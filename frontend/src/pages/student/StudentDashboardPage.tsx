@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
+import JoinGroupDialog from '@/components/JoinGroupDialog';
 import { mockDataService } from '@/services/studentService';
 
 /**
@@ -10,6 +13,9 @@ import { mockDataService } from '@/services/studentService';
  * Handles sign out, join group, and continue training events.
  */
 function StudentDashboardPage() {
+  const navigate = useNavigate();
+  const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
+  
   // Load simulation groups from mock data service
   const groups = mockDataService.getSimulationGroups();
   
@@ -43,24 +49,37 @@ function StudentDashboardPage() {
 
   /**
    * Handle join group event
-   * Phase 1: Logs to console
-   * Future: Will show modal or navigate to join page
+   * Opens the join group dialog
    * 
    * Requirement 6.3
    */
   const handleJoinGroup = () => {
     try {
-      console.log('Join group clicked');
-      // Future: Show modal or navigate to join page
+      setIsJoinDialogOpen(true);
     } catch (error) {
-      console.error('Error during join group:', error);
+      console.error('Error opening join group dialog:', error);
+    }
+  };
+
+  /**
+   * Handle join group submission
+   * Phase 1: Logs access code to console
+   * Future: Will call API to join group
+   * 
+   * @param accessCode - The access code entered by the user
+   */
+  const handleJoinGroupSubmit = (accessCode: string) => {
+    try {
+      console.log('Joining group with access code:', accessCode);
+      // Future: Call API to join group
+    } catch (error) {
+      console.error('Error joining group:', error);
     }
   };
 
   /**
    * Handle continue training event
-   * Phase 1: Logs group ID to console
-   * Future: Will navigate to simulation page
+   * Navigates to the patients page for the selected group
    * 
    * Requirement 7.2
    * 
@@ -69,7 +88,7 @@ function StudentDashboardPage() {
   const handleContinueTraining = (groupId: string) => {
     try {
       console.log(`Continue training for group: ${groupId}`);
-      // Future: Navigate to simulation page
+      navigate(`/patients/${groupId}`);
     } catch (error) {
       console.error('Error during continue training:', error);
     }
@@ -91,6 +110,11 @@ function StudentDashboardPage() {
           onContinueTraining={handleContinueTraining}
         />
       </main>
+      <JoinGroupDialog
+        open={isJoinDialogOpen}
+        onOpenChange={setIsJoinDialogOpen}
+        onJoin={handleJoinGroupSubmit}
+      />
     </div>
   );
 }
