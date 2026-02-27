@@ -1,4 +1,3 @@
-import './App.css'
 import StudentDashboardPage from './pages/student/StudentDashboardPage'
 
 function App() {

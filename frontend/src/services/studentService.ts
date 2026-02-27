@@ -5,6 +5,8 @@
  * Designed for easy replacement with APIs
  */
 
+import { getSimulationGroupColor } from '@/lib/colors';
+
 /**
  * Represents a medical simulation group that students can join
  */
@@ -40,19 +42,19 @@ const mockSimulationGroups: SimulationGroup[] = [
     id: '1',
     name: 'Chronic Pain',
     subtitle: 'Medical Simulation Group',
-    iconColor: '#FF6B6B'
+    iconColor: getSimulationGroupColor(0)
   },
   {
     id: '2',
     name: 'Acne',
     subtitle: 'Medical Simulation Group',
-    iconColor: '#4ECDC4'
+    iconColor: getSimulationGroupColor(1)
   },
   {
     id: '3',
     name: 'Diabetes Management',
     subtitle: 'Medical Simulation Group',
-    iconColor: '#45B7D1'
+    iconColor: getSimulationGroupColor(2)
   }
 ];
 
