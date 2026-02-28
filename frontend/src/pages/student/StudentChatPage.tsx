@@ -3,6 +3,9 @@ import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, Mic, Send } from 'lucide-react';
+import { SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
+import { useState } from 'react';
+import CaseMaterialsDialog from '@/components/CaseMaterialsDialog';
 
 /**
  * StudentChatPage Component
@@ -24,6 +27,31 @@ function StudentChatPage() {
     gender: 'Female',
   };
 
+  // State for dialogs
+  const [isCaseMaterialsOpen, setIsCaseMaterialsOpen] = useState(false);
+
+  // Mock case materials data - will be replaced with backend data
+  const caseMaterials = [
+    {
+      id: '1',
+      title: 'Initial Triage Vital Signs',
+      description: 'Recorded upon arrival to clinic.',
+      type: 'image' as const,
+    },
+    {
+      id: '2',
+      title: '12-Lead Electrocardiogram (ECG)',
+      description: 'Standard 12-lead ECG performed during assessment to evaluate cardiac rhythm and possible ischemic changes.',
+      type: 'image' as const,
+    },
+    {
+      id: '3',
+      title: 'Lung Auscultation Recording',
+      description: 'Audio recording of lung sounds to evaluate respiratory status.',
+      type: 'video' as const,
+    },
+  ];
+
   /**
    * Handle sign out event
    */
@@ -40,6 +68,13 @@ function StudentChatPage() {
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      {/* Case Materials Dialog */}
+      <CaseMaterialsDialog
+        isOpen={isCaseMaterialsOpen}
+        onClose={() => setIsCaseMaterialsOpen(false)}
+        materials={caseMaterials}
+      />
+
       {/* Header */}
       <header className="flex bg-gray-200 border-b border-border items-center justify-between py-6 px-8">
         <div className="flex items-center gap-4">
@@ -91,6 +126,7 @@ function StudentChatPage() {
             <Button
               variant="outline"
               className="w-full justify-center bg-gray-800 text-white hover:bg-gray-900 border-gray-800"
+              onClick={() => setIsCaseMaterialsOpen(true)}
             >
               Case Materials
             </Button>
@@ -108,14 +144,15 @@ function StudentChatPage() {
             </Button>
             <Button
               variant="outline"
-              className="w-full justify-center bg-gray-800 text-white hover:bg-gray-900 border-gray-800"
+              className="w-full justify-center text-white hover:opacity-90 border-0"
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
             >
               Reveal Answer
             </Button>
             <Button
               variant="outline"
               className="w-full justify-center text-white hover:opacity-90 border-0"
-              style={{ backgroundColor: '#E74C3C' }}
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[6] }}
             >
               Conclude Interaction
             </Button>
