@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
@@ -12,6 +12,7 @@ import { ArrowLeft } from 'lucide-react';
  */
 function PatientsPage() {
   const navigate = useNavigate();
+  const { groupId } = useParams();
   
   // Load user data from mock data service
   const user = mockDataService.getCurrentUser();
@@ -23,8 +24,7 @@ function PatientsPage() {
    * Handle sign out event
    */
   const handleSignOut = () => {
-    console.log('Sign out clicked');
-    // Future: Call API and redirect to login
+    navigate('/login');
   };
 
   /**
@@ -38,8 +38,7 @@ function PatientsPage() {
    * Handle review button click
    */
   const handleReview = (patientId: string) => {
-    console.log(`Review patient: ${patientId}`);
-    // Future: Navigate to patient review page
+    navigate(`/patients/${groupId}/${patientId}`);
   };
 
   return (
