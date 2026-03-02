@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import UserAvatar from './UserAvatar';
+import { UI_COLORS } from '@/lib/colors';
 
 interface DashboardHeaderProps {
   title: string;
@@ -26,7 +27,7 @@ function DashboardHeader({
   }, []);
 
   return (
-    <header className="flex bg-gray-200 border-b border-border items-center justify-between py-6 px-8">
+    <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
       <div className="flex items-center gap-4">
         <UserAvatar
           name={userName}
@@ -34,10 +35,10 @@ function DashboardHeader({
           size="medium"
         />
         <div className="flex flex-col gap-0.5">
-          <h1 className="font-bold tracking-tight text-gray-900 leading-tight text-2xl">
+          <h1 className="font-bold tracking-tight leading-tight text-2xl" style={{ color: UI_COLORS.text.heading }}>
             {title}
           </h1>
-          <p className="text-gray-600 leading-normal text-sm tracking-tight">
+          <p className="leading-normal text-sm tracking-tight" style={{ color: UI_COLORS.text.body }}>
             {subtitle}
           </p>
         </div>
@@ -47,7 +48,10 @@ function DashboardHeader({
         <Button
         variant="default"
         onClick={onSignOut}
-        className="bg-gray-800 text-white hover:bg-gray-900 px-6"
+        className="px-6 transition-colors"
+        style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
         >
           Sign Out
         </Button>

@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import type { SimulationGroup } from '@/services/studentService';
+import { UI_COLORS } from '@/lib/colors';
 
 interface SimulationGroupCardProps {
   group: SimulationGroup;
@@ -9,7 +10,7 @@ interface SimulationGroupCardProps {
 
 function SimulationGroupCard({ group, onContinueTraining }: SimulationGroupCardProps) {
   return (
-    <div className="flex flex-col gap-4 p-6 border border-gray-300 rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+    <div className="flex flex-col gap-4 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
       <div className="flex items-start gap-4">
         <UserAvatar
           name={group.name}
@@ -18,10 +19,10 @@ function SimulationGroupCard({ group, onContinueTraining }: SimulationGroupCardP
           backgroundColor={group.iconColor}
         />
         <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-lg leading-tight mb-1 text-gray-900">
+          <h3 className="font-semibold text-lg leading-tight mb-1" style={{ color: UI_COLORS.text.heading }}>
             {group.name}
           </h3>
-          <p className="text-sm text-gray-600">
+          <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
             {group.subtitle}
           </p>
         </div>
@@ -29,7 +30,10 @@ function SimulationGroupCard({ group, onContinueTraining }: SimulationGroupCardP
       <Button
         onClick={() => onContinueTraining(group.id)}
         variant="default"
-        className="w-full bg-gray-800 text-white hover:bg-gray-900"
+        className="w-full transition-colors"
+        style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
       >
         Continue Training
       </Button>

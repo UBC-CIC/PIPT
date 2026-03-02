@@ -1,4 +1,5 @@
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { UI_COLORS } from '@/lib/colors';
 
 interface UserAvatarProps {
   name: string;
@@ -27,7 +28,7 @@ function UserAvatar({ name, imageUrl, size = 'medium', backgroundColor }: UserAv
       {imageUrl && <AvatarImage src={imageUrl} alt={name} />}
       <AvatarFallback
         className="font-semibold text-white select-none"
-        style={{ backgroundColor: backgroundColor || '#646cff' }}
+        style={{ backgroundColor: backgroundColor || UI_COLORS.avatar.fallback }}
       >
         {getInitials(name)}
       </AvatarFallback>

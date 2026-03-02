@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { UI_COLORS } from '@/lib/colors';
 
 interface JoinGroupDialogProps {
   open: boolean;
@@ -36,7 +37,7 @@ function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogProps) {
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Join Group</DialogTitle>
-          <DialogDescription className="text-base text-gray-600">
+          <DialogDescription className="text-base" style={{ color: UI_COLORS.text.body }}>
             Please enter the access code provided by an instructor.
           </DialogDescription>
         </DialogHeader>
@@ -50,19 +51,32 @@ function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogProps) {
                 handleJoin();
               }
             }}
-            className="text-base border border-gray-300 focus-visible:ring-0 focus-visible:ring-offset-0"
+            className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+            style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}
           />
           <div className="flex justify-end gap-3">
             <Button
               variant="outline"
               onClick={handleCancel}
-              className="px-8 bg-gray-200 text-gray-900 hover:bg-gray-300 border border-gray-400"
+              className="px-8 transition-colors"
+              style={{ 
+                backgroundColor: UI_COLORS.button.cancel, 
+                color: UI_COLORS.button.textDark,
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                borderColor: UI_COLORS.border.medium
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancelHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancel}
             >
               Cancel
             </Button>
             <Button
               onClick={handleJoin}
-              className="px-8 bg-black text-white hover:bg-gray-800"
+              className="px-8 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
             >
               Join
             </Button>

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, CheckCircle, Loader, Circle } from 'lucide-react';
-import { SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
+import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 
 /**
  * PatientsPage Component
@@ -51,19 +51,19 @@ function PatientsPage() {
         icon: CheckCircle,
         text: 'Completed',
         bgColor: SIMULATION_GROUP_COLOR_PALETTE[6], // Green
-        textColor: '#FFFFFF'
+        textColor: UI_COLORS.button.text
       },
       'in-progress': {
         icon: Loader,
         text: 'In Progress',
         bgColor: SIMULATION_GROUP_COLOR_PALETTE[2], // Blue
-        textColor: '#FFFFFF'
+        textColor: UI_COLORS.button.text
       },
       'not-started': {
         icon: Circle,
         text: 'Not Started',
-        bgColor: '#E5E7EB', // Gray
-        textColor: '#374151'
+        bgColor: UI_COLORS.border.light, // Gray
+        textColor: UI_COLORS.text.body
       }
     };
 
@@ -78,16 +78,16 @@ function PatientsPage() {
           color: config.textColor
         }}
       >
-        <Icon className="w-4 h-4" style={{ color: '#000000' }} />
+        <Icon className="w-4 h-4" style={{ color: UI_COLORS.text.black }} />
         <span className="font-medium text-sm">{config.text}</span>
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen" style={{ backgroundColor: UI_COLORS.background.white }}>
       {/* Header */}
-      <header className="flex bg-gray-200 border-b border-border items-center justify-between py-6 px-8">
+      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           <UserAvatar
             name={user.name}
@@ -95,12 +95,15 @@ function PatientsPage() {
             size="medium"
           />
           <div className="flex flex-col items-start gap-0.5">
-            <h1 className="font-bold tracking-tight text-gray-900 leading-tight text-2xl">
+            <h1 className="font-bold tracking-tight leading-tight text-2xl" style={{ color: UI_COLORS.text.heading }}>
               Patients
             </h1>
             <button
               onClick={handleBackToHome}
-              className="text-gray-600 hover:text-gray-900 font-normal text-sm flex items-center gap-1 bg-transparent border-0 cursor-pointer p-0"
+              className="font-normal text-sm flex items-center gap-1 bg-transparent border-0 cursor-pointer p-0 transition-colors"
+              style={{ color: UI_COLORS.text.body }}
+              onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Home Page
@@ -112,7 +115,10 @@ function PatientsPage() {
           <Button
             variant="default"
             onClick={handleSignOut}
-            className="bg-gray-800 text-white hover:bg-gray-900 px-6"
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
           >
             Sign Out
           </Button>
@@ -121,20 +127,21 @@ function PatientsPage() {
 
       {/* Main Content */}
       <main className="px-8 py-6">
-        <div className="bg-white rounded-lg border border-gray-300 overflow-hidden">
+        <div className="rounded-lg overflow-hidden" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
           <table className="w-full">
-            <thead className="bg-gray-50 border-b border-gray-300">
+            <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
               <tr>
-                <th className="px-6 py-4 text-center font-semibold text-gray-900">Patient</th>
-                <th className="px-6 py-4 text-center font-semibold text-gray-900">Completion Status</th>
-                <th className="px-6 py-4 text-center font-semibold text-gray-900">Review</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Patient</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Completion Status</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Review</th>
               </tr>
             </thead>
             <tbody>
               {patients.map((patient) => (
                 <tr
                   key={patient.id}
-                  className="border-b border-gray-200 last:border-b-0"
+                  className="last:border-b-0"
+                  style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3 justify-center">
@@ -143,7 +150,7 @@ function PatientsPage() {
                         imageUrl={patient.avatarUrl}
                         size="small"
                       />
-                      <span className="text-gray-900">{patient.name}</span>
+                      <span style={{ color: UI_COLORS.text.heading }}>{patient.name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -153,7 +160,10 @@ function PatientsPage() {
                     <Button
                       onClick={() => handleReview(patient.id)}
                       variant="default"
-                      className="bg-gray-800 text-white hover:bg-gray-900 px-6"
+                      className="px-6 transition-colors"
+                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
                     >
                       Review
                     </Button>

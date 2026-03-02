@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft } from 'lucide-react';
+import { UI_COLORS } from '@/lib/colors';
 
 /**
  * PatientDashboardPage Component
@@ -84,9 +85,9 @@ function PatientDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen" style={{ backgroundColor: UI_COLORS.background.white }}>
       {/* Header */}
-      <header className="flex bg-gray-200 border-b border-border items-center justify-between py-6 px-8">
+      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           <UserAvatar
             name={user.name}
@@ -94,12 +95,15 @@ function PatientDashboardPage() {
             size="medium"
           />
           <div className="flex flex-col items-start gap-0.5">
-            <h1 className="font-bold tracking-tight text-gray-900 leading-tight text-2xl">
+            <h1 className="font-bold tracking-tight leading-tight text-2xl" style={{ color: UI_COLORS.text.heading }}>
               Patient Dashboard
             </h1>
             <button
               onClick={handleBackToPatients}
-              className="text-gray-600 hover:text-gray-900 font-normal text-sm flex items-center gap-1 bg-transparent border-0 cursor-pointer p-0"
+              className="font-normal text-sm flex items-center gap-1 bg-transparent border-0 cursor-pointer p-0 transition-colors"
+              style={{ color: UI_COLORS.text.body }}
+              onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
             >
               <ArrowLeft className="w-4 h-4" />
               Back to All Patients
@@ -111,7 +115,10 @@ function PatientDashboardPage() {
           <Button
             variant="default"
             onClick={handleSignOut}
-            className="bg-gray-800 text-white hover:bg-gray-900 px-6"
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
           >
             Sign Out
           </Button>
@@ -122,26 +129,26 @@ function PatientDashboardPage() {
       <main className="px-8 py-6">
         <div className="grid grid-cols-2 gap-6">
           {/* Left Column - Patient Overview */}
-          <div className="border-r border-gray-300 pr-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Patient Overview</h2>
+          <div className="pr-6" style={{ borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default }}>
+            <h2 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>Patient Overview</h2>
             {/* Patient overview content will be added later */}
           </div>
 
           {/* Right Column - Chat History */}
           <div className="pl-6">
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">Chat History</h2>
-            <p className="text-sm text-gray-600 mb-4">
+            <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
+            <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
               Click on an in-progress chat to continue your diagnosis.<br />
               Click on a completed chat to view the AI debrief.
             </p>
 
             {/* Chat History Table */}
-            <div className="bg-white rounded-lg border border-gray-300 overflow-hidden mb-4">
+            <div className="rounded-lg overflow-hidden mb-4" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
               <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-300">
+                <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
                   <tr>
-                    <th className="px-6 py-3 text-left font-semibold text-gray-900 text-sm">Name</th>
-                    <th className="px-6 py-3 text-center font-semibold text-gray-900 text-sm">Chat Completion Status</th>
+                    <th className="px-6 py-3 text-left font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>Name</th>
+                    <th className="px-6 py-3 text-center font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>Chat Completion Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -149,10 +156,13 @@ function PatientDashboardPage() {
                     <tr
                       key={chat.id}
                       onClick={() => handleChatClick(chat.id)}
-                      className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50 cursor-pointer"
+                      className="last:border-b-0 cursor-pointer transition-colors"
+                      style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
-                      <td className="px-6 py-4 text-gray-900">{chat.name}</td>
-                      <td className="px-6 py-4 text-gray-600 text-center">{chat.completionStatus}</td>
+                      <td className="px-6 py-4" style={{ color: UI_COLORS.text.heading }}>{chat.name}</td>
+                      <td className="px-6 py-4 text-center" style={{ color: UI_COLORS.text.body }}>{chat.completionStatus}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -163,7 +173,10 @@ function PatientDashboardPage() {
             <Button
               onClick={handleStartNewChat}
               variant="default"
-              className="bg-gray-800 text-white hover:bg-gray-900 px-6"
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
             >
               + Start New Chat
             </Button>

@@ -45,7 +45,7 @@ function LoginPage() {
       <div 
         className="hidden lg:flex lg:w-1/2 items-center justify-center p-12"
         style={{ 
-          background: `linear-gradient(135deg, ${SIMULATION_GROUP_COLOR_PALETTE[2]} 0%, #2E8BA8 100%)`,
+          background: `linear-gradient(135deg, ${SIMULATION_GROUP_COLOR_PALETTE[2]} 0%, ${UI_COLORS.gradient.loginEnd} 100%)`,
           borderTopRightRadius: '3rem',
           borderBottomRightRadius: '3rem',
           color: UI_COLORS.button.text
@@ -61,7 +61,7 @@ function LoginPage() {
       </div>
 
       {/* Right Panel - Sign In Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+      <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: UI_COLORS.background.white }}>
         <div className="w-full max-w-md">
           <h2 className="text-3xl font-bold mb-8" style={{ color: UI_COLORS.text.heading }}>Sign In</h2>
           
@@ -72,7 +72,8 @@ function LoginPage() {
                 placeholder="Username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>
@@ -83,7 +84,8 @@ function LoginPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>

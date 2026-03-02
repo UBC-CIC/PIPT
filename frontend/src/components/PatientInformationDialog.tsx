@@ -96,17 +96,22 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
     <div className="fixed inset-0 z-50 pointer-events-none">
       <div
         ref={dialogRef}
-        className="absolute bg-white rounded-lg shadow-2xl border border-gray-300 pointer-events-auto flex flex-col"
+        className="absolute rounded-lg shadow-2xl pointer-events-auto flex flex-col"
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
           width: `${size.width}px`,
           height: `${size.height}px`,
+          backgroundColor: UI_COLORS.background.white,
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor: UI_COLORS.border.default
         }}
       >
         {/* Header - Draggable */}
         <div
-          className="flex items-center justify-between p-6 border-b border-gray-200 cursor-move flex-shrink-0"
+          className="flex items-center justify-between p-6 cursor-move flex-shrink-0"
+          style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
           onMouseDown={handleMouseDown}
         >
           <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
@@ -114,7 +119,10 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
           </h2>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 rounded transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             aria-label="Close dialog"
           >
             <X className="w-6 h-6" style={{ color: UI_COLORS.text.body }} />
@@ -128,7 +136,16 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
               <div
                 key={file.id}
                 onClick={() => handleFileClick(file)}
-                className="flex gap-4 p-4 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors border border-transparent hover:border-gray-200"
+                className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
+                style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
+                  e.currentTarget.style.borderColor = UI_COLORS.border.light;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = 'transparent';
+                }}
               >
                 <div className="flex-shrink-0 mt-1">
                   <FileText className="w-6 h-6" style={{ color: UI_COLORS.text.body }} />
@@ -151,7 +168,7 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
           className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
           onMouseDown={handleResizeMouseDown}
           style={{
-            background: 'linear-gradient(135deg, transparent 50%, #9CA3AF 50%)',
+            background: `linear-gradient(135deg, transparent 50%, ${UI_COLORS.border.medium} 50%)`,
           }}
         />
       </div>

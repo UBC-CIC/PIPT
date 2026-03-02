@@ -50,7 +50,7 @@ function SignUpPage() {
   return (
     <div className="min-h-screen flex">
       {/* Left Panel - Sign Up Form */}
-      <div className="flex-1 flex items-center justify-center p-8 bg-white">
+      <div className="flex-1 flex items-center justify-center p-8" style={{ backgroundColor: UI_COLORS.background.white }}>
         <div className="w-full max-w-md">
           <h2 className="text-3xl font-bold mb-8" style={{ color: UI_COLORS.text.heading }}>
             Create your account
@@ -63,7 +63,8 @@ function SignUpPage() {
                 placeholder="First Name"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                className="flex-1 h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="flex-1 h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
               <Input
@@ -71,7 +72,8 @@ function SignUpPage() {
                 placeholder="Last Name"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                className="flex-1 h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="flex-1 h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>
@@ -82,7 +84,8 @@ function SignUpPage() {
                 placeholder="Email Address"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>
@@ -93,7 +96,8 @@ function SignUpPage() {
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>
@@ -104,7 +108,8 @@ function SignUpPage() {
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full h-12 px-4 bg-gray-50 border-gray-200 rounded-lg"
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
               />
             </div>
@@ -140,7 +145,7 @@ function SignUpPage() {
       <div 
         className="hidden lg:flex lg:w-1/2 items-center justify-center p-12"
         style={{ 
-          background: `linear-gradient(135deg, ${SIMULATION_GROUP_COLOR_PALETTE[1]} 0%, #15A085 100%)`,
+          background: `linear-gradient(135deg, ${SIMULATION_GROUP_COLOR_PALETTE[1]} 0%, ${UI_COLORS.gradient.signupEnd} 100%)`,
           borderTopLeftRadius: '3rem',
           borderBottomLeftRadius: '3rem',
           color: UI_COLORS.button.text

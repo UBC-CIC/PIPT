@@ -33,19 +33,47 @@ export const UI_COLORS = {
   button: {
     primary: '#262626',
     primaryHover: '#171717',
+    secondary: '#1F2937', // gray-800
+    secondaryHover: '#111827', // gray-900
+    cancel: '#E5E5E5', // gray-200
+    cancelHover: '#D4D4D4', // gray-300
     text: '#FFFFFF',
+    textDark: '#111827', // gray-900
   },
   header: {
-    background: '#E5E5E5',
+    background: '#E5E5E5', // gray-200
   },
   text: {
-    heading: '#111827',
-    body: '#374151',
-    muted: '#6B7280',
+    heading: '#111827', // gray-900
+    body: '#374151', // gray-600
+    muted: '#6B7280', // gray-500
+    light: '#9CA3AF', // gray-400
+    black: '#000000',
   },
   icon: {
     default: '#262626',
-    muted: '#737373',
+    muted: '#737373', // gray-600
+    dark: '#4B5563', // gray-600
+  },
+  border: {
+    default: '#D1D5DB', // gray-300
+    light: '#E5E7EB', // gray-200
+    medium: '#9CA3AF', // gray-400
+  },
+  background: {
+    white: '#FFFFFF',
+    input: '#F9FAFB', // gray-50
+    tableHeader: '#F9FAFB', // gray-50
+    hover: '#F9FAFB', // gray-50
+    hoverLight: '#F3F4F6', // gray-100
+    overlay: 'rgba(0, 0, 0, 0.5)', // black/50
+  },
+  avatar: {
+    fallback: '#646cff', // Default avatar color
+  },
+  gradient: {
+    loginEnd: '#2E8BA8', // Login page gradient end color
+    signupEnd: '#15A085', // Signup page gradient end color
   },
 } as const;
 

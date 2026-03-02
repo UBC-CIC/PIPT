@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Image, Video } from 'lucide-react';
+import { UI_COLORS } from '@/lib/colors';
 
 interface CaseMaterial {
   id: string;
@@ -89,11 +90,11 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
   const getIcon = (type: string) => {
     switch (type) {
       case 'image':
-        return <Image className="w-6 h-6 text-gray-600" />;
+        return <Image className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
       case 'video':
-        return <Video className="w-6 h-6 text-gray-600" />;
+        return <Video className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
       default:
-        return <Image className="w-6 h-6 text-gray-600" />;
+        return <Image className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
     }
   };
 
@@ -103,29 +104,37 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
     <div className="fixed inset-0 z-50 pointer-events-none">
       <div
         ref={dialogRef}
-        className="absolute bg-white rounded-lg shadow-2xl border border-gray-300 pointer-events-auto flex flex-col"
+        className="absolute rounded-lg shadow-2xl pointer-events-auto flex flex-col"
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
           width: `${size.width}px`,
           height: `${size.height}px`,
+          backgroundColor: UI_COLORS.background.white,
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor: UI_COLORS.border.default
         }}
       >
         {/* Header - Draggable */}
         <div
-          className="flex items-center justify-between p-6 border-b border-gray-200 cursor-move flex-shrink-0"
+          className="flex items-center justify-between p-6 cursor-move flex-shrink-0"
+          style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
           onMouseDown={handleMouseDown}
         >
           <div>
-            <h2 className="text-2xl font-semibold text-gray-900">Case Materials</h2>
-            <p className="text-sm text-gray-600 mt-1">Click to view the embedded content.</p>
+            <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Case Materials</h2>
+            <p className="text-sm mt-1" style={{ color: UI_COLORS.text.body }}>Click to view the embedded content.</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-gray-100 rounded transition-colors"
+            className="p-1 rounded transition-colors"
+            style={{ backgroundColor: 'transparent' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
             aria-label="Close dialog"
           >
-            <X className="w-6 h-6 text-gray-600" />
+            <X className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />
           </button>
         </div>
 
@@ -136,16 +145,25 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
               <div
                 key={material.id}
                 onClick={() => handleMaterialClick(material)}
-                className="flex gap-4 p-4 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors border border-transparent hover:border-gray-200"
+                className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
+                style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
+                  e.currentTarget.style.borderColor = UI_COLORS.border.light;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'transparent';
+                  e.currentTarget.style.borderColor = 'transparent';
+                }}
               >
                 <div className="flex-shrink-0 mt-1">
                   {getIcon(material.type)}
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
                     {material.title}
                   </h3>
-                  <p className="text-gray-600 leading-relaxed">
+                  <p className="leading-relaxed" style={{ color: UI_COLORS.text.body }}>
                     {material.description}
                   </p>
                 </div>
@@ -159,7 +177,7 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
           className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
           onMouseDown={handleResizeMouseDown}
           style={{
-            background: 'linear-gradient(135deg, transparent 50%, #9CA3AF 50%)',
+            background: `linear-gradient(135deg, transparent 50%, ${UI_COLORS.border.medium} 50%)`,
           }}
         />
       </div>
