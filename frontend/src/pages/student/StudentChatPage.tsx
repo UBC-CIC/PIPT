@@ -2,14 +2,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, StickyNote, User, Eye, CheckCircle, X, Menu } from 'lucide-react';
+import { ArrowLeft, Mic, Send, FileText, StickyNote, User, CheckCircle, X, Menu, Stethoscope } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
 import CaseMaterialsDialog from '@/components/CaseMaterialsDialog';
+import PhysicalAssessmentDialog from '@/components/PhysicalAssessmentDialog';
 import NotesDialog from '@/components/NotesDialog';
 import PatientInformationDialog from '@/components/PatientInformationDialog';
-import ConfirmRevealDialog from '@/components/ConfirmRevealDialog';
-import AnswerKeyDialog from '@/components/AnswerKeyDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 
 // Message interface matching database schema
@@ -49,10 +48,9 @@ function StudentChatPage() {
 
   // State for dialogs
   const [isCaseMaterialsOpen, setIsCaseMaterialsOpen] = useState(false);
+  const [isPhysicalAssessmentOpen, setIsPhysicalAssessmentOpen] = useState(false);
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
-  const [isConfirmRevealOpen, setIsConfirmRevealOpen] = useState(false);
-  const [isAnswerKeyOpen, setIsAnswerKeyOpen] = useState(false);
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
 
   // State for voice mode
@@ -103,16 +101,6 @@ function StudentChatPage() {
     },
   ];
 
-  // Mock answer key - will be replaced with S3 data
-  const answerKey = {
-    id: '1',
-    title: `${patient.name} - Answer Key`,
-    description: 'Complete diagnosis and treatment plan for this patient case.',
-    // Future S3 integration:
-    // s3Key: 'answer-keys/pamela-answer-key.pdf',
-    // s3Url: 'https://bucket.s3.amazonaws.com/...',
-  };
-
   /**
    * Handle sign out event
    */
@@ -125,15 +113,6 @@ function StudentChatPage() {
    */
   const handleBackToPatientDashboard = () => {
     navigate(`/patients/${groupId}/${patientId}`);
-  };
-
-  /**
-   * Handle reveal answer confirmation
-   */
-  const handleRevealAnswer = () => {
-    console.log('Revealing answer...');
-    setIsConfirmRevealOpen(false);
-    setIsAnswerKeyOpen(true);
   };
 
   /**
@@ -203,6 +182,12 @@ function StudentChatPage() {
         materials={caseMaterials}
       />
 
+      {/* Physical Assessment Dialog */}
+      <PhysicalAssessmentDialog
+        isOpen={isPhysicalAssessmentOpen}
+        onClose={() => setIsPhysicalAssessmentOpen(false)}
+      />
+
       {/* Notes Dialog */}
       <NotesDialog
         isOpen={isNotesOpen}
@@ -214,20 +199,6 @@ function StudentChatPage() {
         isOpen={isPatientInfoOpen}
         onClose={() => setIsPatientInfoOpen(false)}
         files={patientFiles}
-      />
-
-      {/* Confirm Reveal Dialog */}
-      <ConfirmRevealDialog
-        isOpen={isConfirmRevealOpen}
-        onCancel={() => setIsConfirmRevealOpen(false)}
-        onConfirm={handleRevealAnswer}
-      />
-
-      {/* Answer Key Dialog */}
-      <AnswerKeyDialog
-        isOpen={isAnswerKeyOpen}
-        onClose={() => setIsAnswerKeyOpen(false)}
-        answerKey={answerKey}
       />
 
       {/* Confirm Conclude Dialog */}
@@ -308,6 +279,17 @@ function StudentChatPage() {
               style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+              onClick={() => setIsPhysicalAssessmentOpen(true)}
+            >
+              <Stethoscope className="w-5 h-5 mr-2" />
+              Physical Assessment
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start transition-colors border-0"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
               onClick={() => setIsNotesOpen(true)}
             >
               <StickyNote className="w-5 h-5 mr-2" />
@@ -323,15 +305,6 @@ function StudentChatPage() {
             >
               <User className="w-5 h-5 mr-2" />
               Patient Information
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start text-white hover:opacity-90 border-0"
-              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
-              onClick={() => setIsConfirmRevealOpen(true)}
-            >
-              <Eye className="w-5 h-5 mr-2" />
-              Reveal Answer
             </Button>
             <Button
               variant="outline"

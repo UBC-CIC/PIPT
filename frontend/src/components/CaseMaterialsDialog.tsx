@@ -129,9 +129,9 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
           <button
             onClick={onClose}
             className="p-1 rounded transition-colors"
-            style={{ backgroundColor: 'transparent' }}
+            style={{ backgroundColor: UI_COLORS.background.transparent }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent}
             aria-label="Close dialog"
           >
             <X className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />
@@ -146,14 +146,14 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
                 key={material.id}
                 onClick={() => handleMaterialClick(material)}
                 className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
-                style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' }}
+                style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.transparent }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
                   e.currentTarget.style.borderColor = UI_COLORS.border.light;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = 'transparent';
+                  e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent;
+                  e.currentTarget.style.borderColor = UI_COLORS.border.transparent;
                 }}
               >
                 <div className="flex-shrink-0 mt-1">

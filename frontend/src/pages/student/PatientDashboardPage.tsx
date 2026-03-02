@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft } from 'lucide-react';
-import { UI_COLORS } from '@/lib/colors';
+import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 /**
  * PatientDashboardPage Component
@@ -18,14 +19,15 @@ function PatientDashboardPage() {
   const user = mockDataService.getCurrentUser();
   
   // Mock patient data - will be replaced with actual data fetching
-
-/*
   const patient = {
     id: patientId,
     name: 'Pamela',
-    avatarUrl: undefined,
+    pronouns: 'she/her',
+    age: 56,
+    sex: 'Female',
+    primaryComplaint: 'Chest Pain',
+    avatarUrl: undefined, // Will be replaced with S3 URL when image is uploaded
   };
-*/
 
   // Mock chat history data
   const chatHistory = [
@@ -53,6 +55,14 @@ function PatientDashboardPage() {
       completionStatus: 'In Progress',
       score: null,
     },
+  ];
+
+  // Mock key questions coverage data per attempt
+  const keyQuestionsCoverageData = [
+    { attempt: 'Attempt 1', coverage: 45 },
+    { attempt: 'Attempt 2', coverage: 72 },
+    { attempt: 'Attempt 3', coverage: 58 },
+    { attempt: 'Attempt 4', coverage: 0 }, // In progress, no data yet
   ];
 
   /**
@@ -130,8 +140,75 @@ function PatientDashboardPage() {
         <div className="grid grid-cols-2 gap-6">
           {/* Left Column - Patient Overview */}
           <div className="pr-6" style={{ borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default }}>
-            <h2 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>Patient Overview</h2>
-            {/* Patient overview content will be added later */}
+            <h2 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>Patient Overview</h2>
+            
+            {/* Patient Info Card */}
+            <div className="flex items-start gap-4 mb-8">
+              <UserAvatar
+                name={patient.name}
+                imageUrl={patient.avatarUrl}
+                size="large"
+              />
+              <div className="flex flex-col gap-1">
+                <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  {patient.name}
+                </h3>
+                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                  Pronouns: {patient.pronouns}
+                </p>
+                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                  Age: {patient.age}
+                </p>
+                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                  Sex: {patient.sex}
+                </p>
+                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                  Primary Complaint: {patient.primaryComplaint}
+                </p>
+              </div>
+            </div>
+
+            {/* Overall Key Questions Coverage */}
+            <div>
+              <h3 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                Overall Key Questions Coverage
+              </h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={keyQuestionsCoverageData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                  <XAxis 
+                    dataKey="attempt" 
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    stroke={UI_COLORS.border.default}
+                  />
+                  <YAxis 
+                    label={{ value: 'Coverage (%)', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.body }}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    domain={[0, 100]}
+                    stroke={UI_COLORS.border.default}
+                  />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: UI_COLORS.background.white, 
+                      border: `1px solid ${UI_COLORS.border.default}`,
+                      borderRadius: '6px',
+                      color: UI_COLORS.text.body
+                    }}
+                    labelStyle={{ color: UI_COLORS.text.heading }}
+                  />
+                  <Legend wrapperStyle={{ color: UI_COLORS.text.body }} />
+                  <Line 
+                    type="monotone"
+                    dataKey="coverage" 
+                    stroke={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                    strokeWidth={2}
+                    name="Coverage (%)"
+                    dot={{ fill: SIMULATION_GROUP_COLOR_PALETTE[2], r: 4 }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Right Column - Chat History */}
