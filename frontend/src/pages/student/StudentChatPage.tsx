@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, StickyNote, User, CheckCircle, X, Menu, Stethoscope } from 'lucide-react';
+import { ArrowLeft, Mic, Send, FileText, StickyNote, User, CheckCircle, X, Menu, Stethoscope, Flag } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
 import CaseMaterialsDialog from '@/components/CaseMaterialsDialog';
@@ -10,6 +10,7 @@ import PhysicalAssessmentDialog from '@/components/PhysicalAssessmentDialog';
 import NotesDialog from '@/components/NotesDialog';
 import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
+import ReportIssueDialog from '@/components/ReportIssueDialog';
 
 // Message interface matching database schema
 interface Message {
@@ -52,6 +53,7 @@ function StudentChatPage() {
   const [isNotesOpen, setIsNotesOpen] = useState(false);
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
+  const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
 
   // State for voice mode
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
@@ -74,18 +76,21 @@ function StudentChatPage() {
       title: 'Initial Triage Vital Signs',
       description: 'Recorded upon arrival to clinic.',
       type: 'image' as const,
+      group: 'Vital Signs',
     },
     {
       id: '2',
       title: '12-Lead Electrocardiogram (ECG)',
       description: 'Standard 12-lead ECG performed during assessment to evaluate cardiac rhythm and possible ischemic changes.',
       type: 'image' as const,
+      group: 'Diagnostic Tests',
     },
     {
       id: '3',
       title: 'Lung Auscultation Recording',
       description: 'Audio recording of lung sounds to evaluate respiratory status.',
       type: 'video' as const,
+      group: 'Physical Examination',
     },
   ];
 
@@ -123,6 +128,15 @@ function StudentChatPage() {
     setIsConfirmConcludeOpen(false);
     // Future: Show AI debrief and disable chat input
     // Navigate to debrief page or show debrief dialog
+  };
+
+  /**
+   * Handle report issue submission
+   */
+  const handleReportIssue = (issues: string[], details: string) => {
+    console.log('Issue reported:', { issues, details, chatId, timestamp: new Date().toISOString() });
+    // Future: Send report to backend with chat context
+    // API call to save issue report with full chat history
   };
 
   /**
@@ -206,6 +220,13 @@ function StudentChatPage() {
         isOpen={isConfirmConcludeOpen}
         onCancel={() => setIsConfirmConcludeOpen(false)}
         onConfirm={handleConcludeInteraction}
+      />
+
+      {/* Report Issue Dialog */}
+      <ReportIssueDialog
+        isOpen={isReportIssueOpen}
+        onClose={() => setIsReportIssueOpen(false)}
+        onSubmit={handleReportIssue}
       />
 
       {/* Header */}
@@ -314,6 +335,15 @@ function StudentChatPage() {
             >
               <CheckCircle className="w-5 h-5 mr-2" />
               Conclude Interaction
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start text-white hover:opacity-90 border-0"
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
+              onClick={() => setIsReportIssueOpen(true)}
+            >
+              <Flag className="w-5 h-5 mr-2" />
+              Report Issue
             </Button>
           </div>
         </aside>
