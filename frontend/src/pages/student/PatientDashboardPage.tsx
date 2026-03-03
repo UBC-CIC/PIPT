@@ -4,7 +4,7 @@ import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState } from 'react';
 
 /**
@@ -63,16 +63,16 @@ function PatientDashboardPage() {
 
   // Mock key questions coverage data per attempt
   const allKeyQuestionsCoverageData = [
-    { attempt: 'Attempt 1', coverage: 45 },
-    { attempt: 'Attempt 2', coverage: 72 },
-    { attempt: 'Attempt 3', coverage: 58 },
-    { attempt: 'Attempt 4', coverage: 63 },
-    { attempt: 'Attempt 5', coverage: 78 },
-    { attempt: 'Attempt 6', coverage: 82 },
-    { attempt: 'Attempt 7', coverage: 75 },
-    { attempt: 'Attempt 8', coverage: 88 },
-    { attempt: 'Attempt 9', coverage: 91 },
-    { attempt: 'Attempt 10', coverage: 0 }, // In progress, no data yet
+    { attempt: 'Attempt 1', attemptNumber: 1, coverage: 45 },
+    { attempt: 'Attempt 2', attemptNumber: 2, coverage: 72 },
+    { attempt: 'Attempt 3', attemptNumber: 3, coverage: 58 },
+    { attempt: 'Attempt 4', attemptNumber: 4, coverage: 63 },
+    { attempt: 'Attempt 5', attemptNumber: 5, coverage: 78 },
+    { attempt: 'Attempt 6', attemptNumber: 6, coverage: 82 },
+    { attempt: 'Attempt 7', attemptNumber: 7, coverage: 75 },
+    { attempt: 'Attempt 8', attemptNumber: 8, coverage: 88 },
+    { attempt: 'Attempt 9', attemptNumber: 9, coverage: 91 },
+    { attempt: 'Attempt 10', attemptNumber: 10, coverage: 0 }, // In progress, no data yet
   ];
 
   // Show only last 5 attempts by default
@@ -217,12 +217,14 @@ function PatientDashboardPage() {
                 </p>
               )}
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={displayedCoverageData}>
+                <LineChart data={displayedCoverageData} margin={{ top: 5, right: 20, bottom: 20, left: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                   <XAxis 
-                    dataKey="attempt" 
+                    dataKey="attemptNumber" 
                     tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                     stroke={UI_COLORS.border.default}
+                    label={{ value: 'Attempt Number', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.body }}
+                    tickFormatter={(value) => `#${value}`}
                   />
                   <YAxis 
                     label={{ value: 'Coverage (%)', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.body }}
@@ -239,7 +241,6 @@ function PatientDashboardPage() {
                     }}
                     labelStyle={{ color: UI_COLORS.text.heading }}
                   />
-                  <Legend wrapperStyle={{ color: UI_COLORS.text.body }} />
                   <Line 
                     type="monotone"
                     dataKey="coverage" 
