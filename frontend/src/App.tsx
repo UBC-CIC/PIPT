@@ -5,6 +5,7 @@ import StudentDashboardPage from './pages/student/StudentDashboardPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';
+import ChatHistoryPage from './pages/student/ChatHistoryPage';
 
 function App() {
   return (
@@ -16,6 +17,7 @@ function App() {
         <Route path="/patients/:groupId" element={<PatientsPage />} />
         <Route path="/patients/:groupId/:patientId" element={<PatientDashboardPage />} />
         <Route path="/patients/:groupId/:patientId/chat" element={<StudentChatPage />} />
+        <Route path="/patients/:groupId/:patientId/chat/:chatId/history" element={<ChatHistoryPage />} />
       </Routes>
     </BrowserRouter>
   );

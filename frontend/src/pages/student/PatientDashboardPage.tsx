@@ -89,9 +89,14 @@ function PatientDashboardPage() {
   /**
    * Handle chat click
    */
-  const handleChatClick = (chatId: string) => {
-    console.log(`Chat clicked: ${chatId}`);
-    // Future: Navigate to chat details or continue chat
+  const handleChatClick = (chatId: string, completionStatus: string) => {
+    if (completionStatus === 'Complete') {
+      // Navigate to read-only chat history page
+      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}/history`);
+    } else {
+      // Navigate to active chat page to continue
+      navigate(`/patients/${groupId}/${patientId}/chat`);
+    }
   };
 
   return (
@@ -232,7 +237,7 @@ function PatientDashboardPage() {
                   {chatHistory.map((chat) => (
                     <tr
                       key={chat.id}
-                      onClick={() => handleChatClick(chat.id)}
+                      onClick={() => handleChatClick(chat.id, chat.completionStatus)}
                       className="last:border-b-0 cursor-pointer transition-colors"
                       style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
