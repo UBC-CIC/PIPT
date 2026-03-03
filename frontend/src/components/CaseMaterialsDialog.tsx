@@ -7,6 +7,7 @@ interface CaseMaterial {
   title: string;
   description: string;
   type: 'image' | 'video' | 'audio';
+  group?: string; // Optional group/category for the material
 }
 
 interface CaseMaterialsDialogProps {
@@ -98,6 +99,19 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
     }
   };
 
+  // Group materials by their group property
+  const groupedMaterials = materials.reduce((acc, material) => {
+    const groupName = material.group || 'Ungrouped';
+    if (!acc[groupName]) {
+      acc[groupName] = [];
+    }
+    acc[groupName].push(material);
+    return acc;
+  }, {} as Record<string, CaseMaterial[]>);
+
+  // Check if any materials have groups defined
+  const hasGroups = materials.some(m => m.group);
+
   if (!isOpen) return null;
 
   return (
@@ -129,9 +143,9 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
           <button
             onClick={onClose}
             className="p-1 rounded transition-colors"
-            style={{ backgroundColor: 'transparent' }}
+            style={{ backgroundColor: UI_COLORS.background.transparent }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent}
             aria-label="Close dialog"
           >
             <X className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />
@@ -140,36 +154,90 @@ function CaseMaterialsDialog({ isOpen, onClose, materials }: CaseMaterialsDialog
 
         {/* Content - Scrollable */}
         <div className="p-6 overflow-y-auto flex-1">
-          <div className="space-y-4">
-            {materials.map((material) => (
-              <div
-                key={material.id}
-                onClick={() => handleMaterialClick(material)}
-                className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
-                style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: 'transparent' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
-                  e.currentTarget.style.borderColor = UI_COLORS.border.light;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.borderColor = 'transparent';
-                }}
-              >
-                <div className="flex-shrink-0 mt-1">
-                  {getIcon(material.type)}
+          {hasGroups ? (
+            // Render grouped materials with headers
+            <div className="space-y-6">
+              {Object.entries(groupedMaterials).map(([groupName, groupMaterials]) => (
+                <div key={groupName}>
+                  {groupName !== 'Ungrouped' && (
+                    <h3 
+                      className="text-lg font-semibold mb-3 pb-2" 
+                      style={{ 
+                        color: UI_COLORS.text.heading,
+                        borderBottomWidth: '1px',
+                        borderBottomStyle: 'solid',
+                        borderBottomColor: UI_COLORS.border.light
+                      }}
+                    >
+                      {groupName}
+                    </h3>
+                  )}
+                  <div className="space-y-4">
+                    {groupMaterials.map((material) => (
+                      <div
+                        key={material.id}
+                        onClick={() => handleMaterialClick(material)}
+                        className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
+                        style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.transparent }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
+                          e.currentTarget.style.borderColor = UI_COLORS.border.light;
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent;
+                          e.currentTarget.style.borderColor = UI_COLORS.border.transparent;
+                        }}
+                      >
+                        <div className="flex-shrink-0 mt-1">
+                          {getIcon(material.type)}
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            {material.title}
+                          </h3>
+                          <p className="leading-relaxed" style={{ color: UI_COLORS.text.body }}>
+                            {material.description}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                    {material.title}
-                  </h3>
-                  <p className="leading-relaxed" style={{ color: UI_COLORS.text.body }}>
-                    {material.description}
-                  </p>
+              ))}
+            </div>
+          ) : (
+            // Render flat list without groups
+            <div className="space-y-4">
+              {materials.map((material) => (
+                <div
+                  key={material.id}
+                  onClick={() => handleMaterialClick(material)}
+                  className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
+                  style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.transparent }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = UI_COLORS.background.hover;
+                    e.currentTarget.style.borderColor = UI_COLORS.border.light;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent;
+                    e.currentTarget.style.borderColor = UI_COLORS.border.transparent;
+                  }}
+                >
+                  <div className="flex-shrink-0 mt-1">
+                    {getIcon(material.type)}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      {material.title}
+                    </h3>
+                    <p className="leading-relaxed" style={{ color: UI_COLORS.text.body }}>
+                      {material.description}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Resize Handle */}

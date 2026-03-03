@@ -108,9 +108,9 @@ function NotesDialog({ isOpen, onClose }: NotesDialogProps) {
           <button
             onClick={onClose}
             className="p-1 rounded transition-colors"
-            style={{ backgroundColor: 'transparent' }}
+            style={{ backgroundColor: UI_COLORS.background.transparent }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent}
             aria-label="Close dialog"
           >
             <X className="w-6 h-6" style={{ color: UI_COLORS.text.body }} />

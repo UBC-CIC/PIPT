@@ -43,23 +43,23 @@ function PatientsPage() {
   };
 
   /**
-   * Get completion status badge
+   * Get debrief status badge
    */
-  const getCompletionStatusBadge = (status: 'not-started' | 'in-progress' | 'completed') => {
+  const getDebriefStatusBadge = (status: 'not_started' | 'in_progress' | 'debrief_reached') => {
     const statusConfig = {
-      'completed': {
+      'debrief_reached': {
         icon: CheckCircle,
-        text: 'Completed',
+        text: 'Debrief Reached',
         bgColor: SIMULATION_GROUP_COLOR_PALETTE[6], // Green
         textColor: UI_COLORS.button.text
       },
-      'in-progress': {
+      'in_progress': {
         icon: Loader,
         text: 'In Progress',
         bgColor: SIMULATION_GROUP_COLOR_PALETTE[2], // Blue
         textColor: UI_COLORS.button.text
       },
-      'not-started': {
+      'not_started': {
         icon: Circle,
         text: 'Not Started',
         bgColor: UI_COLORS.border.light, // Gray
@@ -132,7 +132,7 @@ function PatientsPage() {
             <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
               <tr>
                 <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Patient</th>
-                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Completion Status</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Status</th>
                 <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Review</th>
               </tr>
             </thead>
@@ -154,7 +154,7 @@ function PatientsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    {getCompletionStatusBadge(patient.completionStatus)}
+                    {getDebriefStatusBadge(patient.debriefStatus)}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <Button

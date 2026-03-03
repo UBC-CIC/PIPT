@@ -1,23 +1,20 @@
 import { useState, useRef, useEffect } from 'react';
-import { X, FileText } from 'lucide-react';
+import { X, Stethoscope, Heart, Thermometer, Eye, Ear, Activity } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 
-interface PatientFile {
+interface AssessmentActivity {
   id: string;
-  filename: string;
-  description: string;
-  // Future: Add S3 URL or key for loading from S3
-  // s3Key?: string;
-  // s3Url?: string;
+  name: string;
+  category: string;
+  icon: 'stethoscope' | 'heart' | 'thermometer' | 'eye' | 'ear' | 'activity';
 }
 
-interface PatientInformationDialogProps {
+interface PhysicalAssessmentDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  files: PatientFile[];
 }
 
-function PatientInformationDialog({ isOpen, onClose, files }: PatientInformationDialogProps) {
+function PhysicalAssessmentDialog({ isOpen, onClose }: PhysicalAssessmentDialogProps) {
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [size, setSize] = useState({ width: 600, height: 500 });
   const [isDragging, setIsDragging] = useState(false);
@@ -25,6 +22,18 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Mock assessment activities - will be replaced with backend data
+  const assessmentActivities: AssessmentActivity[] = [
+    { id: '1', name: 'Auscultate Heart Sounds', category: 'Cardiovascular', icon: 'heart' },
+    { id: '2', name: 'Auscultate Lung Sounds', category: 'Respiratory', icon: 'stethoscope' },
+    { id: '3', name: 'Check Blood Pressure', category: 'Vital Signs', icon: 'activity' },
+    { id: '4', name: 'Measure Temperature', category: 'Vital Signs', icon: 'thermometer' },
+    { id: '5', name: 'Examine Pupils', category: 'Neurological', icon: 'eye' },
+    { id: '6', name: 'Otoscopic Examination', category: 'HEENT', icon: 'ear' },
+    { id: '7', name: 'Palpate Abdomen', category: 'Abdominal', icon: 'activity' },
+    { id: '8', name: 'Check Peripheral Pulses', category: 'Cardiovascular', icon: 'heart' },
+  ];
 
   useEffect(() => {
     if (!isOpen) return;
@@ -84,10 +93,28 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
     setIsResizing(true);
   };
 
-  const handleFileClick = (file: PatientFile) => {
-    console.log('File clicked:', file);
-    // Future: Open file viewer or download from S3
-    // Example: window.open(file.s3Url, '_blank');
+  const handleActivityClick = (activity: AssessmentActivity) => {
+    console.log('Assessment activity clicked:', activity);
+    // Future: Perform assessment and show results
+  };
+
+  const getIcon = (iconType: string) => {
+    switch (iconType) {
+      case 'heart':
+        return <Heart className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      case 'stethoscope':
+        return <Stethoscope className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      case 'thermometer':
+        return <Thermometer className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      case 'eye':
+        return <Eye className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      case 'ear':
+        return <Ear className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      case 'activity':
+        return <Activity className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+      default:
+        return <Activity className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />;
+    }
   };
 
   if (!isOpen) return null;
@@ -114,9 +141,10 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
           style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
           onMouseDown={handleMouseDown}
         >
-          <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-            Patient Information Files
-          </h2>
+          <div>
+            <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Physical Assessment</h2>
+            <p className="text-sm mt-1" style={{ color: UI_COLORS.text.body }}>Click an activity to perform the assessment.</p>
+          </div>
           <button
             onClick={onClose}
             className="p-1 rounded transition-colors"
@@ -125,17 +153,17 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.transparent}
             aria-label="Close dialog"
           >
-            <X className="w-6 h-6" style={{ color: UI_COLORS.text.body }} />
+            <X className="w-6 h-6" style={{ color: UI_COLORS.icon.dark }} />
           </button>
         </div>
 
         {/* Content - Scrollable */}
         <div className="p-6 overflow-y-auto flex-1">
           <div className="space-y-4">
-            {files.map((file) => (
+            {assessmentActivities.map((activity) => (
               <div
-                key={file.id}
-                onClick={() => handleFileClick(file)}
+                key={activity.id}
+                onClick={() => handleActivityClick(activity)}
                 className="flex gap-4 p-4 rounded-lg cursor-pointer transition-colors"
                 style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.transparent }}
                 onMouseEnter={(e) => {
@@ -148,14 +176,14 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
                 }}
               >
                 <div className="flex-shrink-0 mt-1">
-                  <FileText className="w-6 h-6" style={{ color: UI_COLORS.text.body }} />
+                  {getIcon(activity.icon)}
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                    {file.filename}
+                  <h3 className="text-lg font-semibold mb-1" style={{ color: UI_COLORS.text.heading }}>
+                    {activity.name}
                   </h3>
-                  <p className="leading-relaxed" style={{ color: UI_COLORS.text.body }}>
-                    {file.description}
+                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                    {activity.category}
                   </p>
                 </div>
               </div>
@@ -176,4 +204,4 @@ function PatientInformationDialog({ isOpen, onClose, files }: PatientInformation
   );
 }
 
-export default PatientInformationDialog;
+export default PhysicalAssessmentDialog;
