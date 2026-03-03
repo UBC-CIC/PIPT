@@ -59,6 +59,7 @@ export const UI_COLORS = {
     default: '#D1D5DB', // gray-300
     light: '#E5E7EB', // gray-200
     medium: '#9CA3AF', // gray-400
+    transparent: 'transparent',
   },
   background: {
     white: '#FFFFFF',
@@ -67,6 +68,7 @@ export const UI_COLORS = {
     hover: '#F9FAFB', // gray-50
     hoverLight: '#F3F4F6', // gray-100
     overlay: 'rgba(0, 0, 0, 0.5)', // black/50
+    transparent: 'transparent',
   },
   avatar: {
     fallback: '#646cff', // Default avatar color

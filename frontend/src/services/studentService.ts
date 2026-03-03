@@ -33,7 +33,7 @@ export interface Patient {
   id: string;                    // Unique identifier
   name: string;                  // Patient name
   avatarUrl?: string;            // Optional patient image URL
-  completionStatus: 'not-started' | 'in-progress' | 'completed'; // Completion status
+  debriefStatus: 'not_started' | 'in_progress' | 'debrief_reached'; // Overall patient case status
   instructorEvaluation: string;  // Instructor evaluation status
 }
 
@@ -86,21 +86,21 @@ const mockPatients: Patient[] = [
     id: '1',
     name: 'Pamela',
     avatarUrl: undefined, // Will display initials
-    completionStatus: 'in-progress',
+    debriefStatus: 'in_progress',
     instructorEvaluation: 'Incomplete'
   },
   {
     id: '2',
     name: 'Timothy',
     avatarUrl: undefined, // Will display initials
-    completionStatus: 'completed',
+    debriefStatus: 'debrief_reached',
     instructorEvaluation: 'Incomplete'
   },
   {
     id: '3',
     name: 'Sarah',
     avatarUrl: undefined, // Will display initials
-    completionStatus: 'not-started',
+    debriefStatus: 'not_started',
     instructorEvaluation: 'Incomplete'
   }
 ];
