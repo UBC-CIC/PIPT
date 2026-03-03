@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup": "node -e \"console.log('Run: ../scripts/get-cdk-outputs.ps1 (Windows) or ../scripts/get-cdk-outputs.sh (Mac/Linux)')\"",
+    "check-env": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) { console.error('❌ .env file not found! Run npm run setup'); process.exit(1); } else { console.log('✅ .env file exists'); }\""
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",

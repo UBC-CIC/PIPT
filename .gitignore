@@ -26,10 +26,11 @@ Thumbs.db
 
 # CDK
 cdk.out/
-*.js
-*.d.ts
-!jest.config.js
+cdk/*.js
+cdk/*.d.ts
+!cdk/jest.config.js
 !cdk/bin/*.js
 
 # Testing
 coverage/
+tools/
