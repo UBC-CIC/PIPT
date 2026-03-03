@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, CheckCircle, Loader, Circle } from 'lucide-react';
-import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
+import { UI_COLORS } from '@/lib/colors';
 
 /**
  * PatientsPage Component
@@ -50,14 +50,14 @@ function PatientsPage() {
       'debrief_reached': {
         icon: CheckCircle,
         text: 'Debrief Reached',
-        bgColor: SIMULATION_GROUP_COLOR_PALETTE[6], // Green
-        textColor: UI_COLORS.button.text
+        bgColor: UI_COLORS.border.light, // Gray
+        textColor: UI_COLORS.text.body
       },
       'in_progress': {
         icon: Loader,
         text: 'In Progress',
-        bgColor: SIMULATION_GROUP_COLOR_PALETTE[2], // Blue
-        textColor: UI_COLORS.button.text
+        bgColor: UI_COLORS.border.light, // Gray
+        textColor: UI_COLORS.text.body
       },
       'not_started': {
         icon: Circle,
@@ -78,7 +78,7 @@ function PatientsPage() {
           color: config.textColor
         }}
       >
-        <Icon className="w-4 h-4" style={{ color: UI_COLORS.text.black }} />
+        <Icon className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
         <span className="font-medium text-sm">{config.text}</span>
       </div>
     );

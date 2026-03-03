@@ -4,7 +4,7 @@ import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import CaseMaterialsDialog from '@/components/CaseMaterialsDialog';
 import PhysicalAssessmentDialog from '@/components/PhysicalAssessmentDialog';
 import PatientInformationDialog from '@/components/PatientInformationDialog';
@@ -57,12 +57,20 @@ function StudentChatPage() {
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
 
-  // Auto-save note with debounce (simulated - will be replaced with API call)
+  // Auto-save note with debounce
+  useEffect(() => {
+    if (noteText === '') return; // Don't save empty initial state
+    
+    const timeoutId = setTimeout(() => {
+      // Future: API call to save note
+      console.log('Auto-saved note');
+    }, 1000); // Save 1 second after user stops typing
+
+    return () => clearTimeout(timeoutId);
+  }, [noteText]);
+
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value;
-    setNoteText(newText);
-    // Future: Debounced API call to save note
-    console.log('Auto-saving note:', newText);
+    setNoteText(e.target.value);
   };
 
   // State for voice mode
@@ -107,6 +115,17 @@ function StudentChatPage() {
       group: 'Physical Examination',
     },
   ];
+
+  // Memoize grouped case materials to avoid recomputing on every render
+  const groupedCaseMaterials = useMemo(() => {
+    return caseMaterials.reduce((acc, material) => {
+      if (!acc[material.group]) {
+        acc[material.group] = [];
+      }
+      acc[material.group].push(material);
+      return acc;
+    }, {} as Record<string, typeof caseMaterials>);
+  }, [caseMaterials]);
 
   // Mock patient information files - will be replaced with S3 data
   const patientFiles = [
@@ -203,19 +222,6 @@ function StudentChatPage() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: UI_COLORS.background.white }}>
-      {/* Case Materials Dialog */}
-      <CaseMaterialsDialog
-        isOpen={false}
-        onClose={() => {}}
-        materials={caseMaterials}
-      />
-
-      {/* Physical Assessment Dialog */}
-      <PhysicalAssessmentDialog
-        isOpen={false}
-        onClose={() => {}}
-      />
-
       {/* Patient Information Dialog */}
       <PatientInformationDialog
         isOpen={isPatientInfoOpen}
@@ -305,6 +311,7 @@ function StudentChatPage() {
         {/* Sidebar */}
         <aside 
           className="flex flex-col transition-all duration-300 ease-in-out"
+          aria-hidden={!isSidebarVisible}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
             borderRightWidth: isSidebarVisible ? '1px' : '0px', 
@@ -314,6 +321,7 @@ function StudentChatPage() {
             minWidth: isSidebarVisible ? '16rem' : '0rem',
             overflow: 'hidden',
             opacity: isSidebarVisible ? 1 : 0,
+            pointerEvents: isSidebarVisible ? 'auto' : 'none',
           }}
         >
           {/* Patient Info */}
@@ -557,6 +565,7 @@ function StudentChatPage() {
         {/* Content Sidebar (Case Materials or Physical Assessment) */}
         <aside 
           className="flex flex-col transition-all duration-300 ease-in-out"
+          aria-hidden={!contentSidebarType}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
             borderLeftWidth: contentSidebarType ? '1px' : '0px', 
@@ -566,6 +575,7 @@ function StudentChatPage() {
             minWidth: contentSidebarType ? '24rem' : '0rem',
             overflow: 'hidden',
             opacity: contentSidebarType ? 1 : 0,
+            pointerEvents: contentSidebarType ? 'auto' : 'none',
           }}
         >
           {/* Header with close button */}
@@ -592,15 +602,7 @@ function StudentChatPage() {
             {contentSidebarType === 'case-materials' && (
               <div className="space-y-6">
                 {/* Group materials by their 'group' property */}
-                {Object.entries(
-                  caseMaterials.reduce((acc, material) => {
-                    if (!acc[material.group]) {
-                      acc[material.group] = [];
-                    }
-                    acc[material.group].push(material);
-                    return acc;
-                  }, {} as Record<string, typeof caseMaterials>)
-                ).map(([groupName, materials]) => (
+                {Object.entries(groupedCaseMaterials).map(([groupName, materials]) => (
                   <div key={groupName}>
                     {/* Group Header */}
                     <h3 className="font-semibold text-base mb-3 pb-2" style={{ color: UI_COLORS.text.heading, borderBottomWidth: '2px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
@@ -612,10 +614,8 @@ function StudentChatPage() {
                       {materials.map((material) => (
                         <div
                           key={material.id}
-                          className="p-4 rounded-lg cursor-pointer transition-colors"
+                          className="p-4 rounded-lg"
                           style={{ backgroundColor: UI_COLORS.background.hoverLight }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
                         >
                           <div className="flex items-start gap-3">
                             <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
@@ -660,6 +660,7 @@ function StudentChatPage() {
         {/* Right Sidebar */}
         <aside 
           className="flex flex-col transition-all duration-300 ease-in-out"
+          aria-hidden={!isRightSidebarVisible}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
             borderLeftWidth: isRightSidebarVisible ? '1px' : '0px', 
@@ -669,6 +670,7 @@ function StudentChatPage() {
             minWidth: isRightSidebarVisible ? '16rem' : '0rem',
             overflow: 'hidden',
             opacity: isRightSidebarVisible ? 1 : 0,
+            pointerEvents: isRightSidebarVisible ? 'auto' : 'none',
           }}
         >
           {/* Right Sidebar Buttons */}

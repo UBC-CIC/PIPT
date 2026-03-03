@@ -3,16 +3,16 @@
  * Colors are assigned to groups dynamically based on their index or ID
  */
 export const SIMULATION_GROUP_COLOR_PALETTE = [
-  '#FF6B6B', // Red/Pink
-  '#4ECDC4', // Teal
-  '#45B7D1', // Blue
-  '#9B59B6', // Purple
-  '#F39C12', // Orange
-  '#E74C3C', // Red
-  '#2ECC71', // Green
-  '#3498DB', // Light Blue
-  '#E67E22', // Dark Orange
-  '#1ABC9C', // Turquoise
+  '#03045E', 
+  '#023E8A',
+  '#0077B6',
+  '#0096C7',
+  '#00B4D8',
+  '#48CAE4',
+  '#90E0EF',
+  '#ADE8F4',
+  '#CAF0F8',
+  '#00B4D4',
 ] as const;
 
 /**
