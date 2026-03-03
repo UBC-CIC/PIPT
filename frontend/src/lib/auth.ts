@@ -1,7 +1,7 @@
 // Authentication utilities for AWS Cognito
 // This is a basic implementation - you may want to use AWS Amplify for full features
 
-import { awsConfig } from '@/config/aws-config';
+// import { awsConfig } from '@/config/aws-config'; // TODO: Uncomment when Cognito auth is implemented
 
 export interface AuthTokens {
   idToken: string;
@@ -34,7 +34,7 @@ class AuthService {
     // TODO: Implement Cognito authentication
     // This is a placeholder - you'll need to use AWS SDK or Amplify
     
-    const _endpoint = `https://cognito-idp.${awsConfig.region}.amazonaws.com/`;
+    // Cognito endpoint: `https://cognito-idp.${awsConfig.region}.amazonaws.com/`
     
     // Example using AWS SDK (you'll need to install @aws-sdk/client-cognito-identity-provider)
     // const client = new CognitoIdentityProviderClient({ region: awsConfig.region });

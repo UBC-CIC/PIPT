@@ -73,8 +73,8 @@ applications:
         preBuild:
           commands:
             - pwd
-            - nvm install 18
-            - nvm use 18
+            - nvm install 20
+            - nvm use 20
             - npm ci
         build:
           commands:
