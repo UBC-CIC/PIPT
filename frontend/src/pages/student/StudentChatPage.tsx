@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, Save, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
 import CaseMaterialsDialog from '@/components/CaseMaterialsDialog';
@@ -54,9 +54,16 @@ function StudentChatPage() {
   // State for content sidebar (case materials or physical assessment)
   const [contentSidebarType, setContentSidebarType] = useState<'case-materials' | 'physical-assessment' | null>(null);
 
-  // State for notes
+  // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
-  const [savedNotes, setSavedNotes] = useState<Array<{ id: string; text: string; timestamp: string }>>([]);
+
+  // Auto-save note with debounce (simulated - will be replaced with API call)
+  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newText = e.target.value;
+    setNoteText(newText);
+    // Future: Debounced API call to save note
+    console.log('Auto-saving note:', newText);
+  };
 
   // State for voice mode
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
@@ -112,24 +119,6 @@ function StudentChatPage() {
       // s3Url: 'https://bucket.s3.amazonaws.com/...',
     },
   ];
-
-  /**
-   * Handle saving a note
-   */
-  const handleSaveNote = () => {
-    if (!noteText.trim()) return;
-
-    const newNote = {
-      id: `note-${Date.now()}`,
-      text: noteText,
-      timestamp: new Date().toISOString(),
-    };
-
-    setSavedNotes((prev) => [...prev, newNote]);
-    setNoteText('');
-    console.log('Note saved:', newNote);
-    // Future: Send note to backend
-  };
 
   /**
    * Handle sign out event
@@ -334,71 +323,28 @@ function StudentChatPage() {
           </div>
 
           {/* Notes Section */}
-          <div className="p-4 flex flex-col" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default, maxHeight: '400px' }}>
-            <h3 className="font-semibold text-sm mb-3 whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>Add New Note</h3>
+          <div className="p-4 flex flex-col flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+            <h3 className="font-semibold text-sm mb-3 whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>Notes</h3>
+            <p className="text-xs mb-2 whitespace-nowrap" style={{ color: UI_COLORS.text.muted }}>This note saves automatically!</p>
             
-            {/* Note Input */}
+            {/* Note Textarea - Auto-saves */}
             <textarea
               value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              placeholder="Type your note here..."
-              className="w-full px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 mb-3 flex-shrink-0"
+              onChange={handleNoteChange}
+              placeholder="Type your notes here..."
+              className="w-full px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2"
               style={{ 
                 borderWidth: '1px', 
                 borderStyle: 'solid', 
                 borderColor: UI_COLORS.border.default,
                 outlineColor: UI_COLORS.border.medium,
-                minHeight: '80px',
-                maxHeight: '80px',
+                height: '300px',
               }}
             />
-
-            {/* Save Button */}
-            <Button
-              variant="outline"
-              className="w-full justify-start transition-colors border-0 mb-3 flex-shrink-0"
-              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-              onClick={handleSaveNote}
-              disabled={!noteText.trim()}
-            >
-              <Save className="w-4 h-4 mr-2" />
-              Save Note
-            </Button>
-
-            {/* Saved Notes List - Scrollable */}
-            {savedNotes.length > 0 && (
-              <div className="flex flex-col flex-shrink-0" style={{ maxHeight: '200px' }}>
-                <h4 className="font-semibold text-xs mb-2 whitespace-nowrap flex-shrink-0" style={{ color: UI_COLORS.text.muted }}>
-                  Saved Notes ({savedNotes.length})
-                </h4>
-                <div className="overflow-y-auto space-y-2 flex-1">
-                  {savedNotes.map((note) => (
-                    <div
-                      key={note.id}
-                      className="p-2 rounded text-xs flex-shrink-0"
-                      style={{ backgroundColor: UI_COLORS.background.hoverLight }}
-                    >
-                      <p className="text-xs leading-relaxed mb-1" style={{ color: UI_COLORS.text.body }}>
-                        {note.text}
-                      </p>
-                      <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                        {new Date(note.timestamp).toLocaleTimeString('en-US', { 
-                          hour: 'numeric', 
-                          minute: '2-digit' 
-                        })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Spacer */}
-          <div className="flex-1"></div>
-
           {/* Sidebar Buttons */}
-          <div className="flex flex-col gap-3 p-4">
+          <div className="mt-auto flex flex-col gap-3 p-4">
             <Button
               variant="outline"
               className="w-full justify-start transition-colors border-0 whitespace-nowrap"
@@ -725,11 +671,8 @@ function StudentChatPage() {
             opacity: isRightSidebarVisible ? 1 : 0,
           }}
         >
-          {/* Spacer */}
-          <div className="flex-1"></div>
-
           {/* Right Sidebar Buttons */}
-          <div className="flex flex-col gap-3 p-4">
+          <div className="mt-auto flex flex-col gap-3 p-4">
             <Button
               variant="outline"
               className="w-full justify-start transition-colors border-0 whitespace-nowrap"

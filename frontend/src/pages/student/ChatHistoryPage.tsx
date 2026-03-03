@@ -55,19 +55,8 @@ function ChatHistoryPage() {
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
   const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
 
-  // Mock saved notes - will be fetched from database
-  const savedNotes = [
-    {
-      id: 'note-1',
-      text: 'Patient reports chest pain with pressure-like sensation',
-      timestamp: '2026-02-18T10:02:00Z',
-    },
-    {
-      id: 'note-2',
-      text: 'Need to check ECG results and vital signs',
-      timestamp: '2026-02-18T10:05:00Z',
-    },
-  ];
+  // Mock saved note - will be fetched from database (read-only in history view)
+  const savedNote = 'Patient reports chest pain with pressure-like sensation. Need to check ECG results and vital signs. Considering cardiac workup.';
 
   // State for chat - Mock data, will be replaced with database fetch
   const [messages ] = useState<Message[]>([
@@ -174,14 +163,6 @@ function ChatHistoryPage() {
    * Format timestamp for display
    */
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  };
-
-  /**
-   * Format note timestamp for display
-   */
-  const formatNoteTime = (timestamp: string) => {
     const date = new Date(timestamp);
     return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   };
@@ -294,37 +275,33 @@ function ChatHistoryPage() {
           </div>
 
           {/* Notes Section - Read Only */}
-          <div className="p-4 flex flex-col" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default, maxHeight: '400px' }}>
+          <div className="p-4 flex flex-col flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
             <h3 className="font-semibold text-sm mb-3 whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>Notes</h3>
             
-            {/* Saved Notes List - Scrollable */}
-            {savedNotes.length > 0 ? (
-              <div className="overflow-y-auto space-y-2 flex-1">
-                {savedNotes.map((note) => (
-                  <div
-                    key={note.id}
-                    className="p-2 rounded text-xs flex-shrink-0"
-                    style={{ backgroundColor: UI_COLORS.background.hoverLight }}
-                  >
-                    <p className="text-xs leading-relaxed mb-1" style={{ color: UI_COLORS.text.body }}>
-                      {note.text}
-                    </p>
-                    <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                      {formatNoteTime(note.timestamp)}
-                    </p>
-                  </div>
-                ))}
+            {/* Saved Note - Read Only */}
+            {savedNote ? (
+              <div
+                className="w-full px-3 py-2 rounded-lg"
+                style={{ 
+                  borderWidth: '1px', 
+                  borderStyle: 'solid', 
+                  borderColor: UI_COLORS.border.default,
+                  backgroundColor: UI_COLORS.background.hoverLight,
+                  height: '300px',
+                  overflowY: 'auto',
+                }}
+              >
+                <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: UI_COLORS.text.body }}>
+                  {savedNote}
+                </p>
               </div>
             ) : (
               <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No notes saved for this chat.</p>
             )}
           </div>
 
-          {/* Spacer */}
-          <div className="flex-1"></div>
-
           {/* Sidebar Buttons */}
-          <div className="flex flex-col gap-3 p-4">
+          <div className="mt-auto flex flex-col gap-3 p-4">
             <Button
               variant="outline"
               className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
@@ -542,11 +519,8 @@ function ChatHistoryPage() {
             opacity: isRightSidebarVisible ? 1 : 0,
           }}
         >
-          {/* Spacer */}
-          <div className="flex-1"></div>
-
           {/* Right Sidebar Buttons */}
-          <div className="flex flex-col gap-3 p-4">
+          <div className="mt-auto flex flex-col gap-3 p-4">
             <Button
               variant="outline"
               className="w-full justify-start transition-colors border-0 whitespace-nowrap"

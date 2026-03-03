@@ -5,6 +5,7 @@ import { mockDataService } from '@/services/studentService';
 import { ArrowLeft } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useState } from 'react';
 
 /**
  * PatientDashboardPage Component
@@ -17,6 +18,9 @@ function PatientDashboardPage() {
   
   // Load user data from mock data service
   const user = mockDataService.getCurrentUser();
+  
+  // State for showing all attempts
+  const [showAllAttempts, setShowAllAttempts] = useState(false);
   
   // Mock patient data - will be replaced with actual data fetching
   const patient = {
@@ -58,12 +62,23 @@ function PatientDashboardPage() {
   ];
 
   // Mock key questions coverage data per attempt
-  const keyQuestionsCoverageData = [
+  const allKeyQuestionsCoverageData = [
     { attempt: 'Attempt 1', coverage: 45 },
     { attempt: 'Attempt 2', coverage: 72 },
     { attempt: 'Attempt 3', coverage: 58 },
-    { attempt: 'Attempt 4', coverage: 0 }, // In progress, no data yet
+    { attempt: 'Attempt 4', coverage: 63 },
+    { attempt: 'Attempt 5', coverage: 78 },
+    { attempt: 'Attempt 6', coverage: 82 },
+    { attempt: 'Attempt 7', coverage: 75 },
+    { attempt: 'Attempt 8', coverage: 88 },
+    { attempt: 'Attempt 9', coverage: 91 },
+    { attempt: 'Attempt 10', coverage: 0 }, // In progress, no data yet
   ];
+
+  // Show only last 5 attempts by default
+  const displayedCoverageData = showAllAttempts 
+    ? allKeyQuestionsCoverageData 
+    : allKeyQuestionsCoverageData.slice(-5);
 
   /**
    * Handle sign out event
@@ -175,11 +190,34 @@ function PatientDashboardPage() {
 
             {/* Overall Key Questions Coverage */}
             <div>
-              <h3 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                Overall Key Questions Coverage
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  Overall Key Questions Coverage
+                </h3>
+                {allKeyQuestionsCoverageData.length > 5 && (
+                  <button
+                    onClick={() => setShowAllAttempts(!showAllAttempts)}
+                    className="text-sm px-3 py-1 rounded transition-colors"
+                    style={{ 
+                      backgroundColor: UI_COLORS.button.secondary, 
+                      color: UI_COLORS.button.text,
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                  >
+                    {showAllAttempts ? 'Show Recent' : 'View All Attempts'}
+                  </button>
+                )}
+              </div>
+              {!showAllAttempts && allKeyQuestionsCoverageData.length > 5 && (
+                <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
+                  Showing last 5 attempts
+                </p>
+              )}
               <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={keyQuestionsCoverageData}>
+                <LineChart data={displayedCoverageData}>
                   <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                   <XAxis 
                     dataKey="attempt" 
