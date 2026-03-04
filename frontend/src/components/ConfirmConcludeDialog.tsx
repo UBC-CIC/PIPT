@@ -72,7 +72,7 @@ function ConfirmConcludeDialog({ isOpen, onCancel, onConfirm }: ConfirmConcludeD
                 onClick={handleSubmit}
                 className="px-8 py-3 rounded-lg font-medium transition-colors"
                 style={{
-                  backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[6],
+                  backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1],
                   color: UI_COLORS.button.text,
                 }}
                 onMouseEnter={(e) => {
@@ -114,7 +114,7 @@ function ConfirmConcludeDialog({ isOpen, onCancel, onConfirm }: ConfirmConcludeD
                 onClick={handleConfirmClick}
                 className="px-6 py-3 rounded-lg font-medium transition-colors"
                 style={{
-                  backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[6],
+                  backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1],
                   color: UI_COLORS.button.text,
                 }}
                 onMouseEnter={(e) => {

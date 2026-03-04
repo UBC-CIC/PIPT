@@ -50,8 +50,8 @@ function StudentChatPage() {
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
 
-  // State for content sidebar (case materials or physical assessment)
-  const [contentSidebarType, setContentSidebarType] = useState<'case-materials' | 'physical-assessment' | null>(null);
+  // State for content sidebar (physical assessment only)
+  const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
 
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
@@ -77,7 +77,6 @@ function StudentChatPage() {
 
   // State for sidebar visibility
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
-  const [isRightSidebarVisible, setIsRightSidebarVisible] = useState(true);
 
   // State for chat
   const [messages, setMessages] = useState<Message[]>([]);
@@ -279,19 +278,7 @@ function StudentChatPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Right Sidebar Toggle Button */}
-          <button
-            onClick={() => setIsRightSidebarVisible(!isRightSidebarVisible)}
-            className="p-2 rounded-lg transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-            aria-label="Toggle right sidebar"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
-
+        <div className="flex items-center">
           <Button
             variant="default"
             onClick={handleSignOut}
@@ -306,7 +293,7 @@ function StudentChatPage() {
       </header>
 
       {/* Main Content */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Sidebar */}
         <aside 
           className="flex flex-col transition-all duration-300 ease-in-out"
@@ -358,6 +345,17 @@ function StudentChatPage() {
               style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+              onClick={() => setContentSidebarType('physical-assessment')}
+            >
+              <Stethoscope className="w-5 h-5 mr-2" />
+              Physical Assessment
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full justify-start transition-colors border-0 whitespace-nowrap"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
               onClick={() => setIsPatientInfoOpen(true)}
             >
               <User className="w-5 h-5 mr-2" />
@@ -366,7 +364,7 @@ function StudentChatPage() {
             <Button
               variant="outline"
               className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
-              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[6] }}
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
               onClick={() => setIsConfirmConcludeOpen(true)}
             >
               <CheckCircle className="w-5 h-5 mr-2" />
@@ -375,7 +373,7 @@ function StudentChatPage() {
             <Button
               variant="outline"
               className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
-              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
               onClick={() => setIsReportIssueOpen(true)}
             >
               <Flag className="w-5 h-5 mr-2" />
@@ -385,7 +383,12 @@ function StudentChatPage() {
         </aside>
 
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col">
+        <div 
+          className="flex-1 flex flex-col transition-all duration-300 ease-in-out"
+          style={{
+            marginRight: contentSidebarType ? '24rem' : '0rem',
+          }}
+        >
           {/* Voice Mode Overlay */}
           {isVoiceModeActive && (
             <div className="absolute inset-0 z-40 flex flex-col items-center justify-center" style={{ backgroundColor: UI_COLORS.background.white }}>
@@ -427,7 +430,7 @@ function StudentChatPage() {
                 <button
                   onClick={() => setIsVoiceModeActive(false)}
                   className="w-16 h-16 rounded-full flex items-center justify-center transition-colors shadow-lg"
-                  style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
+                  style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
                   aria-label="Close voice mode"
                 >
                   <X className="w-6 h-6 text-white" />
@@ -561,27 +564,25 @@ function StudentChatPage() {
           </div>
         </div>
 
-        {/* Content Sidebar (Case Materials or Physical Assessment) */}
+        {/* Content Sidebar (Case Materials or Physical Assessment) - Slides from right edge */}
         <aside 
-          className="flex flex-col transition-all duration-300 ease-in-out"
+          className="flex flex-col transition-all duration-300 ease-in-out absolute top-0 bottom-0 right-0 z-30"
           aria-hidden={!contentSidebarType}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
-            borderLeftWidth: contentSidebarType ? '1px' : '0px', 
+            borderLeftWidth: '1px', 
             borderLeftStyle: 'solid', 
             borderLeftColor: UI_COLORS.border.default,
-            width: contentSidebarType ? '24rem' : '0rem',
-            minWidth: contentSidebarType ? '24rem' : '0rem',
-            overflow: 'hidden',
-            opacity: contentSidebarType ? 1 : 0,
-            pointerEvents: contentSidebarType ? 'auto' : 'none',
+            width: '24rem',
+            transform: contentSidebarType ? 'translateX(0)' : 'translateX(100%)',
+            boxShadow: contentSidebarType ? '-4px 0 6px rgba(0, 0, 0, 0.1)' : 'none',
           }}
         >
           {/* Header with close button */}
           {contentSidebarType && (
             <div className="p-4 flex items-center justify-between" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
               <h2 className="font-semibold text-lg whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>
-                {contentSidebarType === 'case-materials' ? 'Case Materials' : 'Physical Assessment'}
+                Physical Assessment
               </h2>
               <button
                 onClick={() => setContentSidebarType(null)}
@@ -598,7 +599,7 @@ function StudentChatPage() {
 
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4">
-            {contentSidebarType === 'case-materials' && (
+            {contentSidebarType === 'physical-assessment' && (
               <div className="space-y-6">
                 {/* Group materials by their 'group' property */}
                 {Object.entries(groupedCaseMaterials).map(([groupName, materials]) => (
@@ -637,65 +638,6 @@ function StudentChatPage() {
                 ))}
               </div>
             )}
-
-            {contentSidebarType === 'physical-assessment' && (
-              <div className="space-y-4">
-                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                  Physical assessment content will be displayed here.
-                </p>
-                <div className="p-4 rounded-lg" style={{ backgroundColor: UI_COLORS.background.hoverLight }}>
-                  <h3 className="font-semibold text-sm mb-2" style={{ color: UI_COLORS.text.heading }}>
-                    Assessment Tools
-                  </h3>
-                  <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
-                    Physical assessment tools and information will appear here.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </aside>
-
-        {/* Right Sidebar */}
-        <aside 
-          className="flex flex-col transition-all duration-300 ease-in-out"
-          aria-hidden={!isRightSidebarVisible}
-          style={{ 
-            backgroundColor: UI_COLORS.background.white, 
-            borderLeftWidth: isRightSidebarVisible ? '1px' : '0px', 
-            borderLeftStyle: 'solid', 
-            borderLeftColor: UI_COLORS.border.default,
-            width: isRightSidebarVisible ? '16rem' : '0rem',
-            minWidth: isRightSidebarVisible ? '16rem' : '0rem',
-            overflow: 'hidden',
-            opacity: isRightSidebarVisible ? 1 : 0,
-            pointerEvents: isRightSidebarVisible ? 'auto' : 'none',
-          }}
-        >
-          {/* Right Sidebar Buttons */}
-          <div className="mt-auto flex flex-col gap-3 p-4">
-            <Button
-              variant="outline"
-              className="w-full justify-start transition-colors border-0 whitespace-nowrap"
-              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-              onClick={() => setContentSidebarType('case-materials')}
-            >
-              <FileText className="w-5 h-5 mr-2" />
-              Case Materials
-            </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start transition-colors border-0 whitespace-nowrap"
-              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-              onClick={() => setContentSidebarType('physical-assessment')}
-            >
-              <Stethoscope className="w-5 h-5 mr-2" />
-              Physical Assessment
-            </Button>
           </div>
         </aside>
       </div>

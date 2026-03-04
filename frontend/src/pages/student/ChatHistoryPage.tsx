@@ -338,7 +338,7 @@ function ChatHistoryPage() {
             <Button
               variant="outline"
               className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
-              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] }}
+              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0] }}
               onClick={() => setIsReportIssueOpen(true)}
             >
               <Flag className="w-5 h-5 mr-2" />
