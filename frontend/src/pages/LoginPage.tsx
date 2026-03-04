@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { authService } from '@/lib/auth';
+import { useAuth } from '@/App';
 
 /**
  * LoginPage Component
@@ -13,6 +14,7 @@ import { authService } from '@/lib/auth';
  */
 function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +37,8 @@ function LoginPage() {
         return;
       }
 
+      // Refresh auth context so ProtectedRoute sees the new session
+      await refreshUser();
       navigate('/');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed';

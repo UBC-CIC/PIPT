@@ -1,99 +1,87 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
 import JoinGroupDialog from '@/components/JoinGroupDialog';
-import { mockDataService } from '@/services/studentService';
+import { studentService, type SimulationGroup, type UserData } from '@/services/studentService';
+import { useAuth } from '@/App';
 
 /**
  * StudentDashboardPage Component
  * 
  * Main page component that orchestrates the student dashboard.
- * Loads simulation groups and user data from mockDataService.
- * Handles sign out, join group, and continue training events.
+ * Loads simulation groups and user data from the backend API.
  */
 function StudentDashboardPage() {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
-  
-  // Load simulation groups from mock data service
-  const groups = mockDataService.getSimulationGroups();
-  
-  // Load user data from mock data service with error handling
-  let user = mockDataService.getCurrentUser();
-  
-  // Error handling for missing user data (Requirement 12.1, 12.2)
-  if (!user || !user.name) {
-    console.warn('User data is missing or invalid, using default values');
-    user = {
-      name: 'Student',
-      avatarUrl: undefined
+  const [groups, setGroups] = useState<SimulationGroup[]>([]);
+  const [user, setUser] = useState<UserData>({ name: 'Loading...' });
+  const [loading, setLoading] = useState(true);
+
+  // Fetch data from backend on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [groupsData, userData] = await Promise.all([
+          studentService.getSimulationGroups(),
+          studentService.getCurrentUser(),
+        ]);
+        setGroups(groupsData);
+        setUser(userData);
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        setLoading(false);
+      }
     };
-  }
+    loadData();
+  }, []);
 
   /**
    * Handle sign out event
-   * Navigates to login page
-   * Future: Will call API to clear session
-   * 
-   * Requirement 8.2
    */
-  const handleSignOut = () => {
-    try {
-      console.log('Sign out clicked');
-      // Future: Call API to clear session
-      navigate('/login');
-    } catch (error) {
-      console.error('Error during sign out:', error);
-    }
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   /**
    * Handle join group event
-   * Opens the join group dialog
-   * 
-   * Requirement 6.3
    */
   const handleJoinGroup = () => {
-    try {
-      setIsJoinDialogOpen(true);
-    } catch (error) {
-      console.error('Error opening join group dialog:', error);
-    }
+    setIsJoinDialogOpen(true);
   };
 
   /**
    * Handle join group submission
-   * Phase 1: Logs access code to console
-   * Future: Will call API to join group
-   * 
    * @param accessCode - The access code entered by the user
    */
-  const handleJoinGroupSubmit = (accessCode: string) => {
-    try {
-      console.log('Joining group with access code:', accessCode);
-      // Future: Call API to join group
-    } catch (error) {
-      console.error('Error joining group:', error);
+  const handleJoinGroupSubmit = async (accessCode: string) => {
+    const result = await studentService.joinGroup(accessCode);
+    if (result.success) {
+      // Refresh simulation groups to show newly joined group
+      const updatedGroups = await studentService.getSimulationGroups();
+      setGroups(updatedGroups);
     }
+    return result;
   };
 
   /**
    * Handle continue training event
-   * Navigates to the patients page for the selected group
-   * 
-   * Requirement 7.2
-   * 
    * @param groupId - The ID of the simulation group to continue training in
    */
   const handleContinueTraining = (groupId: string) => {
-    try {
-      console.log(`Continue training for group: ${groupId}`);
-      navigate(`/patients/${groupId}`);
-    } catch (error) {
-      console.error('Error during continue training:', error);
-    }
+    navigate(`/patients/${groupId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-lg text-gray-500">Loading dashboard...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">

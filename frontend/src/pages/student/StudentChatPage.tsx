@@ -1,7 +1,7 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
-import { mockDataService } from '@/services/studentService';
+import { useAuth } from '@/App';
 import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -31,8 +31,9 @@ function StudentChatPage() {
   const navigate = useNavigate();
   const { groupId, patientId } = useParams();
   
-  // Load user data from mock data service
-  const user = mockDataService.getCurrentUser();
+  // Load user data from auth context
+  const { user: authUser, signOut } = useAuth();
+  const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
   // Mock patient data
   const patient = {

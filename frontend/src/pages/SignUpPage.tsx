@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { authService } from '@/lib/auth';
+import { useAuth } from '@/App';
 
 /**
  * SignUpPage Component
@@ -14,6 +15,7 @@ import { authService } from '@/lib/auth';
 function SignUpPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { refreshUser } = useAuth();
   
   // Check if we were redirected here for email confirmation
   const locationState = location.state as { email?: string; needsConfirmation?: boolean } | null;
@@ -60,6 +62,7 @@ function SignUpPage() {
       } else {
         // Auto-confirmed — sign in and redirect
         await authService.signIn(email, password);
+        await refreshUser();
         navigate('/');
       }
     } catch (err: unknown) {
@@ -89,6 +92,7 @@ function SignUpPage() {
       await authService.confirmSignUp(email, confirmationCode);
       // Sign in after confirmation
       await authService.signIn(email, password);
+      await refreshUser();
       navigate('/');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Confirmation failed';
