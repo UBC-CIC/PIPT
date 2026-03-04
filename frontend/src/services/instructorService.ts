@@ -61,6 +61,8 @@ export interface ManageablePatient {
   age: number;                          // Patient age
   gender: string;                       // Patient gender
   llmEvaluationEnabled: boolean;        // Whether LLM evaluation is enabled
+  photoUrl?: string;                    // Optional patient photo URL
+  prompt?: string;                      // Patient prompt for LLM
 }
 
 /**
@@ -76,6 +78,43 @@ export interface GlobalRubricQuestion {
 }
 
 /**
+ * Represents a case material
+ */
+export interface CaseMaterial {
+  id: string;                           // Unique identifier
+  title: string;                        // Material title
+  description: string;                  // Material description
+  materialType: string;                 // Type: image, video, document, audio, other
+  contentUrl?: string;                  // URL to uploaded content
+  embedLink?: string;                   // H5P embed link
+}
+
+/**
+ * Represents patient creation data
+ */
+export interface PatientCreateData {
+  name: string;
+  age: number;
+  gender: string;
+  prompt: string;
+}
+
+/**
+ * Represents patient update data
+ */
+export interface PatientUpdateData {
+  id: string;
+  name: string;
+  age: number;
+  gender: string;
+  prompt: string;
+  photoUrl?: string;
+  llmUploadFile?: File;
+  patientInfoFile?: File;
+  answerKeyFile?: File;
+}
+
+/**
  * Mock data service interface
  */
 export interface MockInstructorDataService {
@@ -86,12 +125,25 @@ export interface MockInstructorDataService {
   getMessageCountData: (patientId: string) => MessageCountData[];
   generateAccessCode: (simulationGroupId: string) => string;
   getManageablePatients: (simulationGroupId: string) => ManageablePatient[];
+  getPatient: (patientId: string) => ManageablePatient | undefined;
+  createPatient: (simulationGroupId: string, patientData: PatientCreateData) => void;
+  updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => void;
+  uploadPatientPhoto: (patientId: string, photoFile: File) => Promise<string>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => void;
   deletePatient: (patientId: string) => void;
   getGlobalRubricQuestions: (simulationGroupId: string) => GlobalRubricQuestion[];
   addGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
   updateGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
   deleteGlobalRubricQuestion: (simulationGroupId: string, questionId: string) => void;
+  getCaseSpecificQuestions: (patientId: string) => GlobalRubricQuestion[];
+  addCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
+  updateCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
+  deleteCaseSpecificQuestion: (patientId: string, questionId: string) => void;
+  getCaseMaterials: (patientId: string) => CaseMaterial[];
+  addCaseMaterial: (patientId: string, material: CaseMaterial) => void;
+  updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
+  deleteCaseMaterial: (patientId: string, materialId: string) => void;
+  getEvaluationPrompt: (simulationGroupId: string) => string;
 }
 
 /**
@@ -204,6 +256,65 @@ const mockManageablePatients: Record<string, ManageablePatient[]> = {
 };
 
 /**
+ * Hardcoded evaluation prompt (markdown format)
+ * This will be editable by admin users in the future
+ */
+const mockEvaluationPrompt = `# Evaluation Prompt
+
+Evaluate the student's interview using the instructor-defined rubric and key questions.
+Use only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.
+
+## Assess:
+
+- which key questions were addressed, partially addressed, or missed
+- how well the student's questions align with the rubric
+- overall clinical reasoning and question quality
+
+## Generate an AI debrief with:
+
+- Interview Summary (3-5 sentences)
+- Key Questions Successfully Addressed
+- Key Questions Missed or Incomplete
+- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)
+- Overall Assessment (rubric alignment score + summary)
+
+## OUTPUT FORMAT
+
+Return valid JSON in exactly this structure:
+
+\`\`\`json
+{
+  "interview_summary": "string",
+  "key_questions_successfully_addressed": [
+    {
+      "question_id": "string",
+      "question_content": "string",
+      "feedback": "string"
+    }
+  ],
+  "key_questions_missed_or_incomplete": [
+    {
+      "question_id": "string",
+      "question_content": "string",
+      "status": "missed | partially_addressed",
+      "feedback": "string",
+      "clinical_importance": "string"
+    }
+  ],
+  "rubric_based_feedback": {
+    "strengths": ["string", "string"],
+    "areas_for_improvement": ["string", "string"],
+    "recommended_focus_next_time": ["string", "string"]
+  },
+  "overall_assessment": {
+    "rubric_alignment_score": 0,
+    "summary": "string"
+  }
+}
+\`\`\`
+`;
+
+/**
  * Hardcoded global rubric questions data
  */
 const mockGlobalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {
@@ -243,6 +354,74 @@ const mockGlobalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {
       required: true,
     },
   ]
+};
+
+/**
+ * Hardcoded case-specific questions data (per patient)
+ */
+const mockCaseSpecificQuestions: Record<string, GlobalRubricQuestion[]> = {
+  'pamela': [
+    {
+      id: 'case-q1',
+      title: 'Chest Pain Characterization',
+      keyQuestion: 'Assess the characteristics of the patient\'s chest pain, including onset, duration, severity, quality and radiation.',
+      clinicalIntent: 'This question evaluates the student\'s ability to gather essential details about the chest pain that help differentiate between potentially life-threatening causes (e.g., cardiac ischemia), medication-related causes, gastrointestinal causes and musculoskeletal causes, and to support appropriate clinical decision-making and triage.',
+      evaluationCriteria: 'The student attempts to identify at least 3-4 of the following core characteristics of the chest pain:\n• When the pain started, whether the onset was sudden or gradual\n• Where the pain is located, localized or diffuse\n• Description of the pain (e.g., sharp, dull, pressure, burning, tightness)\n• Intensity of pain (e.g., pain scale or descriptive severity)\n• How long the pain lasts, whether it is constant or intermittent',
+      required: true,
+    },
+    {
+      id: 'case-q2',
+      title: 'Exacerbating and Relieving Factors',
+      keyQuestion: 'Identify factors that worsen or alleviate the patient\'s chest pain.',
+      clinicalIntent: 'This question assesses the student\'s ability to explore triggers and relieving factors, which are critical for distinguishing between cardiac, musculoskeletal, and gastrointestinal causes of chest pain.',
+      evaluationCriteria: 'The student attempts to identify:\n• Activities or positions that worsen the pain (e.g., exertion, deep breathing, lying down)\n• Factors that relieve the pain (e.g., rest, antacids, nitroglycerin)\n• Relationship to meals, stress, or physical activity',
+      required: true,
+    },
+    {
+      id: 'case-q3',
+      title: 'Symptom Duration',
+      keyQuestion: 'Determine how long the patient has been experiencing the chest pain symptoms.',
+      clinicalIntent: 'Understanding symptom duration helps assess urgency and chronicity, distinguishing acute emergencies from chronic conditions.',
+      evaluationCriteria: 'The student asks about:\n• When symptoms first began\n• Whether this is a new or recurring problem\n• Any changes in symptom pattern over time',
+      required: false,
+    },
+  ],
+  'timothy': [],
+  'john': []
+};
+
+/**
+ * Hardcoded case materials data (per patient)
+ */
+const mockCaseMaterials: Record<string, CaseMaterial[]> = {
+  'pamela': [
+    {
+      id: 'material-1',
+      title: 'Chest X-Ray',
+      description: 'Frontal chest radiograph obtained as part of the patient\'s clinical evaluation.',
+      materialType: 'image',
+      contentUrl: '',
+      embedLink: '',
+    },
+    {
+      id: 'material-2',
+      title: 'ECG Reading',
+      description: '12-lead electrocardiogram showing cardiac electrical activity.',
+      materialType: 'document',
+      contentUrl: '',
+      embedLink: '',
+    },
+    {
+      id: 'material-3',
+      title: 'Patient Interview Video',
+      description: 'Video recording of initial patient interview and history taking.',
+      materialType: 'video',
+      contentUrl: '',
+      embedLink: '',
+    },
+  ],
+  'timothy': [],
+  'john': []
 };
 
 /**
@@ -344,6 +523,105 @@ function getManageablePatients(simulationGroupId: string): ManageablePatient[] {
 }
 
 /**
+ * Get a specific patient by ID
+ * 
+ * @param patientId - Patient ID
+ * @returns Patient or undefined if not found
+ */
+function getPatient(patientId: string): ManageablePatient | undefined {
+  for (const groupPatients of Object.values(mockManageablePatients)) {
+    const patient = groupPatients.find(p => p.id === patientId);
+    if (patient) {
+      return patient;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Create a new patient
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @param patientData - New patient data
+ */
+function createPatient(simulationGroupId: string, patientData: PatientCreateData): void {
+  const newPatient: ManageablePatient = {
+    id: `patient-${Date.now()}`,
+    name: patientData.name,
+    age: patientData.age,
+    gender: patientData.gender,
+    llmEvaluationEnabled: false,
+    prompt: patientData.prompt,
+  };
+  
+  if (!mockManageablePatients[simulationGroupId]) {
+    mockManageablePatients[simulationGroupId] = [];
+  }
+  mockManageablePatients[simulationGroupId].push(newPatient);
+}
+
+/**
+ * Update patient information
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @param patientData - Updated patient data
+ */
+function updatePatient(simulationGroupId: string, patientData: PatientUpdateData): void {
+  const patients = mockManageablePatients[simulationGroupId];
+  if (patients) {
+    const index = patients.findIndex(p => p.id === patientData.id);
+    if (index !== -1) {
+      patients[index] = {
+        ...patients[index],
+        name: patientData.name,
+        age: patientData.age,
+        gender: patientData.gender,
+        photoUrl: patientData.photoUrl,
+        prompt: patientData.prompt,
+      };
+    }
+  }
+  // In a real implementation, files would be uploaded to a server
+  // For now, we just log them
+  if (patientData.llmUploadFile) {
+    console.log('LLM Upload file:', patientData.llmUploadFile.name);
+  }
+  if (patientData.patientInfoFile) {
+    console.log('Patient Info file:', patientData.patientInfoFile.name);
+  }
+  if (patientData.answerKeyFile) {
+    console.log('Answer Key file:', patientData.answerKeyFile.name);
+  }
+}
+
+/**
+ * Upload patient photo
+ * 
+ * @param patientId - Patient ID
+ * @param photoFile - Photo file to upload
+ * @returns Promise with photo URL
+ */
+async function uploadPatientPhoto(patientId: string, photoFile: File): Promise<string> {
+  // Mock implementation - in real app, this would upload to a server
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const photoUrl = reader.result as string;
+      // Update patient photo in mock data
+      for (const groupPatients of Object.values(mockManageablePatients)) {
+        const patient = groupPatients.find(p => p.id === patientId);
+        if (patient) {
+          patient.photoUrl = photoUrl;
+          break;
+        }
+      }
+      resolve(photoUrl);
+    };
+    reader.readAsDataURL(photoFile);
+  });
+}
+
+/**
  * Update patient LLM evaluation setting
  * 
  * @param patientId - Patient ID
@@ -427,6 +705,121 @@ function deleteGlobalRubricQuestion(simulationGroupId: string, questionId: strin
 }
 
 /**
+ * Get evaluation prompt for a simulation group
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @returns Evaluation prompt as markdown string
+ */
+function getEvaluationPrompt(): string {
+  // For now, return the same prompt for all groups
+  return mockEvaluationPrompt;
+}
+
+/**
+ * Get case-specific questions for a patient
+ * 
+ * @param patientId - Patient ID
+ * @returns Array of case-specific questions
+ */
+function getCaseSpecificQuestions(patientId: string): GlobalRubricQuestion[] {
+  return mockCaseSpecificQuestions[patientId] || [];
+}
+
+/**
+ * Add a new case-specific question
+ * 
+ * @param patientId - Patient ID
+ * @param question - Question to add
+ */
+function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
+  if (!mockCaseSpecificQuestions[patientId]) {
+    mockCaseSpecificQuestions[patientId] = [];
+  }
+  mockCaseSpecificQuestions[patientId].push(question);
+}
+
+/**
+ * Update a case-specific question
+ * 
+ * @param patientId - Patient ID
+ * @param question - Updated question
+ */
+function updateCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
+  const questions = mockCaseSpecificQuestions[patientId];
+  if (questions) {
+    const index = questions.findIndex(q => q.id === question.id);
+    if (index !== -1) {
+      questions[index] = question;
+    }
+  }
+}
+
+/**
+ * Delete a case-specific question
+ * 
+ * @param patientId - Patient ID
+ * @param questionId - Question ID to delete
+ */
+function deleteCaseSpecificQuestion(patientId: string, questionId: string): void {
+  const questions = mockCaseSpecificQuestions[patientId];
+  if (questions) {
+    mockCaseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
+  }
+}
+
+/**
+ * Get case materials for a patient
+ * 
+ * @param patientId - Patient ID
+ * @returns Array of case materials
+ */
+function getCaseMaterials(patientId: string): CaseMaterial[] {
+  return mockCaseMaterials[patientId] || [];
+}
+
+/**
+ * Add a new case material
+ * 
+ * @param patientId - Patient ID
+ * @param material - Material to add
+ */
+function addCaseMaterial(patientId: string, material: CaseMaterial): void {
+  if (!mockCaseMaterials[patientId]) {
+    mockCaseMaterials[patientId] = [];
+  }
+  mockCaseMaterials[patientId].push(material);
+}
+
+/**
+ * Update a case material
+ * 
+ * @param patientId - Patient ID
+ * @param material - Updated material
+ */
+function updateCaseMaterial(patientId: string, material: CaseMaterial): void {
+  const materials = mockCaseMaterials[patientId];
+  if (materials) {
+    const index = materials.findIndex(m => m.id === material.id);
+    if (index !== -1) {
+      materials[index] = material;
+    }
+  }
+}
+
+/**
+ * Delete a case material
+ * 
+ * @param patientId - Patient ID
+ * @param materialId - Material ID to delete
+ */
+function deleteCaseMaterial(patientId: string, materialId: string): void {
+  const materials = mockCaseMaterials[patientId];
+  if (materials) {
+    mockCaseMaterials[patientId] = materials.filter(m => m.id !== materialId);
+  }
+}
+
+/**
  * Mock instructor data service object
  * Provides methods to retrieve hardcoded data for now
  */
@@ -438,10 +831,23 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getMessageCountData,
   generateAccessCode,
   getManageablePatients,
+  getPatient,
+  createPatient,
+  updatePatient,
+  uploadPatientPhoto,
   updatePatientLLMEvaluation,
   deletePatient,
   getGlobalRubricQuestions,
   addGlobalRubricQuestion,
   updateGlobalRubricQuestion,
-  deleteGlobalRubricQuestion
+  deleteGlobalRubricQuestion,
+  getCaseSpecificQuestions,
+  addCaseSpecificQuestion,
+  updateCaseSpecificQuestion,
+  deleteCaseSpecificQuestion,
+  getCaseMaterials,
+  addCaseMaterial,
+  updateCaseMaterial,
+  deleteCaseMaterial,
+  getEvaluationPrompt
 };
