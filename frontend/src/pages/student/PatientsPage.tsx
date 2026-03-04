@@ -32,7 +32,7 @@ function PatientsPage() {
    * Handle back to home navigation
    */
   const handleBackToHome = () => {
-    navigate('/');
+    navigate('/student');
   };
 
   /**

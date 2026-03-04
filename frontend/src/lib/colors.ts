@@ -40,6 +40,15 @@ export const UI_COLORS = {
     text: '#FFFFFF',
     textDark: '#111827', // gray-900
   },
+  toggle: {
+    active: '#10B981', // green-500
+    inactive: '#D1D5DB', // gray-300
+  },
+  status: {
+    error: '#EF4444', // red-500
+    success: '#10B981', // green-500
+    warning: '#F59E0B', // amber-500
+  },
   header: {
     background: '#E5E5E5', // gray-200
   },
@@ -71,7 +80,7 @@ export const UI_COLORS = {
     transparent: 'transparent',
   },
   avatar: {
-    fallback: '#646cff', // Default avatar color
+    fallback: '#2e34a0ff', // Default avatar color
   },
   gradient: {
     loginEnd: '#2E8BA8', // Login page gradient end color
