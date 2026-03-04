@@ -118,7 +118,7 @@ export class ApiServiceStack extends cdk.Stack {
      */
     const psycopgLayer = new LayerVersion(this, "psycopgLambdaLayer", {
       code: Code.fromAsset("./layers/psycopg2.zip"),
-      compatibleRuntimes: [Runtime.PYTHON_3_11],
+      compatibleRuntimes: [Runtime.PYTHON_3_12],
       description: "Lambda layer containing the psycopg2 Python library",
     });
 
@@ -1323,7 +1323,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-GeneratePreSignedURLFunction`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/generatePreSignedURL"),
         handler: "generatePreSignedURL.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1522,7 +1522,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-TimeoutHandlerLambda`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/timeoutHandler"),
         handler: "timeoutHandler.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1561,7 +1561,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-GetFilesFunction`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/getFilesFunction"),
         handler: "getFilesFunction.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1615,7 +1615,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-GetFilesFunctionStudent`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/getFilesFunction"),
         handler: "getFilesFunction.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1669,7 +1669,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-GetProfilePictures`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/getProfilePictures"),
         handler: "getProfilePictures.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1723,7 +1723,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-GetProfilePicturesStudent`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/getProfilePictures"),
         handler: "getProfilePictures.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1774,7 +1774,7 @@ export class ApiServiceStack extends cdk.Stack {
      * Create Lambda function to delete certain file
      */
     const deleteFile = new lambda.Function(this, `${id}-DeleteFileFunction`, {
-      runtime: lambda.Runtime.PYTHON_3_11,
+      runtime: lambda.Runtime.PYTHON_3_12,
       code: lambda.Code.fromAsset("lambda/deleteFile"),
       handler: "deleteFile.lambda_handler",
       timeout: Duration.seconds(300),
@@ -1826,7 +1826,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-DeletePatientFunction`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/deletePatient"),
         handler: "deletePatient.lambda_handler",
         timeout: Duration.seconds(300),
@@ -1864,7 +1864,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-DeleteLastMessage`,
       {
-        runtime: lambda.Runtime.PYTHON_3_11,
+        runtime: lambda.Runtime.PYTHON_3_12,
         code: lambda.Code.fromAsset("lambda/deleteLastMessage"),
         handler: "deleteLastMessage.lambda_handler",
         timeout: Duration.seconds(300),

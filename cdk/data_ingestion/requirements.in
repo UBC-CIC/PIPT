@@ -1,0 +1,15 @@
+# Top-level dependencies for data_ingestion Lambda
+# Lock with: pip-compile requirements.in -o requirements.txt
+boto3
+botocore
+langchain
+langchain-aws
+langchain-core
+langchain-experimental
+langchain-postgres
+python-dotenv
+sqlalchemy
+Pillow
+PyMuPDF==1.24.10
+psycopg[binary,pool]
+psycopg2-binary
