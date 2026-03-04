@@ -109,18 +109,7 @@ applications:
       enableAutoBuild: true,
     });
 
-    const websocketBranch = new amplify.CfnBranch(this, `${id}-websocketBranch`, {
-      appId: amplifyApp.attrAppId,
-      branchName: "websocket-server",
-      enableAutoBuild: true,
-    });
-
-    const cdkSetupBranch = new amplify.CfnBranch(this, `${id}-cdkSetupBranch`, {
-      appId: amplifyApp.attrAppId,
-      branchName: "cdk_setup",
-      enableAutoBuild: true,
-    });
-
+    
     // Output the Amplify App ID and default domain
     new cdk.CfnOutput(this, "AmplifyAppId", {
       value: amplifyApp.attrAppId,
