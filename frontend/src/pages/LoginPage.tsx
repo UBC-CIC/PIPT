@@ -12,8 +12,31 @@ import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
  */
 function LoginPage() {
   const navigate = useNavigate();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [emailError, setEmailError] = useState('');
+
+  /**
+   * Validate email format
+   */
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  /**
+   * Handle email input change with validation
+   */
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmail(value);
+    
+    if (value && !validateEmail(value)) {
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  };
 
   /**
    * Handle sign in submission
@@ -22,8 +45,15 @@ function LoginPage() {
    */
   const handleSignIn = (e: React.ChangeEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Validate email before submission
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    
     try {
-      console.log('Sign in attempt:', { username });
+      console.log('Sign in attempt:', { email });
       // Future: Call authentication API
       navigate('/');
     } catch (error) {
@@ -68,14 +98,24 @@ function LoginPage() {
           <form onSubmit={handleSignIn} className="space-y-6">
             <div>
               <Input
-                type="text"
-                placeholder="Username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                type="email"
+                placeholder="Email Address"
+                value={email}
+                onChange={handleEmailChange}
                 className="w-full h-12 px-4 rounded-lg"
-                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
+                style={{ 
+                  backgroundColor: UI_COLORS.background.input, 
+                  borderWidth: '1px', 
+                  borderStyle: 'solid', 
+                  borderColor: emailError ? '#ef4444' : UI_COLORS.border.light 
+                }}
                 required
               />
+              {emailError && (
+                <p className="mt-1 text-sm" style={{ color: '#ef4444' }}>
+                  {emailError}
+                </p>
+              )}
             </div>
 
             <div>

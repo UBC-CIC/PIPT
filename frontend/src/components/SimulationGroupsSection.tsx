@@ -7,12 +7,18 @@ interface SimulationGroupsSectionProps {
   groups: SimulationGroup[];
   onJoinGroup: () => void;
   onContinueTraining: (groupId: string) => void;
+  joinButtonText?: string;
+  actionButtonText?: string;
+  descriptionText?: string;
 }
 
 function SimulationGroupsSection({
   groups,
   onJoinGroup,
-  onContinueTraining
+  onContinueTraining,
+  joinButtonText = '+ Join Group',
+  actionButtonText = 'Continue Training',
+  descriptionText = 'Join simulation groups to practice patient interactions and develop your clinical diagnosis skills.'
 }: SimulationGroupsSectionProps) {
   return (
     <div className="w-full px-4 py-8">
@@ -21,7 +27,7 @@ function SimulationGroupsSection({
         <div className="flex-1">
           <h2 className="text-2xl font-bold mb-2 text-left" style={{ color: UI_COLORS.text.heading }}>Simulation Groups</h2>
           <p className="text-sm text-left" style={{ color: UI_COLORS.text.body }}>
-            Join simulation groups to practice patient interactions and develop your clinical diagnosis skills.
+            {descriptionText}
           </p>
         </div>
         <Button 
@@ -32,7 +38,7 @@ function SimulationGroupsSection({
           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
         >
-          + Join Group
+          {joinButtonText}
         </Button>
       </div>
 
@@ -48,6 +54,7 @@ function SimulationGroupsSection({
               key={group.id}
               group={group}
               onContinueTraining={onContinueTraining}
+              actionButtonText={actionButtonText}
             />
           ))}
         </div>
