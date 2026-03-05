@@ -32,7 +32,7 @@ function ChatHistoryPage() {
   const { groupId, patientId, chatId } = useParams();
   
   // Load user data from auth context
-  const { user: authUser, signOut } = useAuth();
+  const { user: authUser } = useAuth();
   const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
   // Mock patient data
