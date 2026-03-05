@@ -14,9 +14,19 @@ interface JoinGroupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onJoin: (accessCode: string) => Promise<{ success: boolean; error?: string }>;
+  title?: string;
+  description?: string;
+  submitButtonText?: string;
 }
 
-function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogProps) {
+function JoinGroupDialog({ 
+  open, 
+  onOpenChange, 
+  onJoin,
+  title = 'Join Group',
+  description = 'Please enter the access code provided by an instructor.',
+  submitButtonText = 'Join'
+}: JoinGroupDialogProps) {
   const [accessCode, setAccessCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -58,9 +68,9 @@ function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogProps) {
     }}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Join Group</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">{title}</DialogTitle>
           <DialogDescription className="text-base" style={{ color: UI_COLORS.text.body }}>
-            Please enter the access code provided by an instructor.
+            {description}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-4">
@@ -115,7 +125,7 @@ function JoinGroupDialog({ open, onOpenChange, onJoin }: JoinGroupDialogProps) {
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
               disabled={loading}
             >
-              {loading ? 'Joining...' : 'Join'}
+              {loading ? 'Joining...' : (submitButtonText || 'Join')}
             </Button>
           </div>
         </div>

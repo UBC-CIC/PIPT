@@ -6,9 +6,10 @@ import { UI_COLORS } from '@/lib/colors';
 interface SimulationGroupCardProps {
   group: SimulationGroup;
   onContinueTraining: (groupId: string) => void;
+  actionButtonText?: string;
 }
 
-function SimulationGroupCard({ group, onContinueTraining }: SimulationGroupCardProps) {
+function SimulationGroupCard({ group, onContinueTraining, actionButtonText = 'Continue Training' }: SimulationGroupCardProps) {
   return (
     <div className="flex flex-col gap-4 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
       <div className="flex items-start gap-4">
@@ -35,7 +36,7 @@ function SimulationGroupCard({ group, onContinueTraining }: SimulationGroupCardP
         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
       >
-        Continue Training
+        {actionButtonText}
       </Button>
     </div>
   );

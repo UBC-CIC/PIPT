@@ -6,6 +6,8 @@ import { useState, useEffect, createContext, useContext, useCallback } from 'rea
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import StudentDashboardPage from './pages/student/StudentDashboardPage';
+import InstructorDashboardPage from './pages/instructor/InstructorDashboardPage';
+import InstructorSimulationGroupPage from './pages/instructor/InstructorSimulationGroupPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';

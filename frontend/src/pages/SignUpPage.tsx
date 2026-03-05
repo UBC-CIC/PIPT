@@ -28,13 +28,43 @@ function SignUpPage() {
   const [confirmationCode, setConfirmationCode] = useState('');
   const [showConfirmation, setShowConfirmation] = useState(locationState?.needsConfirmation || false);
   const [error, setError] = useState('');
+  const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  /**
+   * Validate email format
+   */
+  const validateEmail = (email: string): boolean => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
+  /**
+   * Handle email input change with validation
+   */
+  const handleEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmail(value);
+    
+    if (value && !validateEmail(value)) {
+      setEmailError('Please enter a valid email address');
+    } else {
+      setEmailError('');
+    }
+  };
 
   /**
    * Handle sign up submission
    */
   const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    
+    // Validate email before submission
+    if (!validateEmail(email)) {
+      setEmailError('Please enter a valid email address');
+      return;
+    }
+    
     setError('');
 
     if (password !== confirmPassword) {
@@ -228,12 +258,22 @@ function SignUpPage() {
                 type="email"
                 placeholder="Email Address"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={handleEmailChange}
                 className="w-full h-12 px-4 rounded-lg"
-                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
+                style={{ 
+                  backgroundColor: UI_COLORS.background.input, 
+                  borderWidth: '1px', 
+                  borderStyle: 'solid', 
+                  borderColor: emailError ? '#ef4444' : UI_COLORS.border.light 
+                }}
                 required
                 disabled={loading}
               />
+              {emailError && (
+                <p className="mt-1 text-sm" style={{ color: '#ef4444' }}>
+                  {emailError}
+                </p>
+              )}
             </div>
 
             <div>

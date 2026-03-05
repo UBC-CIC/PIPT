@@ -9,6 +9,8 @@ interface DashboardHeaderProps {
   userName: string;
   userAvatarUrl?: string;
   onSignOut: () => void;
+  onStudentView?: () => void;
+  showStudentViewButton?: boolean;
 }
 
 function DashboardHeader({ 
@@ -16,7 +18,9 @@ function DashboardHeader({
   subtitle, 
   userName, 
   userAvatarUrl, 
-  onSignOut 
+  onSignOut,
+  onStudentView,
+  showStudentViewButton = false
 }: DashboardHeaderProps) {
   const [, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -44,7 +48,19 @@ function DashboardHeader({
         </div>
       </div>
 
-      <div className="flex items-center">
+      <div className="flex items-center gap-3">
+        {showStudentViewButton && onStudentView && (
+          <Button
+            variant="default"
+            onClick={onStudentView}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+          >
+            Student View
+          </Button>
+        )}
         <Button
         variant="default"
         onClick={onSignOut}
