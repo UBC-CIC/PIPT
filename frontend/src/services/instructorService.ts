@@ -90,6 +90,38 @@ export interface CaseMaterial {
 }
 
 /**
+ * Represents a student in a simulation group
+ */
+export interface Student {
+  id: string;                           // Unique identifier
+  name: string;                         // Student name
+  email: string;                        // Student email
+}
+
+/**
+ * Represents student details with performance metrics
+ */
+export interface StudentDetails {
+  id: string;                           // Unique identifier
+  name: string;                         // Student name
+  email: string;                        // Student email
+  groupName: string;                    // Simulation group name
+  casesAttempted: number;               // Number of cases attempted
+  caseCompletionRate: number;           // Completion rate percentage (0-100)
+}
+
+/**
+ * Represents a chat attempt for a patient
+ */
+export interface ChatAttempt {
+  id: string;                           // Unique identifier
+  attemptNumber: number;                // Attempt number
+  date: string;                         // Date of attempt
+  completionStatus: 'In Progress' | 'Complete'; // Status
+  score: number | null;                 // Score percentage (null if in progress)
+}
+
+/**
  * Represents patient creation data
  */
 export interface PatientCreateData {
@@ -144,6 +176,9 @@ export interface MockInstructorDataService {
   updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
   deleteCaseMaterial: (patientId: string, materialId: string) => void;
   getEvaluationPrompt: (simulationGroupId: string) => string;
+  getStudents: (simulationGroupId: string) => Student[];
+  getStudentDetails: (studentId: string) => StudentDetails | undefined;
+  getChatAttempts: (studentId: string, patientId: string) => ChatAttempt[];
 }
 
 /**
@@ -253,6 +288,151 @@ const mockManageablePatients: Record<string, ManageablePatient[]> = {
       llmEvaluationEnabled: false
     }
   ]
+};
+
+/**
+ * Hardcoded students data
+ */
+const mockStudents: Record<string, Student[]> = {
+  '1': [ // Chronic Pain group
+    {
+      id: 'student-1',
+      name: 'Student 1',
+      email: 'student1@example.com'
+    },
+    {
+      id: 'student-2',
+      name: 'Student 2',
+      email: 'student2@example.com'
+    },
+    {
+      id: 'student-3',
+      name: 'Student 3',
+      email: 'student3@example.com'
+    },
+    {
+      id: 'student-4',
+      name: 'Student 4',
+      email: 'student4@example.com'
+    },
+    {
+      id: 'student-5',
+      name: 'Student 5',
+      email: 'student5@example.com'
+    }
+  ],
+  '2': [ // Acne group
+    {
+      id: 'student-6',
+      name: 'Student 6',
+      email: 'student6@example.com'
+    },
+    {
+      id: 'student-7',
+      name: 'Student 7',
+      email: 'student7@example.com'
+    }
+  ]
+};
+
+/**
+ * Hardcoded student details data
+ */
+const mockStudentDetails: Record<string, StudentDetails> = {
+  'student-1': {
+    id: 'student-1',
+    name: 'Student 1',
+    email: 'student1@example.com',
+    groupName: 'Chronic Pain',
+    casesAttempted: 4,
+    caseCompletionRate: 50
+  },
+  'student-2': {
+    id: 'student-2',
+    name: 'Student 2',
+    email: 'student2@example.com',
+    groupName: 'Chronic Pain',
+    casesAttempted: 3,
+    caseCompletionRate: 67
+  },
+  'student-3': {
+    id: 'student-3',
+    name: 'Student 3',
+    email: 'student3@example.com',
+    groupName: 'Chronic Pain',
+    casesAttempted: 2,
+    caseCompletionRate: 100
+  },
+  'student-4': {
+    id: 'student-4',
+    name: 'Student 4',
+    email: 'student4@example.com',
+    groupName: 'Chronic Pain',
+    casesAttempted: 5,
+    caseCompletionRate: 80
+  },
+  'student-5': {
+    id: 'student-5',
+    name: 'Student 5',
+    email: 'student5@example.com',
+    groupName: 'Chronic Pain',
+    casesAttempted: 1,
+    caseCompletionRate: 0
+  }
+};
+
+/**
+ * Hardcoded chat attempts data (per student per patient)
+ */
+const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
+  'student-1': {
+    'pamela': [
+      {
+        id: 'attempt-1',
+        attemptNumber: 4,
+        date: 'Feb 19, 2026',
+        completionStatus: 'In Progress',
+        score: null
+      },
+      {
+        id: 'attempt-2',
+        attemptNumber: 3,
+        date: 'Feb 18, 2026',
+        completionStatus: 'Complete',
+        score: 67
+      },
+      {
+        id: 'attempt-3',
+        attemptNumber: 2,
+        date: 'Feb 14, 2026',
+        completionStatus: 'Complete',
+        score: 88
+      },
+      {
+        id: 'attempt-4',
+        attemptNumber: 1,
+        date: 'Jan 27, 2026',
+        completionStatus: 'In Progress',
+        score: null
+      }
+    ],
+    'timothy': [
+      {
+        id: 'attempt-5',
+        attemptNumber: 2,
+        date: 'Feb 20, 2026',
+        completionStatus: 'Complete',
+        score: 75
+      },
+      {
+        id: 'attempt-6',
+        attemptNumber: 1,
+        date: 'Feb 10, 2026',
+        completionStatus: 'Complete',
+        score: 82
+      }
+    ]
+  }
 };
 
 /**
@@ -716,6 +896,37 @@ function getEvaluationPrompt(): string {
 }
 
 /**
+ * Get students for a simulation group
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @returns Array of students
+ */
+function getStudents(simulationGroupId: string): Student[] {
+  return mockStudents[simulationGroupId] || [];
+}
+
+/**
+ * Get student details by ID
+ * 
+ * @param studentId - Student ID
+ * @returns Student details or undefined if not found
+ */
+function getStudentDetails(studentId: string): StudentDetails | undefined {
+  return mockStudentDetails[studentId];
+}
+
+/**
+ * Get chat attempts for a student and patient
+ * 
+ * @param studentId - Student ID
+ * @param patientId - Patient ID
+ * @returns Array of chat attempts
+ */
+function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
+  return mockChatAttempts[studentId]?.[patientId] || [];
+}
+
+/**
  * Get case-specific questions for a patient
  * 
  * @param patientId - Patient ID
@@ -849,5 +1060,8 @@ export const mockInstructorDataService: MockInstructorDataService = {
   addCaseMaterial,
   updateCaseMaterial,
   deleteCaseMaterial,
-  getEvaluationPrompt
+  getEvaluationPrompt,
+  getStudents,
+  getStudentDetails,
+  getChatAttempts
 };

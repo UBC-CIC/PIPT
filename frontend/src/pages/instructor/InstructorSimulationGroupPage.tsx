@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type Student, type StudentDetails, type ChatAttempt } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
@@ -17,9 +17,12 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 function InstructorSimulationGroupPage() {
   const navigate = useNavigate();
   const { groupId } = useParams();
-  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'prompt' | 'editPatient'>('analytics');
+  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
+  const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [studentViewTab, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   
   // Edit Patient state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
@@ -88,6 +91,7 @@ function InstructorSimulationGroupPage() {
   const user = mockInstructorDataService.getCurrentUser();
   const simulationGroup = mockInstructorDataService.getSimulationGroup(groupId || '1');
   const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
+  const students = mockInstructorDataService.getStudents(groupId || '1');
   
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState(() => 
@@ -112,6 +116,11 @@ function InstructorSimulationGroupPage() {
   // Filter patients based on search query (user searches by name, but ID is the unique identifier)
   const filteredPatients = manageablePatients.filter(patient =>
     patient.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Filter students based on search query (user searches by name, but ID is the unique identifier)
+  const filteredStudents = students.filter(student =>
+    student.name.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
   /**
@@ -216,6 +225,23 @@ function InstructorSimulationGroupPage() {
   const handleBackFromEditPatient = () => {
     setSelectedPatientForEdit(null);
     setActiveSection('patients');
+  };
+
+  /**
+   * Handle view student
+   */
+  const handleViewStudent = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setStudentViewTab('overview');
+    setActiveSection('viewStudent');
+  };
+
+  /**
+   * Handle back from view student
+   */
+  const handleBackFromViewStudent = () => {
+    setSelectedStudentId(null);
+    setActiveSection('students');
   };
 
   /**
@@ -644,7 +670,7 @@ function InstructorSimulationGroupPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-hidden" style={{ padding: activeSection === 'rubric' || activeSection === 'editPatient' ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-hidden" style={{ padding: activeSection === 'rubric' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <div className="space-y-6">
               {/* Simulation Group Title */}
@@ -937,8 +963,57 @@ function InstructorSimulationGroupPage() {
           )}
           
           {activeSection === 'students' && (
-            <div>
-              {/* Manage Students content will go here */}
+            <div className="space-y-6 max-w-4xl">
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: UI_COLORS.text.muted }} />
+                <Input
+                  placeholder="Search by Student Name"
+                  value={studentSearchQuery}
+                  onChange={(e) => setStudentSearchQuery(e.target.value)}
+                  className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                  style={{ 
+                    borderWidth: '1px', 
+                    borderStyle: 'solid', 
+                    borderColor: UI_COLORS.border.default,
+                    backgroundColor: UI_COLORS.background.white
+                  }}
+                />
+              </div>
+
+              <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                Click on a student entry to view their performance metrics.
+              </p>
+
+              {/* Student Table */}
+              <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
+                {/* Table Header */}
+                <div className="grid grid-cols-2 gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Student Name
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Email Address
+                  </div>
+                </div>
+
+                {/* Table Rows */}
+                {filteredStudents.map((student) => (
+                  <div 
+                    key={student.id}
+                    className="grid grid-cols-2 gap-4 px-6 py-4 border-t items-center cursor-pointer transition-colors hover:bg-gray-50"
+                    style={{ borderColor: UI_COLORS.border.default }}
+                    onClick={() => handleViewStudent(student.id)}
+                  >
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {student.name}
+                    </div>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {student.email}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           
@@ -1202,12 +1277,13 @@ function InstructorSimulationGroupPage() {
               
               <div>
                 <textarea
-                  className="w-full px-4 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-sm font-mono"
+                  readOnly
+                  className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default"
                   style={{ 
                     borderWidth: '1px', 
                     borderStyle: 'solid', 
                     borderColor: UI_COLORS.border.default,
-                    backgroundColor: UI_COLORS.background.white,
+                    backgroundColor: UI_COLORS.background.tableHeader,
                     minHeight: '500px',
                   }}
                   defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.
@@ -2091,6 +2167,198 @@ Return valid JSON in exactly this structure:
                       </div>
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'viewStudent' && selectedStudentId && (
+            <div className="flex h-full">
+              {/* Student View Sidebar */}
+              <aside 
+                className="flex flex-col border-r"
+                style={{ 
+                  backgroundColor: UI_COLORS.background.white, 
+                  borderRightWidth: '1px',
+                  borderRightStyle: 'solid',
+                  borderRightColor: UI_COLORS.border.default,
+                  width: '16rem',
+                  minWidth: '16rem',
+                }}
+              >
+                <div className="p-6">
+                  <button
+                    onClick={handleBackFromViewStudent}
+                    className="flex items-center gap-2 mb-4 text-sm transition-colors"
+                    style={{ 
+                      color: UI_COLORS.text.body,
+                      backgroundColor: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                    onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    Back to All Students
+                  </button>
+                  <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                    Overview
+                  </h2>
+                </div>
+                
+                <nav className="flex-1 px-6 space-y-4">
+                  {(() => {
+                    const studentDetails = mockInstructorDataService.getStudentDetails(selectedStudentId);
+                    if (!studentDetails) return null;
+                    
+                    return (
+                      <>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                            Student Name
+                          </p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {studentDetails.name}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                            Student Email
+                          </p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {studentDetails.email}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                            Group Name
+                          </p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {studentDetails.groupName}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                            Cases Attempted
+                          </p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {studentDetails.casesAttempted}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                            Case Completion Rate
+                          </p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {studentDetails.caseCompletionRate}%
+                          </p>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </nav>
+
+                <div className="p-6 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                  <Button
+                    className="w-full justify-center gap-2 py-2.5 h-auto font-medium transition-colors text-white"
+                    style={{ 
+                      backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                      borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                    onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                  >
+                    Unenroll Student
+                  </Button>
+                </div>
+              </aside>
+
+              {/* Chat History Content */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 overflow-y-auto p-8">
+                  <div className="max-w-4xl space-y-6">
+                    <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                      Chat History
+                    </h2>
+
+                    {/* Filter by Patient Name */}
+                    <div>
+                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                        Filter by Patient Name:
+                      </label>
+                      <select
+                        className="w-full px-4 py-3 rounded-lg text-base"
+                        style={{ 
+                          borderWidth: '1px', 
+                          borderStyle: 'solid', 
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white,
+                          color: UI_COLORS.text.heading
+                        }}
+                      >
+                        <option value="pamela">Pamela</option>
+                        <option value="timothy">Timothy</option>
+                      </select>
+                    </div>
+
+                    <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                      Click on the dropdown icon to view the student's chat history and export per-case reports.
+                    </p>
+
+                    {/* Chat Attempts Table */}
+                    <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
+                      {/* Table Header */}
+                      <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                          Name
+                        </div>
+                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                          Completion Status
+                        </div>
+                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                          Scores (if applicable)
+                        </div>
+                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                        </div>
+                      </div>
+
+                      {/* Table Rows */}
+                      {mockInstructorDataService.getChatAttempts(selectedStudentId, 'pamela').map((attempt) => (
+                        <div 
+                          key={attempt.id}
+                          className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 border-t items-center"
+                          style={{ borderColor: UI_COLORS.border.default }}
+                        >
+                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                            Attempt {attempt.attemptNumber} - {attempt.date}
+                          </div>
+                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                            {attempt.completionStatus}
+                          </div>
+                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                            {attempt.score !== null ? `${attempt.score}%` : '-'}
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              className="p-2 rounded transition-colors"
+                              style={{ 
+                                border: 'none',
+                                cursor: 'pointer',
+                                backgroundColor: 'transparent'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                            >
+                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
