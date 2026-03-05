@@ -3,7 +3,15 @@
  * 
  * Provides hardcoded data for instructor views including simulation groups,
  * patient analytics, and access codes.
- * Designed for easy replacement with APIs
+ * Designed for easy replacement with API Gateway URLs
+ * 
+ * DATABASE SCHEMA ALIGNMENT:
+ * - Physical Assessment Materials: persona_media table (media_id, persona_id, media_type, url, title, description, created_at)
+ * - Chat Attempts: chats table (chat_id, student_interaction_id, chat_name, chat_context_embeddings, last_accessed, notes)
+ * - Chat Messages: messages table (message_id, chat_id, student_sent, message_content, time_sent, quality_score, quality_feedback, suggested_rewrite)
+ * - Notes: chats.notes field (text field in chats table)
+ * - Key Questions: key_questions table (question_id, rubric_id, question_text, category, order, weight, max_score)
+ * - Student Interactions: Links students to personas via student_interaction table
  */
 
 import { getSimulationGroupColor } from '@/lib/colors';
@@ -53,40 +61,49 @@ export interface MessageCountData {
 }
 
 /**
- * Represents a patient for management
+ * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
-  id: string;                           // Unique identifier
-  name: string;                         // Patient name
-  age: number;                          // Patient age
-  gender: string;                       // Patient gender
-  llmEvaluationEnabled: boolean;        // Whether LLM evaluation is enabled
-  photoUrl?: string;                    // Optional patient photo URL
-  prompt?: string;                      // Patient prompt for LLM
+  id: string;                           // Unique identifier (persona_id in DB)
+  simulation_group_id: string;          // Reference to simulation group (simulation_group_id in DB)
+  name: string;                         // Patient name (persona_name in DB)
+  age: number;                          // Patient age (persona_age in DB)
+  gender: string;                       // Patient gender (persona_gender in DB)
+  persona_number?: number;              // Patient number (persona_number in DB)
+  prompt: string;                       // Patient prompt for LLM (persona_prompt in DB)
+  average_wpm?: number;                 // Average words per minute (average_wpm in DB)
+  voice_id?: string;                    // Voice ID for TTS (voice_id in DB)
+  interaction_mode?: string;            // Interaction mode (interaction_mode in DB)
+  llmEvaluationEnabled: boolean;        // Whether LLM evaluation is enabled (derived from settings)
+  photoUrl?: string;                    // Optional patient photo URL (stored separately or in media)
 }
 
 /**
- * Represents a global rubric question
+ * Represents a global rubric question (maps to key_questions table in DB)
  */
 export interface GlobalRubricQuestion {
-  id: string;                           // Unique identifier
-  title: string;                        // Question title
-  keyQuestion: string;                  // The key question text
-  clinicalIntent: string;               // Clinical intent description
-  evaluationCriteria: string;           // Evaluation criteria
+  id: string;                           // Unique identifier (question_id in DB)
+  rubric_id?: string;                   // Reference to rubric (rubric_id in DB, null for global)
+  title: string;                        // Question title (derived from question_text)
+  keyQuestion: string;                  // The key question text (question_text in DB)
+  clinicalIntent: string;               // Clinical intent description (stored in category or separate field)
+  evaluationCriteria: string;           // Evaluation criteria (stored in separate field)
   required: boolean;                    // Whether required for case completion
+  order?: number;                       // Display order (order field in DB)
+  weight?: number;                      // Question weight (weight field in DB)
+  max_score?: number;                   // Maximum score (max_score field in DB)
 }
 
 /**
- * Represents a case material
+ * Represents a case material (maps to persona_media table in DB)
  */
 export interface CaseMaterial {
-  id: string;                           // Unique identifier
+  id: string;                           // Unique identifier (media_id in DB)
   title: string;                        // Material title
   description: string;                  // Material description
-  materialType: string;                 // Type: image, video, document, audio, other
-  contentUrl?: string;                  // URL to uploaded content
-  embedLink?: string;                   // H5P embed link
+  materialType: string;                 // Type: image, video, document, audio, other (media_type in DB)
+  contentUrl?: string;                  // URL to uploaded content (url in DB)
+  embedLink?: string;                   // H5P embed link (can be stored in url field)
 }
 
 /**
@@ -111,39 +128,71 @@ export interface StudentDetails {
 }
 
 /**
- * Represents a chat attempt for a patient
+ * Represents a chat attempt for a patient (maps to chats table in DB)
  */
 export interface ChatAttempt {
-  id: string;                           // Unique identifier
-  attemptNumber: number;                // Attempt number
-  date: string;                         // Date of attempt
-  completionStatus: 'In Progress' | 'Complete'; // Status
+  id: string;                           // Unique identifier (chat_id in DB)
+  student_interaction_id: string;       // Reference to student interaction (student_interaction_id in DB)
+  attemptNumber: number;                // Attempt number (derived from ordering)
+  date: string;                         // Date of attempt (derived from last_accessed in DB)
+  completionStatus: 'In Progress' | 'Complete'; // Status (derived from completion state)
   score: number | null;                 // Score percentage (null if in progress)
+  notes?: string;                       // Notes text (notes field in DB)
+}
+
+/**
+ * Represents a chat message (maps to messages table in DB)
+ */
+export interface ChatMessage {
+  message_id: string;                   // Unique identifier (message_id in DB)
+  chat_id: string;                      // Reference to chat (chat_id in DB)
+  student_sent: boolean;                // True if sent by student, false if AI
+  message_content: string;              // Message text (message_content in DB)
+  time_sent: string;                    // Timestamp (time_sent in DB)
+  quality_score?: number;               // Optional quality score (quality_score in DB)
+  quality_feedback?: string;            // Optional quality feedback (quality_feedback in DB)
+  suggested_rewrite?: string;           // Optional suggested rewrite (suggested_rewrite in DB)
+}
+
+/**
+ * Represents notes for a chat attempt (stored in chats.notes field in DB)
+ */
+export interface ChatNotes {
+  attemptId: string;                    // Chat attempt ID (chat_id in DB)
+  notes: string;                        // Notes text (notes field in chats table)
 }
 
 /**
  * Represents patient creation data
  */
 export interface PatientCreateData {
-  name: string;
-  age: number;
-  gender: string;
-  prompt: string;
+  name: string;                         // persona_name
+  age: number;                          // persona_age
+  gender: string;                       // persona_gender
+  prompt: string;                       // persona_prompt
+  persona_number?: number;              // persona_number (optional)
+  average_wpm?: number;                 // average_wpm (optional)
+  voice_id?: string;                    // voice_id (optional)
+  interaction_mode?: string;            // interaction_mode (optional)
 }
 
 /**
  * Represents patient update data
  */
 export interface PatientUpdateData {
-  id: string;
-  name: string;
-  age: number;
-  gender: string;
-  prompt: string;
-  photoUrl?: string;
-  llmUploadFile?: File;
-  patientInfoFile?: File;
-  answerKeyFile?: File;
+  id: string;                           // persona_id
+  name: string;                         // persona_name
+  age: number;                          // persona_age
+  gender: string;                       // persona_gender
+  prompt: string;                       // persona_prompt
+  photoUrl?: string;                    // Photo URL (stored separately)
+  persona_number?: number;              // persona_number (optional)
+  average_wpm?: number;                 // average_wpm (optional)
+  voice_id?: string;                    // voice_id (optional)
+  interaction_mode?: string;            // interaction_mode (optional)
+  llmUploadFile?: File;                 // File upload for LLM
+  patientInfoFile?: File;               // File upload for patient info
+  answerKeyFile?: File;                 // File upload for answer key
 }
 
 /**
@@ -179,6 +228,9 @@ export interface MockInstructorDataService {
   getStudents: (simulationGroupId: string) => Student[];
   getStudentDetails: (studentId: string) => StudentDetails | undefined;
   getChatAttempts: (studentId: string, patientId: string) => ChatAttempt[];
+  getChatMessages: (attemptId: string) => ChatMessage[];
+  getChatNotes: (attemptId: string) => string;
+  getDefaultPatientPrompt: () => string;
 }
 
 /**
@@ -260,31 +312,42 @@ const mockPatientAnalytics: Record<string, PatientAnalytics[]> = {
 };
 
 /**
+ * Default patient prompt for all patients
+ */
+const DEFAULT_PATIENT_PROMPT = "Pretend to be a patient with the context you are given. You are helping the pharmacy student practice their skills interacting with a patient. Engage with the student by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the student is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the student identify the proper diagnosis of the patient you are pretending to be.";
+
+/**
  * Hardcoded manageable patients data
  */
 const mockManageablePatients: Record<string, ManageablePatient[]> = {
   '1': [ // Chronic Pain group
     {
       id: 'pamela',
+      simulation_group_id: '1',
       name: 'Pamela',
       age: 56,
       gender: 'Female',
+      prompt: DEFAULT_PATIENT_PROMPT,
       llmEvaluationEnabled: true
     },
     {
       id: 'timothy',
+      simulation_group_id: '1',
       name: 'Timothy',
       age: 42,
       gender: 'Other',
+      prompt: DEFAULT_PATIENT_PROMPT,
       llmEvaluationEnabled: true
     }
   ],
   '2': [ // Acne group
     {
       id: 'john',
+      simulation_group_id: '2',
       name: 'John',
       age: 38,
       gender: 'Male',
+      prompt: DEFAULT_PATIENT_PROMPT,
       llmEvaluationEnabled: false
     }
   ]
@@ -389,6 +452,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
     'pamela': [
       {
         id: 'attempt-1',
+        student_interaction_id: 'interaction-1',
         attemptNumber: 4,
         date: 'Feb 19, 2026',
         completionStatus: 'In Progress',
@@ -396,6 +460,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
       },
       {
         id: 'attempt-2',
+        student_interaction_id: 'interaction-1',
         attemptNumber: 3,
         date: 'Feb 18, 2026',
         completionStatus: 'Complete',
@@ -403,6 +468,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
       },
       {
         id: 'attempt-3',
+        student_interaction_id: 'interaction-1',
         attemptNumber: 2,
         date: 'Feb 14, 2026',
         completionStatus: 'Complete',
@@ -410,6 +476,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
       },
       {
         id: 'attempt-4',
+        student_interaction_id: 'interaction-1',
         attemptNumber: 1,
         date: 'Jan 27, 2026',
         completionStatus: 'In Progress',
@@ -419,6 +486,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
     'timothy': [
       {
         id: 'attempt-5',
+        student_interaction_id: 'interaction-2',
         attemptNumber: 2,
         date: 'Feb 20, 2026',
         completionStatus: 'Complete',
@@ -426,6 +494,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
       },
       {
         id: 'attempt-6',
+        student_interaction_id: 'interaction-2',
         attemptNumber: 1,
         date: 'Feb 10, 2026',
         completionStatus: 'Complete',
@@ -433,6 +502,65 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
       }
     ]
   }
+};
+
+/**
+ * Hardcoded chat messages data (per attempt)
+ */
+const mockChatMessages: Record<string, ChatMessage[]> = {
+  'attempt-2': [
+    {
+      message_id: 'msg-1',
+      chat_id: 'attempt-2',
+      student_sent: false,
+      message_content: "Hello there! I'm Pamela, nice to meet you. I've been feeling really unwell lately, and I'm worried about these chest pains I've been having for the last week. They're quite uncomfortable and I'm not sure what's causing them. Do you think it could be related to my heart?",
+      time_sent: '10:00 AM'
+    },
+    {
+      message_id: 'msg-2',
+      chat_id: 'attempt-2',
+      student_sent: true,
+      message_content: "Yes it's possible, can you please tell me a little bit about your medical history?",
+      time_sent: '10:01 AM'
+    },
+    {
+      message_id: 'msg-3',
+      chat_id: 'attempt-2',
+      student_sent: false,
+      message_content: "I have a history of hypertension, which I've had for about 4 years now. I've also had a total abdominal hysterectomy, and I've been experiencing dyspnea, or shortness of breath, lately. Oh, and I've had a peptic ulcer in the past, which is why I've been taking over-the-counter non-steroidal anti-inflammatory drugs. Could any of these things be contributing to my chest pains?",
+      time_sent: '10:02 AM'
+    },
+    {
+      message_id: 'msg-4',
+      chat_id: 'attempt-2',
+      student_sent: true,
+      message_content: "What medications are you taking?",
+      time_sent: '10:03 AM'
+    },
+    {
+      message_id: 'msg-5',
+      chat_id: 'attempt-2',
+      student_sent: false,
+      message_content: "I'm not currently taking any prescription medications, but I do take ibuprofen (Advil) occasionally for headaches. I've also been taking NSAIDs regularly, which I know can irritate my stomach and make my peptic ulcer symptoms worse. I'm worried that maybe my medication use is related to my chest pains, but I'm not sure. Do you think that's possible?",
+      time_sent: '10:04 AM'
+    },
+    {
+      message_id: 'msg-6',
+      chat_id: 'attempt-2',
+      student_sent: true,
+      message_content: "Tell me more about how the pain feels",
+      time_sent: '10:05 AM'
+    }
+  ]
+};
+
+/**
+ * Hardcoded notes data (per attempt)
+ */
+const mockChatNotes: Record<string, string> = {
+  'attempt-2': 'No notes available.',
+  'attempt-3': 'sample notes go here.',
+  'attempt-4': ''
 };
 
 /**
@@ -694,9 +822,10 @@ function generateAccessCode(simulationGroupId: string): string {
 
 /**
  * Get manageable patients for a simulation group
+ * Maps to: personas table filtered by simulation_group_id
  * 
  * @param simulationGroupId - Simulation group ID
- * @returns Array of manageable patients
+ * @returns Array of manageable patients with all persona fields
  */
 function getManageablePatients(simulationGroupId: string): ManageablePatient[] {
   return mockManageablePatients[simulationGroupId] || [];
@@ -704,9 +833,10 @@ function getManageablePatients(simulationGroupId: string): ManageablePatient[] {
 
 /**
  * Get a specific patient by ID
+ * Maps to: personas table filtered by persona_id
  * 
- * @param patientId - Patient ID
- * @returns Patient or undefined if not found
+ * @param patientId - Patient ID (persona_id in DB)
+ * @returns Patient with all persona fields or undefined if not found
  */
 function getPatient(patientId: string): ManageablePatient | undefined {
   for (const groupPatients of Object.values(mockManageablePatients)) {
@@ -720,6 +850,7 @@ function getPatient(patientId: string): ManageablePatient | undefined {
 
 /**
  * Create a new patient
+ * Maps to: INSERT into personas table
  * 
  * @param simulationGroupId - Simulation group ID
  * @param patientData - New patient data
@@ -727,11 +858,16 @@ function getPatient(patientId: string): ManageablePatient | undefined {
 function createPatient(simulationGroupId: string, patientData: PatientCreateData): void {
   const newPatient: ManageablePatient = {
     id: `patient-${Date.now()}`,
+    simulation_group_id: simulationGroupId,
     name: patientData.name,
     age: patientData.age,
     gender: patientData.gender,
+    prompt: patientData.prompt || DEFAULT_PATIENT_PROMPT,
+    persona_number: patientData.persona_number,
+    average_wpm: patientData.average_wpm,
+    voice_id: patientData.voice_id,
+    interaction_mode: patientData.interaction_mode,
     llmEvaluationEnabled: false,
-    prompt: patientData.prompt,
   };
   
   if (!mockManageablePatients[simulationGroupId]) {
@@ -742,6 +878,7 @@ function createPatient(simulationGroupId: string, patientData: PatientCreateData
 
 /**
  * Update patient information
+ * Maps to: UPDATE personas table
  * 
  * @param simulationGroupId - Simulation group ID
  * @param patientData - Updated patient data
@@ -756,8 +893,12 @@ function updatePatient(simulationGroupId: string, patientData: PatientUpdateData
         name: patientData.name,
         age: patientData.age,
         gender: patientData.gender,
-        photoUrl: patientData.photoUrl,
         prompt: patientData.prompt,
+        photoUrl: patientData.photoUrl,
+        persona_number: patientData.persona_number,
+        average_wpm: patientData.average_wpm,
+        voice_id: patientData.voice_id,
+        interaction_mode: patientData.interaction_mode,
       };
     }
   }
@@ -917,13 +1058,36 @@ function getStudentDetails(studentId: string): StudentDetails | undefined {
 
 /**
  * Get chat attempts for a student and patient
+ * Maps to: chats table filtered by student_interaction_id
  * 
- * @param studentId - Student ID
- * @param patientId - Patient ID
+ * @param studentId - Student ID (user_id in DB)
+ * @param patientId - Patient ID (persona_id via student_interaction)
  * @returns Array of chat attempts
  */
 function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
   return mockChatAttempts[studentId]?.[patientId] || [];
+}
+
+/**
+ * Get chat messages for an attempt
+ * Maps to: messages table filtered by chat_id
+ * 
+ * @param attemptId - Chat attempt ID (chat_id in DB)
+ * @returns Array of chat messages ordered by time_sent
+ */
+function getChatMessages(attemptId: string): ChatMessage[] {
+  return mockChatMessages[attemptId] || [];
+}
+
+/**
+ * Get notes for an attempt
+ * Maps to: chats.notes field
+ * 
+ * @param attemptId - Chat attempt ID (chat_id in DB)
+ * @returns Notes text from chats.notes field
+ */
+function getChatNotes(attemptId: string): string {
+  return mockChatNotes[attemptId] || '';
 }
 
 /**
@@ -980,9 +1144,10 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
 
 /**
  * Get case materials for a patient
+ * Maps to: persona_media table filtered by persona_id
  * 
- * @param patientId - Patient ID
- * @returns Array of case materials
+ * @param patientId - Patient ID (persona_id in DB)
+ * @returns Array of case materials (physical assessment materials)
  */
 function getCaseMaterials(patientId: string): CaseMaterial[] {
   return mockCaseMaterials[patientId] || [];
@@ -1031,6 +1196,15 @@ function deleteCaseMaterial(patientId: string, materialId: string): void {
 }
 
 /**
+ * Get the default patient prompt
+ * 
+ * @returns Default patient prompt text
+ */
+function getDefaultPatientPrompt(): string {
+  return DEFAULT_PATIENT_PROMPT;
+}
+
+/**
  * Mock instructor data service object
  * Provides methods to retrieve hardcoded data for now
  */
@@ -1063,5 +1237,8 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getEvaluationPrompt,
   getStudents,
   getStudentDetails,
-  getChatAttempts
+  getChatAttempts,
+  getChatMessages,
+  getChatNotes,
+  getDefaultPatientPrompt
 };

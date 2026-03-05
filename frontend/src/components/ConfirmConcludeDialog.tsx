@@ -89,7 +89,7 @@ function ConfirmConcludeDialog({ isOpen, onCancel, onConfirm }: ConfirmConcludeD
         ) : (
           <>
             <p className="text-lg mb-8" style={{ color: UI_COLORS.text.body }}>
-              Are you sure you want to conclude? You will not be able to continue this interaction any further.
+              Do you have enough information to make your recommendation? Once you conclude the case, you won't be able to return to the conversation.
             </p>
             
             <div className="flex justify-end gap-4">

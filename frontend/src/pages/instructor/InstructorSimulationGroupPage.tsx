@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type Student, type StudentDetails, type ChatAttempt } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
@@ -22,7 +22,9 @@ function InstructorSimulationGroupPage() {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [studentViewTab, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
+  const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('pamela');
   
   // Edit Patient state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
@@ -203,7 +205,7 @@ function InstructorSimulationGroupPage() {
       setEditPatientName(patient.name);
       setEditPatientAge(patient.age.toString());
       setEditPatientGender(patient.gender);
-      setEditPatientPrompt(patient.prompt || '');
+      setEditPatientPrompt(patient.prompt || mockInstructorDataService.getDefaultPatientPrompt());
       setEditPatientTab('info');
       
       // Load case-specific questions and materials
@@ -308,7 +310,7 @@ function InstructorSimulationGroupPage() {
     setEditPatientName('');
     setEditPatientAge('');
     setEditPatientGender('');
-    setEditPatientPrompt('');
+    setEditPatientPrompt(mockInstructorDataService.getDefaultPatientPrompt());
     setEditPatientTab('info');
     setActiveSection('editPatient');
   };
@@ -2288,6 +2290,8 @@ Return valid JSON in exactly this structure:
                         Filter by Patient Name:
                       </label>
                       <select
+                        value={selectedPatientFilter}
+                        onChange={(e) => setSelectedPatientFilter(e.target.value)}
                         className="w-full px-4 py-3 rounded-lg text-base"
                         style={{ 
                           borderWidth: '1px', 
@@ -2306,57 +2310,180 @@ Return valid JSON in exactly this structure:
                       Click on the dropdown icon to view the student's chat history and export per-case reports.
                     </p>
 
-                    {/* Chat Attempts Table */}
-                    <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
-                      {/* Table Header */}
-                      <div className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                          Name
-                        </div>
-                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                          Completion Status
-                        </div>
-                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                          Scores (if applicable)
-                        </div>
-                        <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                        </div>
-                      </div>
+                    {/* Chat Attempts */}
+                    <div className="space-y-4">
+                      {mockInstructorDataService.getChatAttempts(selectedStudentId, selectedPatientFilter).map((attempt) => {
+                        const isExpanded = expandedAttemptId === attempt.id;
+                        const messages = mockInstructorDataService.getChatMessages(attempt.id);
+                        const notes = mockInstructorDataService.getChatNotes(attempt.id);
 
-                      {/* Table Rows */}
-                      {mockInstructorDataService.getChatAttempts(selectedStudentId, 'pamela').map((attempt) => (
-                        <div 
-                          key={attempt.id}
-                          className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 border-t items-center"
-                          style={{ borderColor: UI_COLORS.border.default }}
-                        >
-                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                            Attempt {attempt.attemptNumber} - {attempt.date}
-                          </div>
-                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                            {attempt.completionStatus}
-                          </div>
-                          <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                            {attempt.score !== null ? `${attempt.score}%` : '-'}
-                          </div>
-                          <div className="flex justify-end">
-                            <button
-                              className="p-2 rounded transition-colors"
-                              style={{ 
-                                border: 'none',
-                                cursor: 'pointer',
-                                backgroundColor: 'transparent'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                        return (
+                          <div 
+                            key={attempt.id}
+                            className="border rounded-lg overflow-hidden"
+                            style={{ borderColor: UI_COLORS.border.default }}
+                          >
+                            {/* Attempt Header Row */}
+                            <div 
+                              className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 items-center cursor-pointer transition-colors hover:bg-gray-50"
+                              style={{ backgroundColor: isExpanded ? UI_COLORS.background.tableHeader : UI_COLORS.background.white }}
+                              onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
                             >
-                              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                            </button>
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                                Attempt {attempt.attemptNumber} - {attempt.date}
+                              </div>
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                                {attempt.completionStatus}
+                              </div>
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                                {attempt.score !== null ? `${attempt.score}%` : '-'}
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  className="p-2 rounded transition-transform"
+                                  style={{ 
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    backgroundColor: 'transparent',
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                  }}
+                                >
+                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                              <div className="border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                                {/* Chat History Section */}
+                                <div className="p-6">
+                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                                    Chat History
+                                  </h3>
+                                  <div 
+                                    className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto"
+                                    style={{ 
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white
+                                    }}
+                                  >
+                                    {messages.length > 0 ? (
+                                      messages.map((message) => (
+                                        <div
+                                          key={message.message_id}
+                                          className={`flex gap-3 ${message.student_sent ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                          {/* Avatar for AI patient (left side) */}
+                                          {!message.student_sent && (
+                                            <div className="flex-shrink-0">
+                                              <UserAvatar
+                                                name="Pamela"
+                                                imageUrl={undefined}
+                                                size="small"
+                                              />
+                                            </div>
+                                          )}
+
+                                          {/* Message bubble */}
+                                          <div
+                                            className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                                              message.student_sent ? 'rounded-br-none' : 'rounded-bl-none'
+                                            }`}
+                                            style={{
+                                              backgroundColor: message.student_sent
+                                                ? SIMULATION_GROUP_COLOR_PALETTE[2]
+                                                : UI_COLORS.background.hoverLight,
+                                              color: message.student_sent ? UI_COLORS.button.text : UI_COLORS.text.heading,
+                                            }}
+                                          >
+                                            <p className="text-sm font-semibold mb-1">
+                                              {message.student_sent ? 'Student (User)' : 'Pamela (LLM)'}:
+                                            </p>
+                                            <p className="text-sm">{message.message_content}</p>
+                                          </div>
+
+                                          {/* Avatar for student (right side) */}
+                                          {message.student_sent && (
+                                            <div className="flex-shrink-0">
+                                              <UserAvatar
+                                                name="Student"
+                                                imageUrl={undefined}
+                                                size="small"
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                                        No chat history available.
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Notes Section */}
+                                <div className="px-6 pb-6">
+                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                                    Notes
+                                  </h3>
+                                  <div 
+                                    className="border rounded-lg p-4"
+                                    style={{ 
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white
+                                    }}
+                                  >
+                                    <p className="text-sm" style={{ color: notes ? UI_COLORS.text.heading : UI_COLORS.text.muted }}>
+                                      {notes || 'No notes available.'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                {/* Action Buttons */}
+                                <div className="px-6 pb-6 flex gap-4">
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{ 
+                                      backgroundColor: UI_COLORS.button.secondary, 
+                                      color: UI_COLORS.button.text 
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                  >
+                                    Download Chat PDF
+                                  </Button>
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{ 
+                                      backgroundColor: UI_COLORS.button.secondary, 
+                                      color: UI_COLORS.button.text 
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                  >
+                                    Download Notes PDF
+                                  </Button>
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{ 
+                                      backgroundColor: UI_COLORS.button.secondary, 
+                                      color: UI_COLORS.button.text 
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                  >
+                                    View AI Debrief
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
