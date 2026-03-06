@@ -62,6 +62,7 @@ function AdminSimulationGroupPage() {
   const [isAddQuestionDialogOpen, setIsAddQuestionDialogOpen] = useState(false);
   const [isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen] = useState(false);
   const [addQuestionType, setAddQuestionType] = useState<'global' | 'patientSpecific'>('global');
+  const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
   
   // Question Bank questions - loaded from service
   const [globalBankQuestions, setGlobalBankQuestions] = useState(() => 
@@ -256,7 +257,8 @@ function AdminSimulationGroupPage() {
       setSelectedCaseQuestionId(questions[0]?.id || '');
       
       // Initialize includedQuestionIds with the patient's current questions
-      setIncludedQuestionIds(new Set(questions.map(q => q.id)));
+      const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
+      setIncludedQuestionIds(questionIds);
       
       const materials = mockInstructorDataService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
@@ -483,12 +485,11 @@ function AdminSimulationGroupPage() {
       setCaseSpecificQuestions(updatedQuestions);
       setSelectedCaseQuestionId(updatedQuestions[0]?.id || '');
       
-      // Update the question bank checkmark
-      setIncludedQuestionIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(selectedCaseQuestionId);
-        return newSet;
-      });
+      // Update the question bank checkmark if this patient is selected in question bank
+      if (selectedPatientForQuestionBank === selectedPatientForEdit) {
+        const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForEdit);
+        setIncludedQuestionIds(questionIds);
+      }
     }
   };
 
@@ -829,7 +830,14 @@ function AdminSimulationGroupPage() {
           </Button>
 
           <Button
-            onClick={() => setActiveSection('questionBank')}
+            onClick={() => {
+              setActiveSection('questionBank');
+              // Reset question bank state when entering
+              if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank) {
+                const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
+                setIncludedQuestionIds(questionIds);
+              }
+            }}
             variant="ghost"
             className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
             style={{
@@ -1423,63 +1431,111 @@ function AdminSimulationGroupPage() {
                   {questionBankTab === 'patientSpecific' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which patient-specific questions should be available for individual patient cases.
+                        Select a patient to manage their patient-specific questions.
                       </p>
-                      {/* Patient-specific questions from question bank */}
-                      {patientSpecificBankQuestions.map((question) => (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+                      
+                      {/* Patient Selector */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Select Patient
+                        </label>
+                        <select
+                          value={selectedPatientForQuestionBank || ''}
+                          onChange={(e) => {
+                            const patientId = e.target.value || null;
+                            setSelectedPatientForQuestionBank(patientId);
+                            if (patientId) {
+                              const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
+                              setIncludedQuestionIds(questionIds);
+                            } else {
+                              setIncludedQuestionIds(new Set());
+                            }
+                          }}
+                          className="w-full px-4 py-2 rounded-lg border"
                           style={{
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white,
+                            color: UI_COLORS.text.heading,
                           }}
                         >
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            {question.title}
-                          </span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includedQuestionIds.has(question.id)}
-                              onChange={(e) => {
-                                if (!selectedPatientForEdit) return;
-                                
-                                const newSet = new Set(includedQuestionIds);
-                                if (e.target.checked) {
-                                  newSet.add(question.id);
-                                  
-                                  // Add to patient's case-specific questions
-                                  const newCaseQuestion: GlobalRubricQuestion = {
-                                    id: question.id,
-                                    title: question.title,
-                                    keyQuestion: '',
-                                    clinicalIntent: '',
-                                    evaluationCriteria: '',
-                                    required: false,
-                                  };
-                                  mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForEdit, newCaseQuestion);
-                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
-                                } else {
-                                  newSet.delete(question.id);
-                                  
-                                  // Remove from patient's case-specific questions
-                                  mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, question.id);
-                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
-                                }
-                                setIncludedQuestionIds(newSet);
-                              }}
-                              className="w-5 h-5 rounded cursor-pointer"
+                          <option value="">-- Select a patient --</option>
+                          {manageablePatients.map((patient) => (
+                            <option key={patient.id} value={patient.id}>
+                              {patient.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {selectedPatientForQuestionBank ? (
+                        <>
+                          {/* Patient-specific questions from question bank */}
+                          {patientSpecificBankQuestions.map((question) => (
+                            <div
+                              key={question.id}
+                              className="flex items-center justify-between p-4 rounded-lg border transition-colors"
                               style={{
-                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                borderColor: UI_COLORS.border.default,
+                                backgroundColor: UI_COLORS.background.white,
                               }}
-                            />
-                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                              Include
-                            </span>
-                          </label>
-                        </div>
-                      ))}
+                            >
+                              <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                                {question.title}
+                              </span>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={includedQuestionIds.has(question.id)}
+                                  onChange={(e) => {
+                                    const newSet = new Set(includedQuestionIds);
+                                    if (e.target.checked) {
+                                      newSet.add(question.id);
+                                      
+                                      // Add to patient's case-specific questions
+                                      const newCaseQuestion: GlobalRubricQuestion = {
+                                        id: question.id,
+                                        title: question.title,
+                                        keyQuestion: '',
+                                        clinicalIntent: '',
+                                        evaluationCriteria: '',
+                                        required: false,
+                                      };
+                                      mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
+                                      
+                                      // Update case-specific questions if we're editing this patient
+                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                      }
+                                    } else {
+                                      newSet.delete(question.id);
+                                      
+                                      // Remove from patient's case-specific questions
+                                      mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
+                                      
+                                      // Update case-specific questions if we're editing this patient
+                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                      }
+                                    }
+                                    setIncludedQuestionIds(newSet);
+                                  }}
+                                  className="w-5 h-5 rounded cursor-pointer"
+                                  style={{
+                                    accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                  }}
+                                />
+                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                  Include
+                                </span>
+                              </label>
+                            </div>
+                          ))}
+                        </>
+                      ) : (
+                        <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
+                          Please select a patient to manage their questions.
+                        </p>
+                      )}
                       
                       {/* Add New Patient-Specific Question Button */}
                       <Button

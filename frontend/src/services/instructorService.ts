@@ -236,6 +236,8 @@ export interface MockInstructorDataService {
   getPatientSpecificQuestionBank: () => QuestionBankItem[];
   addToGlobalQuestionBank: (question: QuestionBankItem) => void;
   addToPatientSpecificQuestionBank: (question: QuestionBankItem) => void;
+  getPatientCaseSpecificQuestionIds: (patientId: string) => Set<string>;
+  updatePatientCaseSpecificQuestions: (patientId: string, questionIds: Set<string>) => void;
 }
 
 /**
@@ -1287,6 +1289,32 @@ function addToPatientSpecificQuestionBank(question: QuestionBankItem): void {
 }
 
 /**
+ * Get patient's case-specific question IDs
+ * Returns a Set of question IDs that are assigned to this patient
+ * 
+ * @param patientId - Patient ID
+ * @returns Set of question IDs
+ */
+function getPatientCaseSpecificQuestionIds(patientId: string): Set<string> {
+  const questions = mockCaseSpecificQuestions[patientId] || [];
+  return new Set(questions.map(q => q.id));
+}
+
+/**
+ * Update patient's case-specific questions based on question IDs
+ * This is used when toggling checkboxes in the question bank
+ * 
+ * @param patientId - Patient ID
+ * @param questionIds - Set of question IDs that should be assigned to this patient
+ */
+function updatePatientCaseSpecificQuestions(patientId: string, questionIds: Set<string>): void {
+  // This is a helper method that doesn't directly modify data
+  // The actual add/delete operations are handled by addCaseSpecificQuestion and deleteCaseSpecificQuestion
+  // This method is here for consistency and future API integration
+  console.log(`Updating patient ${patientId} case-specific questions:`, Array.from(questionIds));
+}
+
+/**
  * Mock instructor data service object
  * Provides methods to retrieve hardcoded data for now
  */
@@ -1326,5 +1354,7 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getGlobalQuestionBank,
   getPatientSpecificQuestionBank,
   addToGlobalQuestionBank,
-  addToPatientSpecificQuestionBank
+  addToPatientSpecificQuestionBank,
+  getPatientCaseSpecificQuestionIds,
+  updatePatientCaseSpecificQuestions
 };

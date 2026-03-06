@@ -127,7 +127,8 @@ function AdminOrganizationPage() {
         userName={user.name}
         userAvatarUrl={user.avatarUrl}
         onSignOut={handleSignOut}
-        showStudentViewButton={false}
+        showStudentViewButton={true}
+        onStudentView={() => navigate('/student')}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Back to All Organizations button */}
