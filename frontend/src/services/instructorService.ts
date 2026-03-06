@@ -27,6 +27,7 @@ export interface InstructorSimulationGroup {
   iconColor?: string;      // Fallback color for avatar (hex format)
   accessCode: string;      // Access code for students to join
   studentCount: number;    // Number of students in the group
+  instructorCount?: number; // Number of instructors in the group
   patientCount: number;    // Number of patients in the group
 }
 
@@ -231,6 +232,10 @@ export interface MockInstructorDataService {
   getChatMessages: (attemptId: string) => ChatMessage[];
   getChatNotes: (attemptId: string) => string;
   getDefaultPatientPrompt: () => string;
+  getGlobalQuestionBank: () => QuestionBankItem[];
+  getPatientSpecificQuestionBank: () => QuestionBankItem[];
+  addToGlobalQuestionBank: (question: QuestionBankItem) => void;
+  addToPatientSpecificQuestionBank: (question: QuestionBankItem) => void;
 }
 
 /**
@@ -243,7 +248,8 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     subtitle: 'Medical Simulation Group',
     iconColor: getSimulationGroupColor(0),
     accessCode: 'NB3W-PI3I-Q2EH-WPA3',
-    studentCount: 24,
+    studentCount: 20,
+    instructorCount: 5,
     patientCount: 2
   },
   {
@@ -253,6 +259,7 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     iconColor: getSimulationGroupColor(1),
     accessCode: 'XY7Z-AB2C-DE4F-GH8I',
     studentCount: 18,
+    instructorCount: 3,
     patientCount: 3
   },
   {
@@ -262,6 +269,7 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     iconColor: getSimulationGroupColor(2),
     accessCode: 'PQ9R-ST1U-VW3X-YZ5A',
     studentCount: 32,
+    instructorCount: 4,
     patientCount: 2
   }
 ];
@@ -731,6 +739,44 @@ const mockCaseMaterials: Record<string, CaseMaterial[]> = {
   'timothy': [],
   'john': []
 };
+
+/**
+ * Question Bank Item - represents a question in the question bank
+ */
+export interface QuestionBankItem {
+  id: string;
+  title: string;
+}
+
+/**
+ * Hardcoded global question bank data
+ * These are available questions that can be added to simulation groups
+ */
+const mockGlobalQuestionBank: QuestionBankItem[] = [
+  { id: 'bank-global-1', title: 'Patient History Assessment' },
+  { id: 'bank-global-2', title: 'Medication Review' },
+  { id: 'bank-global-3', title: 'Communication Skills' },
+  { id: 'bank-global-4', title: 'Clinical Reasoning' },
+  { id: 'bank-global-5', title: 'Patient Education' },
+  { id: 'bank-global-6', title: 'Documentation Quality' },
+  { id: 'bank-global-7', title: 'Professionalism' },
+  { id: 'bank-global-8', title: 'Safety Considerations' },
+];
+
+/**
+ * Hardcoded patient-specific question bank data
+ * These are available questions that can be added to specific patients
+ */
+const mockPatientSpecificQuestionBank: QuestionBankItem[] = [
+  { id: 'bank-patient-1', title: 'Pain Assessment Scale' },
+  { id: 'bank-patient-2', title: 'Allergy Verification' },
+  { id: 'bank-patient-3', title: 'Symptom Duration' },
+  { id: 'bank-patient-4', title: 'Previous Treatment History' },
+  { id: 'bank-patient-5', title: 'Lifestyle Factors' },
+  { id: 'bank-patient-6', title: 'Family Medical History' },
+  { id: 'bank-patient-7', title: 'Current Medications' },
+  { id: 'bank-patient-8', title: 'Treatment Goals' },
+];
 
 /**
  * Get all simulation groups for instructor
@@ -1205,6 +1251,42 @@ function getDefaultPatientPrompt(): string {
 }
 
 /**
+ * Get global question bank
+ * 
+ * @returns Array of global question bank items
+ */
+function getGlobalQuestionBank(): QuestionBankItem[] {
+  return [...mockGlobalQuestionBank];
+}
+
+/**
+ * Get patient-specific question bank
+ * 
+ * @returns Array of patient-specific question bank items
+ */
+function getPatientSpecificQuestionBank(): QuestionBankItem[] {
+  return [...mockPatientSpecificQuestionBank];
+}
+
+/**
+ * Add a question to the global question bank
+ * 
+ * @param question - Question to add
+ */
+function addToGlobalQuestionBank(question: QuestionBankItem): void {
+  mockGlobalQuestionBank.push(question);
+}
+
+/**
+ * Add a question to the patient-specific question bank
+ * 
+ * @param question - Question to add
+ */
+function addToPatientSpecificQuestionBank(question: QuestionBankItem): void {
+  mockPatientSpecificQuestionBank.push(question);
+}
+
+/**
  * Mock instructor data service object
  * Provides methods to retrieve hardcoded data for now
  */
@@ -1240,5 +1322,9 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getChatAttempts,
   getChatMessages,
   getChatNotes,
-  getDefaultPatientPrompt
+  getDefaultPatientPrompt,
+  getGlobalQuestionBank,
+  getPatientSpecificQuestionBank,
+  addToGlobalQuestionBank,
+  addToPatientSpecificQuestionBank
 };

@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial } from '@/services/instructorService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
+import { mockAdminDataService } from '@/services/adminService';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -12,18 +13,25 @@ import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 
 /**
- * InstructorSimulationGroupPage Component
+ * AdminSimulationGroupPage Component
  * 
- * Displays the simulation group management view for instructors.
+ * Displays the simulation group management view for admins.
  * Includes sidebar navigation and content area for analytics, patient management, etc.
  */
-function InstructorSimulationGroupPage() {
+function AdminSimulationGroupPage() {
   const navigate = useNavigate();
-  const { groupId } = useParams();
-  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
+  const { organizationId, groupId } = useParams();
+  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [instructorSearchQuery, setInstructorSearchQuery] = useState('');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
+  const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
+  const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
+  const [evaluationPromptText, setEvaluationPromptText] = useState('Evaluate the student\'s interview using the instructor-defined rubric and key questions.');
+  const [promptHistory] = useState([
+    { id: 1, text: 'Previous version of the prompt...', savedAt: '2/9/2026, 11:05:11 AM' },
+  ]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
@@ -109,10 +117,20 @@ function InstructorSimulationGroupPage() {
   );
   
   // Load data from instructor service
-  const user = mockInstructorDataService.getCurrentUser();
+  const user = mockAdminDataService.getCurrentUser();
   const simulationGroup = mockInstructorDataService.getSimulationGroup(groupId || '1');
   const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
   const students = mockInstructorDataService.getStudents(groupId || '1');
+  
+  // Mock instructors data - will be replaced with API call
+  const [instructors, setInstructors] = useState([
+    { id: 'inst-1', name: 'Tom Doe', email: 'email1@random.com', dateJoined: '1/1/2025' },
+    { id: 'inst-2', name: 'Mary Jane', email: 'mary.jane@email.com', dateJoined: '30/2/2025' },
+  ]);
+  
+  // Get organization details
+  const organizations = mockAdminDataService.getOrganizations();
+  const organization = organizations.find(org => org.id === organizationId);
   
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState(() => 
@@ -144,6 +162,11 @@ function InstructorSimulationGroupPage() {
     student.name.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
+  // Filter instructors based on search query (user searches by name, but ID is the unique identifier)
+  const filteredInstructors = instructors.filter(instructor =>
+    instructor.name.toLowerCase().includes(instructorSearchQuery.toLowerCase())
+  );
+
   /**
    * Handle sign out event
    */
@@ -152,10 +175,10 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle back to all groups navigation
+   * Handle back to organization page
    */
   const handleBackToAllGroups = () => {
-    navigate('/');
+    navigate(`/admin/organization/${organizationId}`);
   };
 
   /**
@@ -173,7 +196,7 @@ function InstructorSimulationGroupPage() {
       const newCode = mockInstructorDataService.generateAccessCode(groupId);
       console.log('Generated new access code:', newCode);
       // Force re-render by navigating to same route
-      navigate(`/instructor/group/${groupId}`, { replace: true });
+      navigate(`/admin/organization/${organizationId}/group/${groupId}`, { replace: true });
     }
   };
 
@@ -269,6 +292,69 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
+   * Handle add new instructor
+   */
+  const handleAddNewInstructor = () => {
+    const email = prompt('Enter instructor email:');
+    if (email && email.trim()) {
+      const name = prompt('Enter instructor name:');
+      if (name && name.trim()) {
+        const newInstructor = {
+          id: `inst-${Date.now()}`,
+          name: name.trim(),
+          email: email.trim(),
+          dateJoined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+        };
+        setInstructors(prev => [...prev, newInstructor]);
+      }
+    }
+  };
+
+  /**
+   * Handle remove instructor
+   */
+  const handleRemoveInstructor = (instructorId: string) => {
+    const instructor = instructors.find(i => i.id === instructorId);
+    if (instructor && confirm(`Are you sure you want to remove ${instructor.name}?`)) {
+      setInstructors(prev => prev.filter(i => i.id !== instructorId));
+    }
+  };
+
+  /**
+   * Handle load default prompt
+   */
+  const handleLoadDefaultPrompt = () => {
+    if (selectedPromptType === 'system') {
+      setSystemPromptText('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient. Engage with the pharmacist by describing your symptoms to provide them hints on what condition(s) you have.');
+    } else {
+      setEvaluationPromptText(mockInstructorDataService.getEvaluationPrompt(groupId || '1'));
+    }
+  };
+
+  /**
+   * Handle save prompt
+   */
+  const handleSavePrompt = () => {
+    console.log('Saving prompt:', selectedPromptType, selectedPromptType === 'system' ? systemPromptText : evaluationPromptText);
+    // Future: API call to save prompt
+    alert('Prompt saved successfully!');
+  };
+
+  /**
+   * Handle restore prompt version
+   */
+  const handleRestorePromptVersion = (versionText: string) => {
+    if (confirm('Are you sure you want to restore this version?')) {
+      if (selectedPromptType === 'system') {
+        setSystemPromptText(versionText);
+      } else {
+        setEvaluationPromptText(versionText);
+      }
+      console.log('Restored prompt version');
+    }
+  };
+
+  /**
    * Handle save patient changes
    */
   const handleSavePatientChanges = () => {
@@ -337,18 +423,17 @@ function InstructorSimulationGroupPage() {
     setActiveSection('editPatient');
   };
   /**
-   * Handle delete question
+   * Handle delete question (disassociates from simulation group)
    */
   const handleDeleteQuestion = () => {
     if (!selectedQuestionId) return;
-    if (confirm('Are you sure you want to remove this question from the global rubric?')) {
-      // Remove from global rubric
+    if (confirm('Are you sure you want to remove this question from the global rubric? It will remain in the question bank.')) {
       mockInstructorDataService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
       const updatedQuestions = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
       setGlobalRubricQuestions(updatedQuestions);
       setSelectedQuestionId(updatedQuestions[0]?.id || null);
       
-      // Uncheck in question bank
+      // Update the question bank checkmark
       setIncludedQuestionIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(selectedQuestionId);
@@ -388,12 +473,11 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle delete case-specific question
+   * Handle delete case-specific question (disassociates from patient)
    */
   const handleDeleteCaseQuestion = () => {
     if (!selectedCaseQuestionId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to remove this question from this patient\'s case-specific rubric?')) {
-      // Remove from case-specific questions
+    if (confirm('Are you sure you want to remove this question from this patient? It will remain in the question bank.')) {
       mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestionId);
       const updatedQuestions = mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit);
       setCaseSpecificQuestions(updatedQuestions);
@@ -405,8 +489,6 @@ function InstructorSimulationGroupPage() {
         newSet.delete(selectedCaseQuestionId);
         return newSet;
       });
-      
-      // Note: The question remains in the question bank, just disassociated from this patient
     }
   };
 
@@ -589,10 +671,6 @@ function InstructorSimulationGroupPage() {
       }
     } else {
       newSet.delete(questionId);
-      
-      // Optionally remove from global rubric (commented out to keep the question but mark as not included)
-      // mockInstructorDataService.deleteGlobalRubricQuestion(groupId || '1', questionId);
-      // setGlobalRubricQuestions(mockInstructorDataService.getGlobalRubricQuestions(groupId || '1'));
     }
     
     setIncludedQuestionIds(newSet);
@@ -632,7 +710,7 @@ function InstructorSimulationGroupPage() {
               onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to All Groups
+              Back to {organization?.name || 'Organization'}
             </button>
           </div>
         </div>
@@ -725,6 +803,19 @@ function InstructorSimulationGroupPage() {
           </Button>
 
           <Button
+            onClick={() => setActiveSection('instructors')}
+            variant="ghost"
+            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+            style={{
+              backgroundColor: activeSection === 'instructors' ? UI_COLORS.background.tableHeader : 'transparent',
+              color: UI_COLORS.text.heading
+            }}
+          >
+            <UserPlus className="w-5 h-5" />
+            Manage Instructors
+          </Button>
+
+          <Button
             onClick={() => setActiveSection('rubric')}
             variant="ghost"
             className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
@@ -751,16 +842,16 @@ function InstructorSimulationGroupPage() {
           </Button>
 
           <Button
-            onClick={() => setActiveSection('prompt')}
+            onClick={() => setActiveSection('prompts')}
             variant="ghost"
             className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
             style={{
-              backgroundColor: activeSection === 'prompt' ? UI_COLORS.background.tableHeader : 'transparent',
+              backgroundColor: activeSection === 'prompts' ? UI_COLORS.background.tableHeader : 'transparent',
               color: UI_COLORS.text.heading
             }}
           >
-            <Eye className="w-5 h-5" />
-            View Evaluation Prompt
+            <FileCode className="w-5 h-5" />
+            Manage Prompts
           </Button>
         </nav>
 
@@ -804,7 +895,7 @@ function InstructorSimulationGroupPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'prompts' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <div className="space-y-6">
               {/* Simulation Group Title */}
@@ -1150,6 +1241,435 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
+
+          {activeSection === 'instructors' && (
+            <div className="space-y-6 max-w-5xl">
+              {/* Search Bar and Add Button */}
+              <div className="flex gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: UI_COLORS.text.muted }} />
+                  <Input
+                    placeholder="Search by Instructor Name"
+                    value={instructorSearchQuery}
+                    onChange={(e) => setInstructorSearchQuery(e.target.value)}
+                    className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                    style={{ 
+                      borderWidth: '1px', 
+                      borderStyle: 'solid', 
+                      borderColor: UI_COLORS.border.default,
+                      backgroundColor: UI_COLORS.background.white
+                    }}
+                  />
+                </div>
+                <Button
+                  onClick={handleAddNewInstructor}
+                  className="px-6 py-6 gap-2 transition-colors"
+                  style={{ 
+                    backgroundColor: UI_COLORS.button.primary, 
+                    color: UI_COLORS.button.text 
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Instructor
+                </Button>
+              </div>
+
+              {/* Instructor Table */}
+              <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
+                {/* Table Header */}
+                <div className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Instructor Name
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Email Address
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Date Joined
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Actions
+                  </div>
+                </div>
+
+                {/* Table Rows */}
+                {filteredInstructors.map((instructor) => (
+                  <div 
+                    key={instructor.id}
+                    className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4 border-t items-center"
+                    style={{ borderColor: UI_COLORS.border.default }}
+                  >
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.name}
+                    </div>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.email}
+                    </div>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.dateJoined}
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => handleRemoveInstructor(instructor.id)}
+                        className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                        style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
+                        aria-label="Remove instructor"
+                      >
+                        <Trash2 className="w-5 h-5" style={{ color: UI_COLORS.status.error }} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'questionBank' && (
+            <div className="h-full flex flex-col">
+              <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                  Question Bank
+                </h2>
+                
+                {/* Tab Switcher */}
+                <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                  <button
+                    onClick={() => setQuestionBankTab('global')}
+                    className="px-6 py-3 font-medium transition-colors border-b-2"
+                    style={{
+                      color: questionBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                      borderColor: questionBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                      backgroundColor: 'transparent',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Global Questions
+                  </button>
+                  <button
+                    onClick={() => setQuestionBankTab('patientSpecific')}
+                    className="px-6 py-3 font-medium transition-colors border-b-2"
+                    style={{
+                      color: questionBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                      borderColor: questionBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                      backgroundColor: 'transparent',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Patient-Specific Questions
+                  </button>
+                </div>
+              </div>
+
+              {/* Question List */}
+              <div className="flex-1 overflow-y-auto px-8 py-6">
+                <div className="space-y-3">
+                  {questionBankTab === 'global' && (
+                    <>
+                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                        Select which global questions should be included in this simulation group's rubric.
+                      </p>
+                      {/* Global questions from question bank */}
+                      {globalBankQuestions.map((question) => (
+                        <div
+                          key={question.id}
+                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+                          style={{
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white,
+                          }}
+                        >
+                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                            {question.title}
+                          </span>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={includedQuestionIds.has(question.id)}
+                              onChange={(e) => handleToggleQuestionInclusion(question.id, question, e.target.checked)}
+                              className="w-5 h-5 rounded cursor-pointer"
+                              style={{
+                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                              }}
+                            />
+                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                              Include
+                            </span>
+                          </label>
+                        </div>
+                      ))}
+                      
+                      {/* Add New Global Question Button */}
+                      <Button
+                        onClick={() => {
+                          setAddQuestionType('global');
+                          setIsAddQuestionDialogOpen(true);
+                        }}
+                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
+                        style={{ 
+                          backgroundColor: UI_COLORS.button.primary, 
+                          color: UI_COLORS.button.text 
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add New Global Question
+                      </Button>
+                    </>
+                  )}
+
+                  {questionBankTab === 'patientSpecific' && (
+                    <>
+                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                        Select which patient-specific questions should be available for individual patient cases.
+                      </p>
+                      {/* Patient-specific questions from question bank */}
+                      {patientSpecificBankQuestions.map((question) => (
+                        <div
+                          key={question.id}
+                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+                          style={{
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white,
+                          }}
+                        >
+                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                            {question.title}
+                          </span>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={includedQuestionIds.has(question.id)}
+                              onChange={(e) => {
+                                if (!selectedPatientForEdit) return;
+                                
+                                const newSet = new Set(includedQuestionIds);
+                                if (e.target.checked) {
+                                  newSet.add(question.id);
+                                  
+                                  // Add to patient's case-specific questions
+                                  const newCaseQuestion: GlobalRubricQuestion = {
+                                    id: question.id,
+                                    title: question.title,
+                                    keyQuestion: '',
+                                    clinicalIntent: '',
+                                    evaluationCriteria: '',
+                                    required: false,
+                                  };
+                                  mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForEdit, newCaseQuestion);
+                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
+                                } else {
+                                  newSet.delete(question.id);
+                                  
+                                  // Remove from patient's case-specific questions
+                                  mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, question.id);
+                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
+                                }
+                                setIncludedQuestionIds(newSet);
+                              }}
+                              className="w-5 h-5 rounded cursor-pointer"
+                              style={{
+                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                              }}
+                            />
+                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                              Include
+                            </span>
+                          </label>
+                        </div>
+                      ))}
+                      
+                      {/* Add New Patient-Specific Question Button */}
+                      <Button
+                        onClick={() => {
+                          setIsAddPatientQuestionDialogOpen(true);
+                        }}
+                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
+                        style={{ 
+                          backgroundColor: UI_COLORS.button.primary, 
+                          color: UI_COLORS.button.text 
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add New Patient-Specific Question
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === 'prompts' && (
+            <div className="flex h-full relative">
+              {/* Prompt Type Sidebar */}
+              <aside 
+                className="flex flex-col border-r"
+                style={{ 
+                  backgroundColor: UI_COLORS.background.white, 
+                  borderRightWidth: '1px',
+                  borderRightStyle: 'solid',
+                  borderRightColor: UI_COLORS.border.default,
+                  width: '16rem',
+                  minWidth: '16rem',
+                }}
+              >
+                <div className="p-6">
+                  <h3 className="text-sm font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                    Prompt Type
+                  </h3>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => setSelectedPromptType('system')}
+                      variant="ghost"
+                      className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+                      style={{
+                        backgroundColor: selectedPromptType === 'system' ? UI_COLORS.background.tableHeader : 'transparent',
+                        color: UI_COLORS.text.heading
+                      }}
+                    >
+                      System Prompt
+                    </Button>
+                    <Button
+                      onClick={() => setSelectedPromptType('evaluation')}
+                      variant="ghost"
+                      className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+                      style={{
+                        backgroundColor: selectedPromptType === 'evaluation' ? UI_COLORS.background.tableHeader : 'transparent',
+                        color: UI_COLORS.text.heading
+                      }}
+                    >
+                      Evaluation Prompt
+                    </Button>
+                  </div>
+                </div>
+              </aside>
+
+              {/* Main Content */}
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="max-w-4xl space-y-8">
+                  {/* Edit Prompt Section */}
+                  <div>
+                    <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                      {selectedPromptType === 'system' ? 'System Prompt' : 'Evaluation Prompt'}
+                    </h2>
+                    
+                    <div className="space-y-4">
+                      <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                        Edit Prompt
+                      </label>
+                      <textarea
+                        value={String(selectedPromptType === 'system' ? systemPromptText : evaluationPromptText)}
+                        onChange={(e) => selectedPromptType === 'system' ? setSystemPromptText(e.target.value) : setEvaluationPromptText(e.target.value)}
+                        placeholder="Prompt goes here..."
+                        rows={6}
+                        className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                        style={{ 
+                          borderWidth: '1px', 
+                          borderStyle: 'solid', 
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white,
+                          color: UI_COLORS.text.heading
+                        }}
+                      />
+                      
+                      <div className="flex gap-3 justify-end">
+                        <Button
+                          onClick={handleLoadDefaultPrompt}
+                          variant="outline"
+                          className="px-6 transition-colors"
+                          style={{ 
+                            borderColor: UI_COLORS.border.default,
+                            color: UI_COLORS.text.heading,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        >
+                          Load Default Prompt
+                        </Button>
+                        <Button
+                          onClick={handleSavePrompt}
+                          className="px-6 transition-colors"
+                          style={{ 
+                            backgroundColor: UI_COLORS.button.primary, 
+                            color: UI_COLORS.button.text 
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                        >
+                          Save Prompt
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Prompt History Section */}
+                  <div>
+                    <h3 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                      {selectedPromptType === 'system' ? 'System' : 'Evaluation'} Prompt History
+                    </h3>
+                    <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                      Browse earlier versions. Restore any version you want to use.
+                    </p>
+
+                    {promptHistory.map((version, index) => (
+                      <div key={version.id} className="border rounded-lg p-6 mb-4" style={{ borderColor: UI_COLORS.border.default }}>
+                        <textarea
+                          value={String(version.text)}
+                          readOnly
+                          placeholder="Prompt goes here..."
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-md resize-none mb-4"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.tableHeader,
+                            color: UI_COLORS.text.heading
+                          }}
+                        />
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <button
+                              className="text-sm"
+                              style={{ 
+                                color: UI_COLORS.text.muted,
+                                border: 'none',
+                                background: 'none',
+                                cursor: 'pointer',
+                                padding: 0
+                              }}
+                            >
+                              ← Version {index + 1} of {promptHistory.length} →
+                            </button>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Saved: {version.savedAt}
+                            </span>
+                          </div>
+                          <Button
+                            onClick={() => handleRestorePromptVersion(version.text)}
+                            variant="outline"
+                            className="px-6 transition-colors"
+                            style={{ 
+                              borderColor: UI_COLORS.border.default,
+                              color: UI_COLORS.text.heading,
+                              backgroundColor: UI_COLORS.background.white
+                            }}
+                          >
+                            Restore This Version
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
           {activeSection === 'rubric' && (
             <div className="flex h-full relative">
@@ -1380,252 +1900,6 @@ function InstructorSimulationGroupPage() {
                     </div>
                   )}
                 </div>
-              </div>
-            </div>
-          )}
-          
-          {activeSection === 'questionBank' && (
-            <div className="h-full flex flex-col">
-              <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: UI_COLORS.border.default }}>
-                <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                  Question Bank
-                </h2>
-                
-                {/* Tab Switcher */}
-                <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
-                  <button
-                    onClick={() => setQuestionBankTab('global')}
-                    className="px-6 py-3 font-medium transition-colors border-b-2"
-                    style={{
-                      color: questionBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
-                      borderColor: questionBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
-                      backgroundColor: 'transparent',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Global Questions
-                  </button>
-                  <button
-                    onClick={() => setQuestionBankTab('patientSpecific')}
-                    className="px-6 py-3 font-medium transition-colors border-b-2"
-                    style={{
-                      color: questionBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
-                      borderColor: questionBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
-                      backgroundColor: 'transparent',
-                      cursor: 'pointer'
-                    }}
-                  >
-                    Patient-Specific Questions
-                  </button>
-                </div>
-              </div>
-
-              {/* Question List */}
-              <div className="flex-1 overflow-y-auto px-8 py-6">
-                <div className="space-y-3">
-                  {questionBankTab === 'global' && (
-                    <>
-                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which global questions should be included in this simulation group's rubric.
-                      </p>
-                      {/* Global questions from question bank */}
-                      {globalBankQuestions.map((question) => (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
-                          style={{
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
-                          }}
-                        >
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            {question.title}
-                          </span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includedQuestionIds.has(question.id)}
-                              onChange={(e) => handleToggleQuestionInclusion(question.id, question, e.target.checked)}
-                              className="w-5 h-5 rounded cursor-pointer"
-                              style={{
-                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                              }}
-                            />
-                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                              Include
-                            </span>
-                          </label>
-                        </div>
-                      ))}
-                      
-                      {/* Add New Global Question Button */}
-                      <Button
-                        onClick={() => {
-                          setAddQuestionType('global');
-                          setIsAddQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Global Question
-                      </Button>
-                    </>
-                  )}
-
-                  {questionBankTab === 'patientSpecific' && (
-                    <>
-                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which patient-specific questions should be available for individual patient cases.
-                      </p>
-                      {/* Patient-specific questions from question bank */}
-                      {patientSpecificBankQuestions.map((question) => (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
-                          style={{
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
-                          }}
-                        >
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            {question.title}
-                          </span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includedQuestionIds.has(question.id)}
-                              onChange={(e) => {
-                                if (!selectedPatientForEdit) return;
-                                
-                                const newSet = new Set(includedQuestionIds);
-                                if (e.target.checked) {
-                                  newSet.add(question.id);
-                                  
-                                  // Add to patient's case-specific questions
-                                  const newCaseQuestion: GlobalRubricQuestion = {
-                                    id: question.id,
-                                    title: question.title,
-                                    keyQuestion: '',
-                                    clinicalIntent: '',
-                                    evaluationCriteria: '',
-                                    required: false,
-                                  };
-                                  mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForEdit, newCaseQuestion);
-                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
-                                } else {
-                                  newSet.delete(question.id);
-                                  
-                                  // Remove from patient's case-specific questions
-                                  mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, question.id);
-                                  setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit));
-                                }
-                                setIncludedQuestionIds(newSet);
-                              }}
-                              className="w-5 h-5 rounded cursor-pointer"
-                              style={{
-                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                              }}
-                            />
-                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                              Include
-                            </span>
-                          </label>
-                        </div>
-                      ))}
-                      
-                      {/* Add New Patient-Specific Question Button */}
-                      <Button
-                        onClick={() => {
-                          setIsAddPatientQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Patient-Specific Question
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-          
-          {activeSection === 'prompt' && (
-            <div className="space-y-4">
-              <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                Evaluation Prompt
-              </h2>
-              
-              <div>
-                <textarea
-                  readOnly
-                  className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
-                    borderColor: UI_COLORS.border.default,
-                    backgroundColor: UI_COLORS.background.tableHeader,
-                    minHeight: '500px',
-                  }}
-                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.
-Use only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.
-
-Assess:
-- which key questions were addressed, partially addressed, or missed
-- how well the student's questions align with the rubric
-- overall clinical reasoning and question quality
-
-Generate an AI debrief with:
-- Interview Summary (3-5 sentences)
-- Key Questions Successfully Addressed
-- Key Questions Missed or Incomplete
-- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)
-- Overall Assessment (rubric alignment score + summary)
-
-OUTPUT FORMAT
-Return valid JSON in exactly this structure:
-
-{
-  "interview_summary": "string",
-  "key_questions_successfully_addressed": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "feedback": "string"
-    }
-  ],
-  "key_questions_missed_or_incomplete": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "status": "missed | partially_addressed",
-      "feedback": "string",
-      "clinical_importance": "string"
-    }
-  ],
-  "rubric_based_feedback": {
-    "strengths": ["string", "string"],
-    "areas_for_improvement": ["string", "string"],
-    "recommended_focus_next_time": ["string", "string"]
-  },
-  "overall_assessment": {
-    "rubric_alignment_score": 0,
-    "summary": "string"
-  }
-}`}
-                />
               </div>
             </div>
           )}
@@ -2784,4 +3058,4 @@ Return valid JSON in exactly this structure:
   );
 }
 
-export default InstructorSimulationGroupPage;
+export default AdminSimulationGroupPage;
