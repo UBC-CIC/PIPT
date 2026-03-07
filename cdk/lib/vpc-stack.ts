@@ -1,29 +1,32 @@
 import { Stack, StackProps } from "aws-cdk-lib";
 import { Construct } from "constructs";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
+import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Fn } from "aws-cdk-lib";
+import {
+  AwsCustomResource,
+  AwsCustomResourcePolicy,
+  PhysicalResourceId,
+} from "aws-cdk-lib/custom-resources";
 
 export class VpcStack extends Stack {
-  public readonly vpc: ec2.IVpc;
+  public readonly vpc: ec2.Vpc;
   public readonly vpcCidrString: string;
   public readonly privateSubnetsCidrStrings: string[];
 
-  constructor(
-    scope: Construct,
-    id: string,
-    props: StackProps & { stackPrefix: string }
-  ) {
+  constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
     const existingVpcId: string = ""; // CHANGE IF DEPLOYING WITH EXISTING VPC
 
     if (existingVpcId !== "") {
-      const AWSControlTowerStackSet = ""; // CHANGE TO YOUR CONTROL TOWER STACK SET
+      const AWSControlTowerStackSet =
+        "StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-df80d055-f27d-4b9a-917f-f0db2da2ad91"; // CHANGE TO YOUR CONTROL TOWER STACK SET
       const existingPublicSubnetID: string = ""; // CHANGE IF DEPLOYING WITH EXISTING PUBLIC SUBNET
 
-      const latPrefix = props.stackPrefix;
+      const genrxPrefix = "GENRX-production";
 
-      this.vpcCidrString = "172.31.94.0/20";
+      this.vpcCidrString = "172.31.128.0/20";
 
       // VPC for application
       this.vpc = ec2.Vpc.fromVpcAttributes(this, `${id}-Vpc`, {
@@ -45,24 +48,8 @@ export class VpcStack extends Stack {
             `${AWSControlTowerStackSet}-PrivateSubnet3ARouteTable`
           ),
         ],
-        isolatedSubnetIds: [
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet1AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet2AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet3AID`),
-        ],
-        isolatedSubnetRouteTableIds: [
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet1ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet2ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet3ARouteTable`
-          ),
-        ],
         vpcCidrBlock: Fn.importValue(`${AWSControlTowerStackSet}-VPCCIDR`),
-      });
+      }) as ec2.Vpc;
 
       // Extract CIDR ranges from the private subnets
       this.privateSubnetsCidrStrings = [
@@ -112,19 +99,19 @@ export class VpcStack extends Stack {
         });
 
         // Update route table for private subnets
-        new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute1`, {
+        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute1`, {
           routeTableId: this.vpc.privateSubnets[0].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
-        new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute2`, {
+        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute2`, {
           routeTableId: this.vpc.privateSubnets[1].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
-        new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute3`, {
+        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute3`, {
           routeTableId: this.vpc.privateSubnets[2].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
@@ -135,34 +122,53 @@ export class VpcStack extends Stack {
         );
       }
 
-      // Add interface endpoints for private isolated subnets
+      // Add interface endpoints for private subnets
       this.vpc.addInterfaceEndpoint("SSM Endpoint", {
         service: ec2.InterfaceVpcEndpointAwsService.SSM,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-        privateDnsEnabled: false, // Disable private DNS to avoid conflicts
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true, // Enable private DNS for proper resolution
       });
 
       this.vpc.addInterfaceEndpoint("Secrets Manager Endpoint", {
         service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-        privateDnsEnabled: false, // Disable private DNS to avoid conflicts
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true, // Enable private DNS for proper resolution
       });
 
       this.vpc.addInterfaceEndpoint("RDS Endpoint", {
         service: ec2.InterfaceVpcEndpointAwsService.RDS,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-        privateDnsEnabled: false, // Disable private DNS to avoid conflicts
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true, // Enable private DNS for proper resolution
+      });
+
+      this.vpc.addInterfaceEndpoint("Glue Endpoint", {
+        service: ec2.InterfaceVpcEndpointAwsService.GLUE,
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true, // Enable private DNS for proper resolution
+      });
+      
+      // Add API Gateway VPC endpoint
+      this.vpc.addInterfaceEndpoint("API Gateway Endpoint", {
+        service: ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true,
       });
 
       this.vpc.addFlowLog(`${id}-vpcFlowLog`);
 
+      // Get default security group for VPC
+      const defaultSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
+        this,
+        id,
+        this.vpc.vpcDefaultSecurityGroup
+      );
     } else {
       this.vpcCidrString = "10.0.0.0/16";
 
       const natGatewayProvider = ec2.NatProvider.gateway();
 
       // VPC for application
-      this.vpc = new ec2.Vpc(this, "oer-Vpc", {
+      this.vpc = new ec2.Vpc(this, "genrx-Vpc", {
         ipAddresses: ec2.IpAddresses.cidr(this.vpcCidrString),
         natGatewayProvider: natGatewayProvider,
         natGateways: 1,
@@ -183,7 +189,7 @@ export class VpcStack extends Stack {
         ],
       });
 
-      this.vpc.addFlowLog("oer-vpcFlowLog");
+      this.vpc.addFlowLog("genrx-vpcFlowLog");
 
       // Add secrets manager endpoint to VPC
       this.vpc.addInterfaceEndpoint(`${id}-Secrets Manager Endpoint`, {

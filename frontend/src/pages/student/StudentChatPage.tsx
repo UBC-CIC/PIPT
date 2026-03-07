@@ -6,6 +6,7 @@ import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
+// CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
