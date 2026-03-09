@@ -63,14 +63,14 @@ function CreateOrganizationDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">Create new Organization</DialogTitle>
           <DialogDescription className="sr-only">
             Create a new organization with name, description, AI persona, and system prompt
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-6 py-4">
+        <div className="flex flex-col gap-6 py-4 overflow-y-auto pr-2">
           {/* Name Field */}
           <div className="flex flex-col gap-2">
             <label 
