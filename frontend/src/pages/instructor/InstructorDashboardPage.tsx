@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
 import CreateSimulationGroupDialog from '@/components/CreateSimulationGroupDialog';
-import { mockInstructorDataService, type InstructorSimulationGroup } from '@/services/instructorService';
+import { instructorService, type InstructorSimulationGroup } from '@/services/instructorService';
 import { getSimulationGroupColor } from '@/lib/colors';
+import { useAuth } from '@/App';
 
 /**
  * InstructorDashboardPage Component
@@ -15,26 +16,35 @@ import { getSimulationGroupColor } from '@/lib/colors';
  */
 function InstructorDashboardPage() {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [groups, setGroups] = useState<InstructorSimulationGroup[]>([]);
+  const [user, setUser] = useState<{ name: string; avatarUrl?: string }>({ name: 'Instructor', avatarUrl: undefined });
+  const [loading, setLoading] = useState(true);
 
-  // Load simulation groups from mock data service and store in state
-  const [groups, setGroups] = useState<InstructorSimulationGroup[]>(() => mockInstructorDataService.getSimulationGroups());
-
-  // Load user data from mock data service with error handling
-  let user = mockInstructorDataService.getCurrentUser();
-
-  if (!user || !user.name) {
-    console.warn('User data is missing or invalid, using default values');
-    user = {
-      name: 'Instructor',
-      avatarUrl: undefined
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const [groupsData, userData] = await Promise.all([
+          instructorService.getSimulationGroups(),
+          instructorService.getCurrentUser(),
+        ]);
+        setGroups(groupsData);
+        setUser(userData);
+      } catch (error) {
+        console.error('Error loading instructor dashboard:', error);
+      } finally {
+        setLoading(false);
+      }
     };
-  }
 
-  const handleSignOut = () => {
+    loadData();
+  }, []);
+
+  const handleSignOut = async () => {
     try {
       console.log('Sign out clicked');
-      navigate('/login');
+      await signOut();
     } catch (error) {
       console.error('Error during sign out:', error);
     }
@@ -87,12 +97,19 @@ function InstructorDashboardPage() {
   const handleViewAnalytics = (groupId: string) => {
     try {
       console.log(`View analytics for group: ${groupId}`);
-      // Navigate to simulation group page
       navigate(`/instructor/group/${groupId}`);
     } catch (error) {
       console.error('Error viewing analytics:', error);
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <PageContainer>
@@ -107,7 +124,11 @@ function InstructorDashboardPage() {
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         <SimulationGroupsSection
-          groups={groups}
+          groups={groups.map(g => ({
+            ...g,
+            simulation_group_id: g.id,
+            group_name: g.name,
+          }))}
           onJoinGroup={handleCreateGroup}
           onContinueTraining={handleViewAnalytics}
           joinButtonText="+ Create New Group"

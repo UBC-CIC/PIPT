@@ -2,11 +2,11 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockDataService } from '@/services/studentService';
 import { ArrowLeft } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState } from 'react';
+import { useAuth } from '@/App';
 
 /**
  * PatientDashboardPage Component
@@ -17,8 +17,8 @@ function PatientDashboardPage() {
   const navigate = useNavigate();
   const { groupId, patientId } = useParams();
   
-  // Load user data from mock data service
-  const user = mockDataService.getCurrentUser();
+  const { user: authUser, signOut } = useAuth();
+  const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
   // State for showing all attempts
   const [showAllAttempts, setShowAllAttempts] = useState(false);
@@ -90,8 +90,8 @@ function PatientDashboardPage() {
   /**
    * Handle sign out event
    */
-  const handleSignOut = () => {
-    navigate('/login');
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   /**

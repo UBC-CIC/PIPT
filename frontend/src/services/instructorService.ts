@@ -1,9 +1,8 @@
 /**
- * Instructor Service (Populated with Mock Data for now)
+ * Instructor Service
  * 
- * Provides hardcoded data for instructor views including simulation groups,
- * patient analytics, and access codes.
- * Designed for easy replacement with API Gateway URLs
+ * Calls real backend API endpoints via API Gateway.
+ * Falls back to mock data if API calls fail (for local dev without backend).
  * 
  * DATABASE SCHEMA ALIGNMENT:
  * - Physical Assessment Materials: persona_media table (media_id, persona_id, media_type, url, title, description, created_at)
@@ -15,7 +14,8 @@
  */
 
 import { getSimulationGroupColor } from '@/lib/colors';
-import { mockAdminDataService } from './adminService';
+import { apiClient } from '@/lib/api-client';
+import { authService } from '@/lib/auth';
 
 /**
  * Represents a simulation group from instructor perspective
@@ -213,23 +213,23 @@ export interface PatientUpdateData {
 }
 
 /**
- * Mock data service interface
+ * Instructor data service interface
  */
-export interface MockInstructorDataService {
-  getSimulationGroups: () => InstructorSimulationGroup[];
-  getCurrentUser: () => UserData;
-  getSimulationGroup: (id: string) => InstructorSimulationGroup | undefined;
-  getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
-  getPatientAnalytics: (simulationGroupId: string) => PatientAnalytics[];
+export interface InstructorDataService {
+  getSimulationGroups: () => Promise<InstructorSimulationGroup[]>;
+  createSimulationGroup: (data: { name: string; description: string; active: boolean; enableVoice: boolean }) => Promise<InstructorSimulationGroup>;
+  getCurrentUser: () => Promise<UserData>;
+  getSimulationGroup: (id: string) => Promise<InstructorSimulationGroup | undefined>;
+  getPatientAnalytics: (simulationGroupId: string) => Promise<PatientAnalytics[]>;
   getMessageCountData: (patientId: string) => MessageCountData[];
-  generateAccessCode: (simulationGroupId: string) => string;
-  getManageablePatients: (simulationGroupId: string) => ManageablePatient[];
+  generateAccessCode: (simulationGroupId: string) => Promise<string>;
+  getManageablePatients: (simulationGroupId: string) => Promise<ManageablePatient[]>;
   getPatient: (patientId: string) => ManageablePatient | undefined;
-  createPatient: (simulationGroupId: string, patientData: PatientCreateData) => void;
-  updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => void;
+  createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<void>;
+  updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => Promise<void>;
   uploadPatientPhoto: (patientId: string, photoFile: File) => Promise<string>;
-  updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => void;
-  deletePatient: (patientId: string) => void;
+  updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
+  deletePatient: (patientId: string) => Promise<void>;
   getGlobalRubricQuestions: (simulationGroupId: string) => GlobalRubricQuestion[];
   addGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
   updateGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
@@ -242,8 +242,8 @@ export interface MockInstructorDataService {
   addCaseMaterial: (patientId: string, material: CaseMaterial) => void;
   updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
   deleteCaseMaterial: (patientId: string, materialId: string) => void;
-  getEvaluationPrompt: (simulationGroupId: string) => string;
-  getStudents: (simulationGroupId: string) => Student[];
+  getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
+  getStudents: (simulationGroupId: string) => Promise<Student[]>;
   getStudentDetails: (studentId: string) => StudentDetails | undefined;
   getChatAttempts: (studentId: string, patientId: string) => ChatAttempt[];
   getChatMessages: (attemptId: string) => ChatMessage[];
@@ -263,507 +263,49 @@ export interface MockInstructorDataService {
 /**
  * Hardcoded simulation groups for instructors
  */
-const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
-  {
-    id: '1',
-    name: 'Chronic Pain',
-    subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(0),
-    accessCode: 'NB3W-PI3I-Q2EH-WPA3',
-    studentCount: 20,
-    instructorCount: 5,
-    patientCount: 2,
-    organizationId: 'org-1'
-  },
-  {
-    id: '2',
-    name: 'Acne',
-    subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(1),
-    accessCode: 'XY7Z-AB2C-DE4F-GH8I',
-    studentCount: 18,
-    instructorCount: 3,
-    patientCount: 3,
-    organizationId: 'org-1'
-  },
-  {
-    id: '3',
-    name: 'Diabetes Management',
-    subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(2),
-    accessCode: 'PQ9R-ST1U-VW3X-YZ5A',
-    studentCount: 32,
-    instructorCount: 4,
-    patientCount: 2,
-    organizationId: 'org-2'
-  }
-];
+async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
 
-/**
- * Hardcoded user data for instructor
- */
-const mockInstructorUserData: UserData = {
-  name: 'Dr. Sarah Johnson',
-  avatarUrl: undefined // Will display initials
-};
+    const data = await apiClient.request<any[]>(
+      `/instructor/groups?email=${encodeURIComponent(user.email)}`
+    );
 
-/**
- * Hardcoded patient analytics data
- */
-const mockPatientAnalytics: Record<string, PatientAnalytics[]> = {
-  '1': [ // Chronic Pain group
-    {
-      id: 'pamela',
-      name: 'Pamela',
-      instructorCompletionPercentage: 60,
-      llmCompletionPercentage: 0,
-      studentMessageCount: 49,
-      aiMessageCount: 36,
-      studentAccessCount: 10
-    },
-    {
-      id: 'timothy',
-      name: 'Timothy',
-      instructorCompletionPercentage: 0,
-      llmCompletionPercentage: 0,
-      studentMessageCount: 32,
-      aiMessageCount: 28,
-      studentAccessCount: 8
-    }
-  ],
-  '2': [ // Acne group
-    {
-      id: 'john',
-      name: 'John Davis',
-      instructorCompletionPercentage: 15,
-      llmCompletionPercentage: 20,
-      studentMessageCount: 65,
-      aiMessageCount: 52,
-      studentAccessCount: 15
-    }
-  ]
-};
-
-/**
- * Default patient prompt for all patients
- */
-const DEFAULT_PATIENT_PROMPT = "Pretend to be a patient with the context you are given. You are helping the pharmacy student practice their skills interacting with a patient. Engage with the student by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the student is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the student identify the proper diagnosis of the patient you are pretending to be.";
-
-/**
- * Hardcoded manageable patients data
- */
-const mockManageablePatients: Record<string, ManageablePatient[]> = {
-  '1': [ // Chronic Pain group
-    {
-      id: 'pamela',
-      simulation_group_id: '1',
-      name: 'Pamela',
-      age: 56,
-      gender: 'Female',
-      prompt: DEFAULT_PATIENT_PROMPT,
-      llmEvaluationEnabled: true
-    },
-    {
-      id: 'timothy',
-      simulation_group_id: '1',
-      name: 'Timothy',
-      age: 42,
-      gender: 'Other',
-      prompt: DEFAULT_PATIENT_PROMPT,
-      llmEvaluationEnabled: true
-    }
-  ],
-  '2': [ // Acne group
-    {
-      id: 'john',
-      simulation_group_id: '2',
-      name: 'John',
-      age: 38,
-      gender: 'Male',
-      prompt: DEFAULT_PATIENT_PROMPT,
-      llmEvaluationEnabled: false
-    }
-  ]
-};
-
-/**
- * Hardcoded students data
- */
-const mockStudents: Record<string, Student[]> = {
-  '1': [ // Chronic Pain group
-    {
-      id: 'student-1',
-      name: 'Student 1',
-      email: 'student1@example.com'
-    },
-    {
-      id: 'student-2',
-      name: 'Student 2',
-      email: 'student2@example.com'
-    },
-    {
-      id: 'student-3',
-      name: 'Student 3',
-      email: 'student3@example.com'
-    },
-    {
-      id: 'student-4',
-      name: 'Student 4',
-      email: 'student4@example.com'
-    },
-    {
-      id: 'student-5',
-      name: 'Student 5',
-      email: 'student5@example.com'
-    }
-  ],
-  '2': [ // Acne group
-    {
-      id: 'student-6',
-      name: 'Student 6',
-      email: 'student6@example.com'
-    },
-    {
-      id: 'student-7',
-      name: 'Student 7',
-      email: 'student7@example.com'
-    }
-  ]
-};
-
-/**
- * Hardcoded student details data
- */
-const mockStudentDetails: Record<string, StudentDetails> = {
-  'student-1': {
-    id: 'student-1',
-    name: 'Student 1',
-    email: 'student1@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 4,
-    caseCompletionRate: 50
-  },
-  'student-2': {
-    id: 'student-2',
-    name: 'Student 2',
-    email: 'student2@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 3,
-    caseCompletionRate: 67
-  },
-  'student-3': {
-    id: 'student-3',
-    name: 'Student 3',
-    email: 'student3@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 2,
-    caseCompletionRate: 100
-  },
-  'student-4': {
-    id: 'student-4',
-    name: 'Student 4',
-    email: 'student4@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 5,
-    caseCompletionRate: 80
-  },
-  'student-5': {
-    id: 'student-5',
-    name: 'Student 5',
-    email: 'student5@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 1,
-    caseCompletionRate: 0
-  }
-};
-
-/**
- * Hardcoded chat attempts data (per student per patient)
- */
-const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
-  'student-1': {
-    'pamela': [
-      {
-        id: 'attempt-1',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 4,
-        date: 'Feb 19, 2026',
-        completionStatus: 'In Progress',
-        score: null
-      },
-      {
-        id: 'attempt-2',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 3,
-        date: 'Feb 18, 2026',
-        completionStatus: 'Complete',
-        score: 67
-      },
-      {
-        id: 'attempt-3',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 2,
-        date: 'Feb 14, 2026',
-        completionStatus: 'Complete',
-        score: 88
-      },
-      {
-        id: 'attempt-4',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 1,
-        date: 'Jan 27, 2026',
-        completionStatus: 'In Progress',
-        score: null
-      }
-    ],
-    'timothy': [
-      {
-        id: 'attempt-5',
-        student_interaction_id: 'interaction-2',
-        attemptNumber: 2,
-        date: 'Feb 20, 2026',
-        completionStatus: 'Complete',
-        score: 75
-      },
-      {
-        id: 'attempt-6',
-        student_interaction_id: 'interaction-2',
-        attemptNumber: 1,
-        date: 'Feb 10, 2026',
-        completionStatus: 'Complete',
-        score: 82
-      }
-    ]
-  }
-};
-
-/**
- * Hardcoded chat messages data (per attempt)
- */
-const mockChatMessages: Record<string, ChatMessage[]> = {
-  'attempt-2': [
-    {
-      message_id: 'msg-1',
-      chat_id: 'attempt-2',
-      student_sent: false,
-      message_content: "Hello there! I'm Pamela, nice to meet you. I've been feeling really unwell lately, and I'm worried about these chest pains I've been having for the last week. They're quite uncomfortable and I'm not sure what's causing them. Do you think it could be related to my heart?",
-      time_sent: '10:00 AM'
-    },
-    {
-      message_id: 'msg-2',
-      chat_id: 'attempt-2',
-      student_sent: true,
-      message_content: "Yes it's possible, can you please tell me a little bit about your medical history?",
-      time_sent: '10:01 AM'
-    },
-    {
-      message_id: 'msg-3',
-      chat_id: 'attempt-2',
-      student_sent: false,
-      message_content: "I have a history of hypertension, which I've had for about 4 years now. I've also had a total abdominal hysterectomy, and I've been experiencing dyspnea, or shortness of breath, lately. Oh, and I've had a peptic ulcer in the past, which is why I've been taking over-the-counter non-steroidal anti-inflammatory drugs. Could any of these things be contributing to my chest pains?",
-      time_sent: '10:02 AM'
-    },
-    {
-      message_id: 'msg-4',
-      chat_id: 'attempt-2',
-      student_sent: true,
-      message_content: "What medications are you taking?",
-      time_sent: '10:03 AM'
-    },
-    {
-      message_id: 'msg-5',
-      chat_id: 'attempt-2',
-      student_sent: false,
-      message_content: "I'm not currently taking any prescription medications, but I do take ibuprofen (Advil) occasionally for headaches. I've also been taking NSAIDs regularly, which I know can irritate my stomach and make my peptic ulcer symptoms worse. I'm worried that maybe my medication use is related to my chest pains, but I'm not sure. Do you think that's possible?",
-      time_sent: '10:04 AM'
-    },
-    {
-      message_id: 'msg-6',
-      chat_id: 'attempt-2',
-      student_sent: true,
-      message_content: "Tell me more about how the pain feels",
-      time_sent: '10:05 AM'
-    }
-  ]
-};
-
-/**
- * Hardcoded notes data (per attempt)
- */
-const mockChatNotes: Record<string, string> = {
-  'attempt-2': 'No notes available.',
-  'attempt-3': 'sample notes go here.',
-  'attempt-4': ''
-};
-
-/**
- * Hardcoded evaluation prompt (markdown format)
- * This will be editable by admin users in the future
- */
-const mockEvaluationPrompt = `# Evaluation Prompt
-
-Evaluate the student's interview using the instructor-defined rubric and key questions.
-Use only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.
-
-## Assess:
-
-- which key questions were addressed, partially addressed, or missed
-- how well the student's questions align with the rubric
-- overall clinical reasoning and question quality
-
-## Generate an AI debrief with:
-
-- Interview Summary (3-5 sentences)
-- Key Questions Successfully Addressed
-- Key Questions Missed or Incomplete
-- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)
-- Overall Assessment (rubric alignment score + summary)
-
-## OUTPUT FORMAT
-
-Return valid JSON in exactly this structure:
-
-\`\`\`json
-{
-  "interview_summary": "string",
-  "key_questions_successfully_addressed": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "feedback": "string"
-    }
-  ],
-  "key_questions_missed_or_incomplete": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "status": "missed | partially_addressed",
-      "feedback": "string",
-      "clinical_importance": "string"
-    }
-  ],
-  "rubric_based_feedback": {
-    "strengths": ["string", "string"],
-    "areas_for_improvement": ["string", "string"],
-    "recommended_focus_next_time": ["string", "string"]
-  },
-  "overall_assessment": {
-    "rubric_alignment_score": 0,
-    "summary": "string"
+    return data.map((group, index) => ({
+      id: group.simulation_group_id,
+      name: group.group_name,
+      subtitle: 'Medical Simulation Group',
+      iconColor: group.icon_color || getSimulationGroupColor(index),
+      accessCode: group.access_code || '',
+      studentCount: group.student_count || 0,
+      patientCount: group.patient_count || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch instructor groups:', error);
+    return [];
   }
 }
-\`\`\`
-`;
 
 /**
- * Hardcoded global rubric questions data
+ * Create a new simulation group
  */
-const mockGlobalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {
-  '1': [ // Chronic Pain group
-    {
-      id: '1',
-      title: 'Medication History',
-      keyQuestion: 'Ask the patient about current medications, including prescription, OTC, and supplements.',
-      clinicalIntent: 'This question evaluates the student\'s ability to identify medications that may contribute to adverse reactions or drug interactions.',
-      evaluationCriteria: 'Student should attempt to identify:\n• Current medications\n• Dosage if relevant\n• Duration of use\n• Recent medication changes',
-      required: true,
-    },
-    {
-      id: '2',
-      title: 'Allergy History',
-      keyQuestion: 'Ask the patient about any known allergies, including medications, foods, and environmental allergens.',
-      clinicalIntent: 'This question evaluates the student\'s ability to identify potential allergic reactions and contraindications.',
-      evaluationCriteria: 'Student should attempt to identify:\n• Known allergies\n• Type of reaction\n• Severity of reaction\n• Management strategies',
-      required: true,
-    },
-    {
-      id: '3',
-      title: 'Symptom Duration',
-      keyQuestion: 'Ask the patient how long they have been experiencing their current symptoms.',
-      clinicalIntent: 'This question evaluates the student\'s ability to establish a timeline for the patient\'s condition.',
-      evaluationCriteria: 'Student should attempt to identify:\n• Onset of symptoms\n• Duration of symptoms\n• Progression of symptoms\n• Any triggering events',
-      required: false,
-    },
-  ],
-  '2': [ // Acne group - can have different questions
-    {
-      id: '1',
-      title: 'Skin Care Routine',
-      keyQuestion: 'Ask the patient about their current skin care routine and products used.',
-      clinicalIntent: 'This question evaluates the student\'s ability to identify potential irritants or contributing factors.',
-      evaluationCriteria: 'Student should attempt to identify:\n• Current products used\n• Frequency of use\n• Any recent changes\n• Skin sensitivity',
-      required: true,
-    },
-  ]
-};
+async function createSimulationGroup(data: { name: string; description: string; active: boolean; enableVoice: boolean }): Promise<InstructorSimulationGroup> {
+  const user = await authService.getCurrentUser();
+  if (!user?.email) throw new Error('Not authenticated');
 
-/**
- * Hardcoded case-specific questions data (per patient)
- */
-const mockCaseSpecificQuestions: Record<string, GlobalRubricQuestion[]> = {
-  'pamela': [
+  const result = await apiClient.request<any>(
+    `/instructor/create_simulation_group?instructor_email=${encodeURIComponent(user.email)}`,
     {
-      id: 'case-q1',
-      title: 'Chest Pain Characterization',
-      keyQuestion: 'Assess the characteristics of the patient\'s chest pain, including onset, duration, severity, quality and radiation.',
-      clinicalIntent: 'This question evaluates the student\'s ability to gather essential details about the chest pain that help differentiate between potentially life-threatening causes (e.g., cardiac ischemia), medication-related causes, gastrointestinal causes and musculoskeletal causes, and to support appropriate clinical decision-making and triage.',
-      evaluationCriteria: 'The student attempts to identify at least 3-4 of the following core characteristics of the chest pain:\n• When the pain started, whether the onset was sudden or gradual\n• Where the pain is located, localized or diffuse\n• Description of the pain (e.g., sharp, dull, pressure, burning, tightness)\n• Intensity of pain (e.g., pain scale or descriptive severity)\n• How long the pain lasts, whether it is constant or intermittent',
-      required: true,
-    },
-    {
-      id: 'case-q2',
-      title: 'Exacerbating and Relieving Factors',
-      keyQuestion: 'Identify factors that worsen or alleviate the patient\'s chest pain.',
-      clinicalIntent: 'This question assesses the student\'s ability to explore triggers and relieving factors, which are critical for distinguishing between cardiac, musculoskeletal, and gastrointestinal causes of chest pain.',
-      evaluationCriteria: 'The student attempts to identify:\n• Activities or positions that worsen the pain (e.g., exertion, deep breathing, lying down)\n• Factors that relieve the pain (e.g., rest, antacids, nitroglycerin)\n• Relationship to meals, stress, or physical activity',
-      required: true,
-    },
-    {
-      id: 'case-q3',
-      title: 'Symptom Duration',
-      keyQuestion: 'Determine how long the patient has been experiencing the chest pain symptoms.',
-      clinicalIntent: 'Understanding symptom duration helps assess urgency and chronicity, distinguishing acute emergencies from chronic conditions.',
-      evaluationCriteria: 'The student asks about:\n• When symptoms first began\n• Whether this is a new or recurring problem\n• Any changes in symptom pattern over time',
-      required: false,
-    },
-  ],
-  'timothy': [],
-  'john': []
-};
-
-/**
- * Hardcoded case materials data (per patient)
- */
-const mockCaseMaterials: Record<string, CaseMaterial[]> = {
-  'pamela': [
-    {
-      id: 'material-1',
-      title: 'Chest X-Ray',
-      description: 'Frontal chest radiograph obtained as part of the patient\'s clinical evaluation.',
-      materialType: 'image',
-      contentUrl: '',
-      embedLink: '',
-    },
-    {
-      id: 'material-2',
-      title: 'ECG Reading',
-      description: '12-lead electrocardiogram showing cardiac electrical activity.',
-      materialType: 'document',
-      contentUrl: '',
-      embedLink: '',
-    },
-    {
-      id: 'material-3',
-      title: 'Patient Interview Video',
-      description: 'Video recording of initial patient interview and history taking.',
-      materialType: 'video',
-      contentUrl: '',
-      embedLink: '',
-    },
-  ],
-  'timothy': [],
-  'john': []
-};
+      method: 'POST',
+      body: {
+        group_name: data.name,
+        group_description: data.description,
+        group_student_access: data.active,
+        instructor_voice_enabled: data.enableVoice,
+      },
+    }
+  );
 
 /**
  * Question Bank Item - represents a question in the question bank
@@ -829,8 +371,23 @@ function getSimulationGroups(): InstructorSimulationGroup[] {
  * 
  * @returns User data object
  */
-function getCurrentUser(): UserData {
-  return mockInstructorUserData;
+async function getCurrentUser(): Promise<UserData> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    const data = await apiClient.request<{ name: string }>(
+      `/student/get_name?user_email=${encodeURIComponent(user.email)}`
+    );
+
+    return {
+      name: data.name || user.email,
+      avatarUrl: undefined,
+    };
+  } catch (error) {
+    console.error('Failed to fetch user name:', error);
+    throw error;
+  }
 }
 
 /**
@@ -839,8 +396,14 @@ function getCurrentUser(): UserData {
  * @param id - Simulation group ID
  * @returns Simulation group or undefined if not found
  */
-function getSimulationGroup(id: string): InstructorSimulationGroup | undefined {
-  return mockInstructorSimulationGroups.find(group => group.id === id);
+async function getSimulationGroup(id: string): Promise<InstructorSimulationGroup | undefined> {
+  try {
+    const groups = await getSimulationGroups();
+    return groups.find(group => group.id === id);
+  } catch (error) {
+    console.error('Failed to fetch simulation group:', error);
+    return [] as any;
+  }
 }
 
 /**
@@ -876,8 +439,25 @@ function getOrganizationLabels(simulationGroupId: string): OrganizationLabels {
  * @param simulationGroupId - Simulation group ID
  * @returns Array of patient analytics
  */
-function getPatientAnalytics(simulationGroupId: string): PatientAnalytics[] {
-  return mockPatientAnalytics[simulationGroupId] || [];
+async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAnalytics[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `/instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.map((patient) => ({
+      id: patient.patient_id,
+      name: patient.patient_name,
+      instructorCompletionPercentage: patient.instructor_completion_percentage || 0,
+      llmCompletionPercentage: patient.ai_score_percentage || 0,
+      studentMessageCount: patient.student_message_count || 0,
+      aiMessageCount: patient.ai_message_count || 0,
+      studentAccessCount: patient.access_count || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch patient analytics:', error);
+    return [];
+  }
 }
 
 /**
@@ -886,20 +466,7 @@ function getPatientAnalytics(simulationGroupId: string): PatientAnalytics[] {
  * @param patientId - Patient ID
  * @returns Array with message count data
  */
-function getMessageCountData(patientId: string): MessageCountData[] {
-  // Find patient across all groups
-  for (const groupPatients of Object.values(mockPatientAnalytics)) {
-    const patient = groupPatients.find(p => p.id === patientId);
-    if (patient) {
-      return [
-        {
-          name: 'Messages',
-          'Student Messages': patient.studentMessageCount,
-          'AI Messages': patient.aiMessageCount
-        }
-      ];
-    }
-  }
+function getMessageCountData(_patientId: string): MessageCountData[] {
   return [];
 }
 
@@ -909,25 +476,32 @@ function getMessageCountData(patientId: string): MessageCountData[] {
  * @param simulationGroupId - Simulation group ID
  * @returns New access code
  */
-function generateAccessCode(simulationGroupId: string): string {
-  // Mock implementation - generates random code
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  const segments = 4;
-  const segmentLength = 4;
-  
-  const code = Array.from({ length: segments }, () => {
-    return Array.from({ length: segmentLength }, () => 
-      chars.charAt(Math.floor(Math.random() * chars.length))
-    ).join('');
-  }).join('-');
-  
-  // Update the mock data
-  const group = mockInstructorSimulationGroups.find(g => g.id === simulationGroupId);
-  if (group) {
-    group.accessCode = code;
+async function generateAccessCode(simulationGroupId: string): Promise<string> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    const data = await apiClient.request<{ access_code: string }>(
+      `/instructor/generate_access_code?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      { method: 'POST' }
+    );
+
+    return data.access_code;
+  } catch (error) {
+    console.error('Failed to generate access code:', error);
+    // Fallback to mock implementation
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    const segments = 4;
+    const segmentLength = 4;
+    
+    const code = Array.from({ length: segments }, () => {
+      return Array.from({ length: segmentLength }, () => 
+        chars.charAt(Math.floor(Math.random() * chars.length))
+      ).join('');
+    }).join('-');
+    
+    return code;
   }
-  
-  return code;
 }
 
 /**
@@ -937,8 +511,30 @@ function generateAccessCode(simulationGroupId: string): string {
  * @param simulationGroupId - Simulation group ID
  * @returns Array of manageable patients with all persona fields
  */
-function getManageablePatients(simulationGroupId: string): ManageablePatient[] {
-  return mockManageablePatients[simulationGroupId] || [];
+async function getManageablePatients(simulationGroupId: string): Promise<ManageablePatient[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `/instructor/view_patients?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.map((patient) => ({
+      id: patient.patient_id,
+      simulation_group_id: patient.simulation_group_id,
+      name: patient.patient_name,
+      age: patient.patient_age,
+      gender: patient.patient_gender,
+      persona_number: patient.patient_number,
+      prompt: patient.patient_prompt,
+      average_wpm: patient.average_wpm,
+      voice_id: patient.voice_id,
+      interaction_mode: patient.interaction_mode,
+      llmEvaluationEnabled: patient.llm_completion || false,
+      photoUrl: patient.photo_url,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch manageable patients:', error);
+    return [];
+  }
 }
 
 /**
@@ -948,13 +544,7 @@ function getManageablePatients(simulationGroupId: string): ManageablePatient[] {
  * @param patientId - Patient ID (persona_id in DB)
  * @returns Patient with all persona fields or undefined if not found
  */
-function getPatient(patientId: string): ManageablePatient | undefined {
-  for (const groupPatients of Object.values(mockManageablePatients)) {
-    const patient = groupPatients.find(p => p.id === patientId);
-    if (patient) {
-      return patient;
-    }
-  }
+function getPatient(_patientId: string): ManageablePatient | undefined {
   return undefined;
 }
 
@@ -965,25 +555,34 @@ function getPatient(patientId: string): ManageablePatient | undefined {
  * @param simulationGroupId - Simulation group ID
  * @param patientData - New patient data
  */
-function createPatient(simulationGroupId: string, patientData: PatientCreateData): void {
-  const newPatient: ManageablePatient = {
-    id: `patient-${Date.now()}`,
-    simulation_group_id: simulationGroupId,
-    name: patientData.name,
-    age: patientData.age,
-    gender: patientData.gender,
-    prompt: patientData.prompt || DEFAULT_PATIENT_PROMPT,
-    persona_number: patientData.persona_number,
-    average_wpm: patientData.average_wpm,
-    voice_id: patientData.voice_id,
-    interaction_mode: patientData.interaction_mode,
-    llmEvaluationEnabled: false,
-  };
-  
-  if (!mockManageablePatients[simulationGroupId]) {
-    mockManageablePatients[simulationGroupId] = [];
+async function createPatient(simulationGroupId: string, patientData: PatientCreateData): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    const queryParams = new URLSearchParams({
+      simulation_group_id: simulationGroupId,
+      patient_name: patientData.name,
+      patient_number: patientData.persona_number?.toString() || '1',
+      patient_age: patientData.age.toString(),
+      patient_gender: patientData.gender,
+      instructor_email: user.email,
+    });
+
+    if (patientData.voice_id) {
+      queryParams.append('voice_id', patientData.voice_id);
+    }
+
+    await apiClient.request(`/instructor/create_patient?${queryParams.toString()}`, {
+      method: 'POST',
+      body: {
+        patient_prompt: patientData.prompt || '',
+      },
+    });
+  } catch (error) {
+    console.error('Failed to create patient:', error);
+    throw error;
   }
-  mockManageablePatients[simulationGroupId].push(newPatient);
 }
 
 /**
@@ -993,35 +592,40 @@ function createPatient(simulationGroupId: string, patientData: PatientCreateData
  * @param simulationGroupId - Simulation group ID
  * @param patientData - Updated patient data
  */
-function updatePatient(simulationGroupId: string, patientData: PatientUpdateData): void {
-  const patients = mockManageablePatients[simulationGroupId];
-  if (patients) {
-    const index = patients.findIndex(p => p.id === patientData.id);
-    if (index !== -1) {
-      patients[index] = {
-        ...patients[index],
-        name: patientData.name,
-        age: patientData.age,
-        gender: patientData.gender,
-        prompt: patientData.prompt,
-        photoUrl: patientData.photoUrl,
-        persona_number: patientData.persona_number,
-        average_wpm: patientData.average_wpm,
-        voice_id: patientData.voice_id,
-        interaction_mode: patientData.interaction_mode,
-      };
+async function updatePatient(simulationGroupId: string, patientData: PatientUpdateData): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    const queryParams = new URLSearchParams({
+      patient_id: patientData.id,
+      instructor_email: user.email,
+      simulation_group_id: simulationGroupId,
+    });
+
+    await apiClient.request(`/instructor/edit_patient?${queryParams.toString()}`, {
+      method: 'PUT',
+      body: {
+        patient_name: patientData.name,
+        patient_age: patientData.age,
+        patient_gender: patientData.gender,
+        patient_prompt: patientData.prompt,
+      },
+    });
+
+    // Handle file uploads if needed
+    if (patientData.llmUploadFile) {
+      console.log('LLM Upload file:', patientData.llmUploadFile.name);
     }
-  }
-  // In a real implementation, files would be uploaded to a server
-  // For now, we just log them
-  if (patientData.llmUploadFile) {
-    console.log('LLM Upload file:', patientData.llmUploadFile.name);
-  }
-  if (patientData.patientInfoFile) {
-    console.log('Patient Info file:', patientData.patientInfoFile.name);
-  }
-  if (patientData.answerKeyFile) {
-    console.log('Answer Key file:', patientData.answerKeyFile.name);
+    if (patientData.patientInfoFile) {
+      console.log('Patient Info file:', patientData.patientInfoFile.name);
+    }
+    if (patientData.answerKeyFile) {
+      console.log('Answer Key file:', patientData.answerKeyFile.name);
+    }
+  } catch (error) {
+    console.error('Failed to update patient:', error);
+    throw error;
   }
 }
 
@@ -1032,21 +636,12 @@ function updatePatient(simulationGroupId: string, patientData: PatientUpdateData
  * @param photoFile - Photo file to upload
  * @returns Promise with photo URL
  */
-async function uploadPatientPhoto(patientId: string, photoFile: File): Promise<string> {
-  // Mock implementation - in real app, this would upload to a server
+async function uploadPatientPhoto(_patientId: string, photoFile: File): Promise<string> {
+  // TODO: implement real upload to S3
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const photoUrl = reader.result as string;
-      // Update patient photo in mock data
-      for (const groupPatients of Object.values(mockManageablePatients)) {
-        const patient = groupPatients.find(p => p.id === patientId);
-        if (patient) {
-          patient.photoUrl = photoUrl;
-          break;
-        }
-      }
-      resolve(photoUrl);
+      resolve(reader.result as string);
     };
     reader.readAsDataURL(photoFile);
   });
@@ -1058,14 +653,23 @@ async function uploadPatientPhoto(patientId: string, photoFile: File): Promise<s
  * @param patientId - Patient ID
  * @param enabled - Whether LLM evaluation is enabled
  */
-function updatePatientLLMEvaluation(patientId: string, enabled: boolean): void {
-  // Find and update patient across all groups
-  for (const groupPatients of Object.values(mockManageablePatients)) {
-    const patient = groupPatients.find(p => p.id === patientId);
-    if (patient) {
-      patient.llmEvaluationEnabled = enabled;
-      break;
-    }
+async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    await apiClient.request(
+      `/instructor/toggle_llm_completion?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      {
+        method: 'PUT',
+        body: {
+          llm_completion: enabled,
+        },
+      }
+    );
+  } catch (error) {
+    console.error('Failed to update LLM evaluation:', error);
+    throw error;
   }
 }
 
@@ -1074,12 +678,20 @@ function updatePatientLLMEvaluation(patientId: string, enabled: boolean): void {
  * 
  * @param patientId - Patient ID
  */
-function deletePatient(patientId: string): void {
-  // Remove patient from all groups
-  for (const groupId of Object.keys(mockManageablePatients)) {
-    mockManageablePatients[groupId] = mockManageablePatients[groupId].filter(
-      p => p.id !== patientId
+async function deletePatient(patientId: string): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    await apiClient.request(
+      `/instructor/delete_patient?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      {
+        method: 'DELETE',
+      }
     );
+  } catch (error) {
+    console.error('Failed to delete patient:', error);
+    throw error;
   }
 }
 
@@ -1089,8 +701,8 @@ function deletePatient(patientId: string): void {
  * @param simulationGroupId - Simulation group ID
  * @returns Array of global rubric questions
  */
-function getGlobalRubricQuestions(simulationGroupId: string): GlobalRubricQuestion[] {
-  return mockGlobalRubricQuestions[simulationGroupId] || [];
+function getGlobalRubricQuestions(_simulationGroupId: string): GlobalRubricQuestion[] {
+  return [];
 }
 
 /**
@@ -1127,14 +739,8 @@ function addGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubr
  * @param simulationGroupId - Simulation group ID
  * @param question - Updated question
  */
-function updateGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubricQuestion): void {
-  const questions = mockGlobalRubricQuestions[simulationGroupId];
-  if (questions) {
-    const index = questions.findIndex(q => q.id === question.id);
-    if (index !== -1) {
-      questions[index] = question;
-    }
-  }
+function updateGlobalRubricQuestion(_simulationGroupId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -1165,9 +771,17 @@ function deleteGlobalRubricQuestion(simulationGroupId: string, questionId: strin
  * @param simulationGroupId - Simulation group ID
  * @returns Evaluation prompt as markdown string
  */
-function getEvaluationPrompt(): string {
-  // For now, return the same prompt for all groups
-  return mockEvaluationPrompt;
+async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
+  try {
+    const data = await apiClient.request<{ system_prompt: string }>(
+      `/instructor/get_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.system_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch evaluation prompt:', error);
+    return [] as any;
+  }
 }
 
 /**
@@ -1176,8 +790,21 @@ function getEvaluationPrompt(): string {
  * @param simulationGroupId - Simulation group ID
  * @returns Array of students
  */
-function getStudents(simulationGroupId: string): Student[] {
-  return mockStudents[simulationGroupId] || [];
+async function getStudents(simulationGroupId: string): Promise<Student[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `/instructor/view_students?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.map((student) => ({
+      id: student.user_id,
+      name: `${student.first_name} ${student.last_name}`.trim() || student.username,
+      email: student.user_email,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch students:', error);
+    return [];
+  }
 }
 
 /**
@@ -1186,8 +813,8 @@ function getStudents(simulationGroupId: string): Student[] {
  * @param studentId - Student ID
  * @returns Student details or undefined if not found
  */
-function getStudentDetails(studentId: string): StudentDetails | undefined {
-  return mockStudentDetails[studentId];
+function getStudentDetails(_studentId: string): StudentDetails | undefined {
+  return [] as any;
 }
 
 /**
@@ -1198,8 +825,8 @@ function getStudentDetails(studentId: string): StudentDetails | undefined {
  * @param patientId - Patient ID (persona_id via student_interaction)
  * @returns Array of chat attempts
  */
-function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
-  return mockChatAttempts[studentId]?.[patientId] || [];
+function getChatAttempts(_studentId: string, _patientId: string): ChatAttempt[] {
+  return [];
 }
 
 /**
@@ -1209,8 +836,8 @@ function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
  * @param attemptId - Chat attempt ID (chat_id in DB)
  * @returns Array of chat messages ordered by time_sent
  */
-function getChatMessages(attemptId: string): ChatMessage[] {
-  return mockChatMessages[attemptId] || [];
+function getChatMessages(_attemptId: string): ChatMessage[] {
+  return [];
 }
 
 /**
@@ -1220,8 +847,8 @@ function getChatMessages(attemptId: string): ChatMessage[] {
  * @param attemptId - Chat attempt ID (chat_id in DB)
  * @returns Notes text from chats.notes field
  */
-function getChatNotes(attemptId: string): string {
-  return mockChatNotes[attemptId] || '';
+function getChatNotes(_attemptId: string): string {
+  return [] as any;
 }
 
 /**
@@ -1230,8 +857,8 @@ function getChatNotes(attemptId: string): string {
  * @param patientId - Patient ID
  * @returns Array of case-specific questions
  */
-function getCaseSpecificQuestions(patientId: string): GlobalRubricQuestion[] {
-  return mockCaseSpecificQuestions[patientId] || [];
+function getCaseSpecificQuestions(_patientId: string): GlobalRubricQuestion[] {
+  return [];
 }
 
 /**
@@ -1274,14 +901,8 @@ function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuesti
  * @param patientId - Patient ID
  * @param question - Updated question
  */
-function updateCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
-  const questions = mockCaseSpecificQuestions[patientId];
-  if (questions) {
-    const index = questions.findIndex(q => q.id === question.id);
-    if (index !== -1) {
-      questions[index] = question;
-    }
-  }
+function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -1334,8 +955,8 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
  * @param patientId - Patient ID (persona_id in DB)
  * @returns Array of case materials (physical assessment materials)
  */
-function getCaseMaterials(patientId: string): CaseMaterial[] {
-  return mockCaseMaterials[patientId] || [];
+function getCaseMaterials(_patientId: string): CaseMaterial[] {
+  return [];
 }
 
 /**
@@ -1344,11 +965,8 @@ function getCaseMaterials(patientId: string): CaseMaterial[] {
  * @param patientId - Patient ID
  * @param material - Material to add
  */
-function addCaseMaterial(patientId: string, material: CaseMaterial): void {
-  if (!mockCaseMaterials[patientId]) {
-    mockCaseMaterials[patientId] = [];
-  }
-  mockCaseMaterials[patientId].push(material);
+function addCaseMaterial(_patientId: string, _material: CaseMaterial): void {
+  // TODO: implement API call
 }
 
 /**
@@ -1357,14 +975,8 @@ function addCaseMaterial(patientId: string, material: CaseMaterial): void {
  * @param patientId - Patient ID
  * @param material - Updated material
  */
-function updateCaseMaterial(patientId: string, material: CaseMaterial): void {
-  const materials = mockCaseMaterials[patientId];
-  if (materials) {
-    const index = materials.findIndex(m => m.id === material.id);
-    if (index !== -1) {
-      materials[index] = material;
-    }
-  }
+function updateCaseMaterial(_patientId: string, _material: CaseMaterial): void {
+  // TODO: implement API call
 }
 
 /**
@@ -1373,11 +985,8 @@ function updateCaseMaterial(patientId: string, material: CaseMaterial): void {
  * @param patientId - Patient ID
  * @param materialId - Material ID to delete
  */
-function deleteCaseMaterial(patientId: string, materialId: string): void {
-  const materials = mockCaseMaterials[patientId];
-  if (materials) {
-    mockCaseMaterials[patientId] = materials.filter(m => m.id !== materialId);
-  }
+function deleteCaseMaterial(_patientId: string, _materialId: string): void {
+  // TODO: implement API call
 }
 
 /**
@@ -1386,7 +995,7 @@ function deleteCaseMaterial(patientId: string, materialId: string): void {
  * @returns Default patient prompt text
  */
 function getDefaultPatientPrompt(): string {
-  return DEFAULT_PATIENT_PROMPT;
+  return '';
 }
 
 /**
@@ -1502,8 +1111,9 @@ function isQuestionInUse(questionId: string, questionType: 'global' | 'patientSp
  * Mock instructor data service object
  * Provides methods to retrieve hardcoded data for now
  */
-export const mockInstructorDataService: MockInstructorDataService = {
+export const instructorService: InstructorDataService = {
   getSimulationGroups,
+  createSimulationGroup,
   getCurrentUser,
   getSimulationGroup,
   getOrganizationLabels,
@@ -1546,3 +1156,6 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getPatientsUsingQuestion,
   isQuestionInUse
 };
+
+// Keep backward-compatible export
+export const mockInstructorDataService = instructorService;

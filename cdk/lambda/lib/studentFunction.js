@@ -204,9 +204,9 @@ exports.handler = async (event) => {
             // Query to get simulation groups for the user
             const data = await sqlConnection`
                 SELECT "simulation_groups".*
-                FROM "enrolments"
-                JOIN "simulation_groups" ON "simulation_groups".simulation_group_id = "enrolments".simulation_group_id
-                WHERE "enrolments".user_id = ${user_id}
+                FROM "enrollments"
+                JOIN "simulation_groups" ON "simulation_groups".simulation_group_id = "enrollments".simulation_group_id
+                WHERE "enrollments".user_id = ${user_id}
                 AND "simulation_groups".group_student_access = TRUE
                 ORDER BY "simulation_groups".group_name, "simulation_groups".simulation_group_id;
               `;
@@ -251,42 +251,42 @@ exports.handler = async (event) => {
                   SELECT 
                     enrolment_id
                   FROM 
-                    "enrolments"
+                    "enrollments"
                   WHERE 
                     user_id = ${userId}
                     AND simulation_group_id = ${simulationGroupId}
                   LIMIT 1
                 )
                 SELECT
-                  p.patient_id,
-                  p.patient_name,
-                  p.patient_age,
-                  p.patient_gender,
-                  p.patient_number,
+                  p.persona_id,
+                  p.persona_name,
+                  p.persona_age,
+                  p.persona_gender,
+                  p.persona_number,
                   p.llm_completion,
                   sp.student_interaction_id,
-                  sp.patient_score,
+                  sp.persona_score,
                   sp.last_accessed,
-                  sp.patient_context_embedding,
+                  sp.persona_context_embedding,
                   sp.is_completed
                 FROM
-                  "patients" p
+                  "personas" p
                 LEFT JOIN
-                  "student_interactions" sp ON sp.patient_id = p.patient_id
+                  "student_interactions" sp ON sp.persona_id = p.persona_id
                 JOIN
-                  StudentEnrollment se ON sp.enrolment_id = se.enrolment_id
+                  StudentEnrollment se ON sp.enrollment_id = se.enrollment_id
                 WHERE
                   p.simulation_group_id = ${simulationGroupId}
                 ORDER BY
-                  p.patient_number;
+                  p.persona_number;
               `;
 
-            const enrolmentId = data[0]?.enrolment_id;
+            const enrolmentId = data[0]?.enrollment_id;
 
             if (enrolmentId) {
               await sqlConnection`
                   INSERT INTO "user_engagement_log" (
-                    log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                    log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                   ) VALUES (
                     uuid_generate_v4(), ${userId}, ${simulationGroupId}, null, ${enrolmentId}, CURRENT_TIMESTAMP, 'group access'
                   );
@@ -338,10 +338,10 @@ exports.handler = async (event) => {
             const studentPatientData = await sqlConnection`
                     SELECT student_interaction_id
                     FROM "student_interactions"
-                    WHERE patient_id = ${patientId}
-                    AND enrolment_id = (
-                        SELECT enrolment_id
-                        FROM "enrolments"
+                    WHERE persona_id = ${patientId}
+                    AND enrollment_id = (
+                        SELECT enrollment_id
+                        FROM "enrollments"
                         WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId}
                     )
                 `;
@@ -366,25 +366,25 @@ exports.handler = async (event) => {
 
             // Step 4: Retrieve session data specific to the student's patient
             const data = await sqlConnection`
-                    SELECT "sessions".*
-                    FROM "sessions"
+                    SELECT "chats".*
+                    FROM "chats"
                     WHERE student_interaction_id = ${studentPatientId}
-                    ORDER BY "sessions".last_accessed, "sessions".session_id;
+                    ORDER BY "chats".last_accessed, "chats".chat_id;
                 `;
 
             // Step 5: Get enrolment ID for the log entry
             const enrolmentData = await sqlConnection`
-                    SELECT enrolment_id
-                    FROM "enrolments"
+                    SELECT enrollment_id
+                    FROM "enrollments"
                     WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId};
                 `;
 
-            const enrolmentId = enrolmentData[0]?.enrolment_id;
+            const enrolmentId = enrolmentData[0]?.enrollment_id;
 
             // Step 6: Insert into User_Engagement_Log using user_id
             await sqlConnection`
                     INSERT INTO "user_engagement_log" (
-                        log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                        log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                     )
                     VALUES (
                         uuid_generate_v4(),
@@ -443,10 +443,10 @@ exports.handler = async (event) => {
             const studentPatientData = await sqlConnection`
                     SELECT student_interaction_id
                     FROM "student_interactions"
-                    WHERE patient_id = ${patientId}
-                      AND enrolment_id = (
-                        SELECT enrolment_id
-                        FROM "enrolments"
+                    WHERE persona_id = ${patientId}
+                      AND enrollment_id = (
+                        SELECT enrollment_id
+                        FROM "enrollments"
                         WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId}
                     );
                 `;
@@ -471,7 +471,7 @@ exports.handler = async (event) => {
 
             // Step 4: Insert a new session with the session_name
             const sessionData = await sqlConnection`
-                    INSERT INTO "sessions" (session_id, student_interaction_id, session_name, session_context_embeddings, last_accessed, notes)
+                    INSERT INTO "chats" (chat_id, student_interaction_id, chat_name, chat_context_embeddings, last_accessed, notes)
                     VALUES (
                         uuid_generate_v4(),
                         ${studentPatientId},
@@ -485,17 +485,17 @@ exports.handler = async (event) => {
 
             // Step 5: Log the session creation in the User Engagement Log
             const enrolmentData = await sqlConnection`
-                    SELECT enrolment_id
-                    FROM "enrolments"
+                    SELECT enrollment_id
+                    FROM "enrollments"
                     WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId};
                 `;
 
-            const enrolmentId = enrolmentData[0]?.enrolment_id;
+            const enrolmentId = enrolmentData[0]?.enrollment_id;
 
             if (enrolmentId) {
               await sqlConnection`
                         INSERT INTO "user_engagement_log" (
-                            log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                            log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                         ) VALUES (
                             uuid_generate_v4(),
                             ${userId},
@@ -556,15 +556,15 @@ exports.handler = async (event) => {
                     SET last_accessed = CURRENT_TIMESTAMP
                     WHERE student_interaction_id = (
                         SELECT student_interaction_id
-                        FROM "sessions"
-                        WHERE session_id = ${sessionId}
+                        FROM "chats"
+                        WHERE chat_id = ${sessionId}
                     );
                 `;
 
             // Step 3: Delete the session and get the result
             const deleteResult = await sqlConnection`
-                    DELETE FROM "sessions"
-                    WHERE session_id = ${sessionId}
+                    DELETE FROM "chats"
+                    WHERE chat_id = ${sessionId}
                     RETURNING *;
                 `;
 
@@ -576,8 +576,8 @@ exports.handler = async (event) => {
 
             // Step 4: Get the enrolment ID using user_id and simulation_group_id
             const enrolmentData = await sqlConnection`
-                    SELECT enrolment_id
-                    FROM "enrolments"
+                    SELECT enrollment_id
+                    FROM "enrollments"
                     WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId};
                 `;
 
@@ -587,12 +587,12 @@ exports.handler = async (event) => {
               break;
             }
 
-            const enrolmentId = enrolmentData[0].enrolment_id;
+            const enrolmentId = enrolmentData[0].enrollment_id;
 
             // Step 5: Insert an entry into the User_Engagement_Log
             await sqlConnection`
                     INSERT INTO "user_engagement_log" (
-                        log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                        log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                     ) VALUES (
                         uuid_generate_v4(),
                         ${userId},
@@ -630,7 +630,7 @@ exports.handler = async (event) => {
             const data = await sqlConnection`
                       SELECT *
                       FROM "messages"
-                      WHERE session_id = ${sessionId}
+                      WHERE chat_id = ${sessionId}
                       ORDER BY time_sent ASC;
                   `;
 
@@ -672,16 +672,16 @@ exports.handler = async (event) => {
           try {
             // Insert the new message into the Messages table with a generated UUID for message_id
             const messageData = await sqlConnection`
-                      INSERT INTO "messages" (message_id, session_id, student_sent, message_content, time_sent)
+                      INSERT INTO "messages" (message_id, chat_id, student_sent, message_content, time_sent)
                       VALUES (uuid_generate_v4(), ${sessionId}, true, ${message_content}, CURRENT_TIMESTAMP)
                       RETURNING *;
                   `;
 
             // Update the last_accessed field in the Sessions table
             await sqlConnection`
-                      UPDATE "sessions"
+                      UPDATE "chats"
                       SET last_accessed = CURRENT_TIMESTAMP
-                      WHERE session_id = ${sessionId};
+                      WHERE chat_id = ${sessionId};
                   `;
 
             // Retrieve user_id based on studentEmail
@@ -696,17 +696,17 @@ exports.handler = async (event) => {
             if (userId) {
               // Retrieve the enrolment ID using user_id
               const enrolmentData = await sqlConnection`
-                          SELECT enrolment_id
-                          FROM "enrolments"
+                          SELECT enrollment_id
+                          FROM "enrollments"
                           WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId};
                       `;
 
-              const enrolmentId = enrolmentData[0]?.enrolment_id;
+              const enrolmentId = enrolmentData[0]?.enrollment_id;
 
               if (enrolmentId) {
                 await sqlConnection`
                               INSERT INTO "user_engagement_log" (
-                                  log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                                  log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                               )
                               VALUES (
                                   uuid_generate_v4(), 
@@ -753,16 +753,16 @@ exports.handler = async (event) => {
           try {
             // Insert the new AI message into the Messages table with a generated UUID for message_id
             const messageData = await sqlConnection`
-                      INSERT INTO "messages" (message_id, session_id, student_sent, message_content, time_sent)
+                      INSERT INTO "messages" (message_id, chat_id, student_sent, message_content, time_sent)
                       VALUES (uuid_generate_v4(), ${sessionId}, false, ${message_content}, CURRENT_TIMESTAMP)
                       RETURNING *;
                   `;
 
             // Update the last_accessed field in the Sessions table
             await sqlConnection`
-                      UPDATE "sessions"
+                      UPDATE "chats"
                       SET last_accessed = CURRENT_TIMESTAMP
-                      WHERE session_id = ${sessionId};
+                      WHERE chat_id = ${sessionId};
                   `;
 
             // Retrieve user_id based on studentEmail
@@ -777,17 +777,17 @@ exports.handler = async (event) => {
             if (userId) {
               // Retrieve the enrolment ID using user_id
               const enrolmentData = await sqlConnection`
-                          SELECT enrolment_id
-                          FROM "enrolments"
+                          SELECT enrollment_id
+                          FROM "enrollments"
                           WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId};
                       `;
 
-              const enrolmentId = enrolmentData[0]?.enrolment_id;
+              const enrolmentId = enrolmentData[0]?.enrollment_id;
 
               if (enrolmentId) {
                 await sqlConnection`
                               INSERT INTO "user_engagement_log" (
-                                  log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type
+                                  log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
                               )
                               VALUES (
                                   uuid_generate_v4(), 
@@ -864,27 +864,27 @@ exports.handler = async (event) => {
 
             // Step 3: Insert enrollment into enrolments table
             const enrollmentResult = await sqlConnection`
-                  INSERT INTO "enrolments" (enrolment_id, user_id, simulation_group_id, enrolment_type, time_enroled)
+                  INSERT INTO "enrollments" (enrollment_id, user_id, simulation_group_id, enrollment_type, time_enroled)
                   VALUES (uuid_generate_v4(), ${user_id}, ${simulation_group_id}, 'student', CURRENT_TIMESTAMP)
                   ON CONFLICT (simulation_group_id, user_id) DO NOTHING
-                  RETURNING enrolment_id;
+                  RETURNING enrollment_id;
               `;
 
-            const enrolment_id = enrollmentResult[0]?.enrolment_id;
+            const enrolment_id = enrollmentResult[0]?.enrollment_id;
 
-            if (enrolment_id) {
+            if (enrollment_id) {
               // Step 4: Retrieve all patient IDs for the simulation group
               const patientsResult = await sqlConnection`
-                    SELECT patient_id
-                    FROM "patients"
+                    SELECT persona_id
+                    FROM "personas"
                     WHERE simulation_group_id = ${simulation_group_id};
                 `;
 
               // Step 5: Insert a record into student_interactions for each patient
               const studentPatientInsertions = patientsResult.map((patient) => {
                 return sqlConnection`
-                      INSERT INTO "student_interactions" (student_interaction_id, patient_id, enrolment_id, patient_score, last_accessed, patient_context_embedding, is_completed)
-                      VALUES (uuid_generate_v4(), ${patient.patient_id}, ${enrolment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
+                      INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
+                      VALUES (uuid_generate_v4(), ${patient.persona_id}, ${enrolment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
                   `;
               });
 
@@ -922,7 +922,7 @@ exports.handler = async (event) => {
             const messages = await sqlConnection`
                       SELECT *
                       FROM "Messages"
-                      WHERE "session_id" = ${sessionId}
+                      WHERE "chat_id" = ${sessionId}
                       ORDER BY "time_sent" ASC;
                   `;
 
@@ -951,9 +951,9 @@ exports.handler = async (event) => {
 
             // Update the session name
             const updateResult = await sqlConnection`
-                UPDATE "sessions"
+                UPDATE "chats"
                 SET session_name = ${session_name}
-                WHERE session_id = ${session_id}
+                WHERE chat_id = ${session_id}
                 RETURNING *;
               `;
 
@@ -975,7 +975,7 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Invalid value" });
         }
         break;
-      case "POST /student/update_patient_score":
+      case "POST /student/update_persona_score":
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.patient_id &&
@@ -1010,19 +1010,19 @@ exports.handler = async (event) => {
 
             // Get the student_interaction_id and current score for the student and patient
             const studentPatientData = await sqlConnection`
-                    SELECT student_interaction_id, patient_score
+                    SELECT student_interaction_id, persona_score
                     FROM "student_interactions"
-                    WHERE patient_id = ${patientId}
-                      AND enrolment_id = (
-                        SELECT enrolment_id
-                        FROM "enrolments"
+                    WHERE persona_id = ${patientId}
+                      AND enrollment_id = (
+                        SELECT enrollment_id
+                        FROM "enrollments"
                         WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId}
                     );
                 `;
 
             const studentPatientId =
               studentPatientData[0]?.student_interaction_id;
-            const currentScore = studentPatientData[0]?.patient_score;
+            const currentScore = studentPatientData[0]?.persona_score;
 
             if (!studentPatientId) {
               response.statusCode = 404;
@@ -1047,7 +1047,7 @@ exports.handler = async (event) => {
             // Update the patient score for the student
             await sqlConnection`
                     UPDATE "student_interactions"
-                    SET patient_score = ${newScore}
+                    SET persona_score = ${newScore}
                     WHERE student_interaction_id = ${studentPatientId};
                 `;
 
@@ -1078,8 +1078,8 @@ exports.handler = async (event) => {
             // Query to get the notes for the session
             const notesData = await sqlConnection`
                     SELECT notes 
-                    FROM "sessions" 
-                    WHERE session_id = ${sessionId};
+                    FROM "chats" 
+                    WHERE chat_id = ${sessionId};
                 `;
 
             if (notesData.length > 0) {
@@ -1110,8 +1110,8 @@ exports.handler = async (event) => {
             // Query to get the patient voice ID
             const voiceData = await sqlConnection`
                     SELECT voice_id 
-                    FROM "patients" 
-                    WHERE patient_id = ${patientId};
+                    FROM "personas" 
+                    WHERE persona_id = ${patientId};
                 `;
 
             if (voiceData.length > 0) {
@@ -1145,9 +1145,9 @@ exports.handler = async (event) => {
           try {
             // Update the notes for the session
             const updateResult = await sqlConnection`
-                    UPDATE "sessions" 
+                    UPDATE "chats" 
                     SET notes = ${notes}, last_accessed = CURRENT_TIMESTAMP 
-                    WHERE session_id = ${sessionId}
+                    WHERE chat_id = ${sessionId}
                     RETURNING *;
                 `;
 
@@ -1196,12 +1196,12 @@ exports.handler = async (event) => {
 
             // Step 2: Fetch all interactions with completion status for the specified simulation group
             const completionStatus = await sqlConnection`
-              SELECT si.student_interaction_id, si.is_completed, p.patient_name
+              SELECT si.student_interaction_id, si.is_completed, p.persona_name
               FROM "student_interactions" si
-              JOIN "patients" p ON si.patient_id = p.patient_id
-              JOIN "enrolments" e ON si.enrolment_id = e.enrolment_id
+              JOIN "personas" p ON si.persona_id = p.persona_id
+              JOIN "enrollments" e ON si.enrollment_id = e.enrollment_id
               WHERE e.user_id = ${userId} AND e.simulation_group_id = ${simulation_group_id}
-              ORDER BY p.patient_name;
+              ORDER BY p.persona_name;
             `;
 
             response.statusCode = 200;
@@ -1237,9 +1237,9 @@ exports.handler = async (event) => {
 
             // Get patient details
             const patientResult = await sqlConnection`
-              SELECT patient_name, patient_age, patient_prompt, llm_completion
-              FROM "patients" 
-              WHERE patient_id = ${patient_id}
+              SELECT persona_name, persona_age, persona_prompt, llm_completion
+              FROM "personas" 
+              WHERE persona_id = ${patient_id}
             `;
 
             if (systemPromptResult.length === 0 || patientResult.length === 0) {
@@ -1252,9 +1252,9 @@ exports.handler = async (event) => {
 
             const context = {
               system_prompt: systemPromptResult[0].system_prompt,
-              patient_name: patientResult[0].patient_name,
-              patient_age: patientResult[0].patient_age,
-              patient_prompt: patientResult[0].patient_prompt,
+              persona_name: patientResult[0].persona_name,
+              persona_age: patientResult[0].persona_age,
+              persona_prompt: patientResult[0].persona_prompt,
               llm_completion: patientResult[0].llm_completion,
             };
 

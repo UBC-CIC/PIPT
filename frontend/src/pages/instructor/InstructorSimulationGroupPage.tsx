@@ -3,10 +3,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem } from '@/services/instructorService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData } from '@/services/instructorService';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { useState } from 'react';
+import { useAuth } from '@/App';
+import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
@@ -19,6 +20,7 @@ import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecifi
  */
 function InstructorSimulationGroupPage() {
   const navigate = useNavigate();
+  const { signOut } = useAuth();
   const { groupId } = useParams();
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
@@ -39,10 +41,10 @@ function InstructorSimulationGroupPage() {
   
   // Global Rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() => 
-    mockInstructorDataService.getGlobalRubricQuestions(groupId || '1')
+    instructorService.getGlobalRubricQuestions(groupId || '1')
   );
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(() => {
-    const questions = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
+    const questions = instructorService.getGlobalRubricQuestions(groupId || '1');
     return questions[0]?.id || null;
   });
   const [rubricSearchQuery, setRubricSearchQuery] = useState('');
@@ -67,10 +69,10 @@ function InstructorSimulationGroupPage() {
   
   // Case-Specific Key Questions state
   const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() => 
-    selectedPatientForEdit ? mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit) : []
+    selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : []
   );
   const [selectedCaseQuestionId, setSelectedCaseQuestionId] = useState<string>(() => {
-    const questions = selectedPatientForEdit ? mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit) : [];
+    const questions = selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : [];
     return questions[0]?.id || '';
   });
   const [caseQuestionSearchQuery, setCaseQuestionSearchQuery] = useState('');
@@ -85,10 +87,10 @@ function InstructorSimulationGroupPage() {
 
   // Case Materials state
   const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>(() => 
-    selectedPatientForEdit ? mockInstructorDataService.getCaseMaterials(selectedPatientForEdit) : []
+    selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : []
   );
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>(() => {
-    const materials = selectedPatientForEdit ? mockInstructorDataService.getCaseMaterials(selectedPatientForEdit) : [];
+    const materials = selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : [];
     return materials[0]?.id || '';
   });
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
@@ -110,10 +112,11 @@ function InstructorSimulationGroupPage() {
   );
   
   // Load data from instructor service
-  const user = mockInstructorDataService.getCurrentUser();
-  const simulationGroup = mockInstructorDataService.getSimulationGroup(groupId || '1');
-  const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
-  const students = mockInstructorDataService.getStudents(groupId || '1');
+  const [user, setUser] = useState<UserData>({ name: 'Instructor', avatarUrl: undefined });
+  const [simulationGroup, setSimulationGroup] = useState<any>(null);
+  const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
+  const [students, setStudents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Get organization-specific labels from service
   const labels = mockInstructorDataService.getOrganizationLabels(groupId || '1');
@@ -129,9 +132,36 @@ function InstructorSimulationGroupPage() {
   } = labels;
   
   // Use state for manageable patients so we can trigger re-renders
-  const [manageablePatients, setManageablePatients] = useState(() => 
-    mockInstructorDataService.getManageablePatients(groupId || '1')
-  );
+  const [manageablePatients, setManageablePatients] = useState<any[]>([]);
+  
+  // Load initial data
+  useEffect(() => {
+    const loadData = async () => {
+      if (!groupId) return;
+      
+      try {
+        const [userData, groupData, analyticsData, studentsData, patientsData] = await Promise.all([
+          instructorService.getCurrentUser(),
+          instructorService.getSimulationGroup(groupId),
+          instructorService.getPatientAnalytics(groupId),
+          instructorService.getStudents(groupId),
+          instructorService.getManageablePatients(groupId),
+        ]);
+        
+        setUser(userData);
+        setSimulationGroup(groupData);
+        setPatientAnalytics(analyticsData);
+        setStudents(studentsData);
+        setManageablePatients(patientsData);
+      } catch (error) {
+        console.error('Error loading instructor data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [groupId]);
   
   // State for selected patient
   const [selectedPatientId, setSelectedPatientId] = useState<string>(
@@ -141,7 +171,7 @@ function InstructorSimulationGroupPage() {
   // Get current patient data
   const currentPatient = patientAnalytics.find(p => p.id === selectedPatientId);
   const messageCountData = currentPatient 
-    ? mockInstructorDataService.getMessageCountData(selectedPatientId)
+    ? instructorService.getMessageCountData(selectedPatientId)
     : [];
   
   // Fallback values
@@ -161,15 +191,15 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle sign out event
    */
-  const handleSignOut = () => {
-    navigate('/login');
+  const handleSignOut = async () => {
+    await signOut();
   };
 
   /**
    * Handle back to all groups navigation
    */
   const handleBackToAllGroups = () => {
-    navigate('/');
+    navigate('/instructor');
   };
 
   /**
@@ -182,12 +212,17 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle generate new access code
    */
-  const handleGenerateAccessCode = () => {
+  const handleGenerateAccessCode = async () => {
     if (groupId) {
-      const newCode = mockInstructorDataService.generateAccessCode(groupId);
-      console.log('Generated new access code:', newCode);
-      // Force re-render by navigating to same route
-      navigate(`/instructor/group/${groupId}`, { replace: true });
+      try {
+        const newCode = await instructorService.generateAccessCode(groupId);
+        console.log('Generated new access code:', newCode);
+        // Reload simulation group data
+        const groupData = await instructorService.getSimulationGroup(groupId);
+        setSimulationGroup(groupData);
+      } catch (error) {
+        console.error('Error generating access code:', error);
+      }
     }
   };
 
@@ -211,7 +246,7 @@ function InstructorSimulationGroupPage() {
       )
     );
     // Also update the service data for consistency
-    mockInstructorDataService.updatePatientLLMEvaluation(patientId, !currentValue);
+    instructorService.updatePatientLLMEvaluation(patientId, !currentValue);
   };
 
   /**
@@ -224,7 +259,7 @@ function InstructorSimulationGroupPage() {
         prevPatients.filter(patient => patient.id !== patientId)
       );
       // Also update the service data for consistency
-      mockInstructorDataService.deletePatient(patientId);
+      instructorService.deletePatient(patientId);
     }
   };
 
@@ -232,25 +267,21 @@ function InstructorSimulationGroupPage() {
    * Handle edit patient
    */
   const handleEditPatient = (patientId: string) => {
-    const patient = mockInstructorDataService.getPatient(patientId);
+    const patient = instructorService.getPatient(patientId);
     if (patient) {
       setSelectedPatientForEdit(patientId);
       setEditPatientName(patient.name);
       setEditPatientAge(patient.age.toString());
       setEditPatientGender(patient.gender);
-      setEditPatientPrompt(patient.prompt || mockInstructorDataService.getDefaultPatientPrompt());
+      setEditPatientPrompt(patient.prompt || instructorService.getDefaultPatientPrompt());
       setEditPatientTab('info');
       
       // Load case-specific questions and materials
-      const questions = mockInstructorDataService.getCaseSpecificQuestions(patientId);
+      const questions = instructorService.getCaseSpecificQuestions(patientId);
       setCaseSpecificQuestions(questions);
       setSelectedCaseQuestionId(questions[0]?.id || '');
       
-      // Initialize includedQuestionIds with the patient's current questions
-      const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
-      setIncludedQuestionIds(questionIds);
-      
-      const materials = mockInstructorDataService.getCaseMaterials(patientId);
+      const materials = instructorService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
       setSelectedMaterialId(materials[0]?.id || '');
       
@@ -286,11 +317,11 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle save patient changes
    */
-  const handleSavePatientChanges = () => {
+  const handleSavePatientChanges = async () => {
     if (selectedPatientForEdit && groupId) {
       if (selectedPatientForEdit === 'new') {
         // Create new patient
-        mockInstructorDataService.createPatient(groupId, {
+        instructorService.createPatient(groupId, {
           name: editPatientName,
           age: parseInt(editPatientAge) || 0,
           gender: editPatientGender,
@@ -298,7 +329,7 @@ function InstructorSimulationGroupPage() {
         });
       } else {
         // Update existing patient
-        mockInstructorDataService.updatePatient(groupId, {
+        instructorService.updatePatient(groupId, {
           id: selectedPatientForEdit,
           name: editPatientName,
           age: parseInt(editPatientAge) || 0,
@@ -306,7 +337,7 @@ function InstructorSimulationGroupPage() {
           prompt: editPatientPrompt,
         });
       }
-      setManageablePatients(mockInstructorDataService.getManageablePatients(groupId));
+      setManageablePatients(await instructorService.getManageablePatients(groupId));
       handleBackFromEditPatient();
     }
   };
@@ -317,8 +348,8 @@ function InstructorSimulationGroupPage() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
-      mockInstructorDataService.uploadPatientPhoto(selectedPatientForEdit, file).then(() => {
-        setManageablePatients(mockInstructorDataService.getManageablePatients(groupId));
+      instructorService.uploadPatientPhoto(selectedPatientForEdit, file).then(async () => {
+        setManageablePatients(await instructorService.getManageablePatients(groupId));
       });
     }
   };
@@ -336,7 +367,7 @@ function InstructorSimulationGroupPage() {
 
   // Get the patient being edited
   const patientBeingEdited = selectedPatientForEdit 
-    ? mockInstructorDataService.getPatient(selectedPatientForEdit)
+    ? instructorService.getPatient(selectedPatientForEdit)
     : null;
 
   /**
@@ -347,19 +378,36 @@ function InstructorSimulationGroupPage() {
     setEditPatientName('');
     setEditPatientAge('');
     setEditPatientGender('');
-    setEditPatientPrompt(mockInstructorDataService.getDefaultPatientPrompt());
+    setEditPatientPrompt(instructorService.getDefaultPatientPrompt());
     setEditPatientTab('info');
     setActiveSection('editPatient');
   };
+
+  /**
+   * Handle add new key question
+   */
+  const handleAddNewKeyQuestion = () => {
+    const newQuestion: GlobalRubricQuestion = {
+      id: `q-${Date.now()}`,
+      title: 'New Question',
+      keyQuestion: '',
+      clinicalIntent: '',
+      evaluationCriteria: '',
+      required: false,
+    };
+    instructorService.addGlobalRubricQuestion(groupId || '1', newQuestion);
+    setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
+    setSelectedQuestionId(newQuestion.id);
+  };
+
   /**
    * Handle delete question
    */
   const handleDeleteQuestion = () => {
     if (!selectedQuestionId) return;
-    if (confirm('Are you sure you want to remove this question from the global rubric?')) {
-      // Remove from global rubric
-      mockInstructorDataService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
-      const updatedQuestions = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
+    if (confirm('Are you sure you want to delete this question?')) {
+      instructorService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
+      const updatedQuestions = instructorService.getGlobalRubricQuestions(groupId || '1');
       setGlobalRubricQuestions(updatedQuestions);
       setSelectedQuestionId(updatedQuestions[0]?.id || null);
       
@@ -377,7 +425,7 @@ function InstructorSimulationGroupPage() {
    */
   const handleSaveQuestion = () => {
     if (!selectedQuestion) return;
-    mockInstructorDataService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion);
+    instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion);
     console.log('Saving question:', selectedQuestion);
     // TODO: API call to save question
   };
@@ -403,14 +451,31 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
+   * Handle add new case-specific key question
+   */
+  const handleAddNewCaseKeyQuestion = () => {
+    if (!selectedPatientForEdit) return;
+    const newQuestion: GlobalRubricQuestion = {
+      id: `case-q-${Date.now()}`,
+      title: 'New Question',
+      keyQuestion: '',
+      clinicalIntent: '',
+      evaluationCriteria: '',
+      required: false,
+    };
+    instructorService.addCaseSpecificQuestion(selectedPatientForEdit, newQuestion);
+    setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForEdit));
+    setSelectedCaseQuestionId(newQuestion.id);
+  };
+
+  /**
    * Handle delete case-specific question
    */
   const handleDeleteCaseQuestion = () => {
     if (!selectedCaseQuestionId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to remove this question from this patient\'s case-specific rubric?')) {
-      // Remove from case-specific questions
-      mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestionId);
-      const updatedQuestions = mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit);
+    if (confirm('Are you sure you want to delete this question?')) {
+      instructorService.deleteCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestionId);
+      const updatedQuestions = instructorService.getCaseSpecificQuestions(selectedPatientForEdit);
       setCaseSpecificQuestions(updatedQuestions);
       setSelectedCaseQuestionId(updatedQuestions[0]?.id || '');
       
@@ -429,7 +494,7 @@ function InstructorSimulationGroupPage() {
    */
   const handleSaveCaseQuestion = () => {
     if (!selectedCaseQuestion || !selectedPatientForEdit) return;
-    mockInstructorDataService.updateCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestion);
+    instructorService.updateCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestion);
     console.log('Saving case-specific question:', selectedCaseQuestion);
     // TODO: API call to save question
   };
@@ -457,8 +522,8 @@ function InstructorSimulationGroupPage() {
       contentUrl: '',
       embedLink: '',
     };
-    mockInstructorDataService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-    setCaseMaterials(mockInstructorDataService.getCaseMaterials(selectedPatientForEdit));
+    instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
+    setCaseMaterials(instructorService.getCaseMaterials(selectedPatientForEdit));
     setSelectedMaterialId(newMaterial.id);
   };
 
@@ -468,8 +533,8 @@ function InstructorSimulationGroupPage() {
   const handleDeleteCaseMaterial = () => {
     if (!selectedMaterialId || !selectedPatientForEdit) return;
     if (confirm('Are you sure you want to delete this material?')) {
-      mockInstructorDataService.deleteCaseMaterial(selectedPatientForEdit, selectedMaterialId);
-      const updatedMaterials = mockInstructorDataService.getCaseMaterials(selectedPatientForEdit);
+      instructorService.deleteCaseMaterial(selectedPatientForEdit, selectedMaterialId);
+      const updatedMaterials = instructorService.getCaseMaterials(selectedPatientForEdit);
       setCaseMaterials(updatedMaterials);
       setSelectedMaterialId(updatedMaterials[0]?.id || '');
     }
@@ -480,7 +545,7 @@ function InstructorSimulationGroupPage() {
    */
   const handleSaveCaseMaterial = () => {
     if (!selectedMaterial || !selectedPatientForEdit) return;
-    mockInstructorDataService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
+    instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
     console.log('Saving case material:', selectedMaterial);
     // TODO: API call to save material
   };
@@ -498,142 +563,13 @@ function InstructorSimulationGroupPage() {
     }
   };
 
-  /**
-   * Handle save new question from dialog
-   */
-  const handleSaveNewQuestion = (question: {
-    title: string;
-    keyQuestion: string;
-    clinicalIntent: string;
-    evaluationCriteria: string;
-    required: boolean;
-  }) => {
-    const newQuestionId = `bank-${addQuestionType}-${Date.now()}`;
-    const newBankQuestion: QuestionBankItem = { 
-      id: newQuestionId, 
-      title: question.title,
-      questionText: question.keyQuestion,
-      clinicalIntent: question.clinicalIntent,
-      evaluationCriteria: question.evaluationCriteria,
-      isMandatory: question.required,
-      isActive: true,
-      usedBySimulationGroups: [],
-      usedByPatients: addQuestionType === 'patientSpecific' ? [] : undefined
-    };
-    
-    // Add to question bank via service
-    if (addQuestionType === 'global') {
-      mockInstructorDataService.addToGlobalQuestionBank(newBankQuestion);
-      setGlobalBankQuestions(mockInstructorDataService.getGlobalQuestionBank());
-    } else {
-      mockInstructorDataService.addToPatientSpecificQuestionBank(newBankQuestion);
-      setPatientSpecificBankQuestions(mockInstructorDataService.getPatientSpecificQuestionBank());
-    }
-    
-    // DO NOT automatically add to global rubric or checkmark
-    // The question is now in the question bank, but NOT included in the simulation group
-    // Instructor must explicitly checkmark it to include it
-    
-    console.log('Saved new question to bank:', addQuestionType, question);
-  };
-
-  /**
-   * Handle save new patient-specific question from dialog
-   */
-  const handleSaveNewPatientQuestion = (question: {
-    patientId: string;
-    title: string;
-    keyQuestion: string;
-    clinicalIntent: string;
-    evaluationCriteria: string;
-    required: boolean;
-  }) => {
-    const newQuestionId = `bank-patient-${Date.now()}`;
-    const newBankQuestion: QuestionBankItem = { 
-      id: newQuestionId, 
-      title: question.title,
-      questionText: question.keyQuestion,
-      clinicalIntent: question.clinicalIntent,
-      evaluationCriteria: question.evaluationCriteria,
-      isMandatory: question.required,
-      isActive: true,
-      usedBySimulationGroups: [],
-      usedByPatients: []
-    };
-    
-    // Add to question bank via service
-    mockInstructorDataService.addToPatientSpecificQuestionBank(newBankQuestion);
-    setPatientSpecificBankQuestions(mockInstructorDataService.getPatientSpecificQuestionBank());
-    
-    // Add to case-specific questions for the selected patient
-    const newCaseQuestion: GlobalRubricQuestion = {
-      id: newQuestionId,
-      title: question.title,
-      keyQuestion: question.keyQuestion,
-      clinicalIntent: question.clinicalIntent,
-      evaluationCriteria: question.evaluationCriteria,
-      required: question.required,
-    };
-    
-    mockInstructorDataService.addCaseSpecificQuestion(question.patientId, newCaseQuestion);
-    
-    // Update includedQuestionIds to checkmark this question for this patient
-    // Only update if we're currently viewing this patient in the question bank
-    if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank === question.patientId) {
-      setIncludedQuestionIds(prev => {
-        const newSet = new Set(prev);
-        newSet.add(newQuestionId);
-        return newSet;
-      });
-    }
-    
-    // Update case-specific questions if we're editing this patient
-    if (selectedPatientForEdit === question.patientId) {
-      setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(question.patientId));
-    }
-    
-    console.log('Saved new patient-specific question:', question);
-  };
-
-  /**
-   * Handle toggle question inclusion in rubric
-   */
-  const handleToggleQuestionInclusion = (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
-    const newSet = new Set(includedQuestionIds);
-    
-    if (isChecked) {
-      newSet.add(questionId);
-      
-      // Add to global rubric if it's a global question
-      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-        // Check if already exists in rubric
-        const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
-        if (!existingQuestion) {
-          const newGlobalRubricQuestion: GlobalRubricQuestion = {
-            id: questionId,
-            title: bankQuestion.title,
-            keyQuestion: bankQuestion.questionText,
-            clinicalIntent: bankQuestion.clinicalIntent,
-            evaluationCriteria: bankQuestion.evaluationCriteria,
-            required: bankQuestion.isMandatory,
-          };
-          
-          mockInstructorDataService.addGlobalRubricQuestion(groupId || '1', newGlobalRubricQuestion);
-          setGlobalRubricQuestions(mockInstructorDataService.getGlobalRubricQuestions(groupId || '1'));
-        }
-      }
-    } else {
-      newSet.delete(questionId);
-      
-      // Remove from global rubric when unchecked
-      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-        mockInstructorDataService.deleteGlobalRubricQuestion(groupId || '1', questionId);
-        setGlobalRubricQuestions(mockInstructorDataService.getGlobalRubricQuestions(groupId || '1'));
-      }
-    }
-    
-    setIncludedQuestionIds(newSet);
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-lg text-gray-500">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <PageContainer>
@@ -2606,7 +2542,7 @@ Return valid JSON in exactly this structure:
                 
                 <nav className="flex-1 px-6 space-y-4">
                   {(() => {
-                    const studentDetails = mockInstructorDataService.getStudentDetails(selectedStudentId);
+                    const studentDetails = instructorService.getStudentDetails(selectedStudentId);
                     if (!studentDetails) return null;
                     
                     return (
@@ -2707,10 +2643,10 @@ Return valid JSON in exactly this structure:
 
                     {/* Chat Attempts */}
                     <div className="space-y-4">
-                      {mockInstructorDataService.getChatAttempts(selectedStudentId, selectedPatientFilter).map((attempt) => {
+                      {instructorService.getChatAttempts(selectedStudentId, selectedPatientFilter).map((attempt) => {
                         const isExpanded = expandedAttemptId === attempt.id;
-                        const messages = mockInstructorDataService.getChatMessages(attempt.id);
-                        const notes = mockInstructorDataService.getChatNotes(attempt.id);
+                        const messages = instructorService.getChatMessages(attempt.id);
+                        const notes = instructorService.getChatNotes(attempt.id);
 
                         return (
                           <div 
@@ -2908,3 +2844,4 @@ Return valid JSON in exactly this structure:
 }
 
 export default InstructorSimulationGroupPage;
+

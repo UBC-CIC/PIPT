@@ -13,7 +13,7 @@ import { UI_COLORS } from '@/lib/colors';
 interface JoinGroupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onJoin: (accessCode: string) => void;
+  onJoin: (accessCode: string) => Promise<{ success: boolean; error?: string }>;
   title?: string;
   description?: string;
   submitButtonText?: string;
@@ -28,22 +28,44 @@ function JoinGroupDialog({
   submitButtonText = 'Join'
 }: JoinGroupDialogProps) {
   const [accessCode, setAccessCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleJoin = () => {
-    if (accessCode.trim()) {
-      onJoin(accessCode.trim());
-      setAccessCode('');
-      onOpenChange(false);
+  const handleJoin = async () => {
+    if (!accessCode.trim()) return;
+    
+    setError('');
+    setLoading(true);
+    
+    try {
+      const result = await onJoin(accessCode.trim());
+      if (result.success) {
+        setAccessCode('');
+        onOpenChange(false);
+      } else {
+        setError(result.error || 'Failed to join group.');
+      }
+    } catch {
+      setError('An unexpected error occurred.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleCancel = () => {
     setAccessCode('');
+    setError('');
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(isOpen) => {
+      if (!isOpen) {
+        setAccessCode('');
+        setError('');
+      }
+      onOpenChange(isOpen);
+    }}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">{title}</DialogTitle>
@@ -52,6 +74,14 @@ function JoinGroupDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-4">
+          {error && (
+            <div 
+              className="p-3 rounded-lg text-sm"
+              style={{ backgroundColor: '#FEE2E2', color: '#991B1B', borderWidth: '1px', borderStyle: 'solid', borderColor: '#FECACA' }}
+            >
+              {error}
+            </div>
+          )}
           <Input
             placeholder="Access Code"
             value={accessCode}
@@ -63,6 +93,7 @@ function JoinGroupDialog({
             }}
             className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
             style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}
+            disabled={loading}
           />
           <div className="flex justify-end gap-3">
             <Button
@@ -78,17 +109,23 @@ function JoinGroupDialog({
               }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancelHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancel}
+              disabled={loading}
             >
               Cancel
             </Button>
             <Button
               onClick={handleJoin}
               className="px-8 transition-colors"
-              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+              style={{ 
+                backgroundColor: UI_COLORS.button.primary, 
+                color: UI_COLORS.button.text,
+                opacity: loading ? 0.7 : 1,
+              }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+              disabled={loading}
             >
-              {submitButtonText}
+              {loading ? 'Joining...' : (submitButtonText || 'Join')}
             </Button>
           </div>
         </div>
