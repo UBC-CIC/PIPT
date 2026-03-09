@@ -64,6 +64,11 @@
   --spacing: 0.25rem;
 }
 
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
 .dark {
   --background: rgb(255, 255, 255);
   --foreground: rgb(0, 0, 0);

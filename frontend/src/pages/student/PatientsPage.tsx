@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { studentService, type Patient, type UserData } from '@/services/studentService';
 import { ArrowLeft, CheckCircle, Loader, Circle } from 'lucide-react';
@@ -113,9 +114,9 @@ function PatientsPage() {
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: UI_COLORS.background.white }}>
+    <PageContainer>
       {/* Header */}
-      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
+      <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           <UserAvatar
             name={user.name}
@@ -154,19 +155,48 @@ function PatientsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="px-8 py-6">
-        {patients.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
-            No patients found for this simulation group.
-          </div>
-        ) : (
-          <div className="rounded-lg overflow-hidden" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
-            <table className="w-full">
-              <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                <tr>
-                  <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Patient</th>
-                  <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Status</th>
-                  <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Review</th>
+      <main className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="rounded-lg overflow-hidden" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
+          <table className="w-full">
+            <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+              <tr>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Patient</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Status</th>
+                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Review</th>
+              </tr>
+            </thead>
+            <tbody>
+              {patients.map((patient) => (
+                <tr
+                  key={patient.id}
+                  className="last:border-b-0"
+                  style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3 justify-center">
+                      <UserAvatar
+                        name={patient.name}
+                        imageUrl={patient.avatarUrl}
+                        size="small"
+                      />
+                      <span style={{ color: UI_COLORS.text.heading }}>{patient.name}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    {getDebriefStatusBadge(patient.debriefStatus)}
+                  </td>
+                  <td className="px-6 py-4 text-center">
+                    <Button
+                      onClick={() => handleReview(patient.id)}
+                      variant="default"
+                      className="px-6 transition-colors"
+                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                    >
+                      Review
+                    </Button>
+                  </td>
                 </tr>
               </thead>
               <tbody>
@@ -208,7 +238,7 @@ function PatientsPage() {
           </div>
         )}
       </main>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -10,6 +10,15 @@ interface SimulationGroupsSectionProps {
   joinButtonText?: string;
   actionButtonText?: string;
   descriptionText?: string;
+  sectionTitle?: string;
+  showCounts?: boolean;
+  showDeleteButton?: boolean;
+  onDeleteGroup?: (groupId: string) => void;
+  countLabels?: {
+    students?: string;
+    instructors?: string;
+    patients?: string;
+  };
 }
 
 function SimulationGroupsSection({
@@ -18,14 +27,19 @@ function SimulationGroupsSection({
   onContinueTraining,
   joinButtonText = '+ Join Group',
   actionButtonText = 'Continue Training',
-  descriptionText = 'Join simulation groups to practice patient interactions and develop your clinical diagnosis skills.'
+  descriptionText = 'Join simulation groups to practice patient interactions and develop your clinical diagnosis skills.',
+  sectionTitle = 'Simulation Groups',
+  showCounts = false,
+  showDeleteButton = false,
+  onDeleteGroup,
+  countLabels
 }: SimulationGroupsSectionProps) {
   return (
     <div className="w-full px-4 py-8">
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
         <div className="flex-1">
-          <h2 className="text-2xl font-bold mb-2 text-left" style={{ color: UI_COLORS.text.heading }}>Simulation Groups</h2>
+          <h2 className="text-2xl font-bold mb-2 text-left" style={{ color: UI_COLORS.text.heading }}>{sectionTitle}</h2>
           <p className="text-sm text-left" style={{ color: UI_COLORS.text.body }}>
             {descriptionText}
           </p>
@@ -55,6 +69,10 @@ function SimulationGroupsSection({
               group={group}
               onContinueTraining={onContinueTraining}
               actionButtonText={actionButtonText}
+              showCounts={showCounts}
+              showDeleteButton={showDeleteButton}
+              onDelete={onDeleteGroup}
+              countLabels={countLabels}
             />
           ))}
         </div>

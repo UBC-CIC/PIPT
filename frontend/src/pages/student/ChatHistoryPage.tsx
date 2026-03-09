@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { useAuth } from '@/App';
 import { ArrowLeft, FileText, User, Stethoscope, Flag, Eye, Menu, ChevronRight } from 'lucide-react';
@@ -179,7 +180,7 @@ function ChatHistoryPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ backgroundColor: UI_COLORS.background.white }}>
+    <PageContainer>
       {/* Patient Information Dialog */}
       <PatientInformationDialog
         isOpen={isPatientInfoOpen}
@@ -201,7 +202,7 @@ function ChatHistoryPage() {
       />
 
       {/* Header */}
-      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
+      <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           {/* Sidebar Toggle Button */}
           <button
@@ -264,7 +265,8 @@ function ChatHistoryPage() {
             borderRightColor: UI_COLORS.border.default,
             width: isSidebarVisible ? '16rem' : '0rem',
             minWidth: isSidebarVisible ? '16rem' : '0rem',
-            overflow: 'hidden',
+            overflowY: isSidebarVisible ? 'auto' : 'hidden',
+            overflowX: 'hidden',
             opacity: isSidebarVisible ? 1 : 0,
             pointerEvents: isSidebarVisible ? 'auto' : 'none',
           }}
@@ -421,7 +423,7 @@ function ChatHistoryPage() {
 
         {/* Content Sidebar (Physical Assessment) - Slides from right edge */}
         <aside 
-          className="flex flex-col transition-all duration-300 ease-in-out absolute top-0 bottom-0 right-0 z-30"
+          className="flex flex-col transition-all duration-300 ease-in-out absolute top-0 bottom-0 right-0 z-30 overflow-y-auto"
           aria-hidden={!contentSidebarType}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
@@ -496,7 +498,7 @@ function ChatHistoryPage() {
           </div>
         </aside>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 

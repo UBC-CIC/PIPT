@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
 import JoinGroupDialog from '@/components/JoinGroupDialog';
@@ -65,6 +66,9 @@ function StudentDashboardPage() {
 
   /**
    * Handle join group submission
+   * Phase 1: Logs access code to console
+   * Future: Will call API to join group
+   *
    * @param accessCode - The access code entered by the user
    */
   const handleJoinGroupSubmit = async (accessCode: string) => {
@@ -79,6 +83,10 @@ function StudentDashboardPage() {
 
   /**
    * Handle continue training event
+   * Navigates to the patients page for the selected group
+   *
+   * Requirement 7.2
+   *
    * @param groupId - The ID of the simulation group to continue training in
    */
   const handleContinueTraining = (groupId: string) => {
@@ -94,7 +102,7 @@ function StudentDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-white">
+    <PageContainer>
       <DashboardHeader
         title="Student Dashboard"
         subtitle="Home Page"
@@ -104,7 +112,7 @@ function StudentDashboardPage() {
         onInstructorView={handleInstructorView}
         showInstructorViewButton={hasInstructorRole}
       />
-      <main className="px-8 py-6">
+      <main className="flex-1 overflow-y-auto px-8 py-6">
         <SimulationGroupsSection
           groups={groups}
           onJoinGroup={handleJoinGroup}
@@ -116,8 +124,9 @@ function StudentDashboardPage() {
         onOpenChange={setIsJoinDialogOpen}
         onJoin={handleJoinGroupSubmit}
       />
-    </div>
+    </PageContainer>
   );
 }
+
 
 export default StudentDashboardPage;

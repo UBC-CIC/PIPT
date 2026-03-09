@@ -13,16 +13,14 @@ import { authService } from '@/lib/auth';
  * Represents a medical simulation group that students can join
  */
 export interface SimulationGroup {
-  simulation_group_id: string;  // UUID from DB
-  group_name: string;           // e.g. "Chronic Pain"
-  group_description?: string;
-  group_student_access?: boolean;
-  // Frontend display helpers
-  id: string;                   // Alias for simulation_group_id
-  name: string;                 // Alias for group_name
-  subtitle: string;             // Always "Medical Simulation Group"
-  iconUrl?: string;
-  iconColor?: string;
+  id: string;              // Unique identifier
+  name: string;            // Group name (e.g., "Chronic Pain")
+  subtitle: string;        // Always "Medical Simulation Group"
+  iconUrl?: string;        // Optional icon image URL
+  iconColor?: string;      // Fallback color for avatar (hex format)
+  studentCount?: number;   // Optional count of students (admin view only)
+  instructorCount?: number; // Optional count of instructors (admin view only)
+  patientCount?: number;   // Optional count of patients (admin view only)
 }
 
 /**

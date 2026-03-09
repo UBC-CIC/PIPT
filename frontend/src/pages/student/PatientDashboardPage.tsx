@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { ArrowLeft } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -121,9 +122,9 @@ function PatientDashboardPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: UI_COLORS.background.white }}>
+    <PageContainer>
       {/* Header */}
-      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
+      <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           <UserAvatar
             name={user.name}
@@ -162,7 +163,7 @@ function PatientDashboardPage() {
       </header>
 
       {/* Main Content */}
-      <main className="px-8 py-6">
+      <main className="flex-1 overflow-y-auto px-8 py-6">
         <div className={hasChats ? "grid grid-cols-2 gap-6" : "max-w-4xl"}>
           {/* Left Column - Patient Overview */}
           <div className={hasChats ? "pr-6" : ""} style={hasChats ? { borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default } : {}}>
@@ -371,7 +372,7 @@ function PatientDashboardPage() {
           )}
         </div>
       </main>
-    </div>
+    </PageContainer>
   );
 }
 

@@ -6,6 +6,11 @@ import { useState, useEffect, createContext, useContext, useCallback } from 'rea
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
 import StudentDashboardPage from './pages/student/StudentDashboardPage';
+import InstructorDashboardPage from './pages/instructor/InstructorDashboardPage';
+import InstructorSimulationGroupPage from './pages/instructor/InstructorSimulationGroupPage';
+import AdminHomePage from './pages/admin/AdminHomePage';
+import AdminOrganizationPage from './pages/admin/AdminOrganizationPage';
+import AdminSimulationGroupPage from './pages/admin/AdminSimulationGroupPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';
@@ -97,21 +102,18 @@ function AppRoutes() {
   return (
     <AuthContext.Provider value={{ user, loading, signOut: handleSignOut, refreshUser }}>
       <Routes>
-        {/* Public routes */}
-        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-        <Route path="/signup" element={user ? <Navigate to="/" replace /> : <SignUpPage />} />
-
-        {/* Protected routes */}
-        <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
-        <Route path="/student" element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
-        <Route path="/patients/:groupId" element={<ProtectedRoute><PatientsPage /></ProtectedRoute>} />
-        <Route path="/patients/:groupId/:patientId" element={<ProtectedRoute><PatientDashboardPage /></ProtectedRoute>} />
-        <Route path="/patients/:groupId/:patientId/chat" element={<ProtectedRoute><StudentChatPage /></ProtectedRoute>} />
-        <Route path="/patients/:groupId/:patientId/chat/:chatId/history" element={<ProtectedRoute><ChatHistoryPage /></ProtectedRoute>} />
-        
-        {/* Instructor routes */}
-        <Route path="/instructor" element={<ProtectedRoute><InstructorDashboardPage /></ProtectedRoute>} />
-        <Route path="/instructor/group/:groupId" element={<ProtectedRoute><InstructorSimulationGroupPage /></ProtectedRoute>} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
+        <Route path="/" element={<InstructorDashboardPage />} />
+        <Route path="/instructor/group/:groupId" element={<InstructorSimulationGroupPage />} />
+        <Route path="/admin" element={<AdminHomePage />} />
+        <Route path="/admin/organization/:organizationId" element={<AdminOrganizationPage />} />
+        <Route path="/admin/organization/:organizationId/group/:groupId" element={<AdminSimulationGroupPage />} />
+        <Route path="/student" element={<StudentDashboardPage />} />
+        <Route path="/patients/:groupId" element={<PatientsPage />} />
+        <Route path="/patients/:groupId/:patientId" element={<PatientDashboardPage />} />
+        <Route path="/patients/:groupId/:patientId/chat" element={<StudentChatPage />} />
+        <Route path="/patients/:groupId/:patientId/chat/:chatId/history" element={<ChatHistoryPage />} />
       </Routes>
     </AuthContext.Provider>
   );
