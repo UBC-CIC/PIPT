@@ -4,7 +4,8 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem } from '@/services/instructorService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
+import { mockAdminDataService } from '@/services/adminService';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -12,18 +13,25 @@ import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 
 /**
- * InstructorSimulationGroupPage Component
+ * AdminSimulationGroupPage Component
  * 
- * Displays the simulation group management view for instructors.
+ * Displays the simulation group management view for admins.
  * Includes sidebar navigation and content area for analytics, patient management, etc.
  */
-function InstructorSimulationGroupPage() {
+function AdminSimulationGroupPage() {
   const navigate = useNavigate();
-  const { groupId } = useParams();
-  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
+  const { organizationId, groupId } = useParams();
+  const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [instructorSearchQuery, setInstructorSearchQuery] = useState('');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
+  const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
+  const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
+  const [evaluationPromptText, setEvaluationPromptText] = useState('Evaluate the student\'s interview using the instructor-defined rubric and key questions.');
+  const [promptHistory] = useState([
+    { id: 1, text: 'Previous version of the prompt...', savedAt: '2/9/2026, 11:05:11 AM' },
+  ]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
@@ -110,10 +118,20 @@ function InstructorSimulationGroupPage() {
   );
   
   // Load data from instructor service
-  const user = mockInstructorDataService.getCurrentUser();
+  const user = mockAdminDataService.getCurrentUser();
   const simulationGroup = mockInstructorDataService.getSimulationGroup(groupId || '1');
   const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
   const students = mockInstructorDataService.getStudents(groupId || '1');
+  
+  // Mock instructors data - will be replaced with API call
+  const [instructors, setInstructors] = useState([
+    { id: 'inst-1', name: 'Tom Doe', email: 'email1@random.com', dateJoined: '1/1/2025' },
+    { id: 'inst-2', name: 'Mary Jane', email: 'mary.jane@email.com', dateJoined: '30/2/2025' },
+  ]);
+  
+  // Get organization details
+  const organizations = mockAdminDataService.getOrganizations();
+  const organization = organizations.find(org => org.id === organizationId);
   
   // Get organization-specific labels from service
   const labels = mockInstructorDataService.getOrganizationLabels(groupId || '1');
@@ -158,6 +176,11 @@ function InstructorSimulationGroupPage() {
     student.name.toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
+  // Filter instructors based on search query (user searches by name, but ID is the unique identifier)
+  const filteredInstructors = instructors.filter(instructor =>
+    instructor.name.toLowerCase().includes(instructorSearchQuery.toLowerCase())
+  );
+
   /**
    * Handle sign out event
    */
@@ -166,10 +189,10 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle back to all groups navigation
+   * Handle back to organization page
    */
   const handleBackToAllGroups = () => {
-    navigate('/');
+    navigate(`/admin/organization/${organizationId}`);
   };
 
   /**
@@ -187,7 +210,7 @@ function InstructorSimulationGroupPage() {
       const newCode = mockInstructorDataService.generateAccessCode(groupId);
       console.log('Generated new access code:', newCode);
       // Force re-render by navigating to same route
-      navigate(`/instructor/group/${groupId}`, { replace: true });
+      navigate(`/admin/organization/${organizationId}/group/${groupId}`, { replace: true });
     }
   };
 
@@ -284,6 +307,69 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
+   * Handle add new instructor
+   */
+  const handleAddNewInstructor = () => {
+    const email = prompt('Enter instructor email:');
+    if (email && email.trim()) {
+      const name = prompt('Enter instructor name:');
+      if (name && name.trim()) {
+        const newInstructor = {
+          id: `inst-${Date.now()}`,
+          name: name.trim(),
+          email: email.trim(),
+          dateJoined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+        };
+        setInstructors(prev => [...prev, newInstructor]);
+      }
+    }
+  };
+
+  /**
+   * Handle remove instructor
+   */
+  const handleRemoveInstructor = (instructorId: string) => {
+    const instructor = instructors.find(i => i.id === instructorId);
+    if (instructor && confirm(`Are you sure you want to remove ${instructor.name}?`)) {
+      setInstructors(prev => prev.filter(i => i.id !== instructorId));
+    }
+  };
+
+  /**
+   * Handle load default prompt
+   */
+  const handleLoadDefaultPrompt = () => {
+    if (selectedPromptType === 'system') {
+      setSystemPromptText('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient. Engage with the pharmacist by describing your symptoms to provide them hints on what condition(s) you have.');
+    } else {
+      setEvaluationPromptText(mockInstructorDataService.getEvaluationPrompt(groupId || '1'));
+    }
+  };
+
+  /**
+   * Handle save prompt
+   */
+  const handleSavePrompt = () => {
+    console.log('Saving prompt:', selectedPromptType, selectedPromptType === 'system' ? systemPromptText : evaluationPromptText);
+    // Future: API call to save prompt
+    alert('Prompt saved successfully!');
+  };
+
+  /**
+   * Handle restore prompt version
+   */
+  const handleRestorePromptVersion = (versionText: string) => {
+    if (confirm('Are you sure you want to restore this version?')) {
+      if (selectedPromptType === 'system') {
+        setSystemPromptText(versionText);
+      } else {
+        setEvaluationPromptText(versionText);
+      }
+      console.log('Restored prompt version');
+    }
+  };
+
+  /**
    * Handle save patient changes
    */
   const handleSavePatientChanges = () => {
@@ -352,18 +438,17 @@ function InstructorSimulationGroupPage() {
     setActiveSection('editPatient');
   };
   /**
-   * Handle delete question
+   * Handle delete question (disassociates from simulation group)
    */
   const handleDeleteQuestion = () => {
     if (!selectedQuestionId) return;
-    if (confirm('Are you sure you want to remove this question from the global rubric?')) {
-      // Remove from global rubric
+    if (confirm('Are you sure you want to remove this question from the global rubric? It will remain in the question bank.')) {
       mockInstructorDataService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
       const updatedQuestions = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
       setGlobalRubricQuestions(updatedQuestions);
       setSelectedQuestionId(updatedQuestions[0]?.id || null);
       
-      // Uncheck in question bank
+      // Update the question bank checkmark
       setIncludedQuestionIds(prev => {
         const newSet = new Set(prev);
         newSet.delete(selectedQuestionId);
@@ -403,12 +488,11 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle delete case-specific question
+   * Handle delete case-specific question (disassociates from patient)
    */
   const handleDeleteCaseQuestion = () => {
     if (!selectedCaseQuestionId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to remove this question from this patient\'s case-specific rubric?')) {
-      // Remove from case-specific questions
+    if (confirm('Are you sure you want to remove this question from this patient? It will remain in the question bank.')) {
       mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestionId);
       const updatedQuestions = mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForEdit);
       setCaseSpecificQuestions(updatedQuestions);
@@ -419,8 +503,6 @@ function InstructorSimulationGroupPage() {
         const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForEdit);
         setIncludedQuestionIds(questionIds);
       }
-      
-      // Note: The question remains in the question bank, just disassociated from this patient
     }
   };
 
@@ -669,7 +751,7 @@ function InstructorSimulationGroupPage() {
               onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to All Groups
+              Back to {organization?.name || 'Organization'}
             </button>
           </div>
         </div>
@@ -762,6 +844,19 @@ function InstructorSimulationGroupPage() {
           </Button>
 
           <Button
+            onClick={() => setActiveSection('instructors')}
+            variant="ghost"
+            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+            style={{
+              backgroundColor: activeSection === 'instructors' ? UI_COLORS.background.tableHeader : 'transparent',
+              color: UI_COLORS.text.heading
+            }}
+          >
+            <UserPlus className="w-5 h-5" />
+            Manage Instructors
+          </Button>
+
+          <Button
             onClick={() => setActiveSection('rubric')}
             variant="ghost"
             className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
@@ -805,16 +900,16 @@ function InstructorSimulationGroupPage() {
           </Button>
 
           <Button
-            onClick={() => setActiveSection('prompt')}
+            onClick={() => setActiveSection('prompts')}
             variant="ghost"
             className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
             style={{
-              backgroundColor: activeSection === 'prompt' ? UI_COLORS.background.tableHeader : 'transparent',
+              backgroundColor: activeSection === 'prompts' ? UI_COLORS.background.tableHeader : 'transparent',
               color: UI_COLORS.text.heading
             }}
           >
-            <Eye className="w-5 h-5" />
-            View Evaluation Prompt
+            <FileCode className="w-5 h-5" />
+            Manage Prompts
           </Button>
         </nav>
 
@@ -858,7 +953,7 @@ function InstructorSimulationGroupPage() {
         </aside>
 
         {/* Main Content Area */}
-        <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'prompts' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <div className="space-y-6">
               {/* Simulation Group Title */}
@@ -1204,240 +1299,91 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
-          
-          {activeSection === 'rubric' && (
-            <div className="flex h-full relative">
-              {/* Question List Sidebar */}
-              <aside 
-                className="flex flex-col border-r overflow-y-auto"
-                style={{ 
-                  backgroundColor: UI_COLORS.background.white, 
-                  borderRightWidth: '1px',
-                  borderRightStyle: 'solid',
-                  borderRightColor: UI_COLORS.border.default,
-                  width: '20rem',
-                  minWidth: '20rem',
-                }}
-              >
-                {/* Header */}
-                <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                  <div className="px-6 pt-6 pb-6">
-                    <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                      GLOBAL RUBRIC
-                    </h2>
-                    <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      These questions apply to all patients in this simulation group.
-                      Global key questions can only be edited here.
-                    </p>
-                    <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      In each patient's page, global key questions are view-only.
-                    </p>
-                    
-                    {/* Search */}
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
-                      <Input
-                        placeholder="Search Global Key Questions"
-                        value={rubricSearchQuery}
-                        onChange={(e) => setRubricSearchQuery(e.target.value)}
-                        className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                        style={{ 
-                          borderWidth: '1px', 
-                          borderStyle: 'solid', 
-                          borderColor: UI_COLORS.border.default,
-                          backgroundColor: UI_COLORS.background.white
-                        }}
-                      />
-                    </div>
+
+          {activeSection === 'instructors' && (
+            <div className="space-y-6 max-w-5xl">
+              {/* Search Bar and Add Button */}
+              <div className="flex gap-4">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: UI_COLORS.text.muted }} />
+                  <Input
+                    placeholder="Search by Instructor Name"
+                    value={instructorSearchQuery}
+                    onChange={(e) => setInstructorSearchQuery(e.target.value)}
+                    className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                    style={{ 
+                      borderWidth: '1px', 
+                      borderStyle: 'solid', 
+                      borderColor: UI_COLORS.border.default,
+                      backgroundColor: UI_COLORS.background.white
+                    }}
+                  />
+                </div>
+                <Button
+                  onClick={handleAddNewInstructor}
+                  className="px-6 py-6 gap-2 transition-colors"
+                  style={{ 
+                    backgroundColor: UI_COLORS.button.primary, 
+                    color: UI_COLORS.button.text 
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                >
+                  <Plus className="w-5 h-5" />
+                  Add Instructor
+                </Button>
+              </div>
+
+              {/* Instructor Table */}
+              <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
+                {/* Table Header */}
+                <div className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Instructor Name
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Email Address
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Date Joined
+                  </div>
+                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                    Actions
                   </div>
                 </div>
 
-                {/* Question List */}
-                <div className="flex-1 overflow-y-auto">
-                  {filteredRubricQuestions.map((question) => (
-                    <button
-                      key={question.id}
-                      onClick={() => setSelectedQuestionId(question.id)}
-                      className="w-full text-left py-3 transition-colors"
-                      style={{
-                        backgroundColor: selectedQuestionId === question.id ? UI_COLORS.background.tableHeader : 'transparent',
-                        borderBottomWidth: '1px',
-                        borderBottomStyle: 'solid',
-                        borderBottomColor: UI_COLORS.border.default,
-                        cursor: 'pointer',
-                      }}
-                      onMouseEnter={(e) => {
-                        if (selectedQuestionId !== question.id) {
-                          e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (selectedQuestionId !== question.id) {
-                          e.currentTarget.style.backgroundColor = 'transparent';
-                        }
-                      }}
-                    >
-                      <div className="px-6">
-                        <p className="text-sm font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>
-                          Q{globalRubricQuestions.indexOf(question) + 1} - {question.title}
-                        </p>
-                        <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                          [{question.required ? 'Required' : 'Optional'}]
-                        </p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </aside>
-
-              {/* Question Detail Area */}
-              <div className="flex-1 flex flex-col overflow-hidden">
-                {/* Scrollable Content */}
-                <div className="flex-1 overflow-y-auto p-8">
-                  {selectedQuestion ? (
-                    <div className="max-w-4xl space-y-6">
-                      <h2 className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>
-                        Question {globalRubricQuestions.indexOf(selectedQuestion) + 1}
-                      </h2>
-
-                      {/* Title */}
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                          Title
-                        </label>
-                        <Input
-                          value={selectedQuestion.title}
-                          onChange={(e) => handleUpdateQuestionField('title', e.target.value)}
-                          className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white
-                          }}
-                        />
-                      </div>
-
-                      {/* Key Question */}
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                          Key Question
-                        </label>
-                        <textarea
-                          value={selectedQuestion.keyQuestion}
-                          onChange={(e) => handleUpdateQuestionField('keyQuestion', e.target.value)}
-                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
-                            borderColor: UI_COLORS.border.default,
-                            outlineColor: UI_COLORS.border.medium,
-                            minHeight: '100px',
-                          }}
-                        />
-                      </div>
-
-                      {/* Clinical Intent */}
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                          Clinical Intent
-                        </label>
-                        <textarea
-                          value={selectedQuestion.clinicalIntent}
-                          onChange={(e) => handleUpdateQuestionField('clinicalIntent', e.target.value)}
-                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
-                            borderColor: UI_COLORS.border.default,
-                            outlineColor: UI_COLORS.border.medium,
-                            minHeight: '100px',
-                          }}
-                        />
-                      </div>
-
-                      {/* Evaluation Criteria */}
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                          Evaluation Criteria
-                        </label>
-                        <textarea
-                          value={selectedQuestion.evaluationCriteria}
-                          onChange={(e) => handleUpdateQuestionField('evaluationCriteria', e.target.value)}
-                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
-                            borderColor: UI_COLORS.border.default,
-                            outlineColor: UI_COLORS.border.medium,
-                            minHeight: '150px',
-                          }}
-                        />
-                      </div>
-
-                      {/* Required Toggle */}
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={selectedQuestion.required}
-                          onClick={() => handleUpdateQuestionField('required', !selectedQuestion.required)}
-                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                          style={{ 
-                            backgroundColor: selectedQuestion.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
-                          }}
-                        >
-                          <span
-                            className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                            style={{
-                              transform: selectedQuestion.required ? 'translateX(22px)' : 'translateX(2px)'
-                            }}
-                          />
-                        </button>
-                        <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                          Required for Case Completion
-                        </span>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-4 pt-4">
-                        <Button
-                          onClick={handleSaveQuestion}
-                          className="px-8 py-3 text-base font-medium transition-colors"
-                          style={{ 
-                            backgroundColor: UI_COLORS.button.primary, 
-                            color: UI_COLORS.button.text 
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                        >
-                          Save Changes
-                        </Button>
-                        <Button
-                          onClick={handleDeleteQuestion}
-                          variant="outline"
-                          className="px-8 py-3 text-base font-medium transition-colors text-white"
-                          style={{ 
-                            backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                            borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        >
-                          Delete
-                        </Button>
-                      </div>
+                {/* Table Rows */}
+                {filteredInstructors.map((instructor) => (
+                  <div 
+                    key={instructor.id}
+                    className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4 border-t items-center"
+                    style={{ borderColor: UI_COLORS.border.default }}
+                  >
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.name}
                     </div>
-                  ) : (
-                    <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
-                      <p>Select a question to edit or create a new one</p>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.email}
                     </div>
-                  )}
-                </div>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {instructor.dateJoined}
+                    </div>
+                    <div>
+                      <button
+                        onClick={() => handleRemoveInstructor(instructor.id)}
+                        className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                        style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
+                        aria-label="Remove instructor"
+                      >
+                        <Trash2 className="w-5 h-5" style={{ color: UI_COLORS.status.error }} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
-          
+
           {activeSection === 'questionBank' && (
             <div className="h-full flex flex-col">
               <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: UI_COLORS.border.default }}>
@@ -1678,71 +1624,403 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
+
+          {activeSection === 'prompts' && (
+            <div className="flex h-full relative">
+              {/* Prompt Type Sidebar */}
+              <aside 
+                className="flex flex-col border-r"
+                style={{ 
+                  backgroundColor: UI_COLORS.background.white, 
+                  borderRightWidth: '1px',
+                  borderRightStyle: 'solid',
+                  borderRightColor: UI_COLORS.border.default,
+                  width: '16rem',
+                  minWidth: '16rem',
+                }}
+              >
+                <div className="p-6">
+                  <h3 className="text-sm font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                    Prompt Type
+                  </h3>
+                  <div className="space-y-2">
+                    <Button
+                      onClick={() => setSelectedPromptType('system')}
+                      variant="ghost"
+                      className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+                      style={{
+                        backgroundColor: selectedPromptType === 'system' ? UI_COLORS.background.tableHeader : 'transparent',
+                        color: UI_COLORS.text.heading
+                      }}
+                    >
+                      System Prompt
+                    </Button>
+                    <Button
+                      onClick={() => setSelectedPromptType('evaluation')}
+                      variant="ghost"
+                      className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+                      style={{
+                        backgroundColor: selectedPromptType === 'evaluation' ? UI_COLORS.background.tableHeader : 'transparent',
+                        color: UI_COLORS.text.heading
+                      }}
+                    >
+                      Evaluation Prompt
+                    </Button>
+                  </div>
+                </div>
+              </aside>
+
+              {/* Main Content */}
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="max-w-4xl space-y-8">
+                  {/* Edit Prompt Section */}
+                  <div>
+                    <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                      {selectedPromptType === 'system' ? 'System Prompt' : 'Evaluation Prompt'}
+                    </h2>
+                    
+                    <div className="space-y-4">
+                      <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                        Edit Prompt
+                      </label>
+                      <textarea
+                        value={String(selectedPromptType === 'system' ? systemPromptText : evaluationPromptText)}
+                        onChange={(e) => selectedPromptType === 'system' ? setSystemPromptText(e.target.value) : setEvaluationPromptText(e.target.value)}
+                        placeholder="Prompt goes here..."
+                        rows={6}
+                        className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                        style={{ 
+                          borderWidth: '1px', 
+                          borderStyle: 'solid', 
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white,
+                          color: UI_COLORS.text.heading
+                        }}
+                      />
+                      
+                      <div className="flex gap-3 justify-end">
+                        <Button
+                          onClick={handleLoadDefaultPrompt}
+                          variant="outline"
+                          className="px-6 transition-colors"
+                          style={{ 
+                            borderColor: UI_COLORS.border.default,
+                            color: UI_COLORS.text.heading,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        >
+                          Load Default Prompt
+                        </Button>
+                        <Button
+                          onClick={handleSavePrompt}
+                          className="px-6 transition-colors"
+                          style={{ 
+                            backgroundColor: UI_COLORS.button.primary, 
+                            color: UI_COLORS.button.text 
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                        >
+                          Save Prompt
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Prompt History Section */}
+                  <div>
+                    <h3 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                      {selectedPromptType === 'system' ? 'System' : 'Evaluation'} Prompt History
+                    </h3>
+                    <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                      Browse earlier versions. Restore any version you want to use.
+                    </p>
+
+                    {promptHistory.map((version, index) => (
+                      <div key={version.id} className="border rounded-lg p-6 mb-4" style={{ borderColor: UI_COLORS.border.default }}>
+                        <textarea
+                          value={String(version.text)}
+                          readOnly
+                          placeholder="Prompt goes here..."
+                          rows={4}
+                          className="w-full px-4 py-3 rounded-md resize-none mb-4"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.tableHeader,
+                            color: UI_COLORS.text.heading
+                          }}
+                        />
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-4">
+                            <button
+                              className="text-sm"
+                              style={{ 
+                                color: UI_COLORS.text.muted,
+                                border: 'none',
+                                background: 'none',
+                                cursor: 'pointer',
+                                padding: 0
+                              }}
+                            >
+                              ← Version {index + 1} of {promptHistory.length} →
+                            </button>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Saved: {version.savedAt}
+                            </span>
+                          </div>
+                          <Button
+                            onClick={() => handleRestorePromptVersion(version.text)}
+                            variant="outline"
+                            className="px-6 transition-colors"
+                            style={{ 
+                              borderColor: UI_COLORS.border.default,
+                              color: UI_COLORS.text.heading,
+                              backgroundColor: UI_COLORS.background.white
+                            }}
+                          >
+                            Restore This Version
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           
-          {activeSection === 'prompt' && (
-            <div className="space-y-4">
-              <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                Evaluation Prompt
-              </h2>
-              
-              <div>
-                <textarea
-                  readOnly
-                  className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
-                    borderColor: UI_COLORS.border.default,
-                    backgroundColor: UI_COLORS.background.tableHeader,
-                    minHeight: '500px',
-                  }}
-                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.
-Use only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.
+          {activeSection === 'rubric' && (
+            <div className="flex h-full relative">
+              {/* Question List Sidebar */}
+              <aside 
+                className="flex flex-col border-r overflow-y-auto"
+                style={{ 
+                  backgroundColor: UI_COLORS.background.white, 
+                  borderRightWidth: '1px',
+                  borderRightStyle: 'solid',
+                  borderRightColor: UI_COLORS.border.default,
+                  width: '20rem',
+                  minWidth: '20rem',
+                }}
+              >
+                {/* Header */}
+                <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+                  <div className="px-6 pt-6 pb-6">
+                    <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
+                      GLOBAL RUBRIC
+                    </h2>
+                    <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
+                      These questions apply to all patients in this simulation group.
+                      Global key questions can only be edited here.
+                    </p>
+                    <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
+                      In each patient's page, global key questions are view-only.
+                    </p>
+                    
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                      <Input
+                        placeholder="Search Global Key Questions"
+                        value={rubricSearchQuery}
+                        onChange={(e) => setRubricSearchQuery(e.target.value)}
+                        className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                        style={{ 
+                          borderWidth: '1px', 
+                          borderStyle: 'solid', 
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-Assess:
-- which key questions were addressed, partially addressed, or missed
-- how well the student's questions align with the rubric
-- overall clinical reasoning and question quality
+                {/* Question List */}
+                <div className="flex-1 overflow-y-auto">
+                  {filteredRubricQuestions.map((question) => (
+                    <button
+                      key={question.id}
+                      onClick={() => setSelectedQuestionId(question.id)}
+                      className="w-full text-left py-3 transition-colors"
+                      style={{
+                        backgroundColor: selectedQuestionId === question.id ? UI_COLORS.background.tableHeader : 'transparent',
+                        borderBottomWidth: '1px',
+                        borderBottomStyle: 'solid',
+                        borderBottomColor: UI_COLORS.border.default,
+                        cursor: 'pointer',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (selectedQuestionId !== question.id) {
+                          e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight;
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (selectedQuestionId !== question.id) {
+                          e.currentTarget.style.backgroundColor = 'transparent';
+                        }
+                      }}
+                    >
+                      <div className="px-6">
+                        <p className="text-sm font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>
+                          Q{globalRubricQuestions.indexOf(question) + 1} - {question.title}
+                        </p>
+                        <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                          [{question.required ? 'Required' : 'Optional'}]
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </aside>
 
-Generate an AI debrief with:
-- Interview Summary (3-5 sentences)
-- Key Questions Successfully Addressed
-- Key Questions Missed or Incomplete
-- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)
-- Overall Assessment (rubric alignment score + summary)
+              {/* Question Detail Area */}
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-8">
+                  {selectedQuestion ? (
+                    <div className="max-w-4xl space-y-6">
+                      <h2 className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>
+                        Question {globalRubricQuestions.indexOf(selectedQuestion) + 1}
+                      </h2>
 
-OUTPUT FORMAT
-Return valid JSON in exactly this structure:
+                      {/* Title */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                          Title
+                        </label>
+                        <Input
+                          value={selectedQuestion.title}
+                          onChange={(e) => handleUpdateQuestionField('title', e.target.value)}
+                          className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        />
+                      </div>
 
-{
-  "interview_summary": "string",
-  "key_questions_successfully_addressed": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "feedback": "string"
-    }
-  ],
-  "key_questions_missed_or_incomplete": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "status": "missed | partially_addressed",
-      "feedback": "string",
-      "clinical_importance": "string"
-    }
-  ],
-  "rubric_based_feedback": {
-    "strengths": ["string", "string"],
-    "areas_for_improvement": ["string", "string"],
-    "recommended_focus_next_time": ["string", "string"]
-  },
-  "overall_assessment": {
-    "rubric_alignment_score": 0,
-    "summary": "string"
-  }
-}`}
-                />
+                      {/* Key Question */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                          Key Question
+                        </label>
+                        <textarea
+                          value={selectedQuestion.keyQuestion}
+                          onChange={(e) => handleUpdateQuestionField('keyQuestion', e.target.value)}
+                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            outlineColor: UI_COLORS.border.medium,
+                            minHeight: '100px',
+                          }}
+                        />
+                      </div>
+
+                      {/* Clinical Intent */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                          Clinical Intent
+                        </label>
+                        <textarea
+                          value={selectedQuestion.clinicalIntent}
+                          onChange={(e) => handleUpdateQuestionField('clinicalIntent', e.target.value)}
+                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            outlineColor: UI_COLORS.border.medium,
+                            minHeight: '100px',
+                          }}
+                        />
+                      </div>
+
+                      {/* Evaluation Criteria */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                          Evaluation Criteria
+                        </label>
+                        <textarea
+                          value={selectedQuestion.evaluationCriteria}
+                          onChange={(e) => handleUpdateQuestionField('evaluationCriteria', e.target.value)}
+                          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            outlineColor: UI_COLORS.border.medium,
+                            minHeight: '150px',
+                          }}
+                        />
+                      </div>
+
+                      {/* Required Toggle */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={selectedQuestion.required}
+                          onClick={() => handleUpdateQuestionField('required', !selectedQuestion.required)}
+                          className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                          style={{ 
+                            backgroundColor: selectedQuestion.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
+                          }}
+                        >
+                          <span
+                            className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
+                            style={{
+                              transform: selectedQuestion.required ? 'translateX(22px)' : 'translateX(2px)'
+                            }}
+                          />
+                        </button>
+                        <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                          Required for Case Completion
+                        </span>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center gap-4 pt-4">
+                        <Button
+                          onClick={handleSaveQuestion}
+                          className="px-8 py-3 text-base font-medium transition-colors"
+                          style={{ 
+                            backgroundColor: UI_COLORS.button.primary, 
+                            color: UI_COLORS.button.text 
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                        >
+                          Save Changes
+                        </Button>
+                        <Button
+                          onClick={handleDeleteQuestion}
+                          variant="outline"
+                          className="px-8 py-3 text-base font-medium transition-colors text-white"
+                          style={{ 
+                            backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                            borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        >
+                          Delete
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
+                      <p>Select a question to edit or create a new one</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -2061,7 +2339,7 @@ Return valid JSON in exactly this structure:
                               RUBRIC
                             </h2>
                             <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              Click on a Key Question entry to edit/remove it.
+                              Click on a Key Question entry to edit/delete it.
                             </p>
                             
                             {/* Search */}
@@ -2116,7 +2394,7 @@ Return valid JSON in exactly this structure:
                               GLOBAL RUBRIC
                             </h2>
                             <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              The following global questions are shown for reference to prevent redundancy. Edit global questions from the Global Rubric tab.
+                              The following global questions are shown for reference to prevent duplicate questions. Edit global questions from the Global Key Questions page.
                             </p>
 
                             {/* Global Question List */}
@@ -2907,4 +3185,4 @@ Return valid JSON in exactly this structure:
   );
 }
 
-export default InstructorSimulationGroupPage;
+export default AdminSimulationGroupPage;

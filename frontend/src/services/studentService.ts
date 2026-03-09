@@ -16,6 +16,9 @@ export interface SimulationGroup {
   subtitle: string;        // Always "Medical Simulation Group"
   iconUrl?: string;        // Optional icon image URL
   iconColor?: string;      // Fallback color for avatar (hex format)
+  studentCount?: number;   // Optional count of students (admin view only)
+  instructorCount?: number; // Optional count of instructors (admin view only)
+  patientCount?: number;   // Optional count of patients (admin view only)
 }
 
 /**

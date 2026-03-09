@@ -10,41 +10,38 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { UI_COLORS } from '@/lib/colors';
 
-interface CreateSimulationGroupDialogProps {
+interface CreateOrganizationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (data: { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean }) => void;
+  onCreate: (data: { name: string; description: string; aiPersonaTitle: string; userRoleTitle: string; systemPrompt: string }) => void;
 }
 
-function CreateSimulationGroupDialog({ 
+function CreateOrganizationDialog({ 
   open, 
   onOpenChange, 
   onCreate 
-}: CreateSimulationGroupDialogProps) {
+}: CreateOrganizationDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [instructors, setInstructors] = useState('');
+  const [aiPersonaTitle, setAiPersonaTitle] = useState('');
+  const [userRoleTitle, setUserRoleTitle] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
-  const [active, setActive] = useState(true);
-  const [enableVoice, setEnableVoice] = useState(true);
 
   const handleCreate = () => {
-    if (name.trim() && description.trim() && instructors.trim()) {
+    if (name.trim() && description.trim() && aiPersonaTitle.trim() && userRoleTitle.trim()) {
       onCreate({
         name: name.trim(),
         description: description.trim(),
-        instructors: instructors.trim(),
-        systemPrompt: systemPrompt.trim(),
-        active,
-        enableVoice
+        aiPersonaTitle: aiPersonaTitle.trim(),
+        userRoleTitle: userRoleTitle.trim(),
+        systemPrompt: systemPrompt.trim()
       });
       // Reset form
       setName('');
       setDescription('');
-      setInstructors('');
+      setAiPersonaTitle('');
+      setUserRoleTitle('');
       setSystemPrompt('');
-      setActive(true);
-      setEnableVoice(true);
       onOpenChange(false);
     }
   };
@@ -52,10 +49,9 @@ function CreateSimulationGroupDialog({
   const resetForm = () => {
     setName('');
     setDescription('');
-    setInstructors('');
+    setAiPersonaTitle('');
+    setUserRoleTitle('');
     setSystemPrompt('');
-    setActive(true);
-    setEnableVoice(true);
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -69,24 +65,24 @@ function CreateSimulationGroupDialog({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[85vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle className="text-2xl font-bold">Create new Simulation Group</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">Create new Organization</DialogTitle>
           <DialogDescription className="sr-only">
-            Create a new simulation group with name, description, and settings
+            Create a new organization with name, description, AI persona, and system prompt
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-6 py-4 overflow-y-auto pr-2">
           {/* Name Field */}
           <div className="flex flex-col gap-2">
             <label 
-              htmlFor="group-name" 
+              htmlFor="org-name" 
               className="text-sm font-medium"
               style={{ color: UI_COLORS.text.heading }}
             >
               Name <span style={{ color: UI_COLORS.status.error }}>*</span>
             </label>
             <Input
-              id="group-name"
-              placeholder="Chronic Pain"
+              id="org-name"
+              placeholder="Academic Advising"
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -101,15 +97,15 @@ function CreateSimulationGroupDialog({
           {/* Description Field */}
           <div className="flex flex-col gap-2">
             <label 
-              htmlFor="group-description" 
+              htmlFor="org-description" 
               className="text-sm font-medium"
               style={{ color: UI_COLORS.text.heading }}
             >
               Description <span style={{ color: UI_COLORS.status.error }}>*</span>
             </label>
             <Input
-              id="group-description"
-              placeholder="Patients suffering from different types of chronic pain"
+              id="org-description"
+              placeholder="Simulating interactions between students and academic advisors"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -121,20 +117,43 @@ function CreateSimulationGroupDialog({
             />
           </div>
 
-          {/* Add Instructors Field */}
+          {/* AI Persona Title Field */}
           <div className="flex flex-col gap-2">
             <label 
-              htmlFor="group-instructors" 
+              htmlFor="ai-persona-title" 
               className="text-sm font-medium"
               style={{ color: UI_COLORS.text.heading }}
             >
-              Add Instructors <span style={{ color: UI_COLORS.status.error }}>*</span>
+              AI Persona title <span style={{ color: UI_COLORS.status.error }}>*</span>
             </label>
             <Input
-              id="group-instructors"
-              placeholder="instructor1@example.com, instructor2@example.com, instructor3@example.com"
-              value={instructors}
-              onChange={(e) => setInstructors(e.target.value)}
+              id="ai-persona-title"
+              placeholder="Student"
+              value={aiPersonaTitle}
+              onChange={(e) => setAiPersonaTitle(e.target.value)}
+              className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+              style={{ 
+                borderWidth: '1px', 
+                borderStyle: 'solid', 
+                borderColor: UI_COLORS.border.default 
+              }}
+            />
+          </div>
+
+          {/* User Role Title Field */}
+          <div className="flex flex-col gap-2">
+            <label 
+              htmlFor="user-role-title" 
+              className="text-sm font-medium"
+              style={{ color: UI_COLORS.text.heading }}
+            >
+              User Role title <span style={{ color: UI_COLORS.status.error }}>*</span>
+            </label>
+            <Input
+              id="user-role-title"
+              placeholder="Academic Advisor"
+              value={userRoleTitle}
+              onChange={(e) => setUserRoleTitle(e.target.value)}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 
@@ -147,15 +166,15 @@ function CreateSimulationGroupDialog({
           {/* System Prompt Field */}
           <div className="flex flex-col gap-2">
             <label 
-              htmlFor="group-system-prompt" 
+              htmlFor="system-prompt" 
               className="text-sm font-medium"
               style={{ color: UI_COLORS.text.heading }}
             >
               System Prompt
             </label>
             <textarea
-              id="group-system-prompt"
-              placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient. Engage with the pharmacist by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the pharmacist is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the pharmacist identify the proper diagnosis of the patient you are pretending to be."
+              id="system-prompt"
+              placeholder="You are acting as a university student seeking guidance from an Academic Advisor. Your goal is to help the user practice their advising skills, including degree planning, crisis management, and interpersonal communication."
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={4}
@@ -169,80 +188,23 @@ function CreateSimulationGroupDialog({
             />
           </div>
 
-          {/* Toggle Switches */}
-          <div className="flex gap-8">
-            {/* Active Toggle */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={active}
-                onClick={() => setActive(!active)}
-                className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                style={{ 
-                  backgroundColor: active ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
-                }}
-              >
-                <span
-                  className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                  style={{
-                    transform: active ? 'translateX(22px)' : 'translateX(2px)'
-                  }}
-                />
-              </button>
-              <span 
-                className="text-sm font-medium"
-                style={{ color: UI_COLORS.text.heading }}
-              >
-                Active
-              </span>
-            </div>
-
-            {/* Enable Voice Toggle */}
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={enableVoice}
-                onClick={() => setEnableVoice(!enableVoice)}
-                className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                style={{ 
-                  backgroundColor: enableVoice ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
-                }}
-              >
-                <span
-                  className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                  style={{
-                    transform: enableVoice ? 'translateX(22px)' : 'translateX(2px)'
-                  }}
-                />
-              </button>
-              <span 
-                className="text-sm font-medium"
-                style={{ color: UI_COLORS.text.heading }}
-              >
-                Enable Voice
-              </span>
-            </div>
-          </div>
-
-          {/* Create Group Button */}
+          {/* Create Organization Button */}
           <Button
             onClick={handleCreate}
-            disabled={!name.trim() || !description.trim() || !instructors.trim()}
+            disabled={!name.trim() || !description.trim() || !aiPersonaTitle.trim() || !userRoleTitle.trim()}
             className="w-full py-6 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: UI_COLORS.button.primary, 
               color: UI_COLORS.button.text 
             }}
             onMouseEnter={(e) => {
-              if (name.trim() && description.trim() && instructors.trim()) {
+              if (name.trim() && description.trim() && aiPersonaTitle.trim() && userRoleTitle.trim()) {
                 e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover;
               }
             }}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            Create Group
+            Create Organisation
           </Button>
         </div>
       </DialogContent>
@@ -250,4 +212,4 @@ function CreateSimulationGroupDialog({
   );
 }
 
-export default CreateSimulationGroupDialog;
+export default CreateOrganizationDialog;

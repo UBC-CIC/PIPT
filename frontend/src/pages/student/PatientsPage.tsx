@@ -1,5 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockDataService } from '@/services/studentService';
 import { ArrowLeft, CheckCircle, Loader, Circle } from 'lucide-react';
@@ -85,9 +86,9 @@ function PatientsPage() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: UI_COLORS.background.white }}>
+    <PageContainer>
       {/* Header */}
-      <header className="flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
+      <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
           <UserAvatar
             name={user.name}
@@ -126,7 +127,7 @@ function PatientsPage() {
       </header>
 
       {/* Main Content */}
-      <main className="px-8 py-6">
+      <main className="flex-1 overflow-y-auto px-8 py-6">
         <div className="rounded-lg overflow-hidden" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
           <table className="w-full">
             <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
@@ -174,7 +175,7 @@ function PatientsPage() {
           </table>
         </div>
       </main>
-    </div>
+    </PageContainer>
   );
 }
 
