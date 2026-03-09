@@ -366,20 +366,7 @@ async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAn
  * @param patientId - Patient ID
  * @returns Array with message count data
  */
-function getMessageCountData(patientId: string): MessageCountData[] {
-  // Find patient across all groups
-  for (const groupPatients of Object.values(mockPatientAnalytics)) {
-    const patient = groupPatients.find(p => p.id === patientId);
-    if (patient) {
-      return [
-        {
-          name: 'Messages',
-          'Student Messages': patient.studentMessageCount,
-          'AI Messages': patient.aiMessageCount
-        }
-      ];
-    }
-  }
+function getMessageCountData(_patientId: string): MessageCountData[] {
   return [];
 }
 
@@ -412,11 +399,6 @@ async function generateAccessCode(simulationGroupId: string): Promise<string> {
         chars.charAt(Math.floor(Math.random() * chars.length))
       ).join('');
     }).join('-');
-    
-    const group = mockInstructorSimulationGroups.find(g => g.id === simulationGroupId);
-    if (group) {
-      group.accessCode = code;
-    }
     
     return code;
   }
@@ -462,13 +444,7 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
  * @param patientId - Patient ID (persona_id in DB)
  * @returns Patient with all persona fields or undefined if not found
  */
-function getPatient(patientId: string): ManageablePatient | undefined {
-  for (const groupPatients of Object.values(mockManageablePatients)) {
-    const patient = groupPatients.find(p => p.id === patientId);
-    if (patient) {
-      return patient;
-    }
-  }
+function getPatient(_patientId: string): ManageablePatient | undefined {
   return undefined;
 }
 
@@ -500,30 +476,12 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
     await apiClient.request(`/instructor/create_patient?${queryParams.toString()}`, {
       method: 'POST',
       body: {
-        patient_prompt: patientData.prompt || DEFAULT_PATIENT_PROMPT,
+        patient_prompt: patientData.prompt || '',
       },
     });
   } catch (error) {
     console.error('Failed to create patient:', error);
-    // Fallback to mock
-    const newPatient: ManageablePatient = {
-      id: `patient-${Date.now()}`,
-      simulation_group_id: simulationGroupId,
-      name: patientData.name,
-      age: patientData.age,
-      gender: patientData.gender,
-      prompt: patientData.prompt || DEFAULT_PATIENT_PROMPT,
-      persona_number: patientData.persona_number,
-      average_wpm: patientData.average_wpm,
-      voice_id: patientData.voice_id,
-      interaction_mode: patientData.interaction_mode,
-      llmEvaluationEnabled: false,
-    };
-    
-    if (!mockManageablePatients[simulationGroupId]) {
-      mockManageablePatients[simulationGroupId] = [];
-    }
-    mockManageablePatients[simulationGroupId].push(newPatient);
+    throw error;
   }
 }
 
@@ -567,25 +525,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
     }
   } catch (error) {
     console.error('Failed to update patient:', error);
-    // Fallback to mock
-    const patients = mockManageablePatients[simulationGroupId];
-    if (patients) {
-      const index = patients.findIndex(p => p.id === patientData.id);
-      if (index !== -1) {
-        patients[index] = {
-          ...patients[index],
-          name: patientData.name,
-          age: patientData.age,
-          gender: patientData.gender,
-          prompt: patientData.prompt,
-          photoUrl: patientData.photoUrl,
-          persona_number: patientData.persona_number,
-          average_wpm: patientData.average_wpm,
-          voice_id: patientData.voice_id,
-          interaction_mode: patientData.interaction_mode,
-        };
-      }
-    }
+    throw error;
   }
 }
 
@@ -596,21 +536,12 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
  * @param photoFile - Photo file to upload
  * @returns Promise with photo URL
  */
-async function uploadPatientPhoto(patientId: string, photoFile: File): Promise<string> {
-  // Mock implementation - in real app, this would upload to a server
+async function uploadPatientPhoto(_patientId: string, photoFile: File): Promise<string> {
+  // TODO: implement real upload to S3
   return new Promise((resolve) => {
     const reader = new FileReader();
     reader.onloadend = () => {
-      const photoUrl = reader.result as string;
-      // Update patient photo in mock data
-      for (const groupPatients of Object.values(mockManageablePatients)) {
-        const patient = groupPatients.find(p => p.id === patientId);
-        if (patient) {
-          patient.photoUrl = photoUrl;
-          break;
-        }
-      }
-      resolve(photoUrl);
+      resolve(reader.result as string);
     };
     reader.readAsDataURL(photoFile);
   });
@@ -638,14 +569,7 @@ async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): 
     );
   } catch (error) {
     console.error('Failed to update LLM evaluation:', error);
-    // Fallback to mock
-    for (const groupPatients of Object.values(mockManageablePatients)) {
-      const patient = groupPatients.find(p => p.id === patientId);
-      if (patient) {
-        patient.llmEvaluationEnabled = enabled;
-        break;
-      }
-    }
+    throw error;
   }
 }
 
@@ -667,12 +591,7 @@ async function deletePatient(patientId: string): Promise<void> {
     );
   } catch (error) {
     console.error('Failed to delete patient:', error);
-    // Fallback to mock
-    for (const groupId of Object.keys(mockManageablePatients)) {
-      mockManageablePatients[groupId] = mockManageablePatients[groupId].filter(
-        p => p.id !== patientId
-      );
-    }
+    throw error;
   }
 }
 
@@ -682,7 +601,7 @@ async function deletePatient(patientId: string): Promise<void> {
  * @param simulationGroupId - Simulation group ID
  * @returns Array of global rubric questions
  */
-function getGlobalRubricQuestions(simulationGroupId: string): GlobalRubricQuestion[] {
+function getGlobalRubricQuestions(_simulationGroupId: string): GlobalRubricQuestion[] {
   return [];
 }
 
@@ -692,11 +611,8 @@ function getGlobalRubricQuestions(simulationGroupId: string): GlobalRubricQuesti
  * @param simulationGroupId - Simulation group ID
  * @param question - Question to add
  */
-function addGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubricQuestion): void {
-  if (!mockGlobalRubricQuestions[simulationGroupId]) {
-    mockGlobalRubricQuestions[simulationGroupId] = [];
-  }
-  mockGlobalRubricQuestions[simulationGroupId].push(question);
+function addGlobalRubricQuestion(_simulationGroupId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -705,14 +621,8 @@ function addGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubr
  * @param simulationGroupId - Simulation group ID
  * @param question - Updated question
  */
-function updateGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubricQuestion): void {
-  const questions = mockGlobalRubricQuestions[simulationGroupId];
-  if (questions) {
-    const index = questions.findIndex(q => q.id === question.id);
-    if (index !== -1) {
-      questions[index] = question;
-    }
-  }
+function updateGlobalRubricQuestion(_simulationGroupId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -721,11 +631,8 @@ function updateGlobalRubricQuestion(simulationGroupId: string, question: GlobalR
  * @param simulationGroupId - Simulation group ID
  * @param questionId - Question ID to delete
  */
-function deleteGlobalRubricQuestion(simulationGroupId: string, questionId: string): void {
-  const questions = mockGlobalRubricQuestions[simulationGroupId];
-  if (questions) {
-    mockGlobalRubricQuestions[simulationGroupId] = questions.filter(q => q.id !== questionId);
-  }
+function deleteGlobalRubricQuestion(_simulationGroupId: string, _questionId: string): void {
+  // TODO: implement API call
 }
 
 /**
@@ -740,7 +647,7 @@ async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
       `/instructor/get_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
-    return data.system_prompt || mockEvaluationPrompt;
+    return data.system_prompt || '';
   } catch (error) {
     console.error('Failed to fetch evaluation prompt:', error);
     return [] as any;
@@ -776,7 +683,7 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
  * @param studentId - Student ID
  * @returns Student details or undefined if not found
  */
-function getStudentDetails(studentId: string): StudentDetails | undefined {
+function getStudentDetails(_studentId: string): StudentDetails | undefined {
   return [] as any;
 }
 
@@ -788,7 +695,7 @@ function getStudentDetails(studentId: string): StudentDetails | undefined {
  * @param patientId - Patient ID (persona_id via student_interaction)
  * @returns Array of chat attempts
  */
-function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
+function getChatAttempts(_studentId: string, _patientId: string): ChatAttempt[] {
   return [];
 }
 
@@ -799,7 +706,7 @@ function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
  * @param attemptId - Chat attempt ID (chat_id in DB)
  * @returns Array of chat messages ordered by time_sent
  */
-function getChatMessages(attemptId: string): ChatMessage[] {
+function getChatMessages(_attemptId: string): ChatMessage[] {
   return [];
 }
 
@@ -810,7 +717,7 @@ function getChatMessages(attemptId: string): ChatMessage[] {
  * @param attemptId - Chat attempt ID (chat_id in DB)
  * @returns Notes text from chats.notes field
  */
-function getChatNotes(attemptId: string): string {
+function getChatNotes(_attemptId: string): string {
   return [] as any;
 }
 
@@ -820,7 +727,7 @@ function getChatNotes(attemptId: string): string {
  * @param patientId - Patient ID
  * @returns Array of case-specific questions
  */
-function getCaseSpecificQuestions(patientId: string): GlobalRubricQuestion[] {
+function getCaseSpecificQuestions(_patientId: string): GlobalRubricQuestion[] {
   return [];
 }
 
@@ -830,11 +737,8 @@ function getCaseSpecificQuestions(patientId: string): GlobalRubricQuestion[] {
  * @param patientId - Patient ID
  * @param question - Question to add
  */
-function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
-  if (!mockCaseSpecificQuestions[patientId]) {
-    mockCaseSpecificQuestions[patientId] = [];
-  }
-  mockCaseSpecificQuestions[patientId].push(question);
+function addCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -843,14 +747,8 @@ function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuesti
  * @param patientId - Patient ID
  * @param question - Updated question
  */
-function updateCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
-  const questions = mockCaseSpecificQuestions[patientId];
-  if (questions) {
-    const index = questions.findIndex(q => q.id === question.id);
-    if (index !== -1) {
-      questions[index] = question;
-    }
-  }
+function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQuestion): void {
+  // TODO: implement API call
 }
 
 /**
@@ -859,11 +757,8 @@ function updateCaseSpecificQuestion(patientId: string, question: GlobalRubricQue
  * @param patientId - Patient ID
  * @param questionId - Question ID to delete
  */
-function deleteCaseSpecificQuestion(patientId: string, questionId: string): void {
-  const questions = mockCaseSpecificQuestions[patientId];
-  if (questions) {
-    mockCaseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
-  }
+function deleteCaseSpecificQuestion(_patientId: string, _questionId: string): void {
+  // TODO: implement API call
 }
 
 /**
@@ -873,7 +768,7 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
  * @param patientId - Patient ID (persona_id in DB)
  * @returns Array of case materials (physical assessment materials)
  */
-function getCaseMaterials(patientId: string): CaseMaterial[] {
+function getCaseMaterials(_patientId: string): CaseMaterial[] {
   return [];
 }
 
@@ -883,11 +778,8 @@ function getCaseMaterials(patientId: string): CaseMaterial[] {
  * @param patientId - Patient ID
  * @param material - Material to add
  */
-function addCaseMaterial(patientId: string, material: CaseMaterial): void {
-  if (!mockCaseMaterials[patientId]) {
-    mockCaseMaterials[patientId] = [];
-  }
-  mockCaseMaterials[patientId].push(material);
+function addCaseMaterial(_patientId: string, _material: CaseMaterial): void {
+  // TODO: implement API call
 }
 
 /**
@@ -896,14 +788,8 @@ function addCaseMaterial(patientId: string, material: CaseMaterial): void {
  * @param patientId - Patient ID
  * @param material - Updated material
  */
-function updateCaseMaterial(patientId: string, material: CaseMaterial): void {
-  const materials = mockCaseMaterials[patientId];
-  if (materials) {
-    const index = materials.findIndex(m => m.id === material.id);
-    if (index !== -1) {
-      materials[index] = material;
-    }
-  }
+function updateCaseMaterial(_patientId: string, _material: CaseMaterial): void {
+  // TODO: implement API call
 }
 
 /**
@@ -912,11 +798,8 @@ function updateCaseMaterial(patientId: string, material: CaseMaterial): void {
  * @param patientId - Patient ID
  * @param materialId - Material ID to delete
  */
-function deleteCaseMaterial(patientId: string, materialId: string): void {
-  const materials = mockCaseMaterials[patientId];
-  if (materials) {
-    mockCaseMaterials[patientId] = materials.filter(m => m.id !== materialId);
-  }
+function deleteCaseMaterial(_patientId: string, _materialId: string): void {
+  // TODO: implement API call
 }
 
 /**
@@ -925,7 +808,7 @@ function deleteCaseMaterial(patientId: string, materialId: string): void {
  * @returns Default patient prompt text
  */
 function getDefaultPatientPrompt(): string {
-  return DEFAULT_PATIENT_PROMPT;
+  return '';
 }
 
 /**
