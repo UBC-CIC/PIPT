@@ -115,6 +115,19 @@ function InstructorSimulationGroupPage() {
   const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
   const students = mockInstructorDataService.getStudents(groupId || '1');
   
+  // Get organization-specific labels from service
+  const labels = mockInstructorDataService.getOrganizationLabels(groupId || '1');
+  const {
+    aiPersona: aiPersonaLabel,
+    aiPersonaPlural: aiPersonaLabelPlural,
+    aiPersonaLower: aiPersonaLabelLower,
+    aiPersonaPluralLower: aiPersonaLabelPluralLower,
+    userRole: userRoleLabel,
+    userRolePlural: userRoleLabelPlural,
+    userRoleLower: userRoleLabelLower,
+    userRolePluralLower: userRoleLabelPluralLower,
+  } = labels;
+  
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState(() => 
     mockInstructorDataService.getManageablePatients(groupId || '1')
@@ -205,7 +218,7 @@ function InstructorSimulationGroupPage() {
    * Handle delete patient
    */
   const handleDeletePatient = (patientId: string) => {
-    if (confirm('Are you sure you want to delete this patient?')) {
+    if (confirm(`Are you sure you want to delete this ${aiPersonaLabelLower}?`)) {
       // Update the state directly with filtered array
       setManageablePatients(prevPatients => 
         prevPatients.filter(patient => patient.id !== patientId)
@@ -732,7 +745,7 @@ function InstructorSimulationGroupPage() {
             }}
           >
             <Users className="w-5 h-5" />
-            Manage Patients
+            Manage {aiPersonaLabelPlural}
           </Button>
 
           <Button
@@ -745,7 +758,7 @@ function InstructorSimulationGroupPage() {
             }}
           >
             <UserCog className="w-5 h-5" />
-            Manage Students
+            Manage {userRoleLabel}s
           </Button>
 
           <Button
@@ -992,7 +1005,7 @@ function InstructorSimulationGroupPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5" style={{ color: UI_COLORS.text.muted }} />
                 <Input
-                  placeholder="Search by Patient Name"
+                  placeholder={`Search by ${aiPersonaLabel} Name`}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -1762,10 +1775,10 @@ Return valid JSON in exactly this structure:
                     onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
                   >
                     <ArrowLeft className="w-4 h-4" />
-                    Back to All Patients
+                    Back to All {aiPersonaLabelPlural}
                   </button>
                   <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                    {selectedPatientForEdit === 'new' ? 'Create Patient' : 'Edit Patient'}
+                    {selectedPatientForEdit === 'new' ? `Create ${aiPersonaLabel}` : `Edit ${aiPersonaLabel}`}
                   </h2>
                 </div>
                 
@@ -1815,7 +1828,7 @@ Return valid JSON in exactly this structure:
                   {editPatientTab === 'info' && (
                     <div className="space-y-6 max-w-2xl">
                       <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                        Edit Patient Information
+                        {selectedPatientForEdit === 'new' ? `Create ${aiPersonaLabel} Information` : `Edit ${aiPersonaLabel} Information`}
                       </h3>
 
                       {/* Patient Photo */}

@@ -27,7 +27,7 @@ class AdminDataService {
       id: 'org-1',
       name: 'Pharmacy',
       aiPersona: 'Patient',
-      userRole: 'Doctor',
+      userRole: 'Student',
       icon: 'building',
       iconColor: '#03045E',
     },

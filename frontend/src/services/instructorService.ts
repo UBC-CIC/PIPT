@@ -15,6 +15,7 @@
  */
 
 import { getSimulationGroupColor } from '@/lib/colors';
+import { mockAdminDataService } from './adminService';
 
 /**
  * Represents a simulation group from instructor perspective
@@ -29,6 +30,7 @@ export interface InstructorSimulationGroup {
   studentCount: number;    // Number of students in the group
   instructorCount?: number; // Number of instructors in the group
   patientCount: number;    // Number of patients in the group
+  organizationId: string;  // Reference to parent organization
 }
 
 /**
@@ -37,6 +39,20 @@ export interface InstructorSimulationGroup {
 export interface UserData {
   name: string;            // User's full name
   avatarUrl?: string;      // Optional profile picture URL
+}
+
+/**
+ * Represents organization-specific labels for UI display
+ */
+export interface OrganizationLabels {
+  aiPersona: string;              // Singular form (e.g., "Patient", "Law Client")
+  aiPersonaPlural: string;        // Plural form (e.g., "Patients", "Law Clients")
+  aiPersonaLower: string;         // Lowercase singular (e.g., "patient")
+  aiPersonaPluralLower: string;   // Lowercase plural (e.g., "patients")
+  userRole: string;               // Singular form (e.g., "Doctor", "Legal Advisor")
+  userRolePlural: string;         // Plural form (e.g., "Doctors", "Legal Advisors")
+  userRoleLower: string;          // Lowercase singular (e.g., "doctor")
+  userRolePluralLower: string;    // Lowercase plural (e.g., "doctors")
 }
 
 /**
@@ -203,6 +219,7 @@ export interface MockInstructorDataService {
   getSimulationGroups: () => InstructorSimulationGroup[];
   getCurrentUser: () => UserData;
   getSimulationGroup: (id: string) => InstructorSimulationGroup | undefined;
+  getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
   getPatientAnalytics: (simulationGroupId: string) => PatientAnalytics[];
   getMessageCountData: (patientId: string) => MessageCountData[];
   generateAccessCode: (simulationGroupId: string) => string;
@@ -255,7 +272,8 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     accessCode: 'NB3W-PI3I-Q2EH-WPA3',
     studentCount: 20,
     instructorCount: 5,
-    patientCount: 2
+    patientCount: 2,
+    organizationId: 'org-1'
   },
   {
     id: '2',
@@ -265,7 +283,8 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     accessCode: 'XY7Z-AB2C-DE4F-GH8I',
     studentCount: 18,
     instructorCount: 3,
-    patientCount: 3
+    patientCount: 3,
+    organizationId: 'org-1'
   },
   {
     id: '3',
@@ -275,7 +294,8 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     accessCode: 'PQ9R-ST1U-VW3X-YZ5A',
     studentCount: 32,
     instructorCount: 4,
-    patientCount: 2
+    patientCount: 2,
+    organizationId: 'org-2'
   }
 ];
 
@@ -821,6 +841,33 @@ function getCurrentUser(): UserData {
  */
 function getSimulationGroup(id: string): InstructorSimulationGroup | undefined {
   return mockInstructorSimulationGroups.find(group => group.id === id);
+}
+
+/**
+ * Get organization-specific labels for UI display
+ * Derives all label variations from the organization's aiPersona and userRole settings
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @returns OrganizationLabels object with all label variations
+ */
+function getOrganizationLabels(simulationGroupId: string): OrganizationLabels {
+  const simulationGroup = getSimulationGroup(simulationGroupId);
+  const organizations = mockAdminDataService.getOrganizations();
+  const organization = organizations.find((org) => org.id === simulationGroup?.organizationId);
+  
+  const aiPersona = organization?.aiPersona || 'Patient';
+  const userRole = organization?.userRole || 'Doctor';
+  
+  return {
+    aiPersona,
+    aiPersonaPlural: `${aiPersona}s`,
+    aiPersonaLower: aiPersona.toLowerCase(),
+    aiPersonaPluralLower: `${aiPersona}s`.toLowerCase(),
+    userRole,
+    userRolePlural: `${userRole}s`,
+    userRoleLower: userRole.toLowerCase(),
+    userRolePluralLower: `${userRole}s`.toLowerCase(),
+  };
 }
 
 /**
@@ -1459,6 +1506,7 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getSimulationGroups,
   getCurrentUser,
   getSimulationGroup,
+  getOrganizationLabels,
   getPatientAnalytics,
   getMessageCountData,
   generateAccessCode,
