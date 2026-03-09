@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData } from '@/services/instructorService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useAuth } from '@/App';
 import { useState, useEffect } from 'react';
@@ -59,12 +59,12 @@ function InstructorSimulationGroupPage() {
   const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
   
   // Question Bank questions - loaded from service
-  const [globalBankQuestions, setGlobalBankQuestions] = useState(() => 
-    mockInstructorDataService.getGlobalQuestionBank()
+  const [globalBankQuestions] = useState(() => 
+    instructorService.getGlobalQuestionBank()
   );
   
   const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState(() => 
-    mockInstructorDataService.getPatientSpecificQuestionBank()
+    instructorService.getPatientSpecificQuestionBank()
   );
   
   // Case-Specific Key Questions state
@@ -119,16 +119,12 @@ function InstructorSimulationGroupPage() {
   const [loading, setLoading] = useState(true);
   
   // Get organization-specific labels from service
-  const labels = mockInstructorDataService.getOrganizationLabels(groupId || '1');
+  const labels = instructorService.getOrganizationLabels(groupId || '1');
   const {
     aiPersona: aiPersonaLabel,
     aiPersonaPlural: aiPersonaLabelPlural,
     aiPersonaLower: aiPersonaLabelLower,
-    aiPersonaPluralLower: aiPersonaLabelPluralLower,
     userRole: userRoleLabel,
-    userRolePlural: userRoleLabelPlural,
-    userRoleLower: userRoleLabelLower,
-    userRolePluralLower: userRoleLabelPluralLower,
   } = labels;
   
   // Use state for manageable patients so we can trigger re-renders
@@ -270,10 +266,10 @@ function InstructorSimulationGroupPage() {
     const patient = instructorService.getPatient(patientId);
     if (patient) {
       setSelectedPatientForEdit(patientId);
-      setEditPatientName(patient.name);
-      setEditPatientAge(patient.age.toString());
-      setEditPatientGender(patient.gender);
-      setEditPatientPrompt(patient.prompt || instructorService.getDefaultPatientPrompt());
+      setEditPatientName(patient.patient_name);
+      setEditPatientAge(patient.patient_age.toString());
+      setEditPatientGender(patient.patient_gender);
+      setEditPatientPrompt(patient.patient_prompt || instructorService.getDefaultPatientPrompt());
       setEditPatientTab('info');
       
       // Load case-specific questions and materials
@@ -322,19 +318,19 @@ function InstructorSimulationGroupPage() {
       if (selectedPatientForEdit === 'new') {
         // Create new patient
         instructorService.createPatient(groupId, {
-          name: editPatientName,
-          age: parseInt(editPatientAge) || 0,
-          gender: editPatientGender,
-          prompt: editPatientPrompt,
+          patient_name: editPatientName,
+          patient_age: parseInt(editPatientAge) || 0,
+          patient_gender: editPatientGender,
+          patient_prompt: editPatientPrompt,
         });
       } else {
         // Update existing patient
         instructorService.updatePatient(groupId, {
-          id: selectedPatientForEdit,
-          name: editPatientName,
-          age: parseInt(editPatientAge) || 0,
-          gender: editPatientGender,
-          prompt: editPatientPrompt,
+          patient_id: selectedPatientForEdit,
+          patient_name: editPatientName,
+          patient_age: parseInt(editPatientAge) || 0,
+          patient_gender: editPatientGender,
+          patient_prompt: editPatientPrompt,
         });
       }
       setManageablePatients(await instructorService.getManageablePatients(groupId));
@@ -383,22 +379,6 @@ function InstructorSimulationGroupPage() {
     setActiveSection('editPatient');
   };
 
-  /**
-   * Handle add new key question
-   */
-  const handleAddNewKeyQuestion = () => {
-    const newQuestion: GlobalRubricQuestion = {
-      id: `q-${Date.now()}`,
-      title: 'New Question',
-      keyQuestion: '',
-      clinicalIntent: '',
-      evaluationCriteria: '',
-      required: false,
-    };
-    instructorService.addGlobalRubricQuestion(groupId || '1', newQuestion);
-    setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
-    setSelectedQuestionId(newQuestion.id);
-  };
 
   /**
    * Handle delete question
@@ -450,23 +430,6 @@ function InstructorSimulationGroupPage() {
     ));
   };
 
-  /**
-   * Handle add new case-specific key question
-   */
-  const handleAddNewCaseKeyQuestion = () => {
-    if (!selectedPatientForEdit) return;
-    const newQuestion: GlobalRubricQuestion = {
-      id: `case-q-${Date.now()}`,
-      title: 'New Question',
-      keyQuestion: '',
-      clinicalIntent: '',
-      evaluationCriteria: '',
-      required: false,
-    };
-    instructorService.addCaseSpecificQuestion(selectedPatientForEdit, newQuestion);
-    setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForEdit));
-    setSelectedCaseQuestionId(newQuestion.id);
-  };
 
   /**
    * Handle delete case-specific question
@@ -481,7 +444,7 @@ function InstructorSimulationGroupPage() {
       
       // Update the question bank checkmark if this patient is selected in question bank
       if (selectedPatientForQuestionBank === selectedPatientForEdit) {
-        const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForEdit);
+        const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForEdit);
         setIncludedQuestionIds(questionIds);
       }
       
@@ -561,6 +524,104 @@ function InstructorSimulationGroupPage() {
       // For now, just update the contentUrl with a placeholder
       handleUpdateMaterialField('contentUrl', URL.createObjectURL(file));
     }
+  };
+
+
+  /**
+   * Handle save new patient-specific question from dialog
+   */
+  const handleSaveNewPatientQuestion = (question: {
+    patientId: string;
+    title: string;
+    keyQuestion: string;
+    clinicalIntent: string;
+    evaluationCriteria: string;
+    required: boolean;
+  }) => {
+    const newQuestionId = `bank-patient-${Date.now()}`;
+    const newBankQuestion: any = { 
+      id: newQuestionId, 
+      title: question.title,
+      questionText: question.keyQuestion,
+      clinicalIntent: question.clinicalIntent,
+      evaluationCriteria: question.evaluationCriteria,
+      isMandatory: question.required,
+      isActive: true,
+      usedBySimulationGroups: [],
+      usedByPatients: []
+    };
+    
+    // Add to question bank via service
+    instructorService.addToPatientSpecificQuestionBank(newBankQuestion);
+    setPatientSpecificBankQuestions(instructorService.getPatientSpecificQuestionBank());
+    
+    // Add to case-specific questions for the selected patient
+    const newCaseQuestion: GlobalRubricQuestion = {
+      id: newQuestionId,
+      title: question.title,
+      keyQuestion: question.keyQuestion,
+      clinicalIntent: question.clinicalIntent,
+      evaluationCriteria: question.evaluationCriteria,
+      required: question.required,
+    };
+    
+    instructorService.addCaseSpecificQuestion(question.patientId, newCaseQuestion);
+    
+    // Update includedQuestionIds to checkmark this question for this patient
+    if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank === question.patientId) {
+      setIncludedQuestionIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(newQuestionId);
+        return newSet;
+      });
+    }
+    
+    // Update case-specific questions if we're editing this patient
+    if (selectedPatientForEdit === question.patientId) {
+      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(question.patientId));
+    }
+    
+    console.log('Saved new patient-specific question:', question);
+  };
+
+  /**
+   * Handle toggle question inclusion in rubric
+   */
+  const handleToggleQuestionInclusion = (questionId: string, bankQuestion: any, isChecked: boolean) => {
+    const newSet = new Set(includedQuestionIds);
+    
+    if (isChecked) {
+      newSet.add(questionId);
+      
+      // Add to global rubric if it's a global question
+      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
+        // Check if already exists in rubric
+        const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
+        if (!existingQuestion) {
+          const newGlobalRubricQuestion: GlobalRubricQuestion = {
+            id: questionId,
+            title: bankQuestion.title,
+            keyQuestion: bankQuestion.questionText,
+            clinicalIntent: bankQuestion.clinicalIntent,
+            evaluationCriteria: bankQuestion.evaluationCriteria,
+            required: bankQuestion.isMandatory,
+          };
+          
+          instructorService.addGlobalRubricQuestion(groupId || '1', newGlobalRubricQuestion);
+          setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
+        }
+      }
+    } else {
+      newSet.delete(questionId);
+      
+      // Remove from global rubric when unchecked
+      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
+        instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
+        setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
+      }
+    }
+    
+    setIncludedQuestionIds(newSet);
   };
 
   if (loading) {
@@ -717,12 +778,12 @@ function InstructorSimulationGroupPage() {
               // Load included question IDs based on current tab
               if (questionBankTab === 'global') {
                 // Get IDs of questions already in global rubric
-                const globalRubric = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
+                const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                 const questionIds = new Set(globalRubric.map(q => q.id));
                 setIncludedQuestionIds(questionIds);
               } else if (selectedPatientForQuestionBank) {
                 // Get IDs of questions already in patient's case-specific rubric
-                const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
+                const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                 setIncludedQuestionIds(questionIds);
               } else {
                 // No patient selected, clear checkmarks
@@ -1387,7 +1448,7 @@ function InstructorSimulationGroupPage() {
                     onClick={() => {
                       setQuestionBankTab('global');
                       // Load global rubric question IDs when switching to global tab
-                      const globalRubric = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
+                      const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                       const questionIds = new Set(globalRubric.map(q => q.id));
                       setIncludedQuestionIds(questionIds);
                     }}
@@ -1406,7 +1467,7 @@ function InstructorSimulationGroupPage() {
                       setQuestionBankTab('patientSpecific');
                       // Load patient-specific question IDs when switching to patient-specific tab
                       if (selectedPatientForQuestionBank) {
-                        const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
+                        const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                         setIncludedQuestionIds(questionIds);
                       } else {
                         setIncludedQuestionIds(new Set());
@@ -1500,7 +1561,7 @@ function InstructorSimulationGroupPage() {
                             const patientId = e.target.value || null;
                             setSelectedPatientForQuestionBank(patientId);
                             if (patientId) {
-                              const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
+                              const questionIds = instructorService.getPatientCaseSpecificQuestionIds(patientId);
                               setIncludedQuestionIds(questionIds);
                             } else {
                               setIncludedQuestionIds(new Set());
@@ -1555,21 +1616,21 @@ function InstructorSimulationGroupPage() {
                                         evaluationCriteria: question.evaluationCriteria,
                                         required: question.isMandatory,
                                       };
-                                      mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
+                                      instructorService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
                                       
                                       // Update case-specific questions if we're editing this patient
                                       if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                        setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
                                       }
                                     } else {
                                       newSet.delete(question.id);
                                       
                                       // Remove from patient's case-specific questions
-                                      mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
+                                      instructorService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
                                       
                                       // Update case-specific questions if we're editing this patient
                                       if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                        setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
                                       }
                                     }
                                     setIncludedQuestionIds(newSet);
@@ -1771,7 +1832,7 @@ Return valid JSON in exactly this structure:
                       <div className="flex items-center gap-4">
                         <UserAvatar
                           name={editPatientName || 'P'}
-                          imageUrl={patientBeingEdited?.photoUrl}
+                          imageUrl={patientBeingEdited?.photo_url}
                           size="large"
                         />
                         <label className="cursor-pointer">
@@ -2061,7 +2122,7 @@ Return valid JSON in exactly this structure:
                                 // Get the patient's simulation group ID
                                 const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
                                 // Load global rubric questions for the patient's simulation group
-                                const patientGlobalRubric = mockInstructorDataService.getGlobalRubricQuestions(patientSimGroupId);
+                                const patientGlobalRubric = instructorService.getGlobalRubricQuestions(patientSimGroupId);
                                 return patientGlobalRubric.map((question, index) => (
                                   <div
                                     key={question.id}
@@ -2829,7 +2890,7 @@ Return valid JSON in exactly this structure:
         open={isAddQuestionDialogOpen}
         onOpenChange={setIsAddQuestionDialogOpen}
         questionType={addQuestionType}
-        onSave={handleSaveNewQuestion}
+        onSave={handleSaveQuestion}
       />
       
       {/* Add Patient-Specific Question Dialog */}

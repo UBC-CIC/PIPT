@@ -35,14 +35,14 @@ function SimulationGroupCard({
     <div className="flex flex-col gap-4 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
       <div className="flex items-start gap-4">
         <UserAvatar
-          name={group.name}
+          name={group.group_name}
           imageUrl={group.iconUrl}
           size="medium"
           backgroundColor={group.iconColor}
         />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-lg leading-tight mb-1" style={{ color: UI_COLORS.text.heading }}>
-            {group.name}
+            {group.group_name}
           </h3>
           {!showCounts && (
             <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
@@ -52,13 +52,13 @@ function SimulationGroupCard({
           {showCounts && (
             <div className="flex flex-col gap-1 mt-2">
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.students} - {group.studentCount || 0}
+                {countLabels.students} - {group.student_count || 0}
               </p>
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.instructors} - {group.instructorCount || 0}
+                {countLabels.instructors} - {group.instructor_count || 0}
               </p>
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.patients} - {group.patientCount || 0}
+                {countLabels.patients} - {group.patient_count || 0}
               </p>
             </div>
           )}
@@ -66,7 +66,7 @@ function SimulationGroupCard({
       </div>
       <div className="flex gap-2">
         <Button
-          onClick={() => onContinueTraining(group.id)}
+          onClick={() => onContinueTraining(group.simulation_group_id)}
           variant="default"
           className="flex-1 transition-colors"
           style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
@@ -77,7 +77,7 @@ function SimulationGroupCard({
         </Button>
         {showDeleteButton && onDelete && (
           <button
-            onClick={() => onDelete(group.id)}
+            onClick={() => onDelete(group.simulation_group_id)}
             className="p-3 rounded-md hover:bg-gray-100 transition-colors"
             style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}
             aria-label="Delete simulation group"

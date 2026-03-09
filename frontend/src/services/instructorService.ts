@@ -21,16 +21,16 @@ import { authService } from '@/lib/auth';
  * Represents a simulation group from instructor perspective
  */
 export interface InstructorSimulationGroup {
-  id: string;              // Unique identifier
-  name: string;            // Group name (e.g., "Pregnancy")
-  subtitle: string;        // Always "Medical Simulation Group"
-  iconUrl?: string;        // Optional icon image URL
-  iconColor?: string;      // Fallback color for avatar (hex format)
-  accessCode: string;      // Access code for students to join
-  studentCount: number;    // Number of students in the group
-  instructorCount?: number; // Number of instructors in the group
-  patientCount: number;    // Number of patients in the group
-  organizationId: string;  // Reference to parent organization
+  simulation_group_id: string;  // Unique identifier
+  group_name: string;           // Group name (e.g., "Pregnancy")
+  subtitle: string;             // Always "Medical Simulation Group"
+  iconUrl?: string;             // Optional icon image URL
+  iconColor?: string;           // Fallback color for avatar (hex format)
+  access_code: string;          // Access code for students to join
+  student_count: number;        // Number of students in the group
+  instructor_count?: number;    // Number of instructors in the group
+  patient_count: number;        // Number of patients in the group
+  organization_id: string;      // Reference to parent organization
 }
 
 /**
@@ -59,13 +59,13 @@ export interface OrganizationLabels {
  * Represents a patient in a simulation group with analytics
  */
 export interface PatientAnalytics {
-  id: string;                           // Unique identifier
-  name: string;                         // Patient name
-  instructorCompletionPercentage: number; // 0-100
-  llmCompletionPercentage: number;      // 0-100
-  studentMessageCount: number;          // Number of messages from students
-  aiMessageCount: number;               // Number of AI responses
-  studentAccessCount: number;           // Number of times students accessed
+  patient_id: string;                   // Unique identifier
+  patient_name: string;                 // Patient name
+  instructor_completion_percentage: number; // 0-100
+  llm_completion_percentage: number;    // 0-100
+  student_message_count: number;        // Number of messages from students
+  ai_message_count: number;             // Number of AI responses
+  student_access_count: number;         // Number of times students accessed
 }
 
 /**
@@ -81,18 +81,18 @@ export interface MessageCountData {
  * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
-  id: string;                           // Unique identifier (persona_id in DB)
+  patient_id: string;                   // Unique identifier (persona_id in DB)
   simulation_group_id: string;          // Reference to simulation group (simulation_group_id in DB)
-  name: string;                         // Patient name (persona_name in DB)
-  age: number;                          // Patient age (persona_age in DB)
-  gender: string;                       // Patient gender (persona_gender in DB)
-  persona_number?: number;              // Patient number (persona_number in DB)
-  prompt: string;                       // Patient prompt for LLM (persona_prompt in DB)
+  patient_name: string;                 // Patient name (persona_name in DB)
+  patient_age: number;                  // Patient age (persona_age in DB)
+  patient_gender: string;               // Patient gender (persona_gender in DB)
+  patient_number?: number;              // Patient number (persona_number in DB)
+  patient_prompt: string;               // Patient prompt for LLM (persona_prompt in DB)
   average_wpm?: number;                 // Average words per minute (average_wpm in DB)
   voice_id?: string;                    // Voice ID for TTS (voice_id in DB)
   interaction_mode?: string;            // Interaction mode (interaction_mode in DB)
-  llmEvaluationEnabled: boolean;        // Whether LLM evaluation is enabled (derived from settings)
-  photoUrl?: string;                    // Optional patient photo URL (stored separately or in media)
+  llm_completion: boolean;              // Whether LLM evaluation is enabled (derived from settings)
+  photo_url?: string;                   // Optional patient photo URL (stored separately or in media)
 }
 
 /**
@@ -183,11 +183,11 @@ export interface ChatNotes {
  * Represents patient creation data
  */
 export interface PatientCreateData {
-  name: string;                         // persona_name
-  age: number;                          // persona_age
-  gender: string;                       // persona_gender
-  prompt: string;                       // persona_prompt
-  persona_number?: number;              // persona_number (optional)
+  patient_name: string;                 // persona_name
+  patient_age: number;                  // persona_age
+  patient_gender: string;               // persona_gender
+  patient_prompt: string;               // persona_prompt
+  patient_number?: number;              // persona_number (optional)
   average_wpm?: number;                 // average_wpm (optional)
   voice_id?: string;                    // voice_id (optional)
   interaction_mode?: string;            // interaction_mode (optional)
@@ -197,19 +197,39 @@ export interface PatientCreateData {
  * Represents patient update data
  */
 export interface PatientUpdateData {
-  id: string;                           // persona_id
-  name: string;                         // persona_name
-  age: number;                          // persona_age
-  gender: string;                       // persona_gender
-  prompt: string;                       // persona_prompt
-  photoUrl?: string;                    // Photo URL (stored separately)
-  persona_number?: number;              // persona_number (optional)
+  patient_id: string;                   // persona_id
+  patient_name: string;                 // persona_name
+  patient_age: number;                  // persona_age
+  patient_gender: string;               // persona_gender
+  patient_prompt: string;               // persona_prompt
+  photo_url?: string;                   // Photo URL (stored separately)
+  patient_number?: number;              // persona_number (optional)
   average_wpm?: number;                 // average_wpm (optional)
   voice_id?: string;                    // voice_id (optional)
   interaction_mode?: string;            // interaction_mode (optional)
-  llmUploadFile?: File;                 // File upload for LLM
-  patientInfoFile?: File;               // File upload for patient info
-  answerKeyFile?: File;                 // File upload for answer key
+  llm_upload_file?: File;               // File upload for LLM
+  patient_info_file?: File;             // File upload for patient info
+  answer_key_file?: File;               // File upload for answer key
+}
+
+/**
+ * Question Bank Item - represents a question in the question bank
+ * Maps to: question_bank table in DB
+ */
+export interface QuestionBankItem {
+  id: string;                           // question_id
+  title: string;                        // title
+  questionText: string;                 // question_text (the key question)
+  clinicalIntent: string;               // clinical_intent
+  evaluationCriteria: string;           // evaluation_criteria
+  category?: string;                    // category
+  difficultyLevel?: string;             // difficulty_level
+  isMandatory: boolean;                 // is_mandatory (maps to 'required' in UI)
+  weight?: number;                      // weight
+  maxScore?: number;                    // max_score
+  isActive: boolean;                    // is_active
+  usedBySimulationGroups: string[];     // Track which simulation groups are using this question
+  usedByPatients?: string[];            // Track which patients are using this question (for patient-specific questions)
 }
 
 /**
@@ -220,6 +240,7 @@ export interface InstructorDataService {
   createSimulationGroup: (data: { name: string; description: string; active: boolean; enableVoice: boolean }) => Promise<InstructorSimulationGroup>;
   getCurrentUser: () => Promise<UserData>;
   getSimulationGroup: (id: string) => Promise<InstructorSimulationGroup | undefined>;
+  getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
   getPatientAnalytics: (simulationGroupId: string) => Promise<PatientAnalytics[]>;
   getMessageCountData: (patientId: string) => MessageCountData[];
   generateAccessCode: (simulationGroupId: string) => Promise<string>;
@@ -273,13 +294,14 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
     );
 
     return data.map((group, index) => ({
-      id: group.simulation_group_id,
-      name: group.group_name,
+      simulation_group_id: group.simulation_group_id,
+      group_name: group.group_name,
       subtitle: 'Medical Simulation Group',
       iconColor: group.icon_color || getSimulationGroupColor(index),
-      accessCode: group.access_code || '',
-      studentCount: group.student_count || 0,
-      patientCount: group.patient_count || 0,
+      access_code: group.access_code || '',
+      student_count: group.student_count || 0,
+      patient_count: group.patient_count || 0,
+      organization_id: group.organization_id || '',
     }));
   } catch (error) {
     console.error('Failed to fetch instructor groups:', error);
@@ -307,24 +329,16 @@ async function createSimulationGroup(data: { name: string; description: string; 
     }
   );
 
-/**
- * Question Bank Item - represents a question in the question bank
- * Maps to: question_bank table in DB
- */
-export interface QuestionBankItem {
-  id: string;                           // question_id
-  title: string;                        // title
-  questionText: string;                 // question_text (the key question)
-  clinicalIntent: string;               // clinical_intent
-  evaluationCriteria: string;           // evaluation_criteria
-  category?: string;                    // category
-  difficultyLevel?: string;             // difficulty_level
-  isMandatory: boolean;                 // is_mandatory (maps to 'required' in UI)
-  weight?: number;                      // weight
-  maxScore?: number;                    // max_score
-  isActive: boolean;                    // is_active
-  usedBySimulationGroups: string[];     // Track which simulation groups are using this question
-  usedByPatients?: string[];            // Track which patients are using this question (for patient-specific questions)
+  return {
+    simulation_group_id: result.simulation_group_id,
+    group_name: result.group_name,
+    subtitle: 'Medical Simulation Group',
+    iconColor: getSimulationGroupColor(0),
+    access_code: result.access_code || '',
+    student_count: 0,
+    patient_count: 0,
+    organization_id: result.organization_id || '',
+  };
 }
 
 /**
@@ -357,14 +371,9 @@ const mockPatientSpecificQuestionBank: QuestionBankItem[] = [
   { id: 'bank-patient-8', title: 'Treatment Goals', questionText: '', clinicalIntent: '', evaluationCriteria: '', isMandatory: false, isActive: true, usedBySimulationGroups: [], usedByPatients: [] },
 ];
 
-/**
- * Get all simulation groups for instructor
- * 
- * @returns Array of simulation groups
- */
-function getSimulationGroups(): InstructorSimulationGroup[] {
-  return mockInstructorSimulationGroups;
-}
+// Mock data structures for questions
+const mockGlobalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {};
+const mockCaseSpecificQuestions: Record<string, GlobalRubricQuestion[]> = {};
 
 /**
  * Get current instructor user data
@@ -399,10 +408,10 @@ async function getCurrentUser(): Promise<UserData> {
 async function getSimulationGroup(id: string): Promise<InstructorSimulationGroup | undefined> {
   try {
     const groups = await getSimulationGroups();
-    return groups.find(group => group.id === id);
+    return groups.find(group => group.simulation_group_id === id);
   } catch (error) {
     console.error('Failed to fetch simulation group:', error);
-    return [] as any;
+    return undefined;
   }
 }
 
@@ -413,13 +422,10 @@ async function getSimulationGroup(id: string): Promise<InstructorSimulationGroup
  * @param simulationGroupId - Simulation group ID
  * @returns OrganizationLabels object with all label variations
  */
-function getOrganizationLabels(simulationGroupId: string): OrganizationLabels {
-  const simulationGroup = getSimulationGroup(simulationGroupId);
-  const organizations = mockAdminDataService.getOrganizations();
-  const organization = organizations.find((org) => org.id === simulationGroup?.organizationId);
-  
-  const aiPersona = organization?.aiPersona || 'Patient';
-  const userRole = organization?.userRole || 'Doctor';
+function getOrganizationLabels(_simulationGroupId: string): OrganizationLabels {
+  // TODO: Implement with real organization data
+  const aiPersona = 'Patient';
+  const userRole = 'Doctor';
   
   return {
     aiPersona,
@@ -446,13 +452,13 @@ async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAn
     );
 
     return data.map((patient) => ({
-      id: patient.patient_id,
-      name: patient.patient_name,
-      instructorCompletionPercentage: patient.instructor_completion_percentage || 0,
-      llmCompletionPercentage: patient.ai_score_percentage || 0,
-      studentMessageCount: patient.student_message_count || 0,
-      aiMessageCount: patient.ai_message_count || 0,
-      studentAccessCount: patient.access_count || 0,
+      patient_id: patient.patient_id,
+      patient_name: patient.patient_name,
+      instructor_completion_percentage: patient.instructor_completion_percentage || 0,
+      llm_completion_percentage: patient.ai_score_percentage || 0,
+      student_message_count: patient.student_message_count || 0,
+      ai_message_count: patient.ai_message_count || 0,
+      student_access_count: patient.access_count || 0,
     }));
   } catch (error) {
     console.error('Failed to fetch patient analytics:', error);
@@ -518,18 +524,18 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
     );
 
     return data.map((patient) => ({
-      id: patient.patient_id,
+      patient_id: patient.patient_id,
       simulation_group_id: patient.simulation_group_id,
-      name: patient.patient_name,
-      age: patient.patient_age,
-      gender: patient.patient_gender,
-      persona_number: patient.patient_number,
-      prompt: patient.patient_prompt,
+      patient_name: patient.patient_name,
+      patient_age: patient.patient_age,
+      patient_gender: patient.patient_gender,
+      patient_number: patient.patient_number,
+      patient_prompt: patient.patient_prompt,
       average_wpm: patient.average_wpm,
       voice_id: patient.voice_id,
       interaction_mode: patient.interaction_mode,
-      llmEvaluationEnabled: patient.llm_completion || false,
-      photoUrl: patient.photo_url,
+      llm_completion: patient.llm_completion || false,
+      photo_url: patient.photo_url,
     }));
   } catch (error) {
     console.error('Failed to fetch manageable patients:', error);
@@ -562,10 +568,10 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
 
     const queryParams = new URLSearchParams({
       simulation_group_id: simulationGroupId,
-      patient_name: patientData.name,
-      patient_number: patientData.persona_number?.toString() || '1',
-      patient_age: patientData.age.toString(),
-      patient_gender: patientData.gender,
+      patient_name: patientData.patient_name,
+      patient_number: patientData.patient_number?.toString() || '1',
+      patient_age: patientData.patient_age.toString(),
+      patient_gender: patientData.patient_gender,
       instructor_email: user.email,
     });
 
@@ -576,7 +582,7 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
     await apiClient.request(`/instructor/create_patient?${queryParams.toString()}`, {
       method: 'POST',
       body: {
-        patient_prompt: patientData.prompt || '',
+        patient_prompt: patientData.patient_prompt || '',
       },
     });
   } catch (error) {
@@ -598,7 +604,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
     if (!user?.email) throw new Error('Not authenticated');
 
     const queryParams = new URLSearchParams({
-      patient_id: patientData.id,
+      patient_id: patientData.patient_id,
       instructor_email: user.email,
       simulation_group_id: simulationGroupId,
     });
@@ -606,22 +612,22 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
     await apiClient.request(`/instructor/edit_patient?${queryParams.toString()}`, {
       method: 'PUT',
       body: {
-        patient_name: patientData.name,
-        patient_age: patientData.age,
-        patient_gender: patientData.gender,
-        patient_prompt: patientData.prompt,
+        patient_name: patientData.patient_name,
+        patient_age: patientData.patient_age,
+        patient_gender: patientData.patient_gender,
+        patient_prompt: patientData.patient_prompt,
       },
     });
 
     // Handle file uploads if needed
-    if (patientData.llmUploadFile) {
-      console.log('LLM Upload file:', patientData.llmUploadFile.name);
+    if (patientData.llm_upload_file) {
+      console.log('LLM Upload file:', patientData.llm_upload_file.name);
     }
-    if (patientData.patientInfoFile) {
-      console.log('Patient Info file:', patientData.patientInfoFile.name);
+    if (patientData.patient_info_file) {
+      console.log('Patient Info file:', patientData.patient_info_file.name);
     }
-    if (patientData.answerKeyFile) {
-      console.log('Answer Key file:', patientData.answerKeyFile.name);
+    if (patientData.answer_key_file) {
+      console.log('Answer Key file:', patientData.answer_key_file.name);
     }
   } catch (error) {
     console.error('Failed to update patient:', error);
@@ -868,7 +874,7 @@ function getCaseSpecificQuestions(_patientId: string): GlobalRubricQuestion[] {
  * @param patientId - Patient ID
  * @param question - Question to add
  */
-function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
+async function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): Promise<void> {
   if (!mockCaseSpecificQuestions[patientId]) {
     mockCaseSpecificQuestions[patientId] = [];
   }
@@ -888,7 +894,8 @@ function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuesti
     bankQuestion.usedByPatients.push(patientId);
     
     // Also track the simulation group this patient belongs to
-    const patient = getPatient(patientId);
+    const patients = await getManageablePatients('');
+    const patient = patients.find(p => p.patient_id === patientId);
     if (patient && !bankQuestion.usedBySimulationGroups.includes(patient.simulation_group_id)) {
       bankQuestion.usedBySimulationGroups.push(patient.simulation_group_id);
     }
@@ -912,7 +919,7 @@ function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQ
  * @param patientId - Patient ID
  * @param questionId - Question ID to delete
  */
-function deleteCaseSpecificQuestion(patientId: string, questionId: string): void {
+async function deleteCaseSpecificQuestion(patientId: string, questionId: string): Promise<void> {
   const questions = mockCaseSpecificQuestions[patientId];
   if (questions) {
     mockCaseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
@@ -925,17 +932,18 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
       );
       
       // If no patients are using this question anymore, remove the simulation group association
-      const patient = getPatient(patientId);
+      const patients = await getManageablePatients('');
+      const patient = patients.find(p => p.patient_id === patientId);
       if (patient && bankQuestion.usedByPatients.length === 0) {
         bankQuestion.usedBySimulationGroups = bankQuestion.usedBySimulationGroups.filter(
           groupId => groupId !== patient.simulation_group_id
         );
       } else if (patient) {
         // Check if any other patients in this simulation group are still using this question
-        const otherPatientsInGroup = getManageablePatients(patient.simulation_group_id)
-          .filter(p => p.id !== patientId);
+        const otherPatientsInGroup = (await getManageablePatients(patient.simulation_group_id))
+          .filter(p => p.patient_id !== patientId);
         const stillUsedInGroup = otherPatientsInGroup.some(p => 
-          bankQuestion.usedByPatients?.includes(p.id)
+          bankQuestion.usedByPatients?.includes(p.patient_id)
         );
         
         if (!stillUsedInGroup) {

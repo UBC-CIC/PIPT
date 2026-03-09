@@ -13,14 +13,14 @@ import { authService } from '@/lib/auth';
  * Represents a medical simulation group that students can join
  */
 export interface SimulationGroup {
-  id: string;              // Unique identifier
-  name: string;            // Group name (e.g., "Chronic Pain")
-  subtitle: string;        // Always "Medical Simulation Group"
-  iconUrl?: string;        // Optional icon image URL
-  iconColor?: string;      // Fallback color for avatar (hex format)
-  studentCount?: number;   // Optional count of students (admin view only)
-  instructorCount?: number; // Optional count of instructors (admin view only)
-  patientCount?: number;   // Optional count of patients (admin view only)
+  simulation_group_id: string;  // Unique identifier
+  group_name: string;           // Group name (e.g., "Chronic Pain")
+  subtitle: string;             // Always "Medical Simulation Group"
+  iconUrl?: string;             // Optional icon image URL
+  iconColor?: string;           // Fallback color for avatar (hex format)
+  student_count?: number;       // Optional count of students (admin view only)
+  instructor_count?: number;    // Optional count of instructors (admin view only)
+  patient_count?: number;       // Optional count of patients (admin view only)
 }
 
 /**
@@ -46,9 +46,6 @@ export interface Patient {
   patient_score?: number;
   last_accessed?: string;
   is_completed?: boolean;
-  // Frontend display aliases
-  id: string;
-  name: string;
   avatarUrl?: string;
   debriefStatus: 'not_started' | 'in_progress' | 'debrief_reached';
   instructorEvaluation: string;
@@ -81,11 +78,9 @@ export const studentService = {
         `/student/simulation_group?email=${encodeURIComponent(user.email)}`
       );
 
-      // Map backend fields to frontend display fields
+      // Add frontend display fields
       return data.map((group, index) => ({
         ...group,
-        id: group.simulation_group_id,
-        name: group.group_name,
         subtitle: 'Medical Simulation Group',
         iconColor: getSimulationGroupColor(index),
       }));
@@ -134,11 +129,9 @@ export const studentService = {
         `/student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
       );
 
-      // Map backend fields to frontend display fields
+      // Add frontend display fields
       return data.map((patient) => ({
         ...patient,
-        id: patient.patient_id,
-        name: patient.patient_name,
         avatarUrl: undefined,
         debriefStatus: patient.is_completed
           ? 'debrief_reached' as const

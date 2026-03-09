@@ -168,18 +168,18 @@ function PatientsPage() {
             <tbody>
               {patients.map((patient) => (
                 <tr
-                  key={patient.id}
+                  key={patient.patient_id}
                   className="last:border-b-0"
                   style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3 justify-center">
                       <UserAvatar
-                        name={patient.name}
+                        name={patient.patient_name}
                         imageUrl={patient.avatarUrl}
                         size="small"
                       />
-                      <span style={{ color: UI_COLORS.text.heading }}>{patient.name}</span>
+                      <span style={{ color: UI_COLORS.text.heading }}>{patient.patient_name}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
@@ -187,7 +187,7 @@ function PatientsPage() {
                   </td>
                   <td className="px-6 py-4 text-center">
                     <Button
-                      onClick={() => handleReview(patient.id)}
+                      onClick={() => handleReview(patient.patient_id)}
                       variant="default"
                       className="px-6 transition-colors"
                       style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
@@ -198,45 +198,10 @@ function PatientsPage() {
                     </Button>
                   </td>
                 </tr>
-              </thead>
-              <tbody>
-                {patients.map((patient) => (
-                  <tr
-                    key={patient.id}
-                    className="last:border-b-0"
-                    style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3 justify-center">
-                        <UserAvatar
-                          name={patient.name}
-                          imageUrl={patient.avatarUrl}
-                          size="small"
-                        />
-                        <span style={{ color: UI_COLORS.text.heading }}>{patient.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      {getDebriefStatusBadge(patient.debriefStatus)}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <Button
-                        onClick={() => handleReview(patient.id)}
-                        variant="default"
-                        className="px-6 transition-colors"
-                        style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                      >
-                        Review
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </main>
     </PageContainer>
   );
