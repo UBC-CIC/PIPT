@@ -21,7 +21,7 @@ export class ApiClient {
 
     const token = await authService.getIdToken();
     if (token) {
-      headers['Authorization'] = token;
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     return headers;
