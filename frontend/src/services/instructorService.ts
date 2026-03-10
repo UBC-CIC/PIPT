@@ -290,7 +290,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
     if (!user?.email) throw new Error('Not authenticated');
 
     const data = await apiClient.request<any[]>(
-      `/instructor/groups?email=${encodeURIComponent(user.email)}`
+      `instructor/groups?email=${encodeURIComponent(user.email)}`
     );
 
     return data.map((group, index) => ({
@@ -317,7 +317,7 @@ async function createSimulationGroup(data: { name: string; description: string; 
   if (!user?.email) throw new Error('Not authenticated');
 
   const result = await apiClient.request<any>(
-    `/instructor/create_simulation_group?instructor_email=${encodeURIComponent(user.email)}`,
+    `instructor/create_simulation_group?instructor_email=${encodeURIComponent(user.email)}`,
     {
       method: 'POST',
       body: {
@@ -386,7 +386,7 @@ async function getCurrentUser(): Promise<UserData> {
     if (!user?.email) throw new Error('Not authenticated');
 
     const data = await apiClient.request<{ name: string }>(
-      `/student/get_name?user_email=${encodeURIComponent(user.email)}`
+      `student/get_name?user_email=${encodeURIComponent(user.email)}`
     );
 
     return {
@@ -448,7 +448,7 @@ function getOrganizationLabels(_simulationGroupId: string): OrganizationLabels {
 async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAnalytics[]> {
   try {
     const data = await apiClient.request<any[]>(
-      `/instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     return data.map((patient) => ({
@@ -488,7 +488,7 @@ async function generateAccessCode(simulationGroupId: string): Promise<string> {
     if (!user?.email) throw new Error('Not authenticated');
 
     const data = await apiClient.request<{ access_code: string }>(
-      `/instructor/generate_access_code?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/generate_access_code?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(user.email)}`,
       { method: 'POST' }
     );
 
@@ -520,7 +520,7 @@ async function generateAccessCode(simulationGroupId: string): Promise<string> {
 async function getManageablePatients(simulationGroupId: string): Promise<ManageablePatient[]> {
   try {
     const data = await apiClient.request<any[]>(
-      `/instructor/view_patients?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/view_patients?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     return data.map((patient) => ({
@@ -579,7 +579,7 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
       queryParams.append('voice_id', patientData.voice_id);
     }
 
-    await apiClient.request(`/instructor/create_patient?${queryParams.toString()}`, {
+    await apiClient.request(`instructor/create_patient?${queryParams.toString()}`, {
       method: 'POST',
       body: {
         patient_prompt: patientData.patient_prompt || '',
@@ -609,7 +609,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
       simulation_group_id: simulationGroupId,
     });
 
-    await apiClient.request(`/instructor/edit_patient?${queryParams.toString()}`, {
+    await apiClient.request(`instructor/edit_patient?${queryParams.toString()}`, {
       method: 'PUT',
       body: {
         patient_name: patientData.patient_name,
@@ -665,7 +665,7 @@ async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): 
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `/instructor/toggle_llm_completion?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/toggle_llm_completion?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
       {
         method: 'PUT',
         body: {
@@ -690,7 +690,7 @@ async function deletePatient(patientId: string): Promise<void> {
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `/instructor/delete_patient?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/delete_patient?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
       {
         method: 'DELETE',
       }
@@ -780,7 +780,7 @@ function deleteGlobalRubricQuestion(simulationGroupId: string, questionId: strin
 async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
   try {
     const data = await apiClient.request<{ system_prompt: string }>(
-      `/instructor/get_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/get_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     return data.system_prompt || '';
@@ -799,7 +799,7 @@ async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
 async function getStudents(simulationGroupId: string): Promise<Student[]> {
   try {
     const data = await apiClient.request<any[]>(
-      `/instructor/view_students?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/view_students?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     return data.map((student) => ({
