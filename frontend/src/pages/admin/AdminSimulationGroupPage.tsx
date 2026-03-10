@@ -139,11 +139,7 @@ function AdminSimulationGroupPage() {
     aiPersona: aiPersonaLabel,
     aiPersonaPlural: aiPersonaLabelPlural,
     aiPersonaLower: aiPersonaLabelLower,
-    aiPersonaPluralLower: aiPersonaLabelPluralLower,
     userRole: userRoleLabel,
-    userRolePlural: userRoleLabelPlural,
-    userRoleLower: userRoleLabelLower,
-    userRolePluralLower: userRoleLabelPluralLower,
   } = labels;
   
   // Use state for manageable patients so we can trigger re-renders
@@ -1443,6 +1439,25 @@ function AdminSimulationGroupPage() {
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
                         Select which global questions should be included in this simulation group's rubric.
                       </p>
+                      
+                      {/* Add New Global Question Button */}
+                      <Button
+                        onClick={() => {
+                          setAddQuestionType('global');
+                          setIsAddQuestionDialogOpen(true);
+                        }}
+                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
+                        style={{ 
+                          backgroundColor: UI_COLORS.button.primary, 
+                          color: UI_COLORS.button.text 
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add New Global Question
+                      </Button>
+                      
                       {/* Global questions from question bank */}
                       {globalBankQuestions.map((question) => (
                         <div
@@ -1472,24 +1487,6 @@ function AdminSimulationGroupPage() {
                           </label>
                         </div>
                       ))}
-                      
-                      {/* Add New Global Question Button */}
-                      <Button
-                        onClick={() => {
-                          setAddQuestionType('global');
-                          setIsAddQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Global Question
-                      </Button>
                     </>
                   )}
 
@@ -1531,6 +1528,23 @@ function AdminSimulationGroupPage() {
                           ))}
                         </select>
                       </div>
+                      
+                      {/* Add New Patient-Specific Question Button */}
+                      <Button
+                        onClick={() => {
+                          setIsAddPatientQuestionDialogOpen(true);
+                        }}
+                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
+                        style={{ 
+                          backgroundColor: UI_COLORS.button.primary, 
+                          color: UI_COLORS.button.text 
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                      >
+                        <Plus className="w-5 h-5" />
+                        Add New Patient-Specific Question
+                      </Button>
                       
                       {selectedPatientForQuestionBank ? (
                         <>
@@ -1601,23 +1615,6 @@ function AdminSimulationGroupPage() {
                           Please select a patient to manage their questions.
                         </p>
                       )}
-                      
-                      {/* Add New Patient-Specific Question Button */}
-                      <Button
-                        onClick={() => {
-                          setIsAddPatientQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Patient-Specific Question
-                      </Button>
                     </>
                   )}
                 </div>

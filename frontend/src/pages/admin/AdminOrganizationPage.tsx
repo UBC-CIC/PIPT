@@ -76,7 +76,8 @@ function AdminOrganizationPage() {
         accessCode: mockInstructorDataService.generateAccessCode(`group-${Date.now()}`),
         studentCount: 0,
         instructorCount: data.instructors.split(',').map(i => i.trim()).filter(i => i).length,
-        patientCount: 0
+        patientCount: 0,
+        organizationId: ''
       };
 
       // Add to state

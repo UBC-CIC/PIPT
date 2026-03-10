@@ -19,7 +19,6 @@ function OrganizationCard({
   name,
   aiPersona,
   userRole,
-  icon,
   iconColor,
   onUseOrganisation,
 }: OrganizationCardProps) {
