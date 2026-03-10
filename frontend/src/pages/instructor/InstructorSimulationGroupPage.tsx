@@ -52,6 +52,7 @@ function InstructorSimulationGroupPage() {
   // Question Bank state
   const [questionBankTab, setQuestionBankTab] = useState<'global' | 'patientSpecific'>('global');
   const [includedQuestionIds, setIncludedQuestionIds] = useState<Set<string>>(new Set());
+  const [pendingQuestionIds, setPendingQuestionIds] = useState<Set<string>>(new Set());
   const [isAddQuestionDialogOpen, setIsAddQuestionDialogOpen] = useState(false);
   const [isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen] = useState(false);
   const [addQuestionType, setAddQuestionType] = useState<'global' | 'patientSpecific'>('global');
@@ -249,6 +250,7 @@ function InstructorSimulationGroupPage() {
       // Initialize includedQuestionIds with the patient's current questions
       const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
       setIncludedQuestionIds(questionIds);
+      setPendingQuestionIds(new Set(questionIds));
       
       const materials = mockInstructorDataService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
@@ -544,7 +546,7 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle toggle question inclusion in rubric
+   * Handle toggle question inclusion in rubric (called only on confirm)
    */
   const handleToggleQuestionInclusion = (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
     const newSet = new Set(includedQuestionIds);
@@ -582,6 +584,96 @@ function InstructorSimulationGroupPage() {
     
     setIncludedQuestionIds(newSet);
   };
+
+  /**
+   * Handle toggling a pending checkbox (does NOT apply to rubric immediately)
+   */
+  const handleTogglePendingQuestion = (questionId: string) => {
+    setPendingQuestionIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
+  };
+
+  /**
+   * Confirm pending selection changes and apply to rubric
+   */
+  const handleConfirmSelections = () => {
+    const allBankQuestions = questionBankTab === 'global' ? globalBankQuestions : patientSpecificBankQuestions;
+    
+    if (questionBankTab === 'global') {
+      // Find newly added IDs (in pending but not in included)
+      pendingQuestionIds.forEach(id => {
+        if (!includedQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) handleToggleQuestionInclusion(id, bankQ, true);
+        }
+      });
+      // Find removed IDs (in included but not in pending)
+      includedQuestionIds.forEach(id => {
+        if (!pendingQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) handleToggleQuestionInclusion(id, bankQ, false);
+        }
+      });
+    } else if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank) {
+      // Handle patient-specific confirmation
+      pendingQuestionIds.forEach(id => {
+        if (!includedQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) {
+            // Add to patient's case-specific questions
+            const newCaseQuestion: GlobalRubricQuestion = {
+              id: bankQ.id,
+              title: bankQ.title,
+              keyQuestion: bankQ.questionText,
+              clinicalIntent: bankQ.clinicalIntent,
+              evaluationCriteria: bankQ.evaluationCriteria,
+              required: bankQ.isMandatory,
+            };
+            mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForQuestionBank, newCaseQuestion);
+            if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+              setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank));
+            }
+          }
+        }
+      });
+      includedQuestionIds.forEach(id => {
+        if (!pendingQuestionIds.has(id)) {
+          mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank, id);
+          if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+            setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank));
+          }
+        }
+      });
+    }
+    
+    setIncludedQuestionIds(new Set(pendingQuestionIds));
+  };
+
+  /**
+   * Reset pending selections back to current included state
+   */
+  const handleResetSelections = () => {
+    setPendingQuestionIds(new Set(includedQuestionIds));
+  };
+
+  // Calculate if there are pending changes
+  const hasPendingChanges = (() => {
+    if (pendingQuestionIds.size !== includedQuestionIds.size) return true;
+    for (const id of pendingQuestionIds) {
+      if (!includedQuestionIds.has(id)) return true;
+    }
+    return false;
+  })();
+
+  const pendingAddCount = [...pendingQuestionIds].filter(id => !includedQuestionIds.has(id)).length;
+  const pendingRemoveCount = [...includedQuestionIds].filter(id => !pendingQuestionIds.has(id)).length;
 
   /**
    * Pagination helper: Get paginated questions
@@ -792,13 +884,16 @@ function InstructorSimulationGroupPage() {
                 const globalRubric = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
                 const questionIds = new Set(globalRubric.map(q => q.id));
                 setIncludedQuestionIds(questionIds);
+                setPendingQuestionIds(new Set(questionIds));
               } else if (selectedPatientForQuestionBank) {
                 // Get IDs of questions already in patient's case-specific rubric
                 const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                 setIncludedQuestionIds(questionIds);
+                setPendingQuestionIds(new Set(questionIds));
               } else {
                 // No patient selected, clear checkmarks
                 setIncludedQuestionIds(new Set());
+                setPendingQuestionIds(new Set());
               }
             }}
             variant="ghost"
@@ -1462,6 +1557,7 @@ function InstructorSimulationGroupPage() {
                       const globalRubric = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
                       const questionIds = new Set(globalRubric.map(q => q.id));
                       setIncludedQuestionIds(questionIds);
+                      setPendingQuestionIds(new Set(questionIds));
                     }}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
                     style={{
@@ -1480,8 +1576,10 @@ function InstructorSimulationGroupPage() {
                       if (selectedPatientForQuestionBank) {
                         const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                         setIncludedQuestionIds(questionIds);
+                        setPendingQuestionIds(new Set(questionIds));
                       } else {
                         setIncludedQuestionIds(new Set());
+                        setPendingQuestionIds(new Set());
                       }
                     }}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
@@ -1535,38 +1633,131 @@ function InstructorSimulationGroupPage() {
                       )}
                       
                       {/* Global questions from question bank */}
-                      {paginatedGlobalQuestions.map((question) => (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
-                          style={{
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
-                          }}
-                        >
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            {question.title}
-                          </span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includedQuestionIds.has(question.id)}
-                              onChange={(e) => handleToggleQuestionInclusion(question.id, question, e.target.checked)}
-                              className="w-5 h-5 rounded cursor-pointer"
-                              style={{
-                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                      <Accordion type="single" collapsible className="space-y-2">
+                        {paginatedGlobalQuestions.map((question) => (
+                          <AccordionItem 
+                            key={question.id} 
+                            value={question.id}
+                            style={{
+                              borderWidth: '1px',
+                              borderStyle: 'solid',
+                              borderColor: UI_COLORS.border.default,
+                              borderRadius: '0.5rem',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <AccordionTrigger 
+                              className="px-4 hover:no-underline"
+                              style={{ 
+                                backgroundColor: UI_COLORS.background.white,
+                                color: UI_COLORS.text.heading
                               }}
-                            />
-                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                              Include
-                            </span>
-                          </label>
-                        </div>
-                      ))}
+                            >
+                              <div className="flex items-center justify-between w-full pr-4">
+                                <span className="font-medium text-sm">
+                                  {question.title}
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                    {question.isMandatory ? 'Required' : 'Optional'}
+                                  </span>
+                                  <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={pendingQuestionIds.has(question.id)}
+                                      onChange={() => handleTogglePendingQuestion(question.id)}
+                                      className="w-5 h-5 rounded cursor-pointer"
+                                      style={{
+                                        accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                      }}
+                                    />
+                                    <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                      Include
+                                    </span>
+                                  </label>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent 
+                              className="px-4 pb-4"
+                              style={{ backgroundColor: UI_COLORS.background.white }}
+                            >
+                              <div className="space-y-3 pt-3">
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
+                                  <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                  <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                  <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
+                                  <span 
+                                    className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                    style={{ 
+                                      backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
+                                      color: question.isMandatory ? '#166534' : '#6b7280'
+                                    }}
+                                  >
+                                    {question.isMandatory ? 'Required' : 'Optional'}
+                                  </span>
+                                </div>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
                       
+                      {/* Confirm / Reset Buttons */}
+                      <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            onClick={handleConfirmSelections}
+                            disabled={!hasPendingChanges}
+                            className="px-6 py-2 font-medium transition-colors"
+                            style={{ 
+                              backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                              color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
+                              cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
+                            }}
+                            onMouseEnter={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                            onMouseLeave={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+                          >
+                            Confirm Selections
+                          </Button>
+                          {hasPendingChanges && (
+                            <button
+                              onClick={handleResetSelections}
+                              className="text-sm font-medium transition-colors bg-transparent border-0 cursor-pointer p-0"
+                              style={{ color: UI_COLORS.text.muted }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        {hasPendingChanges && (
+                          <span className="text-xs" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>
+                            {pendingAddCount > 0 && `+${pendingAddCount} to add`}
+                            {pendingAddCount > 0 && pendingRemoveCount > 0 && ', '}
+                            {pendingRemoveCount > 0 && `${pendingRemoveCount} to remove`}
+                          </span>
+                        )}
+                      </div>
+
                       {/* Pagination Controls */}
                       {globalTotalPages > 1 && (
-                        <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                           <div className="flex items-center gap-2">
                             <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
                             <select
@@ -1643,8 +1834,10 @@ function InstructorSimulationGroupPage() {
                             if (patientId) {
                               const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
                               setIncludedQuestionIds(questionIds);
+                              setPendingQuestionIds(new Set(questionIds));
                             } else {
                               setIncludedQuestionIds(new Set());
+                              setPendingQuestionIds(new Set());
                             }
                           }}
                           className="w-full px-4 py-2 rounded-lg border"
@@ -1693,70 +1886,131 @@ function InstructorSimulationGroupPage() {
                           )}
                           
                           {/* Patient-specific questions from question bank */}
-                          {paginatedPatientQuestions.map((question) => (
-                            <div
-                              key={question.id}
-                              className="flex items-center justify-between p-4 rounded-lg border transition-colors"
-                              style={{
-                                borderColor: UI_COLORS.border.default,
-                                backgroundColor: UI_COLORS.background.white,
-                              }}
-                            >
-                              <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                {question.title}
-                              </span>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={includedQuestionIds.has(question.id)}
-                                  onChange={(e) => {
-                                    const newSet = new Set(includedQuestionIds);
-                                    if (e.target.checked) {
-                                      newSet.add(question.id);
-                                      
-                                      // Add to patient's case-specific questions with full data
-                                      const newCaseQuestion: GlobalRubricQuestion = {
-                                        id: question.id,
-                                        title: question.title,
-                                        keyQuestion: question.questionText,
-                                        clinicalIntent: question.clinicalIntent,
-                                        evaluationCriteria: question.evaluationCriteria,
-                                        required: question.isMandatory,
-                                      };
-                                      mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
-                                      
-                                      // Update case-specific questions if we're editing this patient
-                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                      }
-                                    } else {
-                                      newSet.delete(question.id);
-                                      
-                                      // Remove from patient's case-specific questions
-                                      mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
-                                      
-                                      // Update case-specific questions if we're editing this patient
-                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                      }
-                                    }
-                                    setIncludedQuestionIds(newSet);
+                          <Accordion type="single" collapsible className="space-y-2">
+                            {paginatedPatientQuestions.map((question) => (
+                              <AccordionItem 
+                                key={question.id} 
+                                value={question.id}
+                                style={{
+                                  borderWidth: '1px',
+                                  borderStyle: 'solid',
+                                  borderColor: UI_COLORS.border.default,
+                                  borderRadius: '0.5rem',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                <AccordionTrigger 
+                                  className="px-4 hover:no-underline"
+                                  style={{ 
+                                    backgroundColor: UI_COLORS.background.white,
+                                    color: UI_COLORS.text.heading
                                   }}
-                                  className="w-5 h-5 rounded cursor-pointer"
-                                  style={{
-                                    accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                                  }}
-                                />
-                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                                  Include
-                                </span>
-                              </label>
-                            </div>
-                          ))}
+                                >
+                                  <div className="flex items-center justify-between w-full pr-4">
+                                    <span className="font-medium text-sm">
+                                      {question.title}
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                        {question.isMandatory ? 'Required' : 'Optional'}
+                                      </span>
+                                      <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                          type="checkbox"
+                                          checked={pendingQuestionIds.has(question.id)}
+                                          onChange={() => handleTogglePendingQuestion(question.id)}
+                                          className="w-5 h-5 rounded cursor-pointer"
+                                          style={{
+                                            accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                          }}
+                                        />
+                                        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                          Include
+                                        </span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent 
+                                  className="px-4 pb-4"
+                                  style={{ backgroundColor: UI_COLORS.background.white }}
+                                >
+                                  <div className="space-y-3 pt-3">
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                      <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
+                                      <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                      <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                      <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
+                                      <span 
+                                        className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                        style={{ 
+                                          backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
+                                          color: question.isMandatory ? '#166534' : '#6b7280'
+                                        }}
+                                      >
+                                        {question.isMandatory ? 'Required' : 'Optional'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                          </Accordion>
                           
+                          {/* Confirm / Reset Buttons */}
+                          <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                            <div className="flex items-center gap-3">
+                              <Button
+                                onClick={handleConfirmSelections}
+                                disabled={!hasPendingChanges}
+                                className="px-6 py-2 font-medium transition-colors"
+                                style={{ 
+                                  backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                                  color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
+                                  cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
+                                }}
+                                onMouseEnter={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                                onMouseLeave={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+                              >
+                                Confirm Selections
+                              </Button>
+                              {hasPendingChanges && (
+                                <button
+                                  onClick={handleResetSelections}
+                                  className="text-sm font-medium transition-colors bg-transparent border-0 cursor-pointer p-0"
+                                  style={{ color: UI_COLORS.text.muted }}
+                                  onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                                  onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
+                            {hasPendingChanges && (
+                              <span className="text-xs" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>
+                                {pendingAddCount > 0 && `+${pendingAddCount} to add`}
+                                {pendingAddCount > 0 && pendingRemoveCount > 0 && ', '}
+                                {pendingRemoveCount > 0 && `${pendingRemoveCount} to remove`}
+                              </span>
+                            )}
+                          </div>
+
                           {/* Pagination Controls */}
                           {patientTotalPages > 1 && (
-                            <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                            <div className="flex items-center justify-between mt-4 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                               <div className="flex items-center gap-2">
                                 <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
                                 <select
