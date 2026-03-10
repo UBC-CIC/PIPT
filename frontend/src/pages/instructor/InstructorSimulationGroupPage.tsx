@@ -421,18 +421,7 @@ function InstructorSimulationGroupPage() {
     setSelectedMaterialId(newMaterial.id);
   };
 
-  /**
-   * Handle delete case material
-   */
-  const handleDeleteCaseMaterial = () => {
-    if (!selectedMaterialId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to delete this material?')) {
-      mockInstructorDataService.deleteCaseMaterial(selectedPatientForEdit, selectedMaterialId);
-      const updatedMaterials = mockInstructorDataService.getCaseMaterials(selectedPatientForEdit);
-      setCaseMaterials(updatedMaterials);
-      setSelectedMaterialId(updatedMaterials[0]?.id || '');
-    }
-  };
+
 
   /**
    * Handle save case material changes
@@ -2250,7 +2239,7 @@ Return valid JSON in exactly this structure:
                                     Q{index + 1} - {question.title}
                                   </span>
                                   <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                                    [{question.required ? 'Required' : 'Optional'}]
+                                    {question.required ? 'Required' : 'Optional'}
                                   </span>
                                 </div>
                               </AccordionTrigger>
@@ -2463,7 +2452,7 @@ Return valid JSON in exactly this structure:
                                   Q{index + 1} - {question.title}
                                 </p>
                                 <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                                  [{question.required ? 'Required' : 'Optional'}]
+                                  {question.required ? 'Required' : 'Optional'}
                                 </p>
                               </div>
                             ));
@@ -2474,262 +2463,279 @@ Return valid JSON in exactly this structure:
                   )}
 
                   {editPatientTab === 'materials' && (
-                    <div className="flex h-full">
-                      {/* Materials List Sidebar */}
-                      <aside 
-                        className="flex flex-col border-r overflow-y-auto"
-                        style={{ 
-                          backgroundColor: UI_COLORS.background.white, 
-                          borderRightWidth: '1px',
-                          borderRightStyle: 'solid',
-                          borderRightColor: UI_COLORS.border.default,
-                          width: '22rem',
-                          minWidth: '22rem',
-                        }}
-                      >
-                        {/* Header */}
-                        <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                          <div className="px-6 pt-6 pb-6">
-                            <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                              Physical Assessment Materials List
-                            </h2>
-                            <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              Click on an entry to edit/delete the Physical Assessment Material.
-                            </p>
-                            
-                            {/* Search */}
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
-                              <Input
-                                placeholder="Search Materials"
-                                value={materialSearchQuery}
-                                onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                                className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                                style={{ 
-                                  borderWidth: '1px', 
-                                  borderStyle: 'solid', 
-                                  borderColor: UI_COLORS.border.default,
-                                  backgroundColor: UI_COLORS.background.white
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
+                    <div className="max-w-5xl mx-auto p-8 space-y-6">
+                      <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                        Physical Assessment Materials
+                      </h2>
 
-                        {/* Materials List */}
-                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+                      {/* Add New Material Button - At the top */}
+                      <div className="mb-6">
+                        <Button
+                          onClick={handleAddNewCaseMaterial}
+                          className="justify-start gap-2 py-2.5 h-auto font-medium transition-colors"
+                          style={{ 
+                            backgroundColor: UI_COLORS.button.primary, 
+                            color: UI_COLORS.button.text 
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                        >
+                          <Plus className="w-5 h-5" />
+                          Add new Material
+                        </Button>
+                      </div>
+
+                      {/* Search */}
+                      <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                        <Input
+                          placeholder="Search Materials"
+                          value={materialSearchQuery}
+                          onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                          className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        />
+                      </div>
+
+                      {/* Materials Accordion */}
+                      <div className="space-y-4">
+                        <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+                          Click on a Material entry to expand and edit it.
+                        </p>
+
+                        <Accordion type="single" collapsible className="space-y-2">
                           {filteredMaterials.map((material) => (
-                            <button
-                              key={material.id}
-                              onClick={() => setSelectedMaterialId(material.id)}
-                              className="w-full text-left px-4 py-3 rounded-lg transition-colors"
+                            <AccordionItem 
+                              key={material.id} 
+                              value={material.id}
                               style={{
-                                backgroundColor: selectedMaterialId === material.id ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
                                 borderWidth: '1px',
                                 borderStyle: 'solid',
                                 borderColor: UI_COLORS.border.default,
-                                cursor: 'pointer',
+                                borderRadius: '0.5rem',
+                                overflow: 'hidden'
                               }}
                             >
-                              <p className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                {material.title}
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Add New Material Button */}
-                        <div style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
-                          <div className="p-6">
-                            <Button
-                              onClick={handleAddNewCaseMaterial}
-                              className="w-full justify-start gap-2 py-2.5 h-auto font-medium transition-colors"
-                              style={{ 
-                                backgroundColor: UI_COLORS.button.primary, 
-                                color: UI_COLORS.button.text 
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                            >
-                              <Plus className="w-5 h-5" />
-                              Add new Material
-                            </Button>
-                          </div>
-                        </div>
-                      </aside>
-
-                      {/* Material Detail Area */}
-                      <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto p-0">
-                          {selectedMaterial ? (
-                            <div className="max-w-4xl space-y-6 p-8">
-                              <h2 className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>
-                                Edit Materials
-                              </h2>
-
-                              {/* Title */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Title
-                                </label>
-                                <Input
-                                  value={selectedMaterial.title}
-                                  onChange={(e) => handleUpdateMaterialField('title', e.target.value)}
-                                  placeholder="Chest X-Ray"
-                                  className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white
-                                  }}
-                                />
-                              </div>
-
-                              {/* Description */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Description
-                                </label>
-                                <textarea
-                                  value={selectedMaterial.description}
-                                  onChange={(e) => handleUpdateMaterialField('description', e.target.value)}
-                                  placeholder="Frontal chest radiograph obtained as part of the patient's clinical evaluation."
-                                  className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    outlineColor: UI_COLORS.border.medium,
-                                    minHeight: '80px',
-                                  }}
-                                />
-                              </div>
-
-                              {/* Material Type */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Material Type (Dropdown)
-                                </label>
-                                <select
-                                  value={selectedMaterial.materialType}
-                                  onChange={(e) => handleUpdateMaterialField('materialType', e.target.value)}
-                                  className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white,
-                                    outlineColor: UI_COLORS.border.medium,
-                                  }}
-                                >
-                                  <option value="image">Image</option>
-                                  <option value="video">Video</option>
-                                  <option value="document">Document</option>
-                                  <option value="audio">Audio</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </div>
-
-                              {/* Content Upload/Embed */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Content Upload/Embed
-                                </label>
-                                <label className="cursor-pointer">
-                                  <input
-                                    type="file"
-                                    onChange={handleMaterialFileUpload}
-                                    className="hidden"
-                                  />
-                                  <div 
-                                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.primary,
-                                      color: UI_COLORS.button.text
-                                    }}
-                                  >
-                                    <Upload className="w-5 h-5" />
-                                    Upload File
-                                  </div>
-                                </label>
-
-                                <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>
-                                  OR
-                                </p>
-
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Enter H5P Embed Link
-                                </label>
-                                <Input
-                                  value={selectedMaterial.embedLink || ''}
-                                  onChange={(e) => handleUpdateMaterialField('embedLink', e.target.value)}
-                                  placeholder="Value"
-                                  className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white
-                                  }}
-                                />
-                              </div>
-
-                              {/* Preview */}
-                              <div 
-                                className="border rounded-lg p-8 flex flex-col items-center justify-center"
+                              <AccordionTrigger 
+                                className="px-4 hover:no-underline"
                                 style={{ 
-                                  borderColor: UI_COLORS.border.default,
-                                  minHeight: '200px'
+                                  backgroundColor: UI_COLORS.background.white,
+                                  color: UI_COLORS.text.heading
                                 }}
                               >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
-                                  <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                    Preview
+                                <div className="flex items-center justify-between w-full pr-4">
+                                  <span className="font-medium">
+                                    {material.title}
+                                  </span>
+                                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                    {material.materialType}
                                   </span>
                                 </div>
-                                <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                                  Rendered preview here
-                                </p>
-                              </div>
+                              </AccordionTrigger>
+                              <AccordionContent 
+                                className="px-4 pb-4"
+                                style={{ backgroundColor: UI_COLORS.background.white }}
+                              >
+                                <div className="space-y-4 pt-4">
+                                  {/* Title */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Title
+                                    </label>
+                                    <Input
+                                      value={material.title}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, title: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Chest X-Ray"
+                                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white
+                                      }}
+                                    />
+                                  </div>
 
-                              {/* Action Buttons */}
-                              <div className="flex items-center gap-4 pt-4">
-                                <Button
-                                  onClick={handleSaveCaseMaterial}
-                                  className="px-8 py-3 text-base font-medium transition-colors"
-                                  style={{ 
-                                    backgroundColor: UI_COLORS.button.primary, 
-                                    color: UI_COLORS.button.text 
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                                >
-                                  Save Changes
-                                </Button>
-                                <Button
-                                  onClick={handleDeleteCaseMaterial}
-                                  variant="outline"
-                                  className="px-8 py-3 text-base font-medium transition-colors text-white"
-                                  style={{ 
-                                    backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                    borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
-                              <p>Select a material to edit or create a new one</p>
-                            </div>
-                          )}
-                        </div>
+                                  {/* Description */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Description
+                                    </label>
+                                    <textarea
+                                      value={material.description}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, description: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Frontal chest radiograph obtained as part of the patient's clinical evaluation."
+                                      className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        outlineColor: UI_COLORS.border.medium,
+                                        minHeight: '80px',
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Material Type */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Material Type
+                                    </label>
+                                    <select
+                                      value={material.materialType}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, materialType: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white,
+                                        outlineColor: UI_COLORS.border.medium,
+                                      }}
+                                    >
+                                      <option value="image">Image</option>
+                                      <option value="video">Video</option>
+                                      <option value="document">Document</option>
+                                      <option value="audio">Audio</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Content Upload/Embed */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Content Upload/Embed
+                                    </label>
+                                    <label className="cursor-pointer">
+                                      <input
+                                        type="file"
+                                        onChange={(e) => {
+                                          // Handle file upload for this specific material
+                                          setSelectedMaterialId(material.id);
+                                          handleMaterialFileUpload(e);
+                                        }}
+                                        className="hidden"
+                                      />
+                                      <div 
+                                        className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
+                                        style={{ 
+                                          backgroundColor: UI_COLORS.button.primary,
+                                          color: UI_COLORS.button.text
+                                        }}
+                                      >
+                                        <Upload className="w-5 h-5" />
+                                        Upload File
+                                      </div>
+                                    </label>
+
+                                    <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>
+                                      OR
+                                    </p>
+
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Enter H5P Embed Link
+                                    </label>
+                                    <Input
+                                      value={material.embedLink || ''}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, embedLink: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Value"
+                                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Preview */}
+                                  <div 
+                                    className="border rounded-lg p-8 flex flex-col items-center justify-center"
+                                    style={{ 
+                                      borderColor: UI_COLORS.border.default,
+                                      minHeight: '200px'
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
+                                      <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                                        Preview
+                                      </span>
+                                    </div>
+                                    <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                                      Rendered preview here
+                                    </p>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex items-center gap-4 pt-4">
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          setSelectedMaterialId(material.id);
+                                          handleSaveCaseMaterial();
+                                        }
+                                      }}
+                                      className="px-8 py-3 text-base font-medium transition-colors"
+                                      style={{ 
+                                        backgroundColor: UI_COLORS.button.primary, 
+                                        color: UI_COLORS.button.text 
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          mockInstructorDataService.deleteCaseMaterial(selectedPatientForEdit, material.id);
+                                          setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                        }
+                                      }}
+                                      variant="outline"
+                                      className="px-8 py-3 text-base font-medium transition-colors text-white"
+                                      style={{ 
+                                        backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                        borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
                       </div>
                     </div>
                   )}
