@@ -78,6 +78,14 @@ export interface MessageCountData {
 }
 
 /**
+ * Represents key question analytics data for charts
+ */
+export interface KeyQuestionAnalytics {
+  questionTitle: string;                // Title of the key question
+  studentsAnswered: number;             // Number of students who answered
+}
+
+/**
  * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
@@ -258,6 +266,7 @@ export interface MockInstructorDataService {
   getSimulationGroupsUsingQuestion: (questionId: string, questionType?: 'global' | 'patientSpecific') => string[];
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
+  getKeyQuestionAnalytics: (simulationGroupId: string) => KeyQuestionAnalytics[];
 }
 
 /**
@@ -904,6 +913,24 @@ function getMessageCountData(patientId: string): MessageCountData[] {
 }
 
 /**
+ * Get key question analytics data for charts
+ * Returns mock data showing how many students answered each key question
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @returns Array of key question analytics
+ */
+function getKeyQuestionAnalytics(simulationGroupId: string): KeyQuestionAnalytics[] {
+  const rubricQuestions = getGlobalRubricQuestions(simulationGroupId);
+  const students = getStudents(simulationGroupId);
+  const totalStudents = students.length;
+  
+  return rubricQuestions.map((q, index) => ({
+    questionTitle: q.title.length > 30 ? q.title.substring(0, 27) + '...' : q.title,
+    studentsAnswered: Math.max(1, Math.floor(totalStudents * (0.4 + Math.sin(index * 1.7) * 0.3 + Math.cos(index * 0.9) * 0.2)))
+  }));
+}
+
+/**
  * Generate a new access code for a simulation group
  * 
  * @param simulationGroupId - Simulation group ID
@@ -1544,5 +1571,6 @@ export const mockInstructorDataService: MockInstructorDataService = {
   updatePatientCaseSpecificQuestions,
   getSimulationGroupsUsingQuestion,
   getPatientsUsingQuestion,
-  isQuestionInUse
+  isQuestionInUse,
+  getKeyQuestionAnalytics
 };

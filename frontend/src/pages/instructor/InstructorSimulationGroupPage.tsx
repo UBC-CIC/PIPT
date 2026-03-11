@@ -7,7 +7,7 @@ import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -136,15 +136,21 @@ function InstructorSimulationGroupPage() {
   );
   
   // State for selected patient
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(
-    patientAnalytics.length > 0 ? patientAnalytics[0].id : ''
-  );
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
   
   // Get current patient data
   const currentPatient = patientAnalytics.find(p => p.id === selectedPatientId);
   const messageCountData = currentPatient 
-    ? mockInstructorDataService.getMessageCountData(selectedPatientId)
+    ? [
+        { name: 'Student Messages', value: currentPatient.studentMessageCount },
+        { name: 'AI Messages', value: currentPatient.aiMessageCount },
+      ]
     : [];
+  const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
+  const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
+  
+  // Key question analytics
+  const keyQuestionAnalytics = mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1');
   
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
@@ -969,8 +975,20 @@ function InstructorSimulationGroupPage() {
                 {simulationGroupName}
               </h2>
 
-              {/* Patient Tabs */}
+              {/* Tabs: Overview + Patient Tabs */}
               <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                <button
+                  onClick={() => setSelectedPatientId('overview')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: selectedPatientId === 'overview' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: selectedPatientId === 'overview' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Overview
+                </button>
                 {patientAnalytics.map((patient) => (
                   <button
                     key={patient.id}
@@ -988,113 +1006,146 @@ function InstructorSimulationGroupPage() {
                 ))}
               </div>
 
-              {/* Patient Overview Section */}
+              {/* ===== OVERVIEW TAB ===== */}
+              {selectedPatientId === 'overview' && simulationGroup && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-6">
+                    {/* Personas Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
+                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patientCount}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
+                    </div>
+                    {/* Students Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
+                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.studentCount}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Students</p>
+                    </div>
+                    {/* Instructors Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
+                        <UserCog className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructorCount ?? 0}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Instructors</p>
+                    </div>
+                  </div>
+
+                  {/* Key Questions Answered — Horizontal Bar Graph */}
+                  {keyQuestionAnalytics.length > 0 && (
+                    <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                      <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                        Key Questions — Students Answered
+                      </h3>
+                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
+                        <BarChart
+                          data={keyQuestionAnalytics}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis 
+                            type="number" 
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            allowDecimals={false}
+                          />
+                          <YAxis 
+                            type="category" 
+                            dataKey="questionTitle" 
+                            width={180}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px'
+                            }}
+                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                          />
+                          <Bar 
+                            dataKey="studentsAnswered" 
+                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                            radius={[0, 4, 4, 0]}
+                            barSize={28}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ===== PER-PATIENT TAB ===== */}
               {currentPatient && (
               <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                 <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
                   {currentPatient.name} Overview
                 </h3>
 
-                {/* Progress Bars */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  {/* Instructor Completion Percentage */}
-                  <div>
-                    <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                      Instructor Completion Percentage:
-                    </p>
-                    <div className="w-full h-2 rounded-full mb-2" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                      <div 
-                        className="h-full rounded-full" 
-                        style={{ 
-                          width: `${currentPatient.instructorCompletionPercentage}%`,
-                          backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4]
-                        }}
-                      />
-                    </div>
-                    <p className="text-sm text-right" style={{ color: UI_COLORS.text.body }}>
-                      {currentPatient.instructorCompletionPercentage.toFixed(2)}%
-                    </p>
+                {/* Message Counts + Student Access */}
+                <div className="grid grid-cols-3 gap-6 mb-8">
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.studentMessageCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
                   </div>
-
-                  {/* LLM Completion Percentage */}
-                  <div>
-                    <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                      LLM Completion Percentage:
-                    </p>
-                    <div className="w-full h-2 rounded-full mb-2" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                      <div 
-                        className="h-full rounded-full" 
-                        style={{ 
-                          width: `${currentPatient.llmCompletionPercentage}%`,
-                          backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4]
-                        }}
-                      />
-                    </div>
-                    <p className="text-sm text-right" style={{ color: UI_COLORS.text.body }}>
-                      {currentPatient.llmCompletionPercentage.toFixed(2)}%
-                    </p>
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.aiMessageCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
+                  </div>
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.studentAccessCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
                   </div>
                 </div>
 
-                {/* Message Counts */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  <div>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      Student Message Count: {currentPatient.studentMessageCount}
-                    </p>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      AI Message Count: {currentPatient.aiMessageCount}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      Student Access Count: {currentPatient.studentAccessCount}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Bar Chart */}
+                {/* Donut Chart — Message Distribution */}
                 <div className="mt-8">
                   <h4 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                    Message Count
+                    Message Distribution
                   </h4>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart
-                      data={messageCountData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                      barSize={60}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                      <XAxis 
-                        dataKey="name" 
-                        tick={{ fill: UI_COLORS.text.body }}
-                        axisLine={{ stroke: UI_COLORS.border.default }}
-                      />
-                      <YAxis 
-                        tick={{ fill: UI_COLORS.text.body }}
-                        axisLine={{ stroke: UI_COLORS.border.default }}
-                      />
+                  <ResponsiveContainer width="100%" height={320}>
+                    <PieChart>
+                      <Pie
+                        data={messageCountData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={120}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {messageCountData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={donutColors[index % donutColors.length]} />
+                        ))}
+                      </Pie>
                       <Tooltip 
                         contentStyle={{ 
                           backgroundColor: UI_COLORS.background.white,
                           border: `1px solid ${UI_COLORS.border.default}`,
                           borderRadius: '6px'
                         }}
+                        formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} messages`, name ?? '']}
                       />
                       <Legend 
                         wrapperStyle={{ color: UI_COLORS.text.body }}
                       />
-                      <Bar 
-                        dataKey="Student Messages" 
-                        fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
-                        radius={[4, 4, 0, 0]}
-                      />
-                      <Bar 
-                        dataKey="AI Messages" 
-                        fill={SIMULATION_GROUP_COLOR_PALETTE[5]} 
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
+                      {/* Center text */}
+                      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.heading, fontSize: '28px', fontWeight: 700 }}>
+                        {totalMessages}
+                      </text>
+                      <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.muted, fontSize: '13px' }}>
+                        Total Messages
+                      </text>
+                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
