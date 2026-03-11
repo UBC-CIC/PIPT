@@ -86,6 +86,23 @@ export interface KeyQuestionAnalytics {
 }
 
 /**
+ * Represents average quality score per key question
+ */
+export interface QuestionPerformanceScore {
+  questionTitle: string;                // Title of the key question
+  averageScore: number;                 // Average quality score (0-100)
+  totalResponses: number;               // Total number of student responses
+}
+
+/**
+ * Represents a bucket in a score distribution histogram
+ */
+export interface ScoreDistributionBucket {
+  range: string;                        // Score range label (e.g., "0-20")
+  count: number;                        // Number of students in this range
+}
+
+/**
  * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
@@ -267,6 +284,8 @@ export interface MockInstructorDataService {
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
   getKeyQuestionAnalytics: (simulationGroupId: string) => KeyQuestionAnalytics[];
+  getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
+  getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
 }
 
 /**
@@ -931,6 +950,56 @@ function getKeyQuestionAnalytics(simulationGroupId: string): KeyQuestionAnalytic
 }
 
 /**
+ * Get average quality score per key question (mock data)
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @returns Array of question performance scores
+ */
+function getQuestionPerformanceScores(simulationGroupId: string): QuestionPerformanceScore[] {
+  const rubricQuestions = getGlobalRubricQuestions(simulationGroupId);
+  const students = getStudents(simulationGroupId);
+  const totalStudents = students.length;
+  
+  return rubricQuestions.map((q, index) => {
+    // Deterministic mock scores between 40–95
+    const baseScore = 55 + Math.sin(index * 2.3) * 20 + Math.cos(index * 1.1) * 15;
+    const score = Math.round(Math.min(95, Math.max(40, baseScore)));
+    const responses = Math.max(2, Math.floor(totalStudents * (0.5 + Math.sin(index * 1.5) * 0.3)));
+    return {
+      questionTitle: q.title.length > 30 ? q.title.substring(0, 27) + '...' : q.title,
+      averageScore: score,
+      totalResponses: responses
+    };
+  });
+}
+
+/**
+ * Get score distribution as a histogram (mock data)
+ * Returns buckets: 0-20, 21-40, 41-60, 61-80, 81-100
+ * 
+ * @param simulationGroupId - Simulation group ID
+ * @param patientId - Patient ID
+ * @returns Array of score distribution buckets
+ */
+function getScoreDistribution(simulationGroupId: string, patientId: string): ScoreDistributionBucket[] {
+  // Deterministic mock distribution that varies by patient
+  const seed = patientId.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+  
+  const buckets = [
+    { range: '0–20', base: 1 },
+    { range: '21–40', base: 3 },
+    { range: '41–60', base: 7 },
+    { range: '61–80', base: 9 },
+    { range: '81–100', base: 5 },
+  ];
+  
+  return buckets.map((b, i) => ({
+    range: b.range,
+    count: Math.max(0, b.base + Math.floor(Math.sin(seed + i * 2.1) * 4))
+  }));
+}
+
+/**
  * Generate a new access code for a simulation group
  * 
  * @param simulationGroupId - Simulation group ID
@@ -1572,5 +1641,7 @@ export const mockInstructorDataService: MockInstructorDataService = {
   getSimulationGroupsUsingQuestion,
   getPatientsUsingQuestion,
   isQuestionInUse,
-  getKeyQuestionAnalytics
+  getKeyQuestionAnalytics,
+  getQuestionPerformanceScores,
+  getScoreDistribution
 };

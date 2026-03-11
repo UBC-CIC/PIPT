@@ -149,8 +149,18 @@ function InstructorSimulationGroupPage() {
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
   
-  // Key question analytics
-  const keyQuestionAnalytics = mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1');
+  // Key question analytics (per patient)
+  const keyQuestionAnalytics = currentPatient
+    ? mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1')
+    : [];
+  
+  // Question performance scores
+  const questionPerformanceScores = mockInstructorDataService.getQuestionPerformanceScores(groupId || '1');
+  
+  // Score distribution for current patient
+  const scoreDistribution = currentPatient 
+    ? mockInstructorDataService.getScoreDistribution(groupId || '1', currentPatient.id)
+    : [];
   
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
@@ -1036,24 +1046,81 @@ function InstructorSimulationGroupPage() {
                     </div>
                   </div>
 
-                  {/* Key Questions Answered — Horizontal Bar Graph */}
-                  {keyQuestionAnalytics.length > 0 && (
+                  {/* Global Key Questions Answered — Horizontal Bar Graph */}
+                  <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                    <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Global Key Questions — Students Answered
+                    </h3>
+                    <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                      Number of students who answered each global key question across all personas
+                    </p>
+                    {(() => {
+                      const globalKeyQuestionData = mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1');
+                      return globalKeyQuestionData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionData.length * 50)}>
+                          <BarChart
+                            data={globalKeyQuestionData}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                            <XAxis 
+                              type="number" 
+                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                              axisLine={{ stroke: UI_COLORS.border.default }}
+                              allowDecimals={false}
+                            />
+                            <YAxis 
+                              type="category" 
+                              dataKey="questionTitle" 
+                              width={180}
+                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                              axisLine={{ stroke: UI_COLORS.border.default }}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: UI_COLORS.background.white,
+                                border: `1px solid ${UI_COLORS.border.default}`,
+                                borderRadius: '6px'
+                              }}
+                              formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                            />
+                            <Bar 
+                              dataKey="studentsAnswered" 
+                              fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                              radius={[0, 4, 4, 0]}
+                              barSize={28}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Question Performance Scores — Horizontal Bar */}
+                  {questionPerformanceScores.length > 0 && (
                     <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                      <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                        Key Questions — Students Answered
+                      <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Question Performance Scores
                       </h3>
-                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
+                      <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                        Average quality score per key question across all student responses
+                      </p>
+                      <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
                         <BarChart
-                          data={keyQuestionAnalytics}
+                          data={questionPerformanceScores}
                           layout="vertical"
                           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                           <XAxis 
                             type="number" 
+                            domain={[0, 100]}
                             tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                             axisLine={{ stroke: UI_COLORS.border.default }}
-                            allowDecimals={false}
+                            tickFormatter={(val: number) => `${val}%`}
                           />
                           <YAxis 
                             type="category" 
@@ -1068,16 +1135,43 @@ function InstructorSimulationGroupPage() {
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
                             }}
-                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { totalResponses?: number } }) => [
+                              `${value ?? 0}% avg (${props.payload?.totalResponses ?? 0} responses)`,
+                              'Score'
+                            ]}
                           />
                           <Bar 
-                            dataKey="studentsAnswered" 
-                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                            dataKey="averageScore" 
                             radius={[0, 4, 4, 0]}
                             barSize={28}
-                          />
+                          >
+                            {questionPerformanceScores.map((entry, index) => (
+                              <Cell 
+                                key={`perf-${index}`} 
+                                fill={
+                                  entry.averageScore >= 75 ? '#22c55e' :
+                                  entry.averageScore >= 55 ? '#eab308' :
+                                  '#ef4444'
+                                } 
+                              />
+                            ))}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
+                      <div className="flex items-center justify-center gap-6 mt-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (≥75%)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55–74%)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Needs Improvement (&lt;55%)</span>
+                        </div>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1105,6 +1199,54 @@ function InstructorSimulationGroupPage() {
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
                   </div>
                 </div>
+
+                {/* Key Questions Answered — Horizontal Bar Graph (per persona) */}
+                {keyQuestionAnalytics.length > 0 && (
+                  <div className="mt-8">
+                    <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Key Questions — Students Answered
+                    </h4>
+                    <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                      Number of students who answered each key question for {currentPatient.name}
+                    </p>
+                    <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
+                      <BarChart
+                        data={keyQuestionAnalytics}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                        <XAxis 
+                          type="number" 
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          allowDecimals={false}
+                        />
+                        <YAxis 
+                          type="category" 
+                          dataKey="questionTitle" 
+                          width={180}
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: UI_COLORS.background.white,
+                            border: `1px solid ${UI_COLORS.border.default}`,
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                        />
+                        <Bar 
+                          dataKey="studentsAnswered" 
+                          fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                          radius={[0, 4, 4, 0]}
+                          barSize={28}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
 
                 {/* Donut Chart — Message Distribution */}
                 <div className="mt-8">
@@ -1146,6 +1288,62 @@ function InstructorSimulationGroupPage() {
                         Total Messages
                       </text>
                     </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Score Distribution — Histogram */}
+                <div className="mt-8">
+                  <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                    Score Distribution
+                  </h4>
+                  <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                    Distribution of student scores for {currentPatient.name}
+                  </p>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart
+                      data={scoreDistribution}
+                      margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                      barSize={50}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                      <XAxis 
+                        dataKey="range" 
+                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                        axisLine={{ stroke: UI_COLORS.border.default }}
+                        label={{ value: 'Score Range (%)', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
+                      />
+                      <YAxis 
+                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                        axisLine={{ stroke: UI_COLORS.border.default }}
+                        allowDecimals={false}
+                        label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: UI_COLORS.background.white,
+                          border: `1px solid ${UI_COLORS.border.default}`,
+                          borderRadius: '6px'
+                        }}
+                        formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Count']}
+                      />
+                      <Bar 
+                        dataKey="count" 
+                        radius={[4, 4, 0, 0]}
+                      >
+                        {scoreDistribution.map((_entry, index) => (
+                          <Cell 
+                            key={`dist-${index}`} 
+                            fill={[
+                              '#ef4444',  // 0-20: red
+                              '#f97316',  // 21-40: orange  
+                              '#eab308',  // 41-60: yellow
+                              '#22c55e',  // 61-80: green
+                              SIMULATION_GROUP_COLOR_PALETTE[2]  // 81-100: brand
+                            ][index] || SIMULATION_GROUP_COLOR_PALETTE[2]}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
