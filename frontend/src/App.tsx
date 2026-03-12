@@ -16,9 +16,10 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LoginPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/" element={<InstructorDashboardPage />} />
+        <Route path="/instructor" element={<InstructorDashboardPage />} />
         <Route path="/instructor/group/:groupId" element={<InstructorSimulationGroupPage />} />
         <Route path="/admin" element={<AdminHomePage />} />
         <Route path="/admin/organization/:organizationId" element={<AdminOrganizationPage />} />

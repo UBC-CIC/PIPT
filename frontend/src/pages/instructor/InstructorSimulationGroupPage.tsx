@@ -887,7 +887,7 @@ function InstructorSimulationGroupPage() {
             }}
           >
             <FileText className="w-5 h-5" />
-            Global Rubric
+            Global Key Questions
           </Button>
 
           <Button
@@ -1575,7 +1575,7 @@ function InstructorSimulationGroupPage() {
                 <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
                   <div className="px-6 pt-6 pb-6">
                     <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                      GLOBAL RUBRIC
+                      GLOBAL KEY QUESTIONS
                     </h2>
                     <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
                       These questions apply to all patients in this simulation group.
@@ -1776,7 +1776,7 @@ function InstructorSimulationGroupPage() {
                           onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
                           onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                         >
-                          Delete
+                          Remove
                         </Button>
                       </div>
                     </div>
@@ -2913,7 +2913,7 @@ Return valid JSON in exactly this structure:
                                       onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
                                       onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                                     >
-                                      Delete
+                                      Remove
                                     </Button>
                                   </div>
                                 </div>

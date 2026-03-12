@@ -45,7 +45,7 @@ function AIDebriefDialog({ isOpen, onClose }: AIDebriefDialogProps) {
         suggested: 'When did your shortness of breath begin, and has it changed over time?',
       },
     ],
-    rubricDescription: "View your interaction, clinical reasoning, and recommendations against a rubric created by your instructor.",
+    rubricDescription: "Compare your recommendations with the answer key provided by your instructor.",
   };
 
   const handleFeedbackSubmit = (helpful: boolean) => {
@@ -187,12 +187,12 @@ function AIDebriefDialog({ isOpen, onClose }: AIDebriefDialogProps) {
             </div>
           </div>
 
-          {/* Rubric */}
+          {/* Answer Key */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
               <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                Rubric
+                Answer Key
               </h3>
             </div>
             <div className="pl-7 flex items-start justify-between gap-4">
@@ -200,7 +200,7 @@ function AIDebriefDialog({ isOpen, onClose }: AIDebriefDialogProps) {
                 {debriefData.rubricDescription}
               </p>
               <Button
-                onClick={() => console.log('View rubric clicked')}
+                onClick={() => console.log('View answer key clicked')}
                 variant="outline"
                 className="px-6 transition-colors flex-shrink-0"
                 style={{
@@ -211,7 +211,7 @@ function AIDebriefDialog({ isOpen, onClose }: AIDebriefDialogProps) {
                   borderColor: UI_COLORS.border.default,
                 }}
               >
-                View Rubric
+                View Answer Key
               </Button>
             </div>
           </div>
