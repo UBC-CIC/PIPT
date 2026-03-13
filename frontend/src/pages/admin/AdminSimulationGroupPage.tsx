@@ -11,6 +11,7 @@ import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { AddInstructorDialog } from '@/components/AddInstructorDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 
 /**
@@ -64,6 +65,7 @@ function AdminSimulationGroupPage() {
   const [includedQuestionIds, setIncludedQuestionIds] = useState<Set<string>>(new Set());
   const [isAddQuestionDialogOpen, setIsAddQuestionDialogOpen] = useState(false);
   const [isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen] = useState(false);
+  const [isAddInstructorDialogOpen, setIsAddInstructorDialogOpen] = useState(false);
   const [addQuestionType, setAddQuestionType] = useState<'global' | 'patientSpecific'>('global');
   const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
   
@@ -282,19 +284,17 @@ function AdminSimulationGroupPage() {
   };
 
   const handleAddNewInstructor = () => {
-    const email = prompt('Enter instructor email:');
-    if (email && email.trim()) {
-      const name = prompt('Enter instructor name:');
-      if (name && name.trim()) {
-        const newInstructor = {
-          id: `inst-${Date.now()}`,
-          name: name.trim(),
-          email: email.trim(),
-          dateJoined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
-        };
-        setInstructors(prev => [...prev, newInstructor]);
-      }
-    }
+    setIsAddInstructorDialogOpen(true);
+  };
+
+  const handleAddInstructorSubmit = (email: string, name: string) => {
+    const newInstructor = {
+      id: `inst-${Date.now()}`,
+      name: name,
+      email: email,
+      dateJoined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+    };
+    setInstructors(prev => [...prev, newInstructor]);
   };
 
   const handleRemoveInstructor = (instructorId: string) => {
@@ -2101,6 +2101,12 @@ function AdminSimulationGroupPage() {
         onOpenChange={setIsAddPatientQuestionDialogOpen}
         patients={manageablePatients.map(p => ({ id: p.id, name: p.name }))}
         onSave={handleSaveNewPatientQuestion}
+      />
+      
+      <AddInstructorDialog
+        open={isAddInstructorDialogOpen}
+        onOpenChange={setIsAddInstructorDialogOpen}
+        onAddInstructor={handleAddInstructorSubmit}
       />
     </PageContainer>
   );

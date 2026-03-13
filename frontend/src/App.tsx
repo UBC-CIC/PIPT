@@ -7,6 +7,7 @@ import InstructorSimulationGroupPage from './pages/instructor/InstructorSimulati
 import AdminHomePage from './pages/admin/AdminHomePage';
 import AdminOrganizationPage from './pages/admin/AdminOrganizationPage';
 import AdminSimulationGroupPage from './pages/admin/AdminSimulationGroupPage';
+import AdminQuestionBankPage from './pages/admin/AdminQuestionBankPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';
@@ -23,6 +24,7 @@ function App() {
         <Route path="/instructor/group/:groupId" element={<InstructorSimulationGroupPage />} />
         <Route path="/admin" element={<AdminHomePage />} />
         <Route path="/admin/organization/:organizationId" element={<AdminOrganizationPage />} />
+        <Route path="/admin/organization/:organizationId/question-bank" element={<AdminQuestionBankPage />} />
         <Route path="/admin/organization/:organizationId/group/:groupId" element={<AdminSimulationGroupPage />} />
         <Route path="/student" element={<StudentDashboardPage />} />
         <Route path="/patients/:groupId" element={<PatientsPage />} />

@@ -120,6 +120,16 @@ function AdminOrganizationPage() {
     }
   };
 
+  const handleManageQuestionBank = () => {
+    try {
+      console.log('Navigate to question bank management');
+      // Navigate to question bank page for this organization
+      navigate(`/admin/organization/${organizationId}/question-bank`);
+    } catch (error) {
+      console.error('Error navigating to question bank:', error);
+    }
+  };
+
   return (
     <PageContainer>
       <DashboardHeader
@@ -130,6 +140,8 @@ function AdminOrganizationPage() {
         onSignOut={handleSignOut}
         showStudentViewButton={true}
         onStudentView={() => navigate('/student')}
+        showManageQuestionBankButton={true}
+        onManageQuestionBank={handleManageQuestionBank}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Back to All Organizations button */}
