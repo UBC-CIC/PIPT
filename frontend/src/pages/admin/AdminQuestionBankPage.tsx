@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
-import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { AddPatientSpecificQuestionBankDialog } from '@/components/AddPatientSpecificQuestionBankDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { mockAdminDataService } from '@/services/adminService';
 import { mockInstructorDataService, type QuestionBankItem } from '@/services/instructorService';
@@ -27,6 +28,11 @@ function AdminQuestionBankPage() {
   const [isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen] = useState(false);
   const [globalQuestionSearchQuery, setGlobalQuestionSearchQuery] = useState('');
   const [patientQuestionSearchQuery, setPatientQuestionSearchQuery] = useState('');
+  
+  // Delete confirmation state
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; questionId: string; questionTitle: string; type: 'global' | 'patient' }>({
+    open: false, questionId: '', questionTitle: '', type: 'global'
+  });
   
   // Pagination state
   const [globalPagination, setGlobalPagination] = useState({
@@ -129,7 +135,6 @@ function AdminQuestionBankPage() {
   };
   
   const handleSaveNewPatientQuestion = (question: {
-    patientId: string;
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
@@ -151,6 +156,15 @@ function AdminQuestionBankPage() {
     
     mockInstructorDataService.addToPatientSpecificQuestionBank(newBankQuestion);
     setPatientSpecificBankQuestions(mockInstructorDataService.getPatientSpecificQuestionBank());
+  };
+  
+  const handleDeleteQuestion = () => {
+    if (deleteConfirm.type === 'global') {
+      setGlobalBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
+    } else {
+      setPatientSpecificBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
+    }
+    setDeleteConfirm({ open: false, questionId: '', questionTitle: '', type: 'global' });
   };
   
   return (
@@ -221,7 +235,7 @@ function AdminQuestionBankPage() {
               {questionBankTab === 'global' && (
                 <>
                   <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                    Select which global questions should be included in this simulation group's rubric.
+                    Manage global key questions for this organization.
                   </p>
                   
                   {/* Search Bar */}
@@ -293,20 +307,19 @@ function AdminQuestionBankPage() {
                               <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
                                 {question.isMandatory ? 'Required' : 'Optional'}
                               </span>
-                              <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={false}
-                                  onChange={() => {}}
-                                  className="w-5 h-5 rounded cursor-pointer"
-                                  style={{
-                                    accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                                  }}
-                                />
-                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                                  Include
-                                </span>
-                              </label>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm({ open: true, questionId: question.id, questionTitle: question.title, type: 'global' });
+                                }}
+                                className="p-1 rounded transition-colors hover:bg-red-50"
+                                style={{ color: UI_COLORS.text.muted }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                                aria-label={`Delete question: ${question.title}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         </AccordionTrigger>
@@ -482,20 +495,19 @@ function AdminQuestionBankPage() {
                               <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
                                 {question.isMandatory ? 'Required' : 'Optional'}
                               </span>
-                              <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
-                                <input
-                                  type="checkbox"
-                                  checked={false}
-                                  onChange={() => {}}
-                                  className="w-5 h-5 rounded cursor-pointer"
-                                  style={{
-                                    accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                                  }}
-                                />
-                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                                  Include
-                                </span>
-                              </label>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteConfirm({ open: true, questionId: question.id, questionTitle: question.title, type: 'patient' });
+                                }}
+                                className="p-1 rounded transition-colors hover:bg-red-50"
+                                style={{ color: UI_COLORS.text.muted }}
+                                onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                                onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                                aria-label={`Delete question: ${question.title}`}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
                             </div>
                           </div>
                         </AccordionTrigger>
@@ -607,12 +619,44 @@ function AdminQuestionBankPage() {
         onSave={handleSaveNewQuestion}
       />
       
-      <AddPatientSpecificQuestionDialog
+      <AddPatientSpecificQuestionBankDialog
         open={isAddPatientQuestionDialogOpen}
         onOpenChange={setIsAddPatientQuestionDialogOpen}
-        patients={[]}
         onSave={handleSaveNewPatientQuestion}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Delete Question
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "<span className="font-medium">{deleteConfirm.questionTitle}</span>"? This will remove it from all simulation groups currently using this question.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteQuestion}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }
