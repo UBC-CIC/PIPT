@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem } from '@/services/instructorService';
-import { mockAdminDataService } from '@/services/adminService';
+import { mockAdminDataService, type Instructor } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useState } from 'react';
@@ -31,9 +31,7 @@ function AdminSimulationGroupPage() {
   const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
   const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
   const [evaluationPromptText, setEvaluationPromptText] = useState('Evaluate the student\'s interview using the instructor-defined rubric and key questions.');
-  const [promptHistory] = useState([
-    { id: 1, text: 'Previous version of the prompt...', savedAt: '2/9/2026, 11:05:11 AM' },
-  ]);
+  const [promptHistory] = useState(() => mockAdminDataService.getPromptHistory());
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
@@ -128,11 +126,8 @@ function AdminSimulationGroupPage() {
   const patientAnalytics = mockInstructorDataService.getPatientAnalytics(groupId || '1');
   const students = mockInstructorDataService.getStudents(groupId || '1');
   
-  // Mock instructors data - will be replaced with API call
-  const [instructors, setInstructors] = useState([
-    { id: 'inst-1', name: 'Tom Doe', email: 'email1@random.com', dateJoined: '1/1/2025' },
-    { id: 'inst-2', name: 'Mary Jane', email: 'mary.jane@email.com', dateJoined: '30/2/2025' },
-  ]);
+  // Load instructors from admin service
+  const [instructors, setInstructors] = useState<Instructor[]>(() => mockAdminDataService.getInstructors());
   
   // Get organization details
   const organizations = mockAdminDataService.getOrganizations();
@@ -181,7 +176,7 @@ function AdminSimulationGroupPage() {
   
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
-  const accessCode = simulationGroup?.accessCode || 'XXXX-XXXX-XXXX-XXXX';
+  const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
   
   // Filter patients based on search query
   const filteredPatients = manageablePatients.filter(patient =>
@@ -288,11 +283,11 @@ function AdminSimulationGroupPage() {
   };
 
   const handleAddInstructorSubmit = (email: string, name: string) => {
-    const newInstructor = {
+    const newInstructor: Instructor = {
       id: `inst-${Date.now()}`,
       name: name,
       email: email,
-      dateJoined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
+      date_joined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
     };
     setInstructors(prev => [...prev, newInstructor]);
   };
@@ -939,9 +934,9 @@ function AdminSimulationGroupPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-3 gap-6">
                     {[
-                      { count: simulationGroup.patientCount, label: aiPersonaLabelPlural, colorIndex: 2, Icon: Users },
-                      { count: simulationGroup.studentCount, label: 'Students', colorIndex: 5, Icon: Users },
-                      { count: simulationGroup.instructorCount ?? 0, label: 'Instructors', colorIndex: 4, Icon: UserCog },
+                      { count: simulationGroup.patient_count, label: aiPersonaLabelPlural, colorIndex: 2, Icon: Users },
+                      { count: simulationGroup.student_count, label: 'Students', colorIndex: 5, Icon: Users },
+                      { count: simulationGroup.instructor_count ?? 0, label: 'Instructors', colorIndex: 4, Icon: UserCog },
                     ].map(({ count, label, colorIndex, Icon }) => (
                       <div key={label} className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
                         <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[colorIndex] + '1a' }}>
@@ -1289,7 +1284,7 @@ function AdminSimulationGroupPage() {
                   <div key={instructor.id} className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4 border-t items-center" style={{ borderColor: UI_COLORS.border.default }}>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.name}</div>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.email}</div>
-                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.dateJoined}</div>
+                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.date_joined}</div>
                     <div>
                       <button
                         onClick={() => handleRemoveInstructor(instructor.id)}

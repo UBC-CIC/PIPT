@@ -24,13 +24,13 @@ export interface InstructorSimulationGroup {
   id: string;              // Unique identifier
   name: string;            // Group name (e.g., "Pregnancy")
   subtitle: string;        // Always "Medical Simulation Group"
-  iconUrl?: string;        // Optional icon image URL
-  iconColor?: string;      // Fallback color for avatar (hex format)
-  accessCode: string;      // Access code for students to join
-  studentCount: number;    // Number of students in the group
-  instructorCount?: number; // Number of instructors in the group
-  patientCount: number;    // Number of patients in the group
-  organizationId: string;  // Reference to parent organization
+  icon_url?: string;        // Optional icon image URL
+  icon_color?: string;      // Fallback color for avatar (hex format)
+  access_code: string;      // Access code for students to join
+  student_count: number;    // Number of students in the group
+  instructor_count?: number; // Number of instructors in the group
+  patient_count: number;    // Number of patients in the group
+  organization_id: string;  // Reference to parent organization
 }
 
 /**
@@ -296,34 +296,34 @@ const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
     id: '1',
     name: 'Chronic Pain',
     subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(0),
-    accessCode: 'NB3W-PI3I-Q2EH-WPA3',
-    studentCount: 20,
-    instructorCount: 5,
-    patientCount: 2,
-    organizationId: 'org-1'
+    icon_color: getSimulationGroupColor(0),
+    access_code: 'NB3W-PI3I-Q2EH-WPA3',
+    student_count: 20,
+    instructor_count: 5,
+    patient_count: 2,
+    organization_id: 'org-1'
   },
   {
     id: '2',
     name: 'Acne',
     subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(1),
-    accessCode: 'XY7Z-AB2C-DE4F-GH8I',
-    studentCount: 18,
-    instructorCount: 3,
-    patientCount: 3,
-    organizationId: 'org-1'
+    icon_color: getSimulationGroupColor(1),
+    access_code: 'XY7Z-AB2C-DE4F-GH8I',
+    student_count: 18,
+    instructor_count: 3,
+    patient_count: 3,
+    organization_id: 'org-1'
   },
   {
     id: '3',
     name: 'Diabetes Management',
     subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(2),
-    accessCode: 'PQ9R-ST1U-VW3X-YZ5A',
-    studentCount: 32,
-    instructorCount: 4,
-    patientCount: 2,
-    organizationId: 'org-2'
+    icon_color: getSimulationGroupColor(2),
+    access_code: 'PQ9R-ST1U-VW3X-YZ5A',
+    student_count: 32,
+    instructor_count: 4,
+    patient_count: 2,
+    organization_id: 'org-2'
   }
 ];
 
@@ -881,10 +881,10 @@ function getSimulationGroup(id: string): InstructorSimulationGroup | undefined {
 function getOrganizationLabels(simulationGroupId: string): OrganizationLabels {
   const simulationGroup = getSimulationGroup(simulationGroupId);
   const organizations = mockAdminDataService.getOrganizations();
-  const organization = organizations.find((org) => org.id === simulationGroup?.organizationId);
+  const organization = organizations.find((org) => org.id === simulationGroup?.organization_id);
   
-  const aiPersona = organization?.aiPersona || 'Patient';
-  const userRole = organization?.userRole || 'Doctor';
+  const aiPersona = organization?.ai_persona || 'Patient';
+  const userRole = organization?.user_role || 'Doctor';
   
   return {
     aiPersona,
@@ -1020,7 +1020,7 @@ function generateAccessCode(simulationGroupId: string): string {
   // Update the mock data
   const group = mockInstructorSimulationGroups.find(g => g.id === simulationGroupId);
   if (group) {
-    group.accessCode = code;
+    group.access_code = code;
   }
   
   return code;

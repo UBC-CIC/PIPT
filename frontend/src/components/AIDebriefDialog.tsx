@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { X, Star, CheckCircle } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState } from 'react';
+import { mockDataService } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
   isOpen: boolean;
@@ -19,34 +20,8 @@ interface AIDebriefDialogProps {
 function AIDebriefDialog({ isOpen, onClose }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
 
-  // Mock debrief data - will be replaced with backend data
-  const debriefData = {
-    summary: "You conducted a structured interview and identified the patient's primary concern of worsening shortness of breath. You gathered relevant medication history and symptom duration, but did not fully explore potential triggers or assess inhaler technique. Further questioning and physical assessment could have helped clarify the underlying cause.",
-    questionsAddressed: [
-      'Asked about symptom duration',
-      'Asked about current medications',
-      'Asked about previous diagnosis of asthma',
-    ],
-    missedKeyQuestionsCount: 5,
-    missedQuestionsGuidance: "These questions are important to fully assess the patient's condition and guide appropriate clinical decision-making.",
-    recommendationFeedback: {
-      strengths: [
-        'Identified relevant symptoms early',
-        'Asked focused medication-related questions',
-      ],
-      areasForImprovement: [
-        'Did not fully assess symptom severity',
-        'Missed opportunities to confirm potential causes',
-      ],
-    },
-    suggestedRewrites: [
-      {
-        original: 'Are you feeling okay lately?',
-        suggested: 'When did your shortness of breath begin, and has it changed over time?',
-      },
-    ],
-    rubricDescription: "Compare your recommendations with the answer key provided by your instructor.",
-  };
+  // Load debrief data from mock data service
+  const debriefData = mockDataService.getAIDebriefData();
 
   const handleFeedbackSubmit = (helpful: boolean) => {
     console.log('Feedback submitted:', { helpful, comment: feedbackComment });

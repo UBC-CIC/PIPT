@@ -72,12 +72,12 @@ function AdminOrganizationPage() {
         id: `group-${Date.now()}`,
         name: data.name,
         subtitle: 'Medical Simulation Group',
-        iconColor: getSimulationGroupColor(groups.length),
-        accessCode: mockInstructorDataService.generateAccessCode(`group-${Date.now()}`),
-        studentCount: 0,
-        instructorCount: data.instructors.split(',').map(i => i.trim()).filter(i => i).length,
-        patientCount: 0,
-        organizationId: ''
+        icon_color: getSimulationGroupColor(groups.length),
+        access_code: mockInstructorDataService.generateAccessCode(`group-${Date.now()}`),
+        student_count: 0,
+        instructor_count: data.instructors.split(',').map(i => i.trim()).filter(i => i).length,
+        patient_count: 0,
+        organization_id: ''
       };
 
       // Add to state
@@ -170,9 +170,9 @@ function AdminOrganizationPage() {
           showDeleteButton={true}
           onDeleteGroup={handleDeleteGroup}
           countLabels={{
-            students: organization?.userRole || 'Students',
+            students: organization?.user_role || 'Students',
             instructors: 'Instructors',
-            patients: organization?.aiPersona || 'Patients'
+            patients: organization?.ai_persona || 'Patients'
           }}
         />
       </main>

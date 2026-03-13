@@ -169,7 +169,7 @@ function InstructorSimulationGroupPage() {
   
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
-  const accessCode = simulationGroup?.accessCode || 'XXXX-XXXX-XXXX-XXXX';
+  const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
   
   // Filter patients based on search query (user searches by name, but ID is the unique identifier)
   const filteredPatients = manageablePatients.filter(patient =>
@@ -1038,7 +1038,7 @@ function InstructorSimulationGroupPage() {
                       <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
                         <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patientCount}</p>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
                     </div>
                     {/* Students Card */}
@@ -1046,7 +1046,7 @@ function InstructorSimulationGroupPage() {
                       <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
                         <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.studentCount}</p>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Students</p>
                     </div>
                     {/* Instructors Card */}
@@ -1054,7 +1054,7 @@ function InstructorSimulationGroupPage() {
                       <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
                         <UserCog className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructorCount ?? 0}</p>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Instructors</p>
                     </div>
                   </div>

@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockDataService } from '@/services/studentService';
+import { mockDataService, type StudentChatMessage as Message } from '@/services/studentService';
 import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -10,18 +10,6 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
-
-// Message interface matching database schema
-interface Message {
-  message_id: string;
-  chat_id: string;
-  student_sent: boolean;
-  message_content: string;
-  time_sent: string;
-  quality_score?: number;
-  quality_feedback?: string;
-  suggested_rewrite?: string;
-}
 
 /**
  * StudentChatPage Component
@@ -35,16 +23,14 @@ function StudentChatPage() {
   // Load user data from mock data service
   const user = mockDataService.getCurrentUser();
   
-  // Mock patient data
-  const patient = {
-    id: patientId,
-    name: 'Pamela',
-    age: 56,
-    gender: 'Female',
-    imageUrl: undefined as string | undefined,
-    // Future: Add patient image URL from backend
-    // imageUrl: 'https://s3.amazonaws.com/bucket/patients/pamela.jpg',
-  };
+  // Load patient data from mock data service
+  const patient = mockDataService.getPatientDetail(patientId);
+
+  // Load case materials from mock data service
+  const caseMaterials = mockDataService.getCaseMaterials();
+
+  // Load patient files from mock data service
+  const patientFiles = mockDataService.getPatientFiles();
 
   // State for dialogs
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
@@ -93,31 +79,6 @@ function StudentChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Mock case materials data - will be replaced with backend data
-  const caseMaterials = [
-    {
-      id: '1',
-      title: 'Initial Triage Vital Signs',
-      description: 'Recorded upon arrival to clinic.',
-      type: 'image' as const,
-      group: 'Vital Signs',
-    },
-    {
-      id: '2',
-      title: '12-Lead Electrocardiogram (ECG)',
-      description: 'Standard 12-lead ECG performed during assessment to evaluate cardiac rhythm and possible ischemic changes.',
-      type: 'image' as const,
-      group: 'Diagnostic Tests',
-    },
-    {
-      id: '3',
-      title: 'Lung Auscultation Recording',
-      description: 'Audio recording of lung sounds to evaluate respiratory status.',
-      type: 'video' as const,
-      group: 'Physical Examination',
-    },
-  ];
-
   // Memoize grouped case materials to avoid recomputing on every render
   const groupedCaseMaterials = useMemo(() => {
     return caseMaterials.reduce((acc, material) => {
@@ -128,18 +89,6 @@ function StudentChatPage() {
       return acc;
     }, {} as Record<string, typeof caseMaterials>);
   }, [caseMaterials]);
-
-  // Mock patient information files - will be replaced with S3 data
-  const patientFiles = [
-    {
-      id: '1',
-      filename: 'Patient_Information_Upload_Pamela.pdf',
-      description: 'No description available',
-      // Future S3 integration:
-      // s3Key: 'patients/123/Patient_Information_Upload_Pamela.pdf',
-      // s3Url: 'https://bucket.s3.amazonaws.com/...',
-    },
-  ];
 
   /**
    * Handle sign out event

@@ -57,7 +57,7 @@ function InstructorDashboardPage() {
     }
   };
 
-  const handleCreateGroupSubmit = (data: { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean }) => {
+  const handleCreateGroupSubmit = (data: { name: string; description: string; active: boolean; enableVoice: boolean }) => {
     try {
       console.log('Creating group with data:', data);
 
@@ -66,12 +66,12 @@ function InstructorDashboardPage() {
         id: `group-${Date.now()}`, // Temporary ID until backend provides one
         name: data.name,
         subtitle: 'Medical Simulation Group',
-        iconColor: getSimulationGroupColor(groups.length), // Use next color in palette
-        accessCode: mockInstructorDataService.generateAccessCode(`group-${Date.now()}`),
-        studentCount: 0,
-        instructorCount: data.instructors.split(',').map(i => i.trim()).filter(i => i).length,
-        patientCount: 0,
-        organizationId: ''
+        icon_color: getSimulationGroupColor(groups.length), // Use next color in palette
+        access_code: mockInstructorDataService.generateAccessCode(`group-${Date.now()}`),
+        student_count: 0,
+        instructor_count: 0,
+        patient_count: 0,
+        organization_id: ''
       };
 
       // Add to state - will be replaced with API call later

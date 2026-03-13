@@ -67,10 +67,10 @@ function AdminHomePage() {
       const newOrganization: Organization = {
         id: `org-${Date.now()}`,
         name: data.name,
-        aiPersona: data.aiPersonaTitle,
-        userRole: data.userRoleTitle,
+        ai_persona: data.aiPersonaTitle,
+        user_role: data.userRoleTitle,
         icon: 'building',
-        iconColor: getSimulationGroupColor(organizations.length),
+        icon_color: getSimulationGroupColor(organizations.length),
       };
 
       // Add to state
@@ -113,10 +113,10 @@ function AdminHomePage() {
             <OrganizationCard
               key={org.id}
               name={org.name}
-              aiPersona={org.aiPersona}
-              userRole={org.userRole}
+              aiPersona={org.ai_persona}
+              userRole={org.user_role}
               icon={org.icon}
-              iconColor={org.iconColor}
+              iconColor={org.icon_color}
               onUseOrganisation={() => handleUseOrganisation(org.id)}
             />
           ))}
