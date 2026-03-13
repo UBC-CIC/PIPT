@@ -24,6 +24,8 @@ function InstructorSimulationGroupPage() {
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
+  const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
@@ -190,7 +192,7 @@ function InstructorSimulationGroupPage() {
    * Handle back to all groups navigation
    */
   const handleBackToAllGroups = () => {
-    navigate('/');
+    navigate('/instructor');
   };
 
   /**
@@ -1113,12 +1115,36 @@ function InstructorSimulationGroupPage() {
                   {/* Question Performance Scores — Horizontal Bar */}
                   {questionPerformanceScores.length > 0 && (
                     <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                      <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                        Question Performance Scores
-                      </h3>
-                      <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-                        Average quality score per key question across all student responses
-                      </p>
+                      <div className="flex items-start justify-between mb-6">
+                        <div>
+                          <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Question Performance Scores
+                          </h3>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                            Average quality score per key question across all student responses
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
+                            Time Period:
+                          </label>
+                          <select
+                            value={questionPerformanceTimePeriod}
+                            onChange={(e) => setQuestionPerformanceTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
+                            className="px-3 py-2 rounded-lg border text-sm"
+                            style={{
+                              borderColor: UI_COLORS.border.default,
+                              backgroundColor: UI_COLORS.background.white,
+                              color: UI_COLORS.text.heading,
+                            }}
+                          >
+                            <option value="week">Last Week</option>
+                            <option value="month">Last Month</option>
+                            <option value="year">Last Year</option>
+                            <option value="all">All Time</option>
+                          </select>
+                        </div>
+                      </div>
                       <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
                         <BarChart
                           data={questionPerformanceScores}
@@ -1304,12 +1330,36 @@ function InstructorSimulationGroupPage() {
 
                 {/* Score Distribution — Histogram */}
                 <div className="mt-8">
-                  <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                    Score Distribution
-                  </h4>
-                  <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                    Distribution of student scores for {currentPatient.name}
-                  </p>
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Score Distribution
+                      </h4>
+                      <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                        Distribution of student scores for {currentPatient.name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
+                        Time Period:
+                      </label>
+                      <select
+                        value={scoreDistributionTimePeriod}
+                        onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                        style={{
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white,
+                          color: UI_COLORS.text.heading,
+                        }}
+                      >
+                        <option value="week">Last Week</option>
+                        <option value="month">Last Month</option>
+                        <option value="year">Last Year</option>
+                        <option value="all">All Time</option>
+                      </select>
+                    </div>
+                  </div>
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart
                       data={scoreDistribution}

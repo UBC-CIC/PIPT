@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
-import CreateSimulationGroupDialog from '@/components/CreateSimulationGroupDialog';
+import CreateSimulationGroupDialogInstructor from '@/components/CreateSimulationGroupDialogInstructor';
 import { mockInstructorDataService, type InstructorSimulationGroup } from '@/services/instructorService';
 import { getSimulationGroupColor } from '@/lib/colors';
 
@@ -116,7 +116,7 @@ function InstructorDashboardPage() {
           descriptionText="Create simulation groups and view analytics."
         />
       </main>
-      <CreateSimulationGroupDialog
+      <CreateSimulationGroupDialogInstructor
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
         onCreate={handleCreateGroupSubmit}
