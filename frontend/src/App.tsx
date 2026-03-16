@@ -23,14 +23,14 @@ interface AuthContextType {
   user: AuthUser | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  refreshUser: () => Promise<AuthUser | null>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   signOut: async () => {},
-  refreshUser: async () => {},
+  refreshUser: async () => null,
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -38,6 +38,8 @@ export const useAuth = () => useContext(AuthContext);
 // Protected route wrapper — redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+
+  console.log('ProtectedRoute check:', { user, loading, hasUser: !!user });
 
   if (loading) {
     return (
@@ -48,9 +50,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
+    console.log('ProtectedRoute: No user, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 
+  console.log('ProtectedRoute: User authenticated, rendering children');
   return <>{children}</>;
 }
 
@@ -79,8 +83,10 @@ function AppRoutes() {
     try {
       const currentUser = await authService.getCurrentUser();
       setUser(currentUser);
+      return currentUser;
     } catch {
       setUser(null);
+      return null;
     }
   }, []);
 

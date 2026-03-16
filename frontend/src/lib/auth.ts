@@ -88,17 +88,24 @@ class AuthService {
     try {
       const session = await fetchAuthSession();
       const idToken = session.tokens?.idToken;
-      if (!idToken) return null;
+      if (!idToken) {
+        console.log('No idToken found');
+        return null;
+      }
 
       const payload = idToken.payload;
       const user = await getCurrentUser();
 
-      return {
+      const authUser = {
         username: user.username,
         email: (payload.email as string) || user.username,
         groups: (payload['cognito:groups'] as string[]) || [],
       };
-    } catch {
+      
+      console.log('getCurrentUser result:', authUser);
+      return authUser;
+    } catch (error) {
+      console.error('Error getting current user:', error);
       return null;
     }
   }

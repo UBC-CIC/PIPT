@@ -184,8 +184,8 @@ exports.handler = async (event) => {
                         COUNT(CASE WHEN NOT m.student_sent THEN 1 ELSE NULL END) AS ai_message_count
                     FROM "personas" p
                     LEFT JOIN "student_interactions" sp ON p.persona_id = sp.persona_id
-                    LEFT JOIN "sessions" s ON sp.student_interaction_id = s.student_interaction_id
-                    LEFT JOIN "messages" m ON s.session_id = m.session_id
+                    LEFT JOIN "chats" c ON sp.student_interaction_id = c.student_interaction_id
+                    LEFT JOIN "messages" m ON c.chat_id = m.chat_id
                     LEFT JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
                     LEFT JOIN "users" u ON e.user_id = u.user_id
                     WHERE p.simulation_group_id = ${simulationGroupId}
@@ -244,18 +244,18 @@ exports.handler = async (event) => {
             const analyticsData = messageCreations.map((patient) => {
               const accesses =
                 patientAccesses.find(
-                  (pa) => pa.patient_id === patient.patient_id,
+                  (pa) => pa.persona_id === patient.persona_id,
                 ) || {};
               const aiScore =
-                aiScores.find((ps) => ps.patient_id === patient.patient_id) ||
+                aiScores.find((ps) => ps.persona_id === patient.persona_id) ||
                 {};
               const instructorCompletionData =
                 instructorCompletionPercentages.find(
-                  (cp) => cp.persona_id === patient.patient_id,
+                  (cp) => cp.persona_id === patient.persona_id,
                 ) || {};
 
               return {
-                patient_id: patient.patient_id,
+                persona_id: patient.persona_id,
                 persona_name: patient.persona_name,
                 persona_number: patient.persona_number,
                 student_message_count: patient.student_message_count || 0,
@@ -288,20 +288,20 @@ exports.handler = async (event) => {
       case "PUT /instructor/update_metadata":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id &&
+          event.queryStringParameters.persona_id &&
           event.queryStringParameters.filename &&
           event.queryStringParameters.filetype
         ) {
-          const patient_id = event.queryStringParameters.patient_id;
+          const persona_id = event.queryStringParameters.persona_id;
           const filename = event.queryStringParameters.filename;
           const filetype = event.queryStringParameters.filetype;
           const { metadata } = JSON.parse(event.body);
 
           try {
-            // Query to find the file with the given patient_id and filename
+            // Query to find the file with the given persona_id and filename
             const existingFile = await sqlConnection`
                       SELECT * FROM "persona_data"
-                      WHERE persona_id = ${patient_id}
+                      WHERE persona_id = ${persona_id}
                       AND filename = ${filename}
                       AND filetype = ${filetype};
                   `;
@@ -309,7 +309,7 @@ exports.handler = async (event) => {
             if (existingFile.length === 0) {
               const result = await sqlConnection`
                 INSERT INTO "persona_data" (persona_id, filename, filetype, metadata)
-                VALUES (${patient_id}, ${filename}, ${filetype}, ${metadata})
+                VALUES (${persona_id}, ${filename}, ${filetype}, ${metadata})
                 RETURNING *;
               `;
               response.body = JSON.stringify({
@@ -321,7 +321,7 @@ exports.handler = async (event) => {
             const result = await sqlConnection`
                       UPDATE "persona_data"
                       SET metadata = ${metadata}
-                      WHERE persona_id = ${patient_id}
+                      WHERE persona_id = ${persona_id}
                       AND filename = ${filename}
                       AND filetype = ${filetype}
                       RETURNING *;
@@ -344,7 +344,7 @@ exports.handler = async (event) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "patient_id and filename are required",
+            error: "persona_id and filename are required",
           });
         }
         break;
@@ -463,7 +463,7 @@ exports.handler = async (event) => {
                         uuid_generate_v4(),
                         (SELECT user_id FROM "users" WHERE user_email = ${instructor_email}),
                         ${simulation_group_id},
-                        ${newPatient[0].patient_id},
+                        ${newPatient[0].persona_id},
                         null,
                         CURRENT_TIMESTAMP,
                         'instructor_created_patient'
@@ -488,7 +488,7 @@ exports.handler = async (event) => {
                             )
                             VALUES (
                                 uuid_generate_v4(), 
-                                ${newPatient[0].patient_id}, 
+                                ${newPatient[0].persona_id}, 
                                 ${enrolment.enrollment_id}, 
                                 0
                             );
@@ -514,7 +514,7 @@ exports.handler = async (event) => {
       case "PUT /instructor/reorder_patient":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id &&
+          event.queryStringParameters.persona_id &&
           event.queryStringParameters.persona_number &&
           event.queryStringParameters.instructor_email
         ) {
@@ -528,13 +528,13 @@ exports.handler = async (event) => {
               await sqlConnection`
                     UPDATE "personas"
                     SET persona_name = ${persona_name}, persona_number = ${persona_number}
-                    WHERE persona_id = ${patient_id};
+                    WHERE persona_id = ${persona_id};
                   `;
 
               // Insert into User Engagement Log
               await sqlConnection`
                     INSERT INTO "user_engagement_log" (log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type)
-                    VALUES (uuid_generate_v4(), (SELECT user_id FROM "users" WHERE user_email = ${instructor_email}), NULL, ${patient_id}, NULL, CURRENT_TIMESTAMP, 'instructor_edited_patient');
+                    VALUES (uuid_generate_v4(), (SELECT user_id FROM "users" WHERE user_email = ${instructor_email}), NULL, ${persona_id}, NULL, CURRENT_TIMESTAMP, 'instructor_edited_patient');
                   `;
 
               response.statusCode = 200;
@@ -565,7 +565,7 @@ exports.handler = async (event) => {
       case "PUT /instructor/edit_patient":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id &&
+          event.queryStringParameters.persona_id &&
           event.queryStringParameters.instructor_email &&
           event.queryStringParameters.simulation_group_id
         ) {
@@ -586,7 +586,7 @@ exports.handler = async (event) => {
                         SELECT * FROM "personas"
                         WHERE simulation_group_id = ${simulation_group_id}
                         AND persona_name = ${persona_name}
-                        AND persona_id != ${patient_id};
+                        AND persona_id != ${persona_id};
                     `;
 
               if (existingPatient.length > 0) {
@@ -605,7 +605,7 @@ exports.handler = async (event) => {
                             persona_age = ${persona_age}, 
                             persona_gender = ${persona_gender}, 
                             persona_prompt = ${persona_prompt}
-                        WHERE persona_id = ${patient_id};
+                        WHERE persona_id = ${persona_id};
                     `;
 
               // Insert into User Engagement Log
@@ -622,7 +622,7 @@ exports.handler = async (event) => {
                             uuid_generate_v4(), 
                             (SELECT user_id FROM "users" WHERE user_email = ${instructor_email}),
                             ${simulation_group_id}, 
-                            ${patient_id}, 
+                            ${persona_id}, 
                             NULL, 
                             CURRENT_TIMESTAMP, 
                             'instructor_edited_patient'
@@ -651,7 +651,7 @@ exports.handler = async (event) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error:
-              "patient_id or instructor_email is missing in query string parameters",
+              "persona_id or instructor_email is missing in query string parameters",
           });
         }
         break;
@@ -698,7 +698,7 @@ exports.handler = async (event) => {
                 log_id,
                 user_id,
                 simulation_group_id,
-                patient_id,
+                persona_id,
                 enrollment_id,
                 timestamp,
                 engagement_type,
@@ -866,15 +866,15 @@ exports.handler = async (event) => {
       case "DELETE /instructor/delete_patient":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id
+          event.queryStringParameters.persona_id
         ) {
-          const patientId = event.queryStringParameters.patient_id;
+          const personaId = event.queryStringParameters.persona_id;
 
           try {
             // Delete the patient from the patients table
             await sqlConnection`
                     DELETE FROM "personas"
-                    WHERE persona_id = ${patientId};
+                    WHERE persona_id = ${personaId};
                 `;
 
             response.statusCode = 200;
@@ -888,7 +888,7 @@ exports.handler = async (event) => {
           }
         } else {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "patient_id is required" });
+          response.body = JSON.stringify({ error: "persona_id is required" });
         }
         break;
       case "GET /instructor/get_prompt":
@@ -956,8 +956,8 @@ exports.handler = async (event) => {
             const messages = await sqlConnection`
               SELECT m.message_content, m.time_sent, m.student_sent
               FROM "messages" m
-              JOIN "sessions" s ON m.session_id = s.session_id
-              JOIN "student_interactions" sp ON s.student_interaction_id = sp.student_interaction_id
+              JOIN "chats" c ON m.chat_id = c.chat_id
+              JOIN "student_interactions" sp ON c.student_interaction_id = sp.student_interaction_id
               JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
               WHERE e.user_id = ${userId}
               AND e.simulation_group_id = ${simulationGroupId}
@@ -1118,12 +1118,12 @@ exports.handler = async (event) => {
 
             const result = {};
 
-            // Step 3: Iterate through the patients and get sessions for each patient
+            // Step 3: Iterate through the patients and get chats for each patient
             for (const patient of studentPatients) {
-              const sessions = await sqlConnection`
-                        SELECT s.session_id, s.session_name, s.notes
-                        FROM "sessions" s
-                        WHERE s.student_interaction_id IN (
+              const chats = await sqlConnection`
+                        SELECT c.chat_id, c.chat_name, c.notes
+                        FROM "chats" c
+                        WHERE c.student_interaction_id IN (
                             SELECT student_interaction_id 
                             FROM "student_interactions"
                             WHERE persona_id = ${patient.persona_id} AND enrollment_id IN (
@@ -1136,18 +1136,18 @@ exports.handler = async (event) => {
 
               result[patient.persona_name] = [];
 
-              // Step 4: For each session, retrieve the messages and notes
-              for (const session of sessions) {
+              // Step 4: For each chat, retrieve the messages and notes
+              for (const chat of chats) {
                 const messages = await sqlConnection`
                             SELECT student_sent, message_content, time_sent
                             FROM "messages"
-                            WHERE session_id = ${session.session_id}
+                            WHERE chat_id = ${chat.chat_id}
                             ORDER BY time_sent ASC;
                         `;
 
                 result[patient.persona_name].push({
-                  sessionName: session.session_name,
-                  notes: session.notes || "No notes available.",
+                  chatName: chat.chat_name,
+                  notes: chat.notes || "No notes available.",
                   messages: messages.map((msg) => ({
                     student_sent: msg.student_sent,
                     message_content: msg.message_content,
@@ -1267,14 +1267,14 @@ exports.handler = async (event) => {
       case "PUT /instructor/toggle_llm_completion":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id
+          event.queryStringParameters.persona_id
         ) {
-          const { patient_id } = event.queryStringParameters;
+          const { persona_id } = event.queryStringParameters;
 
           try {
             // Retrieve the current llm_completion status for the patient
             const result = await sqlConnection`
-                    SELECT llm_completion FROM "personas" WHERE persona_id = ${patient_id};
+                    SELECT llm_completion FROM "personas" WHERE persona_id = ${persona_id};
                 `;
 
             if (result.length > 0) {
@@ -1285,7 +1285,7 @@ exports.handler = async (event) => {
               await sqlConnection`
                         UPDATE "personas"
                         SET llm_completion = ${newStatus}
-                        WHERE persona_id = ${patient_id};
+                        WHERE persona_id = ${persona_id};
                     `;
 
               response.statusCode = 200;
@@ -1304,13 +1304,13 @@ exports.handler = async (event) => {
           }
         } else {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "patient_id is required" });
+          response.body = JSON.stringify({ error: "persona_id is required" });
         }
         break;
       case "GET /instructor/ingestion_status":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id &&
+          event.queryStringParameters.persona_id &&
           event.queryStringParameters.simulation_group_id
         ) {
           const { persona_id, simulation_group_id } =
@@ -1321,9 +1321,9 @@ exports.handler = async (event) => {
             const ingestionStatusData = await sqlConnection`
                     SELECT filename, filetype, ingestion_status
                     FROM "persona_data"
-                    WHERE persona_id = ${patient_id}
+                    WHERE persona_id = ${persona_id}
                     AND filepath LIKE ${
-                      simulation_group_id + "/" + patient_id + "/documents/%"
+                      simulation_group_id + "/" + persona_id + "/documents/%"
                     };
                 `;
 
@@ -1344,7 +1344,7 @@ exports.handler = async (event) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "patient_id and simulation_group_id are required",
+            error: "persona_id and simulation_group_id are required",
           });
         }
         break;
