@@ -35,14 +35,14 @@ function SimulationGroupCard({
     <div className="flex flex-col gap-4 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
       <div className="flex items-start gap-4">
         <UserAvatar
-          name={group.group_name}
-          imageUrl={group.iconUrl}
+          name={group.name}
+          imageUrl={group.icon_url}
           size="medium"
-          backgroundColor={group.iconColor}
+          backgroundColor={group.icon_color}
         />
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-lg leading-tight mb-1" style={{ color: UI_COLORS.text.heading }}>
-            {group.group_name}
+            {group.name}
           </h3>
           {!showCounts && (
             <p className="text-sm" style={{ color: UI_COLORS.text.body }}>

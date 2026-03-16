@@ -11,6 +11,7 @@ import InstructorSimulationGroupPage from './pages/instructor/InstructorSimulati
 import AdminHomePage from './pages/admin/AdminHomePage';
 import AdminOrganizationPage from './pages/admin/AdminOrganizationPage';
 import AdminSimulationGroupPage from './pages/admin/AdminSimulationGroupPage';
+import AdminQuestionBankPage from './pages/admin/AdminQuestionBankPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';
@@ -106,13 +107,14 @@ function AppRoutes() {
   return (
     <AuthContext.Provider value={{ user, loading, signOut: handleSignOut, refreshUser }}>
       <Routes>
+        <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
         <Route path="/instructor" element={<ProtectedRoute><InstructorDashboardPage /></ProtectedRoute>} />
         <Route path="/instructor/group/:groupId" element={<ProtectedRoute><InstructorSimulationGroupPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute><AdminHomePage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId" element={<ProtectedRoute><AdminOrganizationPage /></ProtectedRoute>} />
+        <Route path="/admin/organization/:organizationId/question-bank" element={<ProtectedRoute><AdminQuestionBankPage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId/group/:groupId" element={<ProtectedRoute><AdminSimulationGroupPage /></ProtectedRoute>} />
         <Route path="/student" element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId" element={<ProtectedRoute><PatientsPage /></ProtectedRoute>} />

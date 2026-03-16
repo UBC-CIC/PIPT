@@ -31,7 +31,7 @@ function PatientsPage() {
           studentService.getCurrentUser(),
           groupId ? studentService.getPatients(groupId) : Promise.resolve([]),
         ]);
-        setUser(userData);
+        setUser(userData ?? { name: 'Unknown User' });
         setPatients(patientsData);
       } catch (error) {
         console.error('Failed to load patients data:', error);
@@ -183,7 +183,7 @@ function PatientsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 text-center">
-                    {getDebriefStatusBadge(patient.debriefStatus)}
+                    {getDebriefStatusBadge(patient.debrief_status)}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <Button

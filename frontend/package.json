@@ -12,6 +12,7 @@
     "check-env": "node -e \"const fs = require('fs'); if (!fs.existsSync('.env')) { console.error('❌ .env file not found! Run npm run setup'); process.exit(1); } else { console.log('✅ .env file exists'); }\""
   },
   "dependencies": {
+    "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-dialog": "^1.1.15",
     "@tailwindcss/vite": "^4.2.1",
     "aws-amplify": "^6.16.3",

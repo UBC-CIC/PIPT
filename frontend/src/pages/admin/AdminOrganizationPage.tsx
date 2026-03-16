@@ -6,8 +6,8 @@ import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
 import CreateSimulationGroupDialog from '@/components/CreateSimulationGroupDialog';
 import { mockAdminDataService } from '@/services/adminService';
-import { instructorService, type InstructorSimulationGroup } from '@/services/instructorService';
-import { UI_COLORS } from '@/lib/colors';
+import { instructorService, mockInstructorDataService, type InstructorSimulationGroup } from '@/services/instructorService';
+import { getSimulationGroupColor, UI_COLORS } from '@/lib/colors';
 import { useAuth } from '@/App';
 
 /**
@@ -82,14 +82,26 @@ function AdminOrganizationPage() {
     try {
       console.log('Creating group with data:', data);
 
-      // Call the real API via instructorService
-      const createdGroup = await instructorService.createSimulationGroup(data);
+      // Create new group object
+      const tempId = `group-${Date.now()}`;
+      const newGroup: InstructorSimulationGroup = {
+        simulation_group_id: tempId,
+        name: data.name,
+        subtitle: 'Medical Simulation Group',
+        icon_color: getSimulationGroupColor(groups.length),
+        access_code: await mockInstructorDataService.generateAccessCode(tempId),
+        student_count: 0,
+        instructor_count: data.instructors.split(',').map(i => i.trim()).filter(i => i).length,
+        patient_count: 0,
+        organization_id: ''
+      };
 
-      // Add the real group from backend to state
-      setGroups(prevGroups => [...prevGroups, createdGroup]);
+      // Add to state
+      setGroups(prevGroups => [...prevGroups, newGroup]);
 
-      // Close the dialog
-      setIsCreateDialogOpen(false);
+      // Future: Call API to create group
+      // const createdGroup = await api.createGroup(data);
+      // setGroups(prevGroups => [...prevGroups, createdGroup]);
     } catch (error) {
       console.error('Error creating group:', error);
       // TODO: Show error toast to user
@@ -109,7 +121,7 @@ function AdminOrganizationPage() {
   const handleDeleteGroup = (groupId: string) => {
     try {
       const group = groups.find(g => g.simulation_group_id === groupId);
-      const groupName = group ? group.group_name : 'this simulation group';
+      const groupName = group ? group.name : 'this simulation group';
       
       // Show confirmation alert
       const confirmed = window.confirm(`Are you sure you want to delete ${groupName}? This action cannot be undone.`);
@@ -125,11 +137,23 @@ function AdminOrganizationPage() {
     }
   };
 
+  const handleManageQuestionBank = () => {
+    try {
+      console.log('Navigate to question bank management');
+      // Navigate to question bank page for this organization
+      navigate(`/admin/organization/${organizationId}/question-bank`);
+    } catch (error) {
+      console.error('Error navigating to question bank:', error);
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg text-gray-500">Loading...</div>
-      </div>
+      <PageContainer>
+        <div className="flex items-center justify-center h-full">
+          <p style={{ color: UI_COLORS.text.muted }}>Loading...</p>
+        </div>
+      </PageContainer>
     );
   }
 
@@ -143,6 +167,8 @@ function AdminOrganizationPage() {
         onSignOut={handleSignOut}
         showStudentViewButton={true}
         onStudentView={() => navigate('/student')}
+        showManageQuestionBankButton={true}
+        onManageQuestionBank={handleManageQuestionBank}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Back to All Organizations button */}
@@ -171,9 +197,9 @@ function AdminOrganizationPage() {
           showDeleteButton={true}
           onDeleteGroup={handleDeleteGroup}
           countLabels={{
-            students: organization?.userRole || 'Students',
+            students: organization?.user_role || 'Students',
             instructors: 'Instructors',
-            patients: organization?.aiPersona || 'Patients'
+            patients: organization?.ai_persona || 'Patients'
           }}
         />
       </main>

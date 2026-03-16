@@ -2,26 +2,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { useAuth } from '@/App';
-import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight } from 'lucide-react';
+import { mockDataService, type StudentChatMessage as Message } from '@/services/studentService';
+import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
-
-// Message interface matching database schema
-interface Message {
-  message_id: string;
-  chat_id: string;
-  student_sent: boolean;
-  message_content: string;
-  time_sent: string;
-  quality_score?: number;
-  quality_feedback?: string;
-  suggested_rewrite?: string;
-}
+import { useAuth } from '@/App';
 
 /**
  * StudentChatPage Component
@@ -36,16 +25,14 @@ function StudentChatPage() {
   const { user: authUser } = useAuth();
   const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
-  // Mock patient data
-  const patient = {
-    id: patientId,
-    name: 'Pamela',
-    age: 56,
-    gender: 'Female',
-    imageUrl: undefined as string | undefined,
-    // Future: Add patient image URL from backend
-    // imageUrl: 'https://s3.amazonaws.com/bucket/patients/pamela.jpg',
-  };
+  // Load patient data from mock data service
+  const patient = mockDataService.getPatientDetail(patientId);
+
+  // Load case materials from mock data service
+  const caseMaterials = mockDataService.getCaseMaterials();
+
+  // Load patient files from mock data service
+  const patientFiles = mockDataService.getPatientFiles();
 
   // State for dialogs
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
@@ -54,6 +41,9 @@ function StudentChatPage() {
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
+
+  // State for patient information sidebar
+  const [isPatientInfoSidebarOpen, setIsPatientInfoSidebarOpen] = useState(false);
 
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
@@ -91,31 +81,6 @@ function StudentChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Mock case materials data - will be replaced with backend data
-  const caseMaterials = [
-    {
-      id: '1',
-      title: 'Initial Triage Vital Signs',
-      description: 'Recorded upon arrival to clinic.',
-      type: 'image' as const,
-      group: 'Vital Signs',
-    },
-    {
-      id: '2',
-      title: '12-Lead Electrocardiogram (ECG)',
-      description: 'Standard 12-lead ECG performed during assessment to evaluate cardiac rhythm and possible ischemic changes.',
-      type: 'image' as const,
-      group: 'Diagnostic Tests',
-    },
-    {
-      id: '3',
-      title: 'Lung Auscultation Recording',
-      description: 'Audio recording of lung sounds to evaluate respiratory status.',
-      type: 'video' as const,
-      group: 'Physical Examination',
-    },
-  ];
-
   // Memoize grouped case materials to avoid recomputing on every render
   const groupedCaseMaterials = useMemo(() => {
     return caseMaterials.reduce((acc, material) => {
@@ -126,18 +91,6 @@ function StudentChatPage() {
       return acc;
     }, {} as Record<string, typeof caseMaterials>);
   }, [caseMaterials]);
-
-  // Mock patient information files - will be replaced with S3 data
-  const patientFiles = [
-    {
-      id: '1',
-      filename: 'Patient_Information_Upload_Pamela.pdf',
-      description: 'No description available',
-      // Future S3 integration:
-      // s3Key: 'patients/123/Patient_Information_Upload_Pamela.pdf',
-      // s3Url: 'https://bucket.s3.amazonaws.com/...',
-    },
-  ];
 
   /**
    * Handle sign out event
@@ -348,10 +301,10 @@ function StudentChatPage() {
               style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-              onClick={() => setContentSidebarType('physical-assessment')}
+              onClick={() => setIsPatientInfoSidebarOpen(true)}
             >
-              <Stethoscope className="w-5 h-5 mr-2" />
-              Physical Assessment
+              <User className="w-5 h-5 mr-2" />
+              Patient Information
             </Button>
             <Button
               variant="outline"
@@ -359,10 +312,10 @@ function StudentChatPage() {
               style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-              onClick={() => setIsPatientInfoOpen(true)}
+              onClick={() => setContentSidebarType('physical-assessment')}
             >
-              <User className="w-5 h-5 mr-2" />
-              Patient Information
+              <Stethoscope className="w-5 h-5 mr-2" />
+              Physical Assessment
             </Button>
             <Button
               variant="outline"
@@ -382,6 +335,54 @@ function StudentChatPage() {
               <Flag className="w-5 h-5 mr-2" />
               Report Issue
             </Button>
+          </div>
+        </aside>
+
+        {/* Patient Information Sidebar - Slides from right of notes sidebar */}
+        <aside 
+          className="flex flex-col transition-all duration-300 ease-in-out flex-shrink-0"
+          aria-hidden={!isPatientInfoSidebarOpen}
+          style={{ 
+            backgroundColor: UI_COLORS.background.white, 
+            borderRightWidth: isPatientInfoSidebarOpen ? '1px' : '0px', 
+            borderRightStyle: 'solid', 
+            borderRightColor: UI_COLORS.border.default,
+            width: isPatientInfoSidebarOpen ? '20rem' : '0rem',
+            minWidth: isPatientInfoSidebarOpen ? '20rem' : '0rem',
+            overflowY: isPatientInfoSidebarOpen ? 'auto' : 'hidden',
+            overflowX: 'hidden',
+            opacity: isPatientInfoSidebarOpen ? 1 : 0,
+            pointerEvents: isPatientInfoSidebarOpen ? 'auto' : 'none',
+          }}
+        >
+          {/* Header with close button */}
+          {isPatientInfoSidebarOpen && (
+            <div className="p-4 flex items-center justify-between flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+              <h2 className="font-semibold text-lg whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>
+                Patient Information
+              </h2>
+              <button
+                onClick={() => setIsPatientInfoSidebarOpen(false)}
+                className="p-2 rounded-lg transition-colors"
+                style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                aria-label="Close patient information sidebar"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+            </div>
+          )}
+
+          {/* Content Area - Empty for now */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {isPatientInfoSidebarOpen && (
+              <div className="space-y-4">
+                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                  Patient information content will be displayed here.
+                </p>
+              </div>
+            )}
           </div>
         </aside>
 

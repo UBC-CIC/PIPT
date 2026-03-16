@@ -1,13 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Stethoscope, Heart, Thermometer, Eye, Ear, Activity } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
-
-interface AssessmentActivity {
-  id: string;
-  name: string;
-  category: string;
-  icon: 'stethoscope' | 'heart' | 'thermometer' | 'eye' | 'ear' | 'activity';
-}
+import { mockDataService, type AssessmentActivity } from '@/services/studentService';
 
 interface PhysicalAssessmentDialogProps {
   isOpen: boolean;
@@ -23,17 +17,8 @@ function PhysicalAssessmentDialog({ isOpen, onClose }: PhysicalAssessmentDialogP
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Mock assessment activities - will be replaced with backend data
-  const assessmentActivities: AssessmentActivity[] = [
-    { id: '1', name: 'Auscultate Heart Sounds', category: 'Cardiovascular', icon: 'heart' },
-    { id: '2', name: 'Auscultate Lung Sounds', category: 'Respiratory', icon: 'stethoscope' },
-    { id: '3', name: 'Check Blood Pressure', category: 'Vital Signs', icon: 'activity' },
-    { id: '4', name: 'Measure Temperature', category: 'Vital Signs', icon: 'thermometer' },
-    { id: '5', name: 'Examine Pupils', category: 'Neurological', icon: 'eye' },
-    { id: '6', name: 'Otoscopic Examination', category: 'HEENT', icon: 'ear' },
-    { id: '7', name: 'Palpate Abdomen', category: 'Abdominal', icon: 'activity' },
-    { id: '8', name: 'Check Peripheral Pulses', category: 'Cardiovascular', icon: 'heart' },
-  ];
+  // Load assessment activities from mock data service
+  const assessmentActivities = mockDataService.getAssessmentActivities();
 
   useEffect(() => {
     if (!isOpen) return;

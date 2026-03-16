@@ -3,14 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { useAuth } from '@/App';
-import { useState, useEffect } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { useEffect, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { useAuth } from '@/App';
 
 /**
  * InstructorSimulationGroupPage Component
@@ -25,6 +26,8 @@ function InstructorSimulationGroupPage() {
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
+  const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
+  const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
@@ -53,10 +56,24 @@ function InstructorSimulationGroupPage() {
   // Question Bank state
   const [questionBankTab, setQuestionBankTab] = useState<'global' | 'patientSpecific'>('global');
   const [includedQuestionIds, setIncludedQuestionIds] = useState<Set<string>>(new Set());
+  const [pendingQuestionIds, setPendingQuestionIds] = useState<Set<string>>(new Set());
   const [isAddQuestionDialogOpen, setIsAddQuestionDialogOpen] = useState(false);
   const [isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen] = useState(false);
-  const [addQuestionType, setAddQuestionType] = useState<'global' | 'patientSpecific'>('global');
+  const [addQuestionType] = useState<'global' | 'patientSpecific'>('global');
   const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
+  const [globalQuestionSearchQuery, setGlobalQuestionSearchQuery] = useState('');
+  const [patientQuestionSearchQuery, setPatientQuestionSearchQuery] = useState('');
+  
+  // Pagination state for Question Bank
+  const [globalPagination, setGlobalPagination] = useState({
+    currentPage: 1,
+    itemsPerPage: 5
+  });
+  
+  const [patientPagination, setPatientPagination] = useState({
+    currentPage: 1,
+    itemsPerPage: 5
+  });
   
   // Question Bank questions - loaded from service
   const [globalBankQuestions] = useState(() => 
@@ -71,14 +88,8 @@ function InstructorSimulationGroupPage() {
   const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() => 
     selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : []
   );
-  const [selectedCaseQuestionId, setSelectedCaseQuestionId] = useState<string>(() => {
-    const questions = selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : [];
-    return questions[0]?.id || '';
-  });
   const [caseQuestionSearchQuery, setCaseQuestionSearchQuery] = useState('');
-  
-  // Get selected case question
-  const selectedCaseQuestion = caseSpecificQuestions.find(q => q.id === selectedCaseQuestionId);
+  const [globalRubricSearchQuery, setGlobalRubricSearchQuery] = useState('');
   
   // Filter case questions based on search
   const filteredCaseQuestions = caseSpecificQuestions.filter(q =>
@@ -160,19 +171,35 @@ function InstructorSimulationGroupPage() {
   }, [groupId]);
   
   // State for selected patient
-  const [selectedPatientId, setSelectedPatientId] = useState<string>(
-    patientAnalytics.length > 0 ? patientAnalytics[0].id : ''
-  );
+  const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
   
   // Get current patient data
   const currentPatient = patientAnalytics.find(p => p.id === selectedPatientId);
   const messageCountData = currentPatient 
-    ? instructorService.getMessageCountData(selectedPatientId)
+    ? [
+        { name: 'Student Messages', value: currentPatient.studentMessageCount },
+        { name: 'AI Messages', value: currentPatient.aiMessageCount },
+      ]
+    : [];
+  const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
+  const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
+  
+  // Key question analytics (per patient)
+  const keyQuestionAnalytics = currentPatient
+    ? instructorService.getKeyQuestionAnalytics(groupId || '1')
+    : [];
+  
+  // Question performance scores
+  const questionPerformanceScores = instructorService.getQuestionPerformanceScores(groupId || '1');
+  
+  // Score distribution for current patient
+  const scoreDistribution = currentPatient 
+    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.id)
     : [];
   
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
-  const accessCode = simulationGroup?.accessCode || 'XXXX-XXXX-XXXX-XXXX';
+  const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
   
   // Filter patients based on search query (user searches by name, but ID is the unique identifier)
   const filteredPatients = manageablePatients.filter(patient =>
@@ -275,7 +302,11 @@ function InstructorSimulationGroupPage() {
       // Load case-specific questions and materials
       const questions = instructorService.getCaseSpecificQuestions(patientId);
       setCaseSpecificQuestions(questions);
-      setSelectedCaseQuestionId(questions[0]?.id || '');
+      
+      // Initialize includedQuestionIds with the patient's current questions
+      const questionIds = instructorService.getPatientCaseSpecificQuestionIds(patientId);
+      setIncludedQuestionIds(questionIds);
+      setPendingQuestionIds(new Set(questionIds));
       
       const materials = instructorService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
@@ -421,47 +452,6 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle update case-specific question field
-   */
-  const handleUpdateCaseQuestionField = (field: keyof GlobalRubricQuestion, value: string | boolean) => {
-    if (!selectedCaseQuestionId) return;
-    setCaseSpecificQuestions(caseSpecificQuestions.map(q => 
-      q.id === selectedCaseQuestionId ? { ...q, [field]: value } : q
-    ));
-  };
-
-
-  /**
-   * Handle delete case-specific question
-   */
-  const handleDeleteCaseQuestion = () => {
-    if (!selectedCaseQuestionId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to delete this question?')) {
-      instructorService.deleteCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestionId);
-      const updatedQuestions = instructorService.getCaseSpecificQuestions(selectedPatientForEdit);
-      setCaseSpecificQuestions(updatedQuestions);
-      setSelectedCaseQuestionId(updatedQuestions[0]?.id || '');
-      
-      // Update the question bank checkmark if this patient is selected in question bank
-      if (selectedPatientForQuestionBank === selectedPatientForEdit) {
-        const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForEdit);
-        setIncludedQuestionIds(questionIds);
-      }
-      
-      // Note: The question remains in the question bank, just disassociated from this patient
-    }
-  };
-
-  /**
-   * Handle save case-specific question changes
-   */
-  const handleSaveCaseQuestion = () => {
-    if (!selectedCaseQuestion || !selectedPatientForEdit) return;
-    instructorService.updateCaseSpecificQuestion(selectedPatientForEdit, selectedCaseQuestion);
-    console.log('Saving case-specific question:', selectedCaseQuestion);
-    // TODO: API call to save question
-  };
-
   /**
    * Handle update case material field
    */
@@ -490,18 +480,7 @@ function InstructorSimulationGroupPage() {
     setSelectedMaterialId(newMaterial.id);
   };
 
-  /**
-   * Handle delete case material
-   */
-  const handleDeleteCaseMaterial = () => {
-    if (!selectedMaterialId || !selectedPatientForEdit) return;
-    if (confirm('Are you sure you want to delete this material?')) {
-      instructorService.deleteCaseMaterial(selectedPatientForEdit, selectedMaterialId);
-      const updatedMaterials = instructorService.getCaseMaterials(selectedPatientForEdit);
-      setCaseMaterials(updatedMaterials);
-      setSelectedMaterialId(updatedMaterials[0]?.id || '');
-    }
-  };
+
 
   /**
    * Handle save case material changes
@@ -585,7 +564,7 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle toggle question inclusion in rubric
+   * Handle toggle question inclusion in rubric (called only on confirm)
    */
   const handleToggleQuestionInclusion = (questionId: string, bankQuestion: any, isChecked: boolean) => {
     const newSet = new Set(includedQuestionIds);
@@ -624,11 +603,171 @@ function InstructorSimulationGroupPage() {
     setIncludedQuestionIds(newSet);
   };
 
+  /**
+   * Handle toggling a pending checkbox (does NOT apply to rubric immediately)
+   */
+  const handleTogglePendingQuestion = (questionId: string) => {
+    setPendingQuestionIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questionId)) {
+        newSet.delete(questionId);
+      } else {
+        newSet.add(questionId);
+      }
+      return newSet;
+    });
+  };
+
+  /**
+   * Confirm pending selection changes and apply to rubric
+   */
+  const handleConfirmSelections = () => {
+    const allBankQuestions = questionBankTab === 'global' ? globalBankQuestions : patientSpecificBankQuestions;
+    
+    if (questionBankTab === 'global') {
+      // Find newly added IDs (in pending but not in included)
+      pendingQuestionIds.forEach(id => {
+        if (!includedQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) handleToggleQuestionInclusion(id, bankQ, true);
+        }
+      });
+      // Find removed IDs (in included but not in pending)
+      includedQuestionIds.forEach(id => {
+        if (!pendingQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) handleToggleQuestionInclusion(id, bankQ, false);
+        }
+      });
+    } else if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank) {
+      // Handle patient-specific confirmation
+      pendingQuestionIds.forEach(id => {
+        if (!includedQuestionIds.has(id)) {
+          const bankQ = allBankQuestions.find(q => q.id === id);
+          if (bankQ) {
+            // Add to patient's case-specific questions
+            const newCaseQuestion: GlobalRubricQuestion = {
+              id: bankQ.id,
+              title: bankQ.title,
+              keyQuestion: bankQ.questionText,
+              clinicalIntent: bankQ.clinicalIntent,
+              evaluationCriteria: bankQ.evaluationCriteria,
+              required: bankQ.isMandatory,
+            };
+            instructorService.addCaseSpecificQuestion(selectedPatientForQuestionBank, newCaseQuestion);
+            if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+              setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank));
+            }
+          }
+        }
+      });
+      includedQuestionIds.forEach(id => {
+        if (!pendingQuestionIds.has(id)) {
+          instructorService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank, id);
+          if (selectedPatientForEdit === selectedPatientForQuestionBank) {
+            setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank));
+          }
+        }
+      });
+    }
+    
+    setIncludedQuestionIds(new Set(pendingQuestionIds));
+  };
+
+  /**
+   * Reset pending selections back to current included state
+   */
+  const handleResetSelections = () => {
+    setPendingQuestionIds(new Set(includedQuestionIds));
+  };
+
+  // Calculate if there are pending changes
+  const hasPendingChanges = (() => {
+    if (pendingQuestionIds.size !== includedQuestionIds.size) return true;
+    for (const id of pendingQuestionIds) {
+      if (!includedQuestionIds.has(id)) return true;
+    }
+    return false;
+  })();
+
+  const pendingAddCount = [...pendingQuestionIds].filter(id => !includedQuestionIds.has(id)).length;
+  const pendingRemoveCount = [...includedQuestionIds].filter(id => !pendingQuestionIds.has(id)).length;
+
+  /**
+   * Pagination helper: Get paginated questions
+   */
+  const getPaginatedQuestions = (questions: QuestionBankItem[], currentPage: number, itemsPerPage: number) => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return questions.slice(startIndex, endIndex);
+  };
+
+  /**
+   * Pagination helper: Calculate total pages
+   */
+  const getTotalPages = (totalItems: number, itemsPerPage: number) => {
+    return Math.ceil(totalItems / itemsPerPage);
+  };
+
+  /**
+   * Handle page change for global questions
+   */
+  const handleGlobalPageChange = (newPage: number) => {
+    setGlobalPagination(prev => ({ ...prev, currentPage: newPage }));
+  };
+
+  /**
+   * Handle page change for patient-specific questions
+   */
+  const handlePatientPageChange = (newPage: number) => {
+    setPatientPagination(prev => ({ ...prev, currentPage: newPage }));
+  };
+
+  /**
+   * Handle items per page change for global questions
+   */
+  const handleGlobalItemsPerPageChange = (newItemsPerPage: number) => {
+    setGlobalPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+  };
+
+  /**
+   * Handle items per page change for patient-specific questions
+   */
+  const handlePatientItemsPerPageChange = (newItemsPerPage: number) => {
+    setPatientPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+  };
+
+  // Get paginated questions for current view
+  const filteredGlobalQuestions = globalBankQuestions.filter(q =>
+    q.title.toLowerCase().includes(globalQuestionSearchQuery.toLowerCase())
+  );
+  
+  const filteredPatientQuestions = patientSpecificBankQuestions.filter(q =>
+    q.title.toLowerCase().includes(patientQuestionSearchQuery.toLowerCase())
+  );
+  
+  const paginatedGlobalQuestions = getPaginatedQuestions(
+    filteredGlobalQuestions,
+    globalPagination.currentPage,
+    globalPagination.itemsPerPage
+  );
+
+  const paginatedPatientQuestions = getPaginatedQuestions(
+    filteredPatientQuestions,
+    patientPagination.currentPage,
+    patientPagination.itemsPerPage
+  );
+
+  const globalTotalPages = getTotalPages(filteredGlobalQuestions.length, globalPagination.itemsPerPage);
+  const patientTotalPages = getTotalPages(filteredPatientQuestions.length, patientPagination.itemsPerPage);
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg text-gray-500">Loading...</div>
-      </div>
+      <PageContainer>
+        <div className="flex items-center justify-center h-full">
+          <p style={{ color: UI_COLORS.text.muted }}>Loading...</p>
+        </div>
+      </PageContainer>
     );
   }
 
@@ -768,7 +907,7 @@ function InstructorSimulationGroupPage() {
             }}
           >
             <FileText className="w-5 h-5" />
-            Global Rubric
+            Global Key Questions
           </Button>
 
           <Button
@@ -781,13 +920,16 @@ function InstructorSimulationGroupPage() {
                 const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                 const questionIds = new Set(globalRubric.map(q => q.id));
                 setIncludedQuestionIds(questionIds);
+                setPendingQuestionIds(new Set(questionIds));
               } else if (selectedPatientForQuestionBank) {
                 // Get IDs of questions already in patient's case-specific rubric
                 const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                 setIncludedQuestionIds(questionIds);
+                setPendingQuestionIds(new Set(questionIds));
               } else {
                 // No patient selected, clear checkmarks
                 setIncludedQuestionIds(new Set());
+                setPendingQuestionIds(new Set());
               }
             }}
             variant="ghost"
@@ -863,8 +1005,20 @@ function InstructorSimulationGroupPage() {
                 {simulationGroupName}
               </h2>
 
-              {/* Patient Tabs */}
+              {/* Tabs: Overview + Patient Tabs */}
               <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                <button
+                  onClick={() => setSelectedPatientId('overview')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: selectedPatientId === 'overview' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: selectedPatientId === 'overview' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Overview
+                </button>
                 {patientAnalytics.map((patient) => (
                   <button
                     key={patient.id}
@@ -882,91 +1036,355 @@ function InstructorSimulationGroupPage() {
                 ))}
               </div>
 
-              {/* Patient Overview Section */}
+              {/* ===== OVERVIEW TAB ===== */}
+              {selectedPatientId === 'overview' && simulationGroup && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-3 gap-6">
+                    {/* Personas Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
+                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
+                    </div>
+                    {/* Students Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
+                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Students</p>
+                    </div>
+                    {/* Instructors Card */}
+                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
+                        <UserCog className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
+                      </div>
+                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Instructors</p>
+                    </div>
+                  </div>
+
+                  {/* Global Key Questions Answered — Horizontal Bar Graph */}
+                  <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                    <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Global Key Questions — Students Answered
+                    </h3>
+                    <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                      Number of students who answered each global key question across all personas
+                    </p>
+                    {(() => {
+                      const globalKeyQuestionData = instructorService.getKeyQuestionAnalytics(groupId || '1');
+                      return globalKeyQuestionData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionData.length * 50)}>
+                          <BarChart
+                            data={globalKeyQuestionData}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                            <XAxis 
+                              type="number" 
+                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                              axisLine={{ stroke: UI_COLORS.border.default }}
+                              allowDecimals={false}
+                            />
+                            <YAxis 
+                              type="category" 
+                              dataKey="questionTitle" 
+                              width={180}
+                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                              axisLine={{ stroke: UI_COLORS.border.default }}
+                            />
+                            <Tooltip 
+                              contentStyle={{ 
+                                backgroundColor: UI_COLORS.background.white,
+                                border: `1px solid ${UI_COLORS.border.default}`,
+                                borderRadius: '6px'
+                              }}
+                              formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                            />
+                            <Bar 
+                              dataKey="studentsAnswered" 
+                              fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                              radius={[0, 4, 4, 0]}
+                              barSize={28}
+                            />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Question Performance Scores — Horizontal Bar */}
+                  {questionPerformanceScores.length > 0 && (
+                    <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                      <div className="flex items-start justify-between mb-6">
+                        <div>
+                          <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Question Performance Scores
+                          </h3>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                            Average quality score per key question across all student responses
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
+                            Time Period:
+                          </label>
+                          <select
+                            value={questionPerformanceTimePeriod}
+                            onChange={(e) => setQuestionPerformanceTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
+                            className="px-3 py-2 rounded-lg border text-sm"
+                            style={{
+                              borderColor: UI_COLORS.border.default,
+                              backgroundColor: UI_COLORS.background.white,
+                              color: UI_COLORS.text.heading,
+                            }}
+                          >
+                            <option value="week">Last Week</option>
+                            <option value="month">Last Month</option>
+                            <option value="year">Last Year</option>
+                            <option value="all">All Time</option>
+                          </select>
+                        </div>
+                      </div>
+                      <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
+                        <BarChart
+                          data={questionPerformanceScores}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis 
+                            type="number" 
+                            domain={[0, 100]}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            tickFormatter={(val: number) => `${val}%`}
+                          />
+                          <YAxis 
+                            type="category" 
+                            dataKey="questionTitle" 
+                            width={180}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px'
+                            }}
+                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { totalResponses?: number } }) => [
+                              `${value ?? 0}% avg (${props.payload?.totalResponses ?? 0} responses)`,
+                              'Score'
+                            ]}
+                          />
+                          <Bar 
+                            dataKey="averageScore" 
+                            radius={[0, 4, 4, 0]}
+                            barSize={28}
+                          >
+                            {questionPerformanceScores.map((entry, index) => (
+                              <Cell 
+                                key={`perf-${index}`} 
+                                fill={
+                                  entry.averageScore >= 75 ? '#22c55e' :
+                                  entry.averageScore >= 55 ? '#eab308' :
+                                  '#ef4444'
+                                } 
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex items-center justify-center gap-6 mt-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (≥75%)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55–74%)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Needs Improvement (&lt;55%)</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ===== PER-PATIENT TAB ===== */}
               {currentPatient && (
               <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                 <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
                   {currentPatient.name} Overview
                 </h3>
 
-                {/* Progress Bars */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  {/* Instructor Completion Percentage */}
-                  <div>
-                    <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                      Instructor Completion Percentage:
-                    </p>
-                    <div className="w-full h-2 rounded-full mb-2" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                      <div 
-                        className="h-full rounded-full" 
-                        style={{ 
-                          width: `${currentPatient.instructorCompletionPercentage}%`,
-                          backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4]
-                        }}
-                      />
-                    </div>
-                    <p className="text-sm text-right" style={{ color: UI_COLORS.text.body }}>
-                      {currentPatient.instructorCompletionPercentage.toFixed(2)}%
-                    </p>
+                {/* Message Counts + Student Access */}
+                <div className="grid grid-cols-3 gap-6 mb-8">
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.studentMessageCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
                   </div>
-
-                  {/* LLM Completion Percentage */}
-                  <div>
-                    <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                      LLM Completion Percentage:
-                    </p>
-                    <div className="w-full h-2 rounded-full mb-2" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                      <div 
-                        className="h-full rounded-full" 
-                        style={{ 
-                          width: `${currentPatient.llmCompletionPercentage}%`,
-                          backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4]
-                        }}
-                      />
-                    </div>
-                    <p className="text-sm text-right" style={{ color: UI_COLORS.text.body }}>
-                      {currentPatient.llmCompletionPercentage.toFixed(2)}%
-                    </p>
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.aiMessageCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
+                  </div>
+                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.studentAccessCount}</p>
+                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
                   </div>
                 </div>
 
-                {/* Message Counts */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                  <div>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      Student Message Count: {currentPatient.studentMessageCount}
+                {/* Key Questions Answered — Horizontal Bar Graph (per persona) */}
+                {keyQuestionAnalytics.length > 0 && (
+                  <div className="mt-8">
+                    <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Key Questions — Students Answered
+                    </h4>
+                    <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                      Number of students who answered each key question for {currentPatient.name}
                     </p>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      AI Message Count: {currentPatient.aiMessageCount}
-                    </p>
+                    <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
+                      <BarChart
+                        data={keyQuestionAnalytics}
+                        layout="vertical"
+                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                        <XAxis 
+                          type="number" 
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          allowDecimals={false}
+                        />
+                        <YAxis 
+                          type="category" 
+                          dataKey="questionTitle" 
+                          width={180}
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: UI_COLORS.background.white,
+                            border: `1px solid ${UI_COLORS.border.default}`,
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                        />
+                        <Bar 
+                          dataKey="studentsAnswered" 
+                          fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                          radius={[0, 4, 4, 0]}
+                          barSize={28}
+                        />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
-                  <div>
-                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      Student Access Count: {currentPatient.studentAccessCount}
-                    </p>
-                  </div>
-                </div>
+                )}
 
-                {/* Bar Chart */}
+                {/* Donut Chart — Message Distribution */}
                 <div className="mt-8">
                   <h4 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                    Message Count
+                    Message Distribution
                   </h4>
-                  <ResponsiveContainer width="100%" height={400}>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <PieChart>
+                      <Pie
+                        data={messageCountData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={80}
+                        outerRadius={120}
+                        paddingAngle={4}
+                        dataKey="value"
+                        stroke="none"
+                      >
+                        {messageCountData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={donutColors[index % donutColors.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: UI_COLORS.background.white,
+                          border: `1px solid ${UI_COLORS.border.default}`,
+                          borderRadius: '6px'
+                        }}
+                        formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} messages`, name ?? '']}
+                      />
+                      <Legend 
+                        wrapperStyle={{ color: UI_COLORS.text.body }}
+                      />
+                      {/* Center text */}
+                      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.heading, fontSize: '28px', fontWeight: 700 }}>
+                        {totalMessages}
+                      </text>
+                      <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.muted, fontSize: '13px' }}>
+                        Total Messages
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Score Distribution — Histogram */}
+                <div className="mt-8">
+                  <div className="flex items-start justify-between mb-4">
+                    <div>
+                      <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Score Distribution
+                      </h4>
+                      <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                        Distribution of student scores for {currentPatient.name}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
+                        Time Period:
+                      </label>
+                      <select
+                        value={scoreDistributionTimePeriod}
+                        onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
+                        className="px-3 py-2 rounded-lg border text-sm"
+                        style={{
+                          borderColor: UI_COLORS.border.default,
+                          backgroundColor: UI_COLORS.background.white,
+                          color: UI_COLORS.text.heading,
+                        }}
+                      >
+                        <option value="week">Last Week</option>
+                        <option value="month">Last Month</option>
+                        <option value="year">Last Year</option>
+                        <option value="all">All Time</option>
+                      </select>
+                    </div>
+                  </div>
+                  <ResponsiveContainer width="100%" height={300}>
                     <BarChart
-                      data={messageCountData}
-                      margin={{ top: 20, right: 30, left: 20, bottom: 20 }}
-                      barSize={60}
+                      data={scoreDistribution}
+                      margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                      barSize={50}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                       <XAxis 
-                        dataKey="name" 
-                        tick={{ fill: UI_COLORS.text.body }}
+                        dataKey="range" 
+                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                         axisLine={{ stroke: UI_COLORS.border.default }}
+                        label={{ value: 'Score Range (%)', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
                       />
                       <YAxis 
-                        tick={{ fill: UI_COLORS.text.body }}
+                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                         axisLine={{ stroke: UI_COLORS.border.default }}
+                        allowDecimals={false}
+                        label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
                       />
                       <Tooltip 
                         contentStyle={{ 
@@ -974,20 +1392,25 @@ function InstructorSimulationGroupPage() {
                           border: `1px solid ${UI_COLORS.border.default}`,
                           borderRadius: '6px'
                         }}
-                      />
-                      <Legend 
-                        wrapperStyle={{ color: UI_COLORS.text.body }}
+                        formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Count']}
                       />
                       <Bar 
-                        dataKey="Student Messages" 
-                        fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
+                        dataKey="count" 
                         radius={[4, 4, 0, 0]}
-                      />
-                      <Bar 
-                        dataKey="AI Messages" 
-                        fill={SIMULATION_GROUP_COLOR_PALETTE[5]} 
-                        radius={[4, 4, 0, 0]}
-                      />
+                      >
+                        {scoreDistribution.map((_entry, index) => (
+                          <Cell 
+                            key={`dist-${index}`} 
+                            fill={[
+                              '#ef4444',  // 0-20: red
+                              '#f97316',  // 21-40: orange  
+                              '#eab308',  // 41-60: yellow
+                              '#22c55e',  // 61-80: green
+                              SIMULATION_GROUP_COLOR_PALETTE[2]  // 81-100: brand
+                            ][index] || SIMULATION_GROUP_COLOR_PALETTE[2]}
+                          />
+                        ))}
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -1220,7 +1643,7 @@ function InstructorSimulationGroupPage() {
                 <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
                   <div className="px-6 pt-6 pb-6">
                     <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                      GLOBAL RUBRIC
+                      GLOBAL KEY QUESTIONS
                     </h2>
                     <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
                       These questions apply to all patients in this simulation group.
@@ -1421,7 +1844,7 @@ function InstructorSimulationGroupPage() {
                           onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
                           onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
                         >
-                          Delete
+                          Remove
                         </Button>
                       </div>
                     </div>
@@ -1451,6 +1874,7 @@ function InstructorSimulationGroupPage() {
                       const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                       const questionIds = new Set(globalRubric.map(q => q.id));
                       setIncludedQuestionIds(questionIds);
+                      setPendingQuestionIds(new Set(questionIds));
                     }}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
                     style={{
@@ -1469,8 +1893,10 @@ function InstructorSimulationGroupPage() {
                       if (selectedPatientForQuestionBank) {
                         const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                         setIncludedQuestionIds(questionIds);
+                        setPendingQuestionIds(new Set(questionIds));
                       } else {
                         setIncludedQuestionIds(new Set());
+                        setPendingQuestionIds(new Set());
                       }
                     }}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
@@ -1494,53 +1920,210 @@ function InstructorSimulationGroupPage() {
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
                         Select which global questions should be included in this simulation group's rubric.
                       </p>
-                      {/* Global questions from question bank */}
-                      {globalBankQuestions.map((question) => (
-                        <div
-                          key={question.id}
-                          className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+                      
+                      {/* Search Bar */}
+                      <div className="relative mb-4">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                        <Input
+                          type="text"
+                          placeholder="Search global questions..."
+                          value={globalQuestionSearchQuery}
+                          onChange={(e) => setGlobalQuestionSearchQuery(e.target.value)}
+                          className="pl-10"
                           style={{
                             borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
                           }}
-                        >
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            {question.title}
-                          </span>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={includedQuestionIds.has(question.id)}
-                              onChange={(e) => handleToggleQuestionInclusion(question.id, question, e.target.checked)}
-                              className="w-5 h-5 rounded cursor-pointer"
-                              style={{
-                                accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                              }}
-                            />
-                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                              Include
-                            </span>
-                          </label>
-                        </div>
-                      ))}
+                        />
+                      </div>
                       
-                      {/* Add New Global Question Button */}
-                      <Button
-                        onClick={() => {
-                          setAddQuestionType('global');
-                          setIsAddQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Global Question
-                      </Button>
+                      {/* Pagination Info */}
+                      {filteredGlobalQuestions.length > 0 && (
+                        <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                          <span>
+                            Showing {((globalPagination.currentPage - 1) * globalPagination.itemsPerPage) + 1}-
+                            {Math.min(globalPagination.currentPage * globalPagination.itemsPerPage, filteredGlobalQuestions.length)} of {filteredGlobalQuestions.length} questions
+                          </span>
+                        </div>
+                      )}
+                      
+                      {/* Global questions from question bank */}
+                      <Accordion type="single" collapsible className="space-y-2">
+                        {paginatedGlobalQuestions.map((question) => (
+                          <AccordionItem 
+                            key={question.id} 
+                            value={question.id}
+                            style={{
+                              borderWidth: '1px',
+                              borderStyle: 'solid',
+                              borderColor: UI_COLORS.border.default,
+                              borderRadius: '0.5rem',
+                              overflow: 'hidden'
+                            }}
+                          >
+                            <AccordionTrigger 
+                              className="px-4 hover:no-underline"
+                              style={{ 
+                                backgroundColor: UI_COLORS.background.white,
+                                color: UI_COLORS.text.heading
+                              }}
+                            >
+                              <div className="flex items-center justify-between w-full pr-4">
+                                <span className="font-medium text-sm">
+                                  {question.title}
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                    {question.isMandatory ? 'Required' : 'Optional'}
+                                  </span>
+                                  <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="checkbox"
+                                      checked={pendingQuestionIds.has(question.id)}
+                                      onChange={() => handleTogglePendingQuestion(question.id)}
+                                      className="w-5 h-5 rounded cursor-pointer"
+                                      style={{
+                                        accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                      }}
+                                    />
+                                    <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                      Include
+                                    </span>
+                                  </label>
+                                </div>
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent 
+                              className="px-4 pb-4"
+                              style={{ backgroundColor: UI_COLORS.background.white }}
+                            >
+                              <div className="space-y-3 pt-3">
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
+                                  <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                  <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                  <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
+                                  <span 
+                                    className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                    style={{ 
+                                      backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
+                                      color: question.isMandatory ? '#166534' : '#6b7280'
+                                    }}
+                                  >
+                                    {question.isMandatory ? 'Required' : 'Optional'}
+                                  </span>
+                                </div>
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                      
+                      {/* Confirm / Reset Buttons */}
+                      <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                        <div className="flex items-center gap-3">
+                          <Button
+                            onClick={handleConfirmSelections}
+                            disabled={!hasPendingChanges}
+                            className="px-6 py-2 font-medium transition-colors"
+                            style={{ 
+                              backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                              color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
+                              cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
+                            }}
+                            onMouseEnter={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                            onMouseLeave={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+                          >
+                            Confirm Selections
+                          </Button>
+                          {hasPendingChanges && (
+                            <button
+                              onClick={handleResetSelections}
+                              className="text-sm font-medium transition-colors bg-transparent border-0 cursor-pointer p-0"
+                              style={{ color: UI_COLORS.text.muted }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                            >
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                        {hasPendingChanges && (
+                          <span className="text-xs" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>
+                            {pendingAddCount > 0 && `+${pendingAddCount} to add`}
+                            {pendingAddCount > 0 && pendingRemoveCount > 0 && ', '}
+                            {pendingRemoveCount > 0 && `${pendingRemoveCount} to remove`}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Pagination Controls */}
+                      {globalTotalPages > 1 && (
+                        <div className="flex items-center justify-between mt-4 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
+                            <select
+                              value={globalPagination.itemsPerPage}
+                              onChange={(e) => handleGlobalItemsPerPageChange(Number(e.target.value))}
+                              className="px-3 py-1 rounded border text-sm"
+                              style={{
+                                borderColor: UI_COLORS.border.default,
+                                backgroundColor: UI_COLORS.background.white,
+                                color: UI_COLORS.text.heading,
+                              }}
+                            >
+                              <option value={5}>5</option>
+                              <option value={10}>10</option>
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                            </select>
+                          </div>
+                          
+                          <div className="flex items-center gap-2">
+                            <Button
+                              onClick={() => handleGlobalPageChange(globalPagination.currentPage - 1)}
+                              disabled={globalPagination.currentPage === 1}
+                              variant="outline"
+                              className="px-3 py-1 text-sm"
+                              style={{
+                                opacity: globalPagination.currentPage === 1 ? 0.5 : 1,
+                                cursor: globalPagination.currentPage === 1 ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              Previous
+                            </Button>
+                            
+                            <span className="text-sm px-3" style={{ color: UI_COLORS.text.body }}>
+                              Page {globalPagination.currentPage} of {globalTotalPages}
+                            </span>
+                            
+                            <Button
+                              onClick={() => handleGlobalPageChange(globalPagination.currentPage + 1)}
+                              disabled={globalPagination.currentPage === globalTotalPages}
+                              variant="outline"
+                              className="px-3 py-1 text-sm"
+                              style={{
+                                opacity: globalPagination.currentPage === globalTotalPages ? 0.5 : 1,
+                                cursor: globalPagination.currentPage === globalTotalPages ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
 
@@ -1560,11 +2143,15 @@ function InstructorSimulationGroupPage() {
                           onChange={(e) => {
                             const patientId = e.target.value || null;
                             setSelectedPatientForQuestionBank(patientId);
+                            // Reset pagination when changing patient
+                            setPatientPagination({ currentPage: 1, itemsPerPage: patientPagination.itemsPerPage });
                             if (patientId) {
                               const questionIds = instructorService.getPatientCaseSpecificQuestionIds(patientId);
                               setIncludedQuestionIds(questionIds);
+                              setPendingQuestionIds(new Set(questionIds));
                             } else {
                               setIncludedQuestionIds(new Set());
+                              setPendingQuestionIds(new Set());
                             }
                           }}
                           className="w-full px-4 py-2 rounded-lg border"
@@ -1583,92 +2170,217 @@ function InstructorSimulationGroupPage() {
                         </select>
                       </div>
                       
+                      {/* Search Bar */}
+                      <div className="relative mb-4">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                        <Input
+                          type="text"
+                          placeholder="Search patient-specific questions..."
+                          value={patientQuestionSearchQuery}
+                          onChange={(e) => setPatientQuestionSearchQuery(e.target.value)}
+                          className="pl-10"
+                          style={{
+                            borderColor: UI_COLORS.border.default,
+                          }}
+                        />
+                      </div>
+                      
                       {selectedPatientForQuestionBank ? (
                         <>
-                          {/* Patient-specific questions from question bank */}
-                          {patientSpecificBankQuestions.map((question) => (
-                            <div
-                              key={question.id}
-                              className="flex items-center justify-between p-4 rounded-lg border transition-colors"
-                              style={{
-                                borderColor: UI_COLORS.border.default,
-                                backgroundColor: UI_COLORS.background.white,
-                              }}
-                            >
-                              <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                {question.title}
+                          {/* Pagination Info */}
+                          {filteredPatientQuestions.length > 0 && (
+                            <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              <span>
+                                Showing {((patientPagination.currentPage - 1) * patientPagination.itemsPerPage) + 1}-
+                                {Math.min(patientPagination.currentPage * patientPagination.itemsPerPage, filteredPatientQuestions.length)} of {filteredPatientQuestions.length} questions
                               </span>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  checked={includedQuestionIds.has(question.id)}
-                                  onChange={(e) => {
-                                    const newSet = new Set(includedQuestionIds);
-                                    if (e.target.checked) {
-                                      newSet.add(question.id);
-                                      
-                                      // Add to patient's case-specific questions with full data
-                                      const newCaseQuestion: GlobalRubricQuestion = {
-                                        id: question.id,
-                                        title: question.title,
-                                        keyQuestion: question.questionText,
-                                        clinicalIntent: question.clinicalIntent,
-                                        evaluationCriteria: question.evaluationCriteria,
-                                        required: question.isMandatory,
-                                      };
-                                      instructorService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
-                                      
-                                      // Update case-specific questions if we're editing this patient
-                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                      }
-                                    } else {
-                                      newSet.delete(question.id);
-                                      
-                                      // Remove from patient's case-specific questions
-                                      instructorService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
-                                      
-                                      // Update case-specific questions if we're editing this patient
-                                      if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                        setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                      }
-                                    }
-                                    setIncludedQuestionIds(newSet);
-                                  }}
-                                  className="w-5 h-5 rounded cursor-pointer"
-                                  style={{
-                                    accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
-                                  }}
-                                />
-                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                                  Include
-                                </span>
-                              </label>
                             </div>
-                          ))}
+                          )}
+                          
+                          {/* Patient-specific questions from question bank */}
+                          <Accordion type="single" collapsible className="space-y-2">
+                            {paginatedPatientQuestions.map((question) => (
+                              <AccordionItem 
+                                key={question.id} 
+                                value={question.id}
+                                style={{
+                                  borderWidth: '1px',
+                                  borderStyle: 'solid',
+                                  borderColor: UI_COLORS.border.default,
+                                  borderRadius: '0.5rem',
+                                  overflow: 'hidden'
+                                }}
+                              >
+                                <AccordionTrigger 
+                                  className="px-4 hover:no-underline"
+                                  style={{ 
+                                    backgroundColor: UI_COLORS.background.white,
+                                    color: UI_COLORS.text.heading
+                                  }}
+                                >
+                                  <div className="flex items-center justify-between w-full pr-4">
+                                    <span className="font-medium text-sm">
+                                      {question.title}
+                                    </span>
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                        {question.isMandatory ? 'Required' : 'Optional'}
+                                      </span>
+                                      <label className="flex items-center gap-2 cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                                        <input
+                                          type="checkbox"
+                                          checked={pendingQuestionIds.has(question.id)}
+                                          onChange={() => handleTogglePendingQuestion(question.id)}
+                                          className="w-5 h-5 rounded cursor-pointer"
+                                          style={{
+                                            accentColor: SIMULATION_GROUP_COLOR_PALETTE[2],
+                                          }}
+                                        />
+                                        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                          Include
+                                        </span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent 
+                                  className="px-4 pb-4"
+                                  style={{ backgroundColor: UI_COLORS.background.white }}
+                                >
+                                  <div className="space-y-3 pt-3">
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                      <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
+                                      <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                      <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                      <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
+                                      <span 
+                                        className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                        style={{ 
+                                          backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
+                                          color: question.isMandatory ? '#166534' : '#6b7280'
+                                        }}
+                                      >
+                                        {question.isMandatory ? 'Required' : 'Optional'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            ))}
+                          </Accordion>
+                          
+                          {/* Confirm / Reset Buttons */}
+                          <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                            <div className="flex items-center gap-3">
+                              <Button
+                                onClick={handleConfirmSelections}
+                                disabled={!hasPendingChanges}
+                                className="px-6 py-2 font-medium transition-colors"
+                                style={{ 
+                                  backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                                  color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
+                                  cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
+                                }}
+                                onMouseEnter={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                                onMouseLeave={(e) => hasPendingChanges && (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+                              >
+                                Confirm Selections
+                              </Button>
+                              {hasPendingChanges && (
+                                <button
+                                  onClick={handleResetSelections}
+                                  className="text-sm font-medium transition-colors bg-transparent border-0 cursor-pointer p-0"
+                                  style={{ color: UI_COLORS.text.muted }}
+                                  onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                                  onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                                >
+                                  Reset
+                                </button>
+                              )}
+                            </div>
+                            {hasPendingChanges && (
+                              <span className="text-xs" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>
+                                {pendingAddCount > 0 && `+${pendingAddCount} to add`}
+                                {pendingAddCount > 0 && pendingRemoveCount > 0 && ', '}
+                                {pendingRemoveCount > 0 && `${pendingRemoveCount} to remove`}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Pagination Controls */}
+                          {patientTotalPages > 1 && (
+                            <div className="flex items-center justify-between mt-4 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
+                                <select
+                                  value={patientPagination.itemsPerPage}
+                                  onChange={(e) => handlePatientItemsPerPageChange(Number(e.target.value))}
+                                  className="px-3 py-1 rounded border text-sm"
+                                  style={{
+                                    borderColor: UI_COLORS.border.default,
+                                    backgroundColor: UI_COLORS.background.white,
+                                    color: UI_COLORS.text.heading,
+                                  }}
+                                >
+                                  <option value={5}>5</option>
+                                  <option value={10}>10</option>
+                                  <option value={25}>25</option>
+                                  <option value={50}>50</option>
+                                </select>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  onClick={() => handlePatientPageChange(patientPagination.currentPage - 1)}
+                                  disabled={patientPagination.currentPage === 1}
+                                  variant="outline"
+                                  className="px-3 py-1 text-sm"
+                                  style={{
+                                    opacity: patientPagination.currentPage === 1 ? 0.5 : 1,
+                                    cursor: patientPagination.currentPage === 1 ? 'not-allowed' : 'pointer',
+                                  }}
+                                >
+                                  Previous
+                                </Button>
+                                
+                                <span className="text-sm px-3" style={{ color: UI_COLORS.text.body }}>
+                                  Page {patientPagination.currentPage} of {patientTotalPages}
+                                </span>
+                                
+                                <Button
+                                  onClick={() => handlePatientPageChange(patientPagination.currentPage + 1)}
+                                  disabled={patientPagination.currentPage === patientTotalPages}
+                                  variant="outline"
+                                  className="px-3 py-1 text-sm"
+                                  style={{
+                                    opacity: patientPagination.currentPage === patientTotalPages ? 0.5 : 1,
+                                    cursor: patientPagination.currentPage === patientTotalPages ? 'not-allowed' : 'pointer',
+                                  }}
+                                >
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                           Please select a patient to manage their questions.
                         </p>
                       )}
-                      
-                      {/* Add New Patient-Specific Question Button */}
-                      <Button
-                        onClick={() => {
-                          setIsAddPatientQuestionDialogOpen(true);
-                        }}
-                        className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mt-4"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                      >
-                        <Plus className="w-5 h-5" />
-                        Add New Patient-Specific Question
-                      </Button>
                     </>
                   )}
                 </div>
@@ -2037,527 +2749,667 @@ Return valid JSON in exactly this structure:
                   )}
 
                   {editPatientTab === 'questions' && (
-                    <div className="flex h-full">
-                      {/* Question List Sidebar */}
-                      <aside 
-                        className="flex flex-col border-r overflow-y-auto"
-                        style={{ 
-                          backgroundColor: UI_COLORS.background.white, 
-                          borderRightWidth: '1px',
-                          borderRightStyle: 'solid',
-                          borderRightColor: UI_COLORS.border.default,
-                          width: '28rem',
-                          minWidth: '28rem',
-                        }}
-                      >
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto">
-                          {/* Case-Specific Questions Section */}
-                          <div className="px-6 pt-6 pb-4">
-                            <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                              RUBRIC
-                            </h2>
-                            <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              Click on a Key Question entry to edit/remove it.
-                            </p>
-                            
-                            {/* Search */}
-                            <div className="relative mb-4">
-                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
-                              <Input
-                                placeholder="Search Key Questions"
-                                value={caseQuestionSearchQuery}
-                                onChange={(e) => setCaseQuestionSearchQuery(e.target.value)}
-                                className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                    <div className="max-w-5xl mx-auto p-8 space-y-6">
+                      <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                        Case-Specific Key Questions
+                      </h2>
+
+                      {/* Search */}
+                      <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                        <Input
+                          placeholder="Search Key Questions"
+                          value={caseQuestionSearchQuery}
+                          onChange={(e) => setCaseQuestionSearchQuery(e.target.value)}
+                          className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        />
+                      </div>
+
+                      {/* Local Patient Specific Questions Section */}
+                      <div className="space-y-4">
+                        <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+                          Click on a Key Question entry to expand and edit it.
+                        </p>
+
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {filteredCaseQuestions.map((question, index) => (
+                            <AccordionItem 
+                              key={question.id} 
+                              value={question.id}
+                              style={{
+                                borderWidth: '1px',
+                                borderStyle: 'solid',
+                                borderColor: UI_COLORS.border.default,
+                                borderRadius: '0.5rem',
+                                overflow: 'hidden'
+                              }}
+                            >
+                              <AccordionTrigger 
+                                className="px-4 hover:no-underline"
                                 style={{ 
-                                  borderWidth: '1px', 
-                                  borderStyle: 'solid', 
-                                  borderColor: UI_COLORS.border.default,
-                                  backgroundColor: UI_COLORS.background.white
+                                  backgroundColor: UI_COLORS.background.white,
+                                  color: UI_COLORS.text.heading
                                 }}
-                              />
-                            </div>
-
-                            {/* Case-Specific Question List */}
-                            <div className="space-y-2">
-                              {filteredCaseQuestions.map((question, index) => (
-                                <button
-                                  key={question.id}
-                                  onClick={() => setSelectedCaseQuestionId(question.id)}
-                                  className="w-full text-left px-4 py-3 rounded-lg transition-colors"
-                                  style={{
-                                    backgroundColor: selectedCaseQuestionId === question.id ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
-                                    borderWidth: '1px',
-                                    borderStyle: 'solid',
-                                    borderColor: UI_COLORS.border.default,
-                                    cursor: 'pointer',
-                                  }}
-                                >
-                                  <p className="text-sm font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>
+                              >
+                                <div className="flex items-center justify-between w-full pr-4">
+                                  <span className="font-medium">
                                     Q{index + 1} - {question.title}
-                                  </p>
-                                  <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                                    [{question.required ? 'Required' : 'Optional'}]
-                                  </p>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          {/* Divider */}
-                          <div className="my-4 mx-6" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
-
-                          {/* Global Rubric Section */}
-                          <div className="px-6 pb-6">
-                            <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                              GLOBAL RUBRIC
-                            </h2>
-                            <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              The following global questions are shown for reference to prevent redundancy. Edit global questions from the Global Rubric tab.
-                            </p>
-
-                            {/* Global Question List */}
-                            <div className="space-y-2">
-                              {(() => {
-                                // Get the patient's simulation group ID
-                                const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
-                                // Load global rubric questions for the patient's simulation group
-                                const patientGlobalRubric = instructorService.getGlobalRubricQuestions(patientSimGroupId);
-                                return patientGlobalRubric.map((question, index) => (
-                                  <div
-                                    key={question.id}
-                                    className="w-full text-left px-4 py-3 rounded-lg"
-                                    style={{
-                                      backgroundColor: UI_COLORS.background.tableHeader,
-                                      borderWidth: '1px',
-                                      borderStyle: 'solid',
-                                      borderColor: UI_COLORS.border.default,
-                                      opacity: 0.7,
-                                    }}
-                                  >
-                                    <p className="text-sm font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>
-                                      Q{index + 1} - {question.title}
-                                    </p>
-                                    <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                                      [{question.required ? 'Required' : 'Optional'}]
-                                    </p>
+                                  </span>
+                                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                    {question.required ? 'Required' : 'Optional'}
+                                  </span>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent 
+                                className="px-4 pb-4"
+                                style={{ backgroundColor: UI_COLORS.background.white }}
+                              >
+                                <div className="space-y-4 pt-4">
+                                  {/* Title */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Title
+                                    </label>
+                                    <Input
+                                      value={question.title}
+                                      onChange={(e) => {
+                                        const updatedQuestions = caseSpecificQuestions.map(q =>
+                                          q.id === question.id ? { ...q, title: e.target.value } : q
+                                        );
+                                        setCaseSpecificQuestions(updatedQuestions);
+                                      }}
+                                      placeholder="Chest Pain Characterization"
+                                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white
+                                      }}
+                                    />
                                   </div>
-                                ));
-                              })()}
-                            </div>
-                          </div>
+
+                                  {/* Key Question */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Key Question
+                                    </label>
+                                    <textarea
+                                      value={question.keyQuestion}
+                                      onChange={(e) => {
+                                        const updatedQuestions = caseSpecificQuestions.map(q =>
+                                          q.id === question.id ? { ...q, keyQuestion: e.target.value } : q
+                                        );
+                                        setCaseSpecificQuestions(updatedQuestions);
+                                      }}
+                                      placeholder="Assess the characteristics of the patient's chest pain..."
+                                      className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        outlineColor: UI_COLORS.border.medium,
+                                        minHeight: '100px',
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Clinical Intent */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Clinical Intent
+                                    </label>
+                                    <textarea
+                                      value={question.clinicalIntent}
+                                      onChange={(e) => {
+                                        const updatedQuestions = caseSpecificQuestions.map(q =>
+                                          q.id === question.id ? { ...q, clinicalIntent: e.target.value } : q
+                                        );
+                                        setCaseSpecificQuestions(updatedQuestions);
+                                      }}
+                                      placeholder="This question evaluates the student's ability..."
+                                      className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        outlineColor: UI_COLORS.border.medium,
+                                        minHeight: '100px',
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Evaluation Criteria */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Evaluation Criteria
+                                    </label>
+                                    <textarea
+                                      value={question.evaluationCriteria}
+                                      onChange={(e) => {
+                                        const updatedQuestions = caseSpecificQuestions.map(q =>
+                                          q.id === question.id ? { ...q, evaluationCriteria: e.target.value } : q
+                                        );
+                                        setCaseSpecificQuestions(updatedQuestions);
+                                      }}
+                                      placeholder="The student attempts to identify at least 3-4 of the following..."
+                                      className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        outlineColor: UI_COLORS.border.medium,
+                                        minHeight: '150px',
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Required Toggle */}
+                                  <div className="flex items-center gap-3">
+                                    <button
+                                      type="button"
+                                      role="switch"
+                                      aria-checked={question.required}
+                                      onClick={() => {
+                                        const updatedQuestions = caseSpecificQuestions.map(q =>
+                                          q.id === question.id ? { ...q, required: !q.required } : q
+                                        );
+                                        setCaseSpecificQuestions(updatedQuestions);
+                                      }}
+                                      className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                                      style={{ 
+                                        backgroundColor: question.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
+                                      }}
+                                    >
+                                      <span
+                                        className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
+                                        style={{
+                                          transform: question.required ? 'translateX(22px)' : 'translateX(2px)'
+                                        }}
+                                      />
+                                    </button>
+                                    <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                                      Required for Case Completion
+                                    </span>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex items-center gap-4 pt-4">
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          instructorService.updateCaseSpecificQuestion(selectedPatientForEdit, question);
+                                        }
+                                      }}
+                                      className="px-8 py-3 text-base font-medium transition-colors"
+                                      style={{ 
+                                        backgroundColor: UI_COLORS.button.primary, 
+                                        color: UI_COLORS.button.text 
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          instructorService.deleteCaseSpecificQuestion(selectedPatientForEdit, question.id);
+                                          setCaseSpecificQuestions(caseSpecificQuestions.filter(q => q.id !== question.id));
+                                        }
+                                      }}
+                                      variant="outline"
+                                      className="px-8 py-3 text-base font-medium transition-colors text-white"
+                                      style={{ 
+                                        backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                        borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
+                      </div>
+
+                      {/* Divider */}
+                      <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
+
+                      {/* Global Key Questions Section */}
+                      <div className="space-y-4">
+                        <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
+                          GLOBAL KEY QUESTIONS
+                        </h3>
+                        <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+                          The following global questions are shown for reference to prevent redundancy. Edit global questions from the Global Rubric tab.
+                        </p>
+
+                        {/* Search Bar for Global Questions */}
+                        <div className="relative mb-6">
+                          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                          <Input
+                            placeholder="Search Global Questions"
+                            value={globalRubricSearchQuery}
+                            onChange={(e) => setGlobalRubricSearchQuery(e.target.value)}
+                            className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                            style={{ 
+                              borderWidth: '1px', 
+                              borderStyle: 'solid', 
+                              borderColor: UI_COLORS.border.default,
+                              backgroundColor: UI_COLORS.background.white
+                            }}
+                          />
                         </div>
-                      </aside>
 
-                      {/* Question Detail Area */}
-                      <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto p-0">
-                          {selectedCaseQuestion ? (
-                            <div className="max-w-4xl space-y-6 p-8">
-                              <h2 className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>
-                                Question {caseSpecificQuestions.findIndex(q => q.id === selectedCaseQuestionId) + 1}
-                              </h2>
-
-                              {/* Title */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Title
-                                </label>
-                                <Input
-                                  value={selectedCaseQuestion.title}
-                                  onChange={(e) => handleUpdateCaseQuestionField('title', e.target.value)}
-                                  placeholder="Chest Pain Characterization"
-                                  className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {(() => {
+                            const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
+                            const patientGlobalRubric = instructorService.getGlobalRubricQuestions(patientSimGroupId);
+                            const filteredGlobalRubric = patientGlobalRubric.filter(q =>
+                              q.title.toLowerCase().includes(globalRubricSearchQuery.toLowerCase())
+                            );
+                            return filteredGlobalRubric.map((question, index) => (
+                              <AccordionItem 
+                                key={question.id} 
+                                value={question.id}
+                                style={{
+                                  borderWidth: '1px',
+                                  borderStyle: 'solid',
+                                  borderColor: UI_COLORS.border.default,
+                                  borderRadius: '0.5rem',
+                                  overflow: 'hidden',
+                                  opacity: 0.7,
+                                }}
+                              >
+                                <AccordionTrigger 
+                                  className="px-4 hover:no-underline"
                                   style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white
-                                  }}
-                                />
-                              </div>
-
-                              {/* Key Question */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Key Question
-                                </label>
-                                <textarea
-                                  value={selectedCaseQuestion.keyQuestion}
-                                  onChange={(e) => handleUpdateCaseQuestionField('keyQuestion', e.target.value)}
-                                  placeholder="Assess the characteristics of the patient's chest pain, including onset, duration, severity, quality and radiation."
-                                  className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    outlineColor: UI_COLORS.border.medium,
-                                    minHeight: '100px',
-                                  }}
-                                />
-                              </div>
-
-                              {/* Clinical Intent */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Clinical Intent
-                                </label>
-                                <textarea
-                                  value={selectedCaseQuestion.clinicalIntent}
-                                  onChange={(e) => handleUpdateCaseQuestionField('clinicalIntent', e.target.value)}
-                                  placeholder="This question evaluates the student's ability to gather essential details about the chest pain that help differentiate between potentially life-threatening causes (e.g., cardiac ischemia), medication-related causes, gastrointestinal causes and musculoskeletal causes, and to support appropriate clinical decision-making and triage."
-                                  className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    outlineColor: UI_COLORS.border.medium,
-                                    minHeight: '100px',
-                                  }}
-                                />
-                              </div>
-
-                              {/* Evaluation Criteria */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Evaluation Criteria
-                                </label>
-                                <textarea
-                                  value={selectedCaseQuestion.evaluationCriteria}
-                                  onChange={(e) => handleUpdateCaseQuestionField('evaluationCriteria', e.target.value)}
-                                  placeholder="The student attempts to identify at least 3-4 of the following core characteristics of the chest pain:&#10;• When the pain started, whether the onset was sudden or gradual&#10;• Where the pain is located, localized or diffuse&#10;• Description of the pain (e.g., sharp, dull, pressure, burning, tightness)&#10;• Intensity of pain (e.g., pain scale or descriptive severity)&#10;• How long the pain lasts, whether it is constant or intermittent"
-                                  className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    outlineColor: UI_COLORS.border.medium,
-                                    minHeight: '150px',
-                                  }}
-                                />
-                              </div>
-
-                              {/* Required Toggle */}
-                              <div className="flex items-center gap-3">
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-checked={selectedCaseQuestion.required}
-                                  onClick={() => handleUpdateCaseQuestionField('required', !selectedCaseQuestion.required)}
-                                  className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                                  style={{ 
-                                    backgroundColor: selectedCaseQuestion.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
+                                    backgroundColor: UI_COLORS.background.tableHeader,
+                                    color: UI_COLORS.text.heading
                                   }}
                                 >
-                                  <span
-                                    className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                                    style={{
-                                      transform: selectedCaseQuestion.required ? 'translateX(22px)' : 'translateX(2px)'
-                                    }}
-                                  />
-                                </button>
-                                <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                                  Required for Case Completion
-                                </span>
-                              </div>
+                                  <div className="flex items-center justify-between w-full pr-4">
+                                    <span className="font-medium text-sm">
+                                      Q{index + 1} - {question.title}
+                                    </span>
+                                    <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                      {question.required ? 'Required' : 'Optional'}
+                                    </span>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent 
+                                  className="px-4 pb-4"
+                                  style={{ backgroundColor: UI_COLORS.background.white }}
+                                >
+                                  <div className="space-y-4 pt-4">
+                                    {/* Title */}
+                                    <div>
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                        Title
+                                      </label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base" style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.hoverLight,
+                                        color: UI_COLORS.text.body
+                                      }}>
+                                        {question.title}
+                                      </div>
+                                    </div>
 
-                              {/* Action Buttons */}
-                              <div className="flex items-center gap-4 pt-4">
-                                <Button
-                                  onClick={handleSaveCaseQuestion}
-                                  className="px-8 py-3 text-base font-medium transition-colors"
-                                  style={{ 
-                                    backgroundColor: UI_COLORS.button.primary, 
-                                    color: UI_COLORS.button.text 
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                                >
-                                  Save Changes
-                                </Button>
-                                <Button
-                                  onClick={handleDeleteCaseQuestion}
-                                  variant="outline"
-                                  className="px-8 py-3 text-base font-medium transition-colors text-white"
-                                  style={{ 
-                                    backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                    borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
-                              <p>Select a question to edit or create a new one</p>
-                            </div>
-                          )}
-                        </div>
+                                    {/* Key Question */}
+                                    <div>
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                        Key Question
+                                      </label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.hoverLight,
+                                        color: UI_COLORS.text.body,
+                                        minHeight: '150px',
+                                      }}>
+                                        {question.keyQuestion}
+                                      </div>
+                                    </div>
+
+                                    {/* Clinical Intent */}
+                                    <div>
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                        Clinical Intent
+                                      </label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.hoverLight,
+                                        color: UI_COLORS.text.body,
+                                        minHeight: '100px',
+                                      }}>
+                                        {question.clinicalIntent}
+                                      </div>
+                                    </div>
+
+                                    {/* Evaluation Criteria */}
+                                    <div>
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                        Evaluation Criteria
+                                      </label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.hoverLight,
+                                        color: UI_COLORS.text.body,
+                                        minHeight: '100px',
+                                      }}>
+                                        {question.evaluationCriteria}
+                                      </div>
+                                    </div>
+
+                                    {/* Required/Optional Display */}
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                                        {question.required ? 'Required for Case Completion' : 'Optional'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </AccordionContent>
+                              </AccordionItem>
+                            ));
+                          })()}
+                        </Accordion>
                       </div>
                     </div>
                   )}
 
                   {editPatientTab === 'materials' && (
-                    <div className="flex h-full">
-                      {/* Materials List Sidebar */}
-                      <aside 
-                        className="flex flex-col border-r overflow-y-auto"
-                        style={{ 
-                          backgroundColor: UI_COLORS.background.white, 
-                          borderRightWidth: '1px',
-                          borderRightStyle: 'solid',
-                          borderRightColor: UI_COLORS.border.default,
-                          width: '22rem',
-                          minWidth: '22rem',
-                        }}
-                      >
-                        {/* Header */}
-                        <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                          <div className="px-6 pt-6 pb-6">
-                            <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-                              Physical Assessment Materials List
-                            </h2>
-                            <p className="text-xs mb-4 italic" style={{ color: UI_COLORS.text.muted }}>
-                              Click on an entry to edit/delete the Physical Assessment Material.
-                            </p>
-                            
-                            {/* Search */}
-                            <div className="relative">
-                              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
-                              <Input
-                                placeholder="Search Materials"
-                                value={materialSearchQuery}
-                                onChange={(e) => setMaterialSearchQuery(e.target.value)}
-                                className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                                style={{ 
-                                  borderWidth: '1px', 
-                                  borderStyle: 'solid', 
-                                  borderColor: UI_COLORS.border.default,
-                                  backgroundColor: UI_COLORS.background.white
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </div>
+                    <div className="max-w-5xl mx-auto p-8 space-y-6">
+                      <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                        Physical Assessment Materials
+                      </h2>
 
-                        {/* Materials List */}
-                        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
+                      {/* Add New Material Button - At the top */}
+                      <div className="mb-6">
+                        <Button
+                          onClick={handleAddNewCaseMaterial}
+                          className="justify-start gap-2 py-2.5 h-auto font-medium transition-colors"
+                          style={{ 
+                            backgroundColor: UI_COLORS.button.primary, 
+                            color: UI_COLORS.button.text 
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                        >
+                          <Plus className="w-5 h-5" />
+                          Add new Material
+                        </Button>
+                      </div>
+
+                      {/* Search */}
+                      <div className="relative mb-6">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                        <Input
+                          placeholder="Search Materials"
+                          value={materialSearchQuery}
+                          onChange={(e) => setMaterialSearchQuery(e.target.value)}
+                          className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+                          style={{ 
+                            borderWidth: '1px', 
+                            borderStyle: 'solid', 
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white
+                          }}
+                        />
+                      </div>
+
+                      {/* Materials Accordion */}
+                      <div className="space-y-4">
+                        <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+                          Click on a Material entry to expand and edit it.
+                        </p>
+
+                        <Accordion type="single" collapsible className="space-y-2">
                           {filteredMaterials.map((material) => (
-                            <button
-                              key={material.id}
-                              onClick={() => setSelectedMaterialId(material.id)}
-                              className="w-full text-left px-4 py-3 rounded-lg transition-colors"
+                            <AccordionItem 
+                              key={material.id} 
+                              value={material.id}
                               style={{
-                                backgroundColor: selectedMaterialId === material.id ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
                                 borderWidth: '1px',
                                 borderStyle: 'solid',
                                 borderColor: UI_COLORS.border.default,
-                                cursor: 'pointer',
+                                borderRadius: '0.5rem',
+                                overflow: 'hidden'
                               }}
                             >
-                              <p className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                {material.title}
-                              </p>
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Add New Material Button */}
-                        <div style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
-                          <div className="p-6">
-                            <Button
-                              onClick={handleAddNewCaseMaterial}
-                              className="w-full justify-start gap-2 py-2.5 h-auto font-medium transition-colors"
-                              style={{ 
-                                backgroundColor: UI_COLORS.button.primary, 
-                                color: UI_COLORS.button.text 
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                            >
-                              <Plus className="w-5 h-5" />
-                              Add new Material
-                            </Button>
-                          </div>
-                        </div>
-                      </aside>
-
-                      {/* Material Detail Area */}
-                      <div className="flex-1 flex flex-col overflow-hidden">
-                        {/* Scrollable Content */}
-                        <div className="flex-1 overflow-y-auto p-0">
-                          {selectedMaterial ? (
-                            <div className="max-w-4xl space-y-6 p-8">
-                              <h2 className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>
-                                Edit Materials
-                              </h2>
-
-                              {/* Title */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Title
-                                </label>
-                                <Input
-                                  value={selectedMaterial.title}
-                                  onChange={(e) => handleUpdateMaterialField('title', e.target.value)}
-                                  placeholder="Chest X-Ray"
-                                  className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white
-                                  }}
-                                />
-                              </div>
-
-                              {/* Description */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Description
-                                </label>
-                                <textarea
-                                  value={selectedMaterial.description}
-                                  onChange={(e) => handleUpdateMaterialField('description', e.target.value)}
-                                  placeholder="Frontal chest radiograph obtained as part of the patient's clinical evaluation."
-                                  className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    outlineColor: UI_COLORS.border.medium,
-                                    minHeight: '80px',
-                                  }}
-                                />
-                              </div>
-
-                              {/* Material Type */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Material Type (Dropdown)
-                                </label>
-                                <select
-                                  value={selectedMaterial.materialType}
-                                  onChange={(e) => handleUpdateMaterialField('materialType', e.target.value)}
-                                  className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white,
-                                    outlineColor: UI_COLORS.border.medium,
-                                  }}
-                                >
-                                  <option value="image">Image</option>
-                                  <option value="video">Video</option>
-                                  <option value="document">Document</option>
-                                  <option value="audio">Audio</option>
-                                  <option value="other">Other</option>
-                                </select>
-                              </div>
-
-                              {/* Content Upload/Embed */}
-                              <div>
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Content Upload/Embed
-                                </label>
-                                <label className="cursor-pointer">
-                                  <input
-                                    type="file"
-                                    onChange={handleMaterialFileUpload}
-                                    className="hidden"
-                                  />
-                                  <div 
-                                    className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.primary,
-                                      color: UI_COLORS.button.text
-                                    }}
-                                  >
-                                    <Upload className="w-5 h-5" />
-                                    Upload File
-                                  </div>
-                                </label>
-
-                                <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>
-                                  OR
-                                </p>
-
-                                <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                  Enter H5P Embed Link
-                                </label>
-                                <Input
-                                  value={selectedMaterial.embedLink || ''}
-                                  onChange={(e) => handleUpdateMaterialField('embedLink', e.target.value)}
-                                  placeholder="Value"
-                                  className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                  style={{ 
-                                    borderWidth: '1px', 
-                                    borderStyle: 'solid', 
-                                    borderColor: UI_COLORS.border.default,
-                                    backgroundColor: UI_COLORS.background.white
-                                  }}
-                                />
-                              </div>
-
-                              {/* Preview */}
-                              <div 
-                                className="border rounded-lg p-8 flex flex-col items-center justify-center"
+                              <AccordionTrigger 
+                                className="px-4 hover:no-underline"
                                 style={{ 
-                                  borderColor: UI_COLORS.border.default,
-                                  minHeight: '200px'
+                                  backgroundColor: UI_COLORS.background.white,
+                                  color: UI_COLORS.text.heading
                                 }}
                               >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
-                                  <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                    Preview
+                                <div className="flex items-center justify-between w-full pr-4">
+                                  <span className="font-medium">
+                                    {material.title}
+                                  </span>
+                                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                                    {material.materialType}
                                   </span>
                                 </div>
-                                <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                                  Rendered preview here
-                                </p>
-                              </div>
+                              </AccordionTrigger>
+                              <AccordionContent 
+                                className="px-4 pb-4"
+                                style={{ backgroundColor: UI_COLORS.background.white }}
+                              >
+                                <div className="space-y-4 pt-4">
+                                  {/* Title */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Title
+                                    </label>
+                                    <Input
+                                      value={material.title}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, title: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Chest X-Ray"
+                                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white
+                                      }}
+                                    />
+                                  </div>
 
-                              {/* Action Buttons */}
-                              <div className="flex items-center gap-4 pt-4">
-                                <Button
-                                  onClick={handleSaveCaseMaterial}
-                                  className="px-8 py-3 text-base font-medium transition-colors"
-                                  style={{ 
-                                    backgroundColor: UI_COLORS.button.primary, 
-                                    color: UI_COLORS.button.text 
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                                >
-                                  Save Changes
-                                </Button>
-                                <Button
-                                  onClick={handleDeleteCaseMaterial}
-                                  variant="outline"
-                                  className="px-8 py-3 text-base font-medium transition-colors text-white"
-                                  style={{ 
-                                    backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                    borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                                  }}
-                                  onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                                  onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                                >
-                                  Delete
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
-                              <p>Select a material to edit or create a new one</p>
-                            </div>
-                          )}
-                        </div>
+                                  {/* Description */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Description
+                                    </label>
+                                    <textarea
+                                      value={material.description}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, description: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Frontal chest radiograph obtained as part of the patient's clinical evaluation."
+                                      className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        outlineColor: UI_COLORS.border.medium,
+                                        minHeight: '80px',
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Material Type */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Material Type
+                                    </label>
+                                    <select
+                                      value={material.materialType}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, materialType: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white,
+                                        outlineColor: UI_COLORS.border.medium,
+                                      }}
+                                    >
+                                      <option value="image">Image</option>
+                                      <option value="video">Video</option>
+                                      <option value="document">Document</option>
+                                      <option value="audio">Audio</option>
+                                      <option value="other">Other</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Content Upload/Embed */}
+                                  <div>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Content Upload/Embed
+                                    </label>
+                                    <label className="cursor-pointer">
+                                      <input
+                                        type="file"
+                                        onChange={(e) => {
+                                          // Handle file upload for this specific material
+                                          setSelectedMaterialId(material.id);
+                                          handleMaterialFileUpload(e);
+                                        }}
+                                        className="hidden"
+                                      />
+                                      <div 
+                                        className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
+                                        style={{ 
+                                          backgroundColor: UI_COLORS.button.primary,
+                                          color: UI_COLORS.button.text
+                                        }}
+                                      >
+                                        <Upload className="w-5 h-5" />
+                                        Upload File
+                                      </div>
+                                    </label>
+
+                                    <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>
+                                      OR
+                                    </p>
+
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                                      Enter H5P Embed Link
+                                    </label>
+                                    <Input
+                                      value={material.embedLink || ''}
+                                      onChange={(e) => {
+                                        const updatedMaterials = caseMaterials.map(m =>
+                                          m.id === material.id ? { ...m, embedLink: e.target.value } : m
+                                        );
+                                        setCaseMaterials(updatedMaterials);
+                                      }}
+                                      placeholder="Value"
+                                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                                      style={{ 
+                                        borderWidth: '1px', 
+                                        borderStyle: 'solid', 
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Preview */}
+                                  <div 
+                                    className="border rounded-lg p-8 flex flex-col items-center justify-center"
+                                    style={{ 
+                                      borderColor: UI_COLORS.border.default,
+                                      minHeight: '200px'
+                                    }}
+                                  >
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
+                                      <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                                        Preview
+                                      </span>
+                                    </div>
+                                    <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                                      Rendered preview here
+                                    </p>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex items-center gap-4 pt-4">
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          setSelectedMaterialId(material.id);
+                                          handleSaveCaseMaterial();
+                                        }
+                                      }}
+                                      className="px-8 py-3 text-base font-medium transition-colors"
+                                      style={{ 
+                                        backgroundColor: UI_COLORS.button.primary, 
+                                        color: UI_COLORS.button.text 
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                                    >
+                                      Save
+                                    </Button>
+                                    <Button
+                                      onClick={() => {
+                                        if (selectedPatientForEdit) {
+                                          instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id);
+                                          setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                        }
+                                      }}
+                                      variant="outline"
+                                      className="px-8 py-3 text-base font-medium transition-colors text-white"
+                                      style={{ 
+                                        backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                        borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                                      onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                                    >
+                                      Delete
+                                    </Button>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          ))}
+                        </Accordion>
                       </div>
                     </div>
                   )}

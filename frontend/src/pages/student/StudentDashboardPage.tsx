@@ -33,7 +33,7 @@ function StudentDashboardPage() {
           studentService.getCurrentUser(),
         ]);
         setGroups(groupsData);
-        setUser(userData);
+        setUser(userData ?? { name: 'Unknown User' });
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       } finally {

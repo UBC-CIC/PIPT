@@ -7,6 +7,7 @@ import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState } from 'react';
 import { useAuth } from '@/App';
+import { studentService } from '@/services/studentService';
 
 /**
  * PatientDashboardPage Component
@@ -23,64 +24,20 @@ function PatientDashboardPage() {
   // State for showing all attempts
   const [showAllAttempts, setShowAllAttempts] = useState(false);
   
-  // Mock patient data - will be replaced with actual data fetching
-  const patient = {
-    id: patientId,
-    name: 'Pamela',
-    pronouns: 'she/her',
-    age: 56,
-    sex: 'Female',
-    primaryComplaint: 'Chest Pain',
-    avatarUrl: undefined, // Will be replaced with S3 URL when image is uploaded
-  };
+  // Load patient data from mock data service
+  const patient = studentService.getPatientDetail(patientId);
 
-  // Mock chat history data
-  const chatHistory = [
-    {
-      id: '1',
-      name: 'Attempt 4 - Feb 19, 2026',
-      completionStatus: 'In Progress',
-      score: null,
-    },
-    {
-      id: '2',
-      name: 'Attempt 3 - Feb 18, 2026',
-      completionStatus: 'Complete',
-      score: '67%',
-    },
-    {
-      id: '3',
-      name: 'Attempt 2 - Feb 14, 2026',
-      completionStatus: 'Complete',
-      score: '88%',
-    },
-    {
-      id: '4',
-      name: 'Attempt 1 - Jan 27, 2026',
-      completionStatus: 'In Progress',
-      score: null,
-    },
-  ];
+  // Load chat history from mock data service
+  const chatHistory = studentService.getChatHistory();
 
-  // Mock key questions coverage data per attempt
-  const allKeyQuestionsCoverageData = [
-    { attempt: 'Attempt 1', attemptNumber: 1, coverage: 45 },
-    { attempt: 'Attempt 2', attemptNumber: 2, coverage: 72 },
-    { attempt: 'Attempt 3', attemptNumber: 3, coverage: 58 },
-    { attempt: 'Attempt 4', attemptNumber: 4, coverage: 63 },
-    { attempt: 'Attempt 5', attemptNumber: 5, coverage: 78 },
-    { attempt: 'Attempt 6', attemptNumber: 6, coverage: 82 },
-    { attempt: 'Attempt 7', attemptNumber: 7, coverage: 75 },
-    { attempt: 'Attempt 8', attemptNumber: 8, coverage: 88 },
-    { attempt: 'Attempt 9', attemptNumber: 9, coverage: 91 },
-    { attempt: 'Attempt 10', attemptNumber: 10, coverage: 0 }, // In progress, no data yet
-  ];
+  // Load key questions coverage data from mock data service
+  const allKeyQuestionsCoverageData = studentService.getKeyQuestionsCoverageData();
 
   // Check if there are any chats
   const hasChats = chatHistory.length > 0;
   
   // Check if there's any coverage data
-  const hasCoverageData = allKeyQuestionsCoverageData.some(d => d.coverage > 0);
+  const hasCoverageData = allKeyQuestionsCoverageData.some((d: { coverage: number; }) => d.coverage > 0);
 
   // Show only last 5 attempts by default
   const displayedCoverageData = showAllAttempts 
