@@ -74,7 +74,7 @@ function LoginPage() {
   /**
    * Handle sign in submission
    */
-  const handleSignIn = async (e: React.ChangeEvent<HTMLFormElement>) => {
+  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     // Validate email before submission
