@@ -368,7 +368,7 @@ function AdminSimulationGroupPage() {
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
-      instructorService.uploadPatientPhoto(selectedPatientForEdit, file).then(async () => {
+      instructorService.uploadPatientPhoto(groupId, selectedPatientForEdit, file).then(async () => {
         const manageablePatients = await instructorService.getManageablePatients(groupId);
         setManageablePatients(manageablePatients);
       });
@@ -377,8 +377,9 @@ function AdminSimulationGroupPage() {
 
   const handleFileUpload = (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      console.log(`Uploading ${fileType} file:`, file.name);
+    if (file && selectedPatientForEdit && groupId) {
+      const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
+      instructorService.uploadPatientFile(groupId, selectedPatientForEdit, file, folderType);
     }
   };
 
