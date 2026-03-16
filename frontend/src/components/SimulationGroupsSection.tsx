@@ -65,7 +65,7 @@ function SimulationGroupsSection({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {groups.map((group) => (
             <SimulationGroupCard
-              key={group.id}
+              key={group.simulation_group_id}
               group={group}
               onContinueTraining={onContinueTraining}
               actionButtonText={actionButtonText}

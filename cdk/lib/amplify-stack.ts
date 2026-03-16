@@ -108,8 +108,14 @@ applications:
       branchName: "main",
       enableAutoBuild: true,
     });
+//remove when merging to main
+    const cdkLinkingBranch = new amplify.CfnBranch(this, `${id}-cdkLinkingBranch`, {
+      appId: amplifyApp.attrAppId,
+      branchName: "cdk_linking",
+      enableAutoBuild: true,
+    });
 
-    
+
     // Output the Amplify App ID and default domain
     new cdk.CfnOutput(this, "AmplifyAppId", {
       value: amplifyApp.attrAppId,

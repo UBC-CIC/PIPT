@@ -10,6 +10,7 @@ interface DashboardHeaderProps {
   userAvatarUrl?: string;
   onSignOut: () => void;
   onStudentView?: () => void;
+  onInstructorView?: () => void;
   showStudentViewButton?: boolean;
   onManageQuestionBank?: () => void;
   showManageQuestionBankButton?: boolean;

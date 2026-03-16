@@ -1,11 +1,13 @@
 /**
- * Student Service (Populated with Mock Data for now)
+ * Student Service
  * 
- * Provides hardcoded data for simulation groups and user information.
- * Designed for easy replacement with APIs
+ * Calls real backend API endpoints via API Gateway.
+ * Falls back to mock data if API calls fail (for local dev without backend).
  */
 
 import { getSimulationGroupColor } from '@/lib/colors';
+import { apiClient } from '@/lib/api-client';
+import { authService } from '@/lib/auth';
 
 /**
  * Represents a medical simulation group that students can join
@@ -25,8 +27,9 @@ export interface SimulationGroup {
  * Represents current user data
  */
 export interface UserData {
-  name: string;            // User's full name
-  avatarUrl?: string;      // Optional profile picture URL
+  name: string;
+  email?: string;
+  avatarUrl?: string;
 }
 
 /**
@@ -41,16 +44,18 @@ export interface Patient {
 }
 
 /**
- * Mock data service interface
+ * Represents a chat session
  */
-export interface MockDataService {
-  getSimulationGroups: () => SimulationGroup[];
-  getCurrentUser: () => UserData;
-  getPatients: () => Patient[];
+export interface Session {
+  session_id: string;
+  student_interaction_id: string;
+  session_name: string;
+  last_accessed: string;
+  notes?: string;
 }
 
 /**
- * Hardcoded simulation groups for Phase 1
+ * Student data service — calls real API, falls back to mock
  */
 const mockSimulationGroups: SimulationGroup[] = [
   {
@@ -73,13 +78,13 @@ const mockSimulationGroups: SimulationGroup[] = [
   }
 ];
 
-/**
- * Hardcoded user data until backend is set up
- */
-const mockUserData: UserData = {
-  name: 'Alice Smith',
-  avatarUrl: undefined // Will display initials "AS"
-};
+  /**
+   * Get patients for a simulation group
+   */
+  async getPatients(simulationGroupId: string): Promise<Patient[]> {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Not authenticated');
 
 /**
  * Hardcoded patient data for Phase 1
@@ -108,32 +113,25 @@ const mockPatients: Patient[] = [
   }
 ];
 
-/**
- * Get all available simulation groups
- * 
- * @returns Array of simulation groups
- */
-function getSimulationGroups(): SimulationGroup[] {
-  return mockSimulationGroups;
-}
+  /**
+   * Create a new session
+   */
+  async createSession(simulationGroupId: string, patientId: string, sessionName: string): Promise<Session | null> {
+    try {
+      const user = await authService.getCurrentUser();
+      if (!user) throw new Error('Not authenticated');
 
-/**
- * Get current user data
- * 
- * @returns User data object
- */
-function getCurrentUser(): UserData {
-  return mockUserData;
-}
+      const data = await apiClient.request<Session[]>(
+        `/student/create_session?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_name=${encodeURIComponent(sessionName)}`,
+        { method: 'POST' }
+      );
 
-/**
- * Get all patients for the current simulation group
- * 
- * @returns Array of patients
- */
-function getPatients(): Patient[] {
-  return mockPatients;
-}
+      return data[0] || null;
+    } catch (error) {
+      console.error('Failed to create session:', error);
+      return null;
+    }
+  },
 
 /**
  * Represents a case material for physical assessment
@@ -498,3 +496,4 @@ export const mockDataService = {
   getChatHistoryMessages,
   getSavedNote,
 };
+

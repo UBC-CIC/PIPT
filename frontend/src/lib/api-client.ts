@@ -1,8 +1,9 @@
-import { awsConfig } from '@/config/aws-config';
+import { appConfig } from '@/config/aws-config';
+import { authService } from '@/lib/auth';
 
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  body?: any;
+  body?: unknown;
   headers?: Record<string, string>;
 }
 
@@ -10,7 +11,7 @@ export class ApiClient {
   private baseUrl: string;
 
   constructor() {
-    this.baseUrl = awsConfig.api.endpoint;
+    this.baseUrl = appConfig.api.endpoint;
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
@@ -18,12 +19,10 @@ export class ApiClient {
       'Content-Type': 'application/json',
     };
 
-    // Get ID token from auth service
-    // Uncomment when auth is implemented:
-    // const token = authService.getIdToken();
-    // if (token) {
-    //   headers['Authorization'] = `Bearer ${token}`;
-    // }
+    const token = await authService.getIdToken();
+    if (token) {
+      headers['Authorization'] = token;
+    }
 
     return headers;
   }
@@ -47,6 +46,11 @@ export class ApiClient {
     });
 
     if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired or invalid — redirect to login
+        window.location.href = '/login';
+        throw new Error('Session expired. Please sign in again.');
+      }
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
     }
 

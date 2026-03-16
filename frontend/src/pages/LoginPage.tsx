@@ -3,18 +3,23 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
+import { authService } from '@/lib/auth';
+import { useAuth } from '@/App';
 
 /**
  * LoginPage Component
  * 
  * Authentication page for GENRx - AI Supported Interview Evaluation 2.0
- * Provides username/password login and account creation link
+ * Connects to Cognito via AWS Amplify for real authentication
  */
 function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   /**
    * Validate email format
@@ -40,10 +45,8 @@ function LoginPage() {
 
   /**
    * Handle sign in submission
-   * Phase 1: Navigates to student dashboard
-   * Future: Will call authentication API
    */
-  const handleSignIn = (e: React.ChangeEvent<HTMLFormElement>) => {
+  const handleSignIn = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
     // Validate email before submission
@@ -52,18 +55,52 @@ function LoginPage() {
       return;
     }
     
+    setError('');
+    setLoading(true);
+
     try {
-      console.log('Sign in attempt:', { email });
-      // Future: Call authentication API
-      navigate('/');
-    } catch (error) {
-      console.error('Error during sign in:', error);
+      const result = await authService.signIn(email, password);
+      
+      if (result.needsConfirmation) {
+        // User needs to verify their email first
+        navigate('/signup', { state: { email, needsConfirmation: true } });
+        return;
+      }
+
+      // Refresh auth context so ProtectedRoute sees the new session
+      await refreshUser();
+      
+      // Role-based navigation
+      const user = await authService.getCurrentUser();
+      if (user?.groups.includes('instructor')) {
+        navigate('/instructor');
+      } else if (user?.groups.includes('admin')) {
+        navigate('/admin');
+      } else {
+        navigate('/');
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Sign in failed';
+      
+      if (message.includes('UserNotConfirmedException')) {
+        navigate('/signup', { state: { email, needsConfirmation: true } });
+        return;
+      }
+      
+      if (message.includes('NotAuthorizedException')) {
+        setError('Incorrect email or password.');
+      } else if (message.includes('UserNotFoundException')) {
+        setError('No account found with this email.');
+      } else {
+        setError(message);
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   /**
    * Handle create account link click
-   * Navigates to sign up page
    */
   const handleCreateAccount = () => {
     navigate('/signup');
@@ -95,6 +132,15 @@ function LoginPage() {
         <div className="w-full max-w-md">
           <h2 className="text-3xl font-bold mb-8" style={{ color: UI_COLORS.text.heading }}>Sign In</h2>
           
+          {error && (
+            <div 
+              className="mb-6 p-4 rounded-lg text-sm"
+              style={{ backgroundColor: '#FEE2E2', color: '#991B1B', borderWidth: '1px', borderStyle: 'solid', borderColor: '#FECACA' }}
+            >
+              {error}
+            </div>
+          )}
+
           <form onSubmit={handleSignIn} className="space-y-6">
             <div>
               <Input
@@ -110,6 +156,7 @@ function LoginPage() {
                   borderColor: emailError ? '#ef4444' : UI_COLORS.border.light 
                 }}
                 required
+                disabled={loading}
               />
               {emailError && (
                 <p className="mt-1 text-sm" style={{ color: '#ef4444' }}>
@@ -127,6 +174,7 @@ function LoginPage() {
                 className="w-full h-12 px-4 rounded-lg"
                 style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
+                disabled={loading}
               />
             </div>
 
@@ -135,10 +183,12 @@ function LoginPage() {
               className="w-full h-12 rounded-full text-base font-medium"
               style={{ 
                 backgroundColor: UI_COLORS.button.primary,
-                color: UI_COLORS.button.text
+                color: UI_COLORS.button.text,
+                opacity: loading ? 0.7 : 1,
               }}
+              disabled={loading}
             >
-              Sign In
+              {loading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
 

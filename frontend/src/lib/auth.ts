@@ -1,81 +1,140 @@
-// Authentication utilities for AWS Cognito
-// This is a basic implementation - you may want to use AWS Amplify for full features
+// Authentication service using AWS Amplify (Cognito)
+// Provider-agnostic interface — swap provider by changing this file
+// See: cdk/lambda/studentAuthorizerFunction/studentAuthorizerFunction.js for backend decoupling plan
 
-// import { awsConfig } from '@/config/aws-config'; // TODO: Uncomment when Cognito auth is implemented
+import { signIn, signUp, signOut, fetchAuthSession, getCurrentUser, confirmSignUp } from 'aws-amplify/auth';
 
 export interface AuthTokens {
   idToken: string;
   accessToken: string;
-  refreshToken: string;
 }
 
-export interface User {
+export interface AuthUser {
   username: string;
   email: string;
   groups: string[];
 }
 
-class AuthService {
-  private tokens: AuthTokens | null = null;
-  private user: User | null = null;
+export interface SignUpParams {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+}
 
-  // Initialize authentication (call this on app startup)
-  async initialize() {
-    // Check for stored tokens in localStorage
-    const storedTokens = localStorage.getItem('auth_tokens');
-    if (storedTokens) {
-      this.tokens = JSON.parse(storedTokens);
-      // TODO: Validate tokens and refresh if needed
+export interface AuthResult {
+  user: AuthUser;
+  tokens: AuthTokens;
+  needsConfirmation?: boolean;
+}
+
+class AuthService {
+  // Sign in with email and password
+  async signIn(email: string, password: string): Promise<AuthResult> {
+    const result = await signIn({ username: email, password });
+
+    if (result.nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
+      return {
+        user: { username: email, email, groups: [] },
+        tokens: { idToken: '', accessToken: '' },
+        needsConfirmation: true,
+      };
     }
+
+    return this.buildAuthResult();
   }
 
-  // Sign in with username and password
-  async signIn(_username: string, _password: string): Promise<User> {
-    // TODO: Implement Cognito authentication
-    // This is a placeholder - you'll need to use AWS SDK or Amplify
-    
-    // Cognito endpoint: `https://cognito-idp.${awsConfig.region}.amazonaws.com/`
-    
-    // Example using AWS SDK (you'll need to install @aws-sdk/client-cognito-identity-provider)
-    // const client = new CognitoIdentityProviderClient({ region: awsConfig.region });
-    // const command = new InitiateAuthCommand({
-    //   AuthFlow: 'USER_PASSWORD_AUTH',
-    //   ClientId: awsConfig.cognito.userPoolClientId,
-    //   AuthParameters: {
-    //     USERNAME: username,
-    //     PASSWORD: password,
-    //   },
-    // });
-    // const response = await client.send(command);
-    
-    throw new Error('Authentication not yet implemented');
+  // Sign up with email, password, and name
+  async signUp(params: SignUpParams): Promise<{ needsConfirmation: boolean }> {
+    const result = await signUp({
+      username: params.email,
+      password: params.password,
+      options: {
+        userAttributes: {
+          email: params.email,
+          given_name: params.firstName,
+          family_name: params.lastName,
+        },
+      },
+    });
+
+    return {
+      needsConfirmation: result.nextStep?.signUpStep === 'CONFIRM_SIGN_UP',
+    };
+  }
+
+  // Confirm sign up with verification code
+  async confirmSignUp(email: string, code: string): Promise<void> {
+    await confirmSignUp({ username: email, confirmationCode: code });
   }
 
   // Sign out
-  async signOut() {
-    this.tokens = null;
-    this.user = null;
-    localStorage.removeItem('auth_tokens');
+  async signOut(): Promise<void> {
+    await signOut();
   }
 
-  // Get current user
-  getCurrentUser(): User | null {
-    return this.user;
+  // Get current ID token for API requests
+  async getIdToken(): Promise<string | null> {
+    try {
+      const session = await fetchAuthSession();
+      return session.tokens?.idToken?.toString() || null;
+    } catch {
+      return null;
+    }
   }
 
-  // Get ID token for API requests
-  getIdToken(): string | null {
-    return this.tokens?.idToken || null;
+  // Get current authenticated user
+  async getCurrentUser(): Promise<AuthUser | null> {
+    try {
+      const session = await fetchAuthSession();
+      const idToken = session.tokens?.idToken;
+      if (!idToken) return null;
+
+      const payload = idToken.payload;
+      const user = await getCurrentUser();
+
+      return {
+        username: user.username,
+        email: (payload.email as string) || user.username,
+        groups: (payload['cognito:groups'] as string[]) || [],
+      };
+    } catch {
+      return null;
+    }
   }
 
   // Check if user is authenticated
-  isAuthenticated(): boolean {
-    return this.tokens !== null;
+  async isAuthenticated(): Promise<boolean> {
+    try {
+      const session = await fetchAuthSession();
+      return !!session.tokens?.idToken;
+    } catch {
+      return false;
+    }
   }
 
   // Check if user has a specific role
-  hasRole(role: 'student' | 'instructor' | 'admin' | 'techadmin'): boolean {
-    return this.user?.groups.includes(role) || false;
+  async hasRole(role: 'student' | 'instructor' | 'admin'): Promise<boolean> {
+    const user = await this.getCurrentUser();
+    return user?.groups.includes(role) || false;
+  }
+
+  // Build auth result from current session
+  private async buildAuthResult(): Promise<AuthResult> {
+    const session = await fetchAuthSession();
+    const user = await this.getCurrentUser();
+
+    if (!user || !session.tokens) {
+      throw new Error('Failed to get user session after sign in');
+    }
+
+    return {
+      user,
+      tokens: {
+        idToken: session.tokens.idToken?.toString() || '',
+        accessToken: session.tokens.accessToken?.toString() || '',
+      },
+    };
   }
 }
 

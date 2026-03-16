@@ -20,8 +20,9 @@ function ChatHistoryPage() {
   const navigate = useNavigate();
   const { groupId, patientId, chatId } = useParams();
   
-  // Load user data from mock data service
-  const user = mockDataService.getCurrentUser();
+  // Load user data from auth context
+  const { user: authUser } = useAuth();
+  const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
   // Load patient data from mock data service
   const patient = mockDataService.getPatientDetail(patientId);
