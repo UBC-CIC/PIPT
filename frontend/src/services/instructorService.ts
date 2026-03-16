@@ -653,7 +653,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
       simulation_group_id: group.simulation_group_id,
       name: group.group_name,
       subtitle: 'Medical Simulation Group',
-      iconColor: group.icon_color || getSimulationGroupColor(index),
+      icon_color: group.icon_color || getSimulationGroupColor(index),
       access_code: group.group_access_code || '',
       student_count: group.student_count || 0,
       patient_count: group.patient_count || 0,
@@ -689,7 +689,7 @@ async function createSimulationGroup(data: { name: string; description: string; 
     simulation_group_id: result.simulation_group_id,
     name: result.group_name,
     subtitle: 'Medical Simulation Group',
-    iconColor: getSimulationGroupColor(0),
+    icon_color: getSimulationGroupColor(0),
     access_code: result.group_access_code || '',
     student_count: 0,
     patient_count: 0,
@@ -798,8 +798,8 @@ async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAn
     );
 
     return data.map((patient) => ({
-      patient_id: patient.patient_id,
-      patient_name: patient.patient_name,
+      patient_id: patient.persona_id,
+      patient_name: patient.persona_name,
       instructor_completion_percentage: patient.instructor_completion_percentage || 0,
       llm_completion_percentage: patient.ai_score_percentage || 0,
       student_message_count: patient.student_message_count || 0,
@@ -907,13 +907,13 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
     );
 
     return data.map((patient) => ({
-      patient_id: patient.patient_id,
+      patient_id: patient.persona_id,
       simulation_group_id: patient.simulation_group_id,
-      patient_name: patient.patient_name,
-      patient_age: patient.patient_age,
-      patient_gender: patient.patient_gender,
-      patient_number: patient.patient_number,
-      patient_prompt: patient.patient_prompt,
+      patient_name: patient.persona_name,
+      patient_age: patient.persona_age,
+      patient_gender: patient.persona_gender,
+      patient_number: patient.persona_number,
+      patient_prompt: patient.persona_prompt,
       average_wpm: patient.average_wpm,
       voice_id: patient.voice_id,
       interaction_mode: patient.interaction_mode,
@@ -943,10 +943,10 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
 
     const queryParams = new URLSearchParams({
       simulation_group_id: simulationGroupId,
-      patient_name: patientData.patient_name,
-      patient_number: patientData.patient_number?.toString() || '1',
-      patient_age: patientData.patient_age.toString(),
-      patient_gender: patientData.patient_gender,
+      persona_name: patientData.patient_name,
+      persona_number: patientData.patient_number?.toString() || '1',
+      persona_age: patientData.patient_age.toString(),
+      persona_gender: patientData.patient_gender,
       instructor_email: user.email,
     });
 
@@ -957,7 +957,7 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
     await apiClient.request(`instructor/create_patient?${queryParams.toString()}`, {
       method: 'POST',
       body: {
-        patient_prompt: patientData.patient_prompt || '',
+        persona_prompt: patientData.patient_prompt || '',
       },
     });
   } catch (error) {
@@ -975,7 +975,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
     if (!user?.email) throw new Error('Not authenticated');
 
     const queryParams = new URLSearchParams({
-      patient_id: patientData.patient_id,
+      persona_id: patientData.patient_id,
       instructor_email: user.email,
       simulation_group_id: simulationGroupId,
     });
@@ -983,10 +983,10 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
     await apiClient.request(`instructor/edit_patient?${queryParams.toString()}`, {
       method: 'PUT',
       body: {
-        patient_name: patientData.patient_name,
-        patient_age: patientData.patient_age,
-        patient_gender: patientData.patient_gender,
-        patient_prompt: patientData.patient_prompt,
+        persona_name: patientData.patient_name,
+        persona_age: patientData.patient_age,
+        persona_gender: patientData.patient_gender,
+        persona_prompt: patientData.patient_prompt,
       },
     });
 
@@ -1027,7 +1027,7 @@ async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): 
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `instructor/toggle_llm_completion?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/toggle_llm_completion?persona_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
       {
         method: 'PUT',
         body: {
@@ -1050,7 +1050,7 @@ async function deletePatient(patientId: string): Promise<void> {
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `instructor/delete_patient?patient_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/delete_patient?persona_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
       {
         method: 'DELETE',
       }
