@@ -109,9 +109,9 @@ applications:
       enableAutoBuild: true,
     });
 //remove when merging to main
-    const cdkLinkingBranch = new amplify.CfnBranch(this, `${id}-cdkLinkingBranch`, {
+    const oldcdkLinkingBranch = new amplify.CfnBranch(this, `${id}-cdkLinkingBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "cdk_linking",
+      branchName: "old_cdk_linking",
       enableAutoBuild: true,
     });
 

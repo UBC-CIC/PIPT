@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,12 +14,40 @@ import { useAuth } from '@/App';
  */
 function LoginPage() {
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const { refreshUser, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [waitingForAuth, setWaitingForAuth] = useState(false);
+  const navigationAttempted = useRef(false);
+
+  // Navigate once user is authenticated after sign-in
+  useEffect(() => {
+    if (!waitingForAuth) return;
+    if (!user) return; // Keep waiting — don't clear waitingForAuth yet
+    if (navigationAttempted.current) return;
+    
+    navigationAttempted.current = true;
+    console.log('=== NAVIGATION TRIGGERED ===');
+    console.log('User:', user);
+    console.log('Groups:', user.groups);
+    
+    if (user.groups.includes('instructor')) {
+      console.log('Navigating to /instructor');
+      navigate('/instructor', { replace: true });
+    } else if (user.groups.includes('admin')) {
+      console.log('Navigating to /admin');
+      navigate('/admin', { replace: true });
+    } else {
+      console.log('Navigating to /');
+      navigate('/', { replace: true });
+    }
+    
+    setWaitingForAuth(false);
+    setLoading(false); // Clear loading here after nav
+  }, [waitingForAuth, user, navigate]);
 
   /**
    * Validate email format
@@ -59,6 +87,14 @@ function LoginPage() {
     setLoading(true);
 
     try {
+      // Force sign out first to clear any stale sessions
+      try {
+        await authService.signOut();
+      } catch (e) {
+        // Ignore sign out errors
+        console.log('Sign out before sign in (expected):', e);
+      }
+      
       const result = await authService.signIn(email, password);
       
       if (result.needsConfirmation) {
@@ -67,26 +103,22 @@ function LoginPage() {
         return;
       }
 
-      // Refresh auth context so ProtectedRoute sees the new session
-      await refreshUser();
-      
-      // Role-based navigation
-      const user = await authService.getCurrentUser();
-      if (user?.groups.includes('instructor')) {
-        navigate('/instructor');
-      } else if (user?.groups.includes('admin')) {
-        navigate('/admin');
+      const currentUser = await refreshUser(); // Gets the user directly
+
+      if (currentUser?.groups.includes('instructor')) {
+        navigate('/instructor', { replace: true });
+      } else if (currentUser?.groups.includes('admin')) {
+        navigate('/admin', { replace: true });
       } else {
-        navigate('/');
+        navigate('/', { replace: true });
       }
+
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Sign in failed';
-      
       if (message.includes('UserNotConfirmedException')) {
         navigate('/signup', { state: { email, needsConfirmation: true } });
         return;
       }
-      
       if (message.includes('NotAuthorizedException')) {
         setError('Incorrect email or password.');
       } else if (message.includes('UserNotFoundException')) {
