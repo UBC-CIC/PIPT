@@ -46,38 +46,31 @@ exports.handler = async (event) => {
     const lastName = lastNameAttr?.Value || "";
     const username = `${firstName}_${lastName}`.toLowerCase().replace(/\s+/g, '_');
 
-    // Check if user exists in the database
+    // Idempotent upsert: insert new user or update last_sign_in if already exists
     const dbUser = await sqlConnection`
-      SELECT roles FROM "users" WHERE user_email = ${email};
+      INSERT INTO "users" (
+        user_email, 
+        username, 
+        first_name, 
+        last_name, 
+        time_account_created, 
+        roles, 
+        last_sign_in
+      )
+      VALUES (
+        ${email}, 
+        ${username}, 
+        ${firstName}, 
+        ${lastName}, 
+        CURRENT_TIMESTAMP, 
+        ARRAY['student'], 
+        CURRENT_TIMESTAMP
+      )
+      ON CONFLICT (user_email) DO UPDATE SET last_sign_in = CURRENT_TIMESTAMP
+      RETURNING roles;
     `;
 
-    let dbRoles = dbUser[0]?.roles || [];
-
-    // If user doesn't exist in DB, create them with 'student' role
-    if (dbUser.length === 0) {
-      console.log(`Creating new user in database: ${email}`);
-      await sqlConnection`
-        INSERT INTO "users" (
-          user_email, 
-          username, 
-          first_name, 
-          last_name, 
-          time_account_created, 
-          roles, 
-          last_sign_in
-        )
-        VALUES (
-          ${email}, 
-          ${username}, 
-          ${firstName}, 
-          ${lastName}, 
-          CURRENT_TIMESTAMP, 
-          ARRAY['student'], 
-          CURRENT_TIMESTAMP
-        )
-      `;
-      dbRoles = ['student'];
-    }
+    const dbRoles = dbUser[0]?.roles || ['student'];
 
     // Determine the new Cognito group based on the roles
     const newGroupName = dbRoles.length > 0 ? dbRoles[0] : "student";
