@@ -6,6 +6,7 @@ const secretsManager = new SecretsManagerClient();
 
 async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
   try {
+    console.log(JSON.stringify({ level: "INFO", message: "Initializing database connection" }));
     // Retrieve the secret from AWS Secrets Manager
     const getSecretValueCommand = new GetSecretValueCommand({ SecretId: SM_DB_CREDENTIALS });
     const secretResponse = await secretsManager.send(getSecretValueCommand);
@@ -24,9 +25,9 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
     // Create the PostgreSQL connection
     global.sqlConnection = postgres(connectionConfig);
     
-    console.log("Database connection initialized");
+    console.log(JSON.stringify({ level: "INFO", message: "Database connection initialized successfully" }));
   } catch (error) {
-    console.error("Error initializing database connection:", error);
+    console.error(JSON.stringify({ level: "ERROR", message: "Error initializing database connection", error: error.message, stack: error.stack }));
     throw new Error("Failed to initialize database connection");
   }
 }

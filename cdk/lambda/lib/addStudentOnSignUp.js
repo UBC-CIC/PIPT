@@ -1,11 +1,16 @@
 const { initializeConnection } = require("./lib.js");
+const logger = require("./logger");
 const { CognitoIdentityProviderClient, AdminGetUserCommand, AdminAddUserToGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
 
 const { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 let sqlConnection = global.sqlConnection;
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
+  logger.init(event, context);
+  logger.info("addStudentOnSignUp invoked", { userName: event.userName });
+
   if (!sqlConnection) {
+    logger.info("Initializing database connection");
     await initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT);
     sqlConnection = global.sqlConnection;
   }
@@ -32,7 +37,7 @@ exports.handler = async (event) => {
     );
     
     if (!emailAttr) {
-      console.error("Email attribute missing from Cognito");
+      logger.error("Email attribute missing from Cognito user", { userName: event.userName });
       return {
         statusCode: 400,
         body: JSON.stringify({
@@ -83,9 +88,11 @@ exports.handler = async (event) => {
     });
     await client.send(addUserToGroupCommand);
 
+    logger.info("User assigned to group successfully", { email, groupName: newGroupName });
+
     return event;
   } catch (err) {
-    console.error("Error assigning user to group:", err);
+    logger.error("Error assigning user to group", { error: err.message, stack: err.stack, userName: event.userName });
     return {
       statusCode: 500,
       body: JSON.stringify({
