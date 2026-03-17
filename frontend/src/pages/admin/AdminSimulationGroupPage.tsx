@@ -263,7 +263,7 @@ function AdminSimulationGroupPage() {
       setSimulationGroup(prev => prev ? { ...prev, access_code: result.access_code } : prev);
     } catch (err) {
       console.error('Failed to regenerate access code via API, using mock:', err);
-      const newCode = mockInstructorDataService.generateAccessCode(groupId);
+      const newCode = await mockInstructorDataService.generateAccessCode(groupId);
       setSimulationGroup(prev => prev ? { ...prev, access_code: newCode } : prev);
     }
   };
@@ -1292,7 +1292,7 @@ function AdminSimulationGroupPage() {
                       try {
                         await adminApi.updateGroupAccess({
                           simulation_group_id: groupId,
-                          access: simulationGroup?.group_student_access ?? true,
+                          access: true,
                           admin_voice_enabled: newValue,
                           instructor_voice_enabled: newValue,
                         });
