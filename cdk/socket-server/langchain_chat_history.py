@@ -97,7 +97,7 @@ def insert_message_to_postgres(session_id: str, role: str, content: str):
         cursor = conn.cursor()
 
         insert_query = """
-            INSERT INTO messages (message_id, session_id, student_sent, message_content, time_sent)
+            INSERT INTO messages (message_id, chat_id, student_sent, message_content, time_sent)
             VALUES (%s, %s, %s, %s, %s);
         """
         cursor.execute(insert_query, (

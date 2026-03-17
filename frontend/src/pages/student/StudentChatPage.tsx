@@ -98,7 +98,7 @@ function StudentChatPage() {
     let cancelled = false;
     studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
       if (!cancelled && session) {
-        setSessionId(session.session_id);
+        setSessionId(session.chat_id);
       }
     });
     return () => { cancelled = true; };

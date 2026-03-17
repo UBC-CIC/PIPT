@@ -1063,8 +1063,8 @@ Provide JSON response:
             empathy_json = json.dumps(empathy_evaluation) if empathy_evaluation else None
             
             cursor.execute(
-                'INSERT INTO "messages" (session_id, student_sent, message_content, empathy_evaluation, time_sent) VALUES (%s, %s, %s, %s, NOW())',
-                (session_id, student_sent, message_content, empathy_json)
+                'INSERT INTO "messages" (chat_id, student_sent, message_content, time_sent) VALUES (%s, %s, %s, NOW())',
+                (session_id, student_sent, message_content)
             )
             
             conn.commit()

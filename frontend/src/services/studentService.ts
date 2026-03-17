@@ -49,9 +49,9 @@ export interface Patient {
  * Represents a chat session
  */
 export interface Session {
-  session_id: string;
+  chat_id: string;
   student_interaction_id: string;
-  session_name: string;
+  chat_name: string;
   last_accessed: string;
   notes?: string;
 }

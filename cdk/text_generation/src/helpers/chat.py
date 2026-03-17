@@ -912,8 +912,8 @@ def save_message_to_db(session_id: str, student_sent: bool, message_content: str
             logger.info(f"💾 Emotional resonance in DB save: {empathy_evaluation.get('emotional_resonance')}")
         
         cursor.execute(
-            'INSERT INTO "messages" (session_id, student_sent, message_content, empathy_evaluation, time_sent) VALUES (%s, %s, %s, %s, NOW())',
-            (session_id, student_sent, message_content, empathy_json)
+            'INSERT INTO "messages" (chat_id, student_sent, message_content, time_sent) VALUES (%s, %s, %s, NOW())',
+            (session_id, student_sent, message_content)
         )
         
         conn.commit()
