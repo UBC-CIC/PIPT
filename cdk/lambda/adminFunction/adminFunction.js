@@ -367,7 +367,6 @@ exports.handler = async (event) => {
               message: "Instructor enrolments deleted successfully.",
             });
           } catch (err) {
-            await sqlConnectionTableCreator.rollback();
             response.statusCode = 500;
             console.log(err);
             response.body = JSON.stringify({ error: "Internal server error" });
@@ -427,7 +426,6 @@ exports.handler = async (event) => {
               message: "Group and related records deleted successfully.",
             });
           } catch (err) {
-            await sqlConnection.rollback();
             response.statusCode = 500;
             console.log(err);
             response.body = JSON.stringify({ error: "Internal server error" });
