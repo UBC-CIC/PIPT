@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient } from '@/services/instructorService';
-import { mockAdminDataService, mockGroupInstructors } from '@/services/adminService';
+import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useState } from 'react';
@@ -121,9 +121,8 @@ function AdminSimulationGroupPage() {
   const [instructors, setInstructors] = useState<adminApi.AdminInstructor[]>([]);
   const [instructorsLoading, setInstructorsLoading] = useState(false);
   
-  // Get organization details
-  const organizations = mockAdminDataService.getOrganizations();
-  const organization = organizations.find(org => org.id === organizationId);
+  // Organization details (loaded from API with mock fallback)
+  const [organization, setOrganization] = useState<adminApi.AdminOrganization | null>(null);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -165,10 +164,22 @@ function AdminSimulationGroupPage() {
       } finally {
         setLoading(false);
       }
+
+      // Load organization details from API, fall back to mock
+      if (organizationId) {
+        try {
+          const orgData = await adminApi.getOrganization(organizationId);
+          setOrganization(orgData);
+        } catch (err) {
+          console.error('Failed to load organization from API, using mock:', err);
+          const mockOrg = mockOrganizations.find(o => o.organization_id === organizationId) || null;
+          setOrganization(mockOrg);
+        }
+      }
     };
 
     loadData();
-  }, [groupId]);
+  }, [groupId, organizationId]);
 
   // Load instructors from real API when section is active, fall back to mock
   useEffect(() => {
@@ -244,11 +255,16 @@ function AdminSimulationGroupPage() {
     navigate('/student');
   };
 
-  const handleGenerateAccessCode = () => {
-    if (groupId) {
+  const handleGenerateAccessCode = async () => {
+    if (!groupId) return;
+    try {
+      const result = await adminApi.regenerateAccessCode(groupId);
+      // Update local state with the new access code
+      setSimulationGroup(prev => prev ? { ...prev, access_code: result.access_code } : prev);
+    } catch (err) {
+      console.error('Failed to regenerate access code via API, using mock:', err);
       const newCode = mockInstructorDataService.generateAccessCode(groupId);
-      console.log('Generated new access code:', newCode);
-      navigate(`/admin/organization/${organizationId}/group/${groupId}`, { replace: true });
+      setSimulationGroup(prev => prev ? { ...prev, access_code: newCode } : prev);
     }
   };
 
@@ -1269,7 +1285,23 @@ function AdminSimulationGroupPage() {
                   type="button"
                   role="switch"
                   aria-checked={enableVoiceForAll}
-                  onClick={() => setEnableVoiceForAll(!enableVoiceForAll)}
+                  onClick={async () => {
+                    const newValue = !enableVoiceForAll;
+                    setEnableVoiceForAll(newValue);
+                    if (groupId) {
+                      try {
+                        await adminApi.updateGroupAccess({
+                          simulation_group_id: groupId,
+                          access: simulationGroup?.group_student_access ?? true,
+                          admin_voice_enabled: newValue,
+                          instructor_voice_enabled: newValue,
+                        });
+                      } catch (err) {
+                        console.error('Failed to update voice setting via API:', err);
+                        // State already updated locally, so UI stays consistent
+                      }
+                    }
+                  }}
                   className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                   style={{ backgroundColor: enableVoiceForAll ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive }}
                 >

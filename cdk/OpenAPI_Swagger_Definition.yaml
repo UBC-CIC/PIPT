@@ -4695,6 +4695,37 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /admin/regenerate_access_code:
+    <<: *commonOptions
+    post:
+      tags:
+        - Admin
+      summary: Regenerate access code for a simulation group
+      operationId: admin_regenerate_access_code_POST
+      parameters:
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+      responses:
+        "200":
+          description: New access code generated
+        "400":
+          description: Bad Request
+        "404":
+          description: Simulation group not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /admin/delete_instructor_enrolments:
     options:
       summary: CORS support

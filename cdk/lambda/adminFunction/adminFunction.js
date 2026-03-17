@@ -291,6 +291,44 @@ exports.handler = async (event) => {
           });
         }
         break;
+      case "POST /admin/regenerate_access_code":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          try {
+            const { simulation_group_id } = event.queryStringParameters;
+
+            // Generate a new random access code (8 chars, uppercase alphanumeric)
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let newCode = "";
+            for (let i = 0; i < 4; i++) newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+            newCode += "-";
+            for (let i = 0; i < 4; i++) newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "simulation_groups"
+              SET group_access_code = ${newCode}
+              WHERE simulation_group_id = ${simulation_group_id}
+              RETURNING group_access_code;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Simulation group not found" });
+            } else {
+              response.body = JSON.stringify({ access_code: updated[0].group_access_code });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            console.log(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "simulation_group_id is required" });
+        }
+        break;
       case "DELETE /admin/delete_instructor_enrolments":
         if (
           event.queryStringParameters != null &&

@@ -247,6 +247,16 @@ export async function updateGroupAccess(params: {
   );
 }
 
+/**
+ * Regenerate the access code for a simulation group.
+ */
+export async function regenerateAccessCode(simulationGroupId: string): Promise<{ access_code: string }> {
+  return apiClient.request<{ access_code: string }>(
+    `admin/regenerate_access_code?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+    { method: 'POST' }
+  );
+}
+
 
 // ─── Organization API Functions ──────────────────────────────────────────────
 
