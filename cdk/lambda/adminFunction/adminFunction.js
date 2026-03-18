@@ -3,7 +3,7 @@ const logger = require("./logger");
 
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
-// SQL connection from global variable at libadmin.js
+// SQL conneciton from global variable at libadmin.js
 let sqlConnectionTableCreator = global.sqlConnectionTableCreator;
 
 exports.handler = async (event, context) => {
@@ -47,11 +47,11 @@ exports.handler = async (event, context) => {
 
           // SQL query to fetch all users who are instructors
           const instructors = await sqlConnectionTableCreator`
-            SELECT user_email, first_name, last_name
-            FROM "users"
-            WHERE roles @> ARRAY['instructor']::varchar[]
-            ORDER BY last_name ASC;
-          `;
+                SELECT user_email, first_name, last_name
+                FROM "users"
+                WHERE roles @> ARRAY['instructor']::varchar[]
+                ORDER BY last_name ASC;
+              `;
 
           response.body = JSON.stringify(instructors);
         } else {
@@ -60,14 +60,33 @@ exports.handler = async (event, context) => {
           logger.warn("Missing instructor_email parameter");
         }
         break;
-
       case "GET /admin/simulation_groups":
         try {
           // Query all simulation groups with student, instructor, and persona counts
           const simulationGroups = await sqlConnectionTableCreator`
-            SELECT *
-            FROM "simulation_groups";
-          `;
+                    SELECT sg.*,
+                      COALESCE(pc.persona_count, 0)::int AS persona_count,
+                      COALESCE(sc.student_count, 0)::int AS student_count,
+                      COALESCE(ic.instructor_count, 0)::int AS instructor_count
+                    FROM "simulation_groups" sg
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS persona_count
+                      FROM "personas"
+                      GROUP BY simulation_group_id
+                    ) pc ON pc.simulation_group_id = sg.simulation_group_id
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS student_count
+                      FROM "enrollments"
+                      WHERE enrollment_type = 'student'
+                      GROUP BY simulation_group_id
+                    ) sc ON sc.simulation_group_id = sg.simulation_group_id
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS instructor_count
+                      FROM "enrollments"
+                      WHERE enrollment_type = 'instructor'
+                      GROUP BY simulation_group_id
+                    ) ic ON ic.simulation_group_id = sg.simulation_group_id;
+                `;
 
           logger.info("Fetched simulation groups", { count: simulationGroups.length });
           response.body = JSON.stringify(simulationGroups);
@@ -77,7 +96,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
       case "POST /admin/enroll_instructor":
         if (
           event.queryStringParameters != null &&
@@ -90,10 +108,10 @@ exports.handler = async (event, context) => {
 
             // Retrieve user_id from users table based on the instructor email
             const userResult = await sqlConnectionTableCreator`
-              SELECT user_id
-              FROM "users"
-              WHERE user_email = ${instructor_email};
-            `;
+                  SELECT user_id
+                  FROM "users"
+                  WHERE user_email = ${instructor_email};
+                `;
 
             const user_id = userResult[0]?.user_id;
 
@@ -107,33 +125,33 @@ exports.handler = async (event, context) => {
 
             // Insert enrollment into enrollments table with current timestamp for the 'instructor' role
             const enrollment = await sqlConnectionTableCreator`
-              INSERT INTO "enrolments" (enrolment_id, simulation_group_id, user_id, enrolment_type, time_enroled)
-              VALUES (uuid_generate_v4(), ${simulation_group_id}, ${user_id}, 'instructor', CURRENT_TIMESTAMP)
-              ON CONFLICT (simulation_group_id, user_id) 
-              DO UPDATE SET 
-                  enrolment_id = EXCLUDED.enrolment_id,
-                  enrolment_type = EXCLUDED.enrolment_type,
-                  time_enroled = EXCLUDED.time_enroled
-              RETURNING enrolment_id;
-            `;
+                  INSERT INTO "enrollments" (enrollment_id, simulation_group_id, user_id, enrollment_type, time_enrolled)
+                  VALUES (uuid_generate_v4(), ${simulation_group_id}, ${user_id}, 'instructor', CURRENT_TIMESTAMP)
+                  ON CONFLICT (simulation_group_id, user_id) 
+                  DO UPDATE SET 
+                      enrollment_id = EXCLUDED.enrollment_id,
+                      enrollment_type = EXCLUDED.enrollment_type,
+                      time_enrolled = EXCLUDED.time_enrolled
+                  RETURNING enrollment_id;
+                `;
 
             const enrollment_id = enrollment[0]?.enrollment_id;
 
-            if (enrolment_id) {
-              // Retrieve all patient IDs associated with the simulation group
-              const patientsResult = await sqlConnectionTableCreator`
-                SELECT patient_id
-                FROM "patients"
-                WHERE simulation_group_id = ${simulation_group_id};
-              `;
+            if (enrollment_id) {
+              // Retrieve all persona IDs associated with the simulation group
+              const personasResult = await sqlConnectionTableCreator`
+                    SELECT persona_id
+                    FROM "personas"
+                    WHERE simulation_group_id = ${simulation_group_id};
+                  `;
 
               // Insert a record into student_interactions for each persona in the simulation group
               const studentInteractionInsertions = personasResult.map(
                 (persona) => {
                   return sqlConnectionTableCreator`
-                    INSERT INTO "student_interactions" (student_interaction_id, patient_id, enrolment_id, patient_score, last_accessed, patient_context_embedding, is_completed)
-                    VALUES (uuid_generate_v4(), ${patient.patient_id}, ${enrolment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
-                  `;
+                      INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
+                      VALUES (uuid_generate_v4(), ${persona.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
+                    `;
                 }
               );
 
@@ -144,6 +162,12 @@ exports.handler = async (event, context) => {
             response.body = JSON.stringify({
               message: "Instructor enrolled and patients linked successfully.",
             });
+
+            // Optionally insert into User Engagement Log (uncomment if needed)
+            // await sqlConnectionTableCreator`
+            //   INSERT INTO "user_engagement_log" (log_id, user_id, simulation_group_id, patient_id, enrolment_id, timestamp, engagement_type)
+            //   VALUES (uuid_generate_v4(), ${user_id}, ${simulation_group_id}, null, ${enrolment_id}, CURRENT_TIMESTAMP, 'enrollment_created');
+            // `;
           } catch (err) {
             response.statusCode = 500;
             logger.error("Operation failed", { error: err.message, stack: err.stack });
@@ -151,13 +175,14 @@ exports.handler = async (event, context) => {
           }
         } else {
           response.statusCode = 400;
-          response.body = "simulation_group_id and instructor_email are required";
+          response.body =
+            "simulation_group_id and instructor_email are required";
         }
         break;
-
       case "POST /admin/create_simulation_group":
         if (event.body) {
           try {
+            const body = JSON.parse(event.body);
             const {
               group_name,
               group_description,
@@ -166,6 +191,12 @@ exports.handler = async (event, context) => {
               // admin_voice_enabled,      // uncomment after migration 005 runs
               // instructor_voice_enabled,  // uncomment after migration 005 runs
             } = body;
+
+            if (!group_name || !group_description || group_student_access === undefined) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "group_name, group_description, and group_student_access are required" });
+              break;
+            }
 
             logger.info("Simulation group creation start", { group_name, group_description });
 
@@ -179,30 +210,24 @@ exports.handler = async (event, context) => {
             // Insert new simulation group into simulation_groups table
             // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
             const newSimulationGroup = await sqlConnectionTableCreator`
-              INSERT INTO "simulation_groups" (
-                  simulation_group_id,
-                  group_name,
-                  group_description,
-                  group_access_code,
-                  group_student_access,
-                  system_prompt,
-                  empathy_enabled,
-                  admin_voice_enabled,
-                  instructor_voice_enabled
-              )
-              VALUES (
-                  uuid_generate_v4(),
-                  ${group_name},
-                  ${group_description},
-                  ${group_access_code},
-                  ${group_student_access.toLowerCase() === "true"},
-                  ${system_prompt},
-                  ${empathy_enabled ? empathy_enabled.toLowerCase() === "true" : true},
-                  ${admin_voice_enabled ? admin_voice_enabled.toLowerCase() === "true" : true},
-                  ${instructor_voice_enabled ? instructor_voice_enabled.toLowerCase() === "true" : true}
-              )
-              RETURNING *;
-            `;
+                  INSERT INTO "simulation_groups" (
+                      simulation_group_id,
+                      group_name,
+                      group_description,
+                      group_access_code,
+                      group_student_access,
+                      system_prompt
+                  )
+                  VALUES (
+                      uuid_generate_v4(),
+                      ${group_name},
+                      ${group_description},
+                      ${group_access_code},
+                      ${typeof group_student_access === "string" ? group_student_access.toLowerCase() === "true" : !!group_student_access},
+                      ${system_prompt || null}
+                  )
+                  RETURNING *;
+              `;
 
             response.body = JSON.stringify(newSimulationGroup[0]);
           } catch (err) {
@@ -215,7 +240,6 @@ exports.handler = async (event, context) => {
           response.body = "Missing required parameters";
         }
         break;
-
       case "GET /admin/groupInstructors":
         if (
           event.queryStringParameters != null &&
@@ -225,11 +249,11 @@ exports.handler = async (event, context) => {
 
           // SQL query to fetch all instructors for a given group
           const instructors = await sqlConnectionTableCreator`
-            SELECT u.user_email, u.first_name, u.last_name
-            FROM "enrolments" e
-            JOIN "users" u ON e.user_id = u.user_id
-            WHERE e.simulation_group_id = ${simulation_group_id} AND e.enrolment_type = 'instructor';
-          `;
+              SELECT u.user_email, u.first_name, u.last_name
+              FROM "enrollments" e
+              JOIN "users" u ON e.user_id = u.user_id
+              WHERE e.simulation_group_id = ${simulation_group_id} AND e.enrollment_type = 'instructor';
+            `;
 
           response.body = JSON.stringify(instructors);
         } else {
@@ -239,7 +263,6 @@ exports.handler = async (event, context) => {
           });
         }
         break;
-
       case "GET /admin/instructorGroups":
         if (
           event.queryStringParameters != null &&
@@ -249,12 +272,12 @@ exports.handler = async (event, context) => {
 
           // SQL query to fetch all groups for a given instructor
           const groups = await sqlConnectionTableCreator`
-            SELECT g.simulation_group_id, g.group_name, g.group_description
-            FROM "enrolments" e
-            JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
-            JOIN "users" u ON e.user_id = u.user_id
-            WHERE u.user_email = ${instructor_email} AND e.enrolment_type = 'instructor';
-          `;
+              SELECT g.simulation_group_id, g.group_name, g.group_description
+              FROM "enrollments" e
+              JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
+              JOIN "users" u ON e.user_id = u.user_id
+              WHERE u.user_email = ${instructor_email} AND e.enrollment_type = 'instructor';
+            `;
 
           response.body = JSON.stringify(groups);
         } else {
@@ -264,7 +287,6 @@ exports.handler = async (event, context) => {
           });
         }
         break;
-
       case "POST /admin/updateGroupAccess":
         if (
           event.queryStringParameters != null &&
@@ -278,13 +300,10 @@ exports.handler = async (event, context) => {
           // SQL query to update group access
           // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
           await sqlConnectionTableCreator`
-            UPDATE "simulation_groups"
-            SET group_student_access = ${accessBool}, 
-                empathy_enabled = ${empathyBool},
-                admin_voice_enabled = ${adminVoiceBool},
-                instructor_voice_enabled = ${instructorVoiceBool}
-            WHERE simulation_group_id = ${simulation_group_id};
-          `;
+                    UPDATE "simulation_groups"
+                    SET group_student_access = ${accessBool}
+                    WHERE simulation_group_id = ${simulation_group_id};
+                  `;
 
           response.body = JSON.stringify({
             message: "Group settings updated successfully.",
@@ -292,11 +311,11 @@ exports.handler = async (event, context) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "simulation_group_id and access query parameters are required",
+            error:
+              "simulation_group_id and access query parameters are required",
           });
         }
         break;
-
       case "POST /admin/regenerate_access_code":
         if (
           event.queryStringParameters != null &&
@@ -305,7 +324,7 @@ exports.handler = async (event, context) => {
           try {
             const { simulation_group_id } = event.queryStringParameters;
 
-            // Generate a new random access code (XXXX-XXXX format)
+            // Generate a new random access code (8 chars, uppercase alphanumeric)
             const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             let newCode = "";
             for (let i = 0; i < 4; i++) newCode += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -335,7 +354,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "simulation_group_id is required" });
         }
         break;
-
       case "DELETE /admin/delete_instructor_enrolments":
         if (
           event.queryStringParameters != null &&
@@ -346,10 +364,10 @@ exports.handler = async (event, context) => {
 
             // Retrieve the user's ID
             const userResult = await sqlConnectionTableCreator`
-              SELECT user_id 
-              FROM "users"
-              WHERE user_email = ${instructor_email};
-            `;
+                        SELECT user_id 
+                        FROM "users"
+                        WHERE user_email = ${instructor_email};
+                    `;
 
             const userId = userResult[0]?.user_id;
 
@@ -361,9 +379,9 @@ exports.handler = async (event, context) => {
 
             // Delete all enrollments for the instructor
             await sqlConnectionTableCreator`
-              DELETE FROM "enrolments"
-              WHERE user_id = ${userId} AND enrolment_type = 'instructor';
-            `;
+                        DELETE FROM "enrollments"
+                        WHERE user_id = ${userId} AND enrollment_type = 'instructor';
+                    `;
 
             response.body = JSON.stringify({
               message: "Instructor enrolments deleted successfully.",
@@ -378,7 +396,6 @@ exports.handler = async (event, context) => {
           response.body = "instructor_email query parameter is required";
         }
         break;
-
       case "DELETE /admin/delete_group_instructor_enrolments":
         if (
           event.queryStringParameters != null &&
@@ -389,9 +406,9 @@ exports.handler = async (event, context) => {
 
             // Delete all enrollments for the group where enrollment_type is 'instructor'
             await sqlConnectionTableCreator`
-              DELETE FROM "enrolments"
-              WHERE simulation_group_id = ${simulation_group_id} AND enrolment_type = 'instructor';
-            `;
+                      DELETE FROM "enrollments"
+                      WHERE simulation_group_id = ${simulation_group_id} AND enrollment_type = 'instructor';
+                  `;
 
             response.body = JSON.stringify({
               message: "Group instructor enrolments deleted successfully.",
@@ -406,7 +423,6 @@ exports.handler = async (event, context) => {
           response.body = "simulation_group_id query parameter is required";
         }
         break;
-
       case "DELETE /admin/delete_group":
         if (
           event.queryStringParameters != null &&
@@ -415,11 +431,16 @@ exports.handler = async (event, context) => {
           try {
             const { simulation_group_id } = event.queryStringParameters;
 
+            // // Drop the table whose name is the simulation_group_id
+            // await sqlConnectionTableCreator`
+            //   DROP TABLE IF EXISTS ${sqlConnectionTableCreator(simulation_group_id)};
+            // `;
+
             // Delete the group, related records will be automatically deleted due to cascading
             await sqlConnectionTableCreator`
-              DELETE FROM "simulation_groups"
-              WHERE simulation_group_id = ${simulation_group_id};
-            `;
+                      DELETE FROM "simulation_groups"
+                      WHERE simulation_group_id = ${simulation_group_id};
+                  `;
 
             response.body = JSON.stringify({
               message: "Group and related records deleted successfully.",
@@ -434,7 +455,6 @@ exports.handler = async (event, context) => {
           response.body = "simulation_group_id query parameter is required";
         }
         break;
-
       case "POST /admin/elevate_instructor":
         if (
           event.queryStringParameters != null &&
@@ -445,9 +465,9 @@ exports.handler = async (event, context) => {
           try {
             // Check if the user exists
             const existingUser = await sqlConnectionTableCreator`
-              SELECT * FROM "users"
-              WHERE user_email = ${instructorEmail};
-            `;
+                          SELECT * FROM "users"
+                          WHERE user_email = ${instructorEmail};
+                      `;
 
             if (existingUser.length > 0) {
               const userRoles = existingUser[0].roles;
@@ -459,7 +479,8 @@ exports.handler = async (event, context) => {
               ) {
                 response.statusCode = 200;
                 response.body = JSON.stringify({
-                  message: "No changes made. User is already an instructor or admin.",
+                  message:
+                    "No changes made. User is already an instructor or admin.",
                 });
                 break;
               }
@@ -471,10 +492,10 @@ exports.handler = async (event, context) => {
                 );
 
                 await sqlConnectionTableCreator`
-                  UPDATE "users"
-                  SET roles = ${newRoles}
-                  WHERE user_email = ${instructorEmail};
-                `;
+                                UPDATE "users"
+                                SET roles = ${newRoles}
+                                WHERE user_email = ${instructorEmail};
+                            `;
 
                 response.statusCode = 200;
                 response.body = JSON.stringify({
@@ -485,9 +506,9 @@ exports.handler = async (event, context) => {
             } else {
               // Create a new user with the role 'instructor'
               await sqlConnectionTableCreator`
-                INSERT INTO "users" (user_email, roles)
-                VALUES (${instructorEmail}, ARRAY['instructor']);
-              `;
+                              INSERT INTO "users" (user_email, roles)
+                              VALUES (${instructorEmail}, ARRAY['instructor']);
+                          `;
 
               response.statusCode = 201;
               response.body = JSON.stringify({
@@ -504,7 +525,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Email is required" });
         }
         break;
-
       case "POST /admin/lower_instructor":
         if (
           event.queryStringParameters != null &&
@@ -515,10 +535,10 @@ exports.handler = async (event, context) => {
 
             // Fetch the roles for the user
             const userRoleData = await sqlConnectionTableCreator`
-              SELECT roles, user_id
-              FROM "users"
-              WHERE user_email = ${userEmail};
-            `;
+                    SELECT roles, user_id
+                    FROM "users"
+                    WHERE user_email = ${userEmail};
+                  `;
 
             const userRoles = userRoleData[0]?.roles;
             const userId = userRoleData[0]?.user_id;
@@ -538,16 +558,16 @@ exports.handler = async (event, context) => {
 
             // Update the roles in the database
             await sqlConnectionTableCreator`
-              UPDATE "users"
-              SET roles = ${updatedRoles}
-              WHERE user_email = ${userEmail};
-            `;
+                    UPDATE "users"
+                    SET roles = ${updatedRoles}
+                    WHERE user_email = ${userEmail};
+                  `;
 
             // Delete all enrollments where the enrollment type is instructor
             await sqlConnectionTableCreator`
-              DELETE FROM "enrolments"
-              WHERE user_id = ${userId} AND enrolment_type = 'instructor';
-            `;
+                    DELETE FROM "enrollments"
+                    WHERE user_id = ${userId} AND enrollment_type = 'instructor';
+                  `;
 
             response.statusCode = 200;
             response.body = JSON.stringify({
@@ -565,7 +585,6 @@ exports.handler = async (event, context) => {
           });
         }
         break;
-
       case "GET /admin/system_prompts":
         try {
           // Get the latest system prompt from history table
@@ -594,7 +613,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
       case "POST /admin/update_system_prompt":
         if (event.body) {
           try {
@@ -605,7 +623,7 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Insert new prompt into history
+            // Insert new prompt into history (created_by removed)
             await sqlConnectionTableCreator`
               INSERT INTO "system_prompt_history" (prompt_content)
               VALUES (${prompt_content});
@@ -624,9 +642,9 @@ exports.handler = async (event, context) => {
           response.body = "prompt_content is required";
         }
         break;
-
       case "POST /admin/restore_system_prompt":
         try {
+          // Prefer query param history_id; fallback to body with prompt_content for backward compatibility
           const historyId =
             event.queryStringParameters &&
             event.queryStringParameters.history_id
@@ -645,7 +663,9 @@ exports.handler = async (event, context) => {
             const fromHistory = rows[0]?.prompt_content;
             if (!fromHistory) {
               response.statusCode = 404;
-              response.body = JSON.stringify({ error: "History entry not found" });
+              response.body = JSON.stringify({
+                error: "History entry not found",
+              });
               break;
             }
 
@@ -660,7 +680,7 @@ exports.handler = async (event, context) => {
             break;
           }
 
-          // Fallback: body-based restore
+          // Fallback: body-based restore (no created_by)
           if (event.body) {
             const { prompt_content } = JSON.parse(event.body);
             if (!prompt_content || !prompt_content.trim()) {
@@ -687,14 +707,14 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
       case "POST /admin/update_user_token_limit":
         if (event.body) {
           try {
             const { user_email, token_limit } = JSON.parse(event.body);
             if (!user_email || !token_limit || token_limit < 1000) {
               response.statusCode = 400;
-              response.body = "user_email and token_limit (min 1000) are required";
+              response.body =
+                "user_email and token_limit (min 1000) are required";
               break;
             }
 
@@ -717,7 +737,6 @@ exports.handler = async (event, context) => {
           response.body = "user_email and token_limit are required";
         }
         break;
-
       case "POST /admin/update_all_token_limits":
         if (event.body) {
           try {
@@ -746,7 +765,6 @@ exports.handler = async (event, context) => {
           response.body = "token_limit is required";
         }
         break;
-
       case "GET /admin/empathy_prompts":
         try {
           // Get the latest empathy prompt from history table
@@ -775,7 +793,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
       case "POST /admin/update_empathy_prompt":
         if (event.body) {
           try {
@@ -805,7 +822,6 @@ exports.handler = async (event, context) => {
           response.body = "prompt_content is required";
         }
         break;
-
       case "POST /admin/restore_empathy_prompt":
         try {
           const historyId =
@@ -826,7 +842,9 @@ exports.handler = async (event, context) => {
             const fromHistory = rows[0]?.prompt_content;
             if (!fromHistory) {
               response.statusCode = 404;
-              response.body = JSON.stringify({ error: "History entry not found" });
+              response.body = JSON.stringify({
+                error: "History entry not found",
+              });
               break;
             }
 
@@ -868,214 +886,7 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
-      // ================================================================
-      // QUESTION BANK CRUD
-      // ================================================================
-
-      case "GET /admin/question_bank":
-        try {
-          const questions = await sqlConnectionTableCreator`
-            SELECT * FROM "question_bank" ORDER BY created_at DESC;
-          `;
-          response.body = JSON.stringify(questions);
-        } catch (err) {
-          response.statusCode = 500;
-          logger.error("Operation failed", { error: err.message, stack: err.stack });
-          response.body = JSON.stringify({ error: "Internal server error" });
-        }
-        break;
-
-      case "POST /admin/question_bank":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.organization_id &&
-          event.queryStringParameters.created_by &&
-          event.body
-        ) {
-          try {
-            const { organization_id, created_by } = event.queryStringParameters;
-            const {
-              title,
-              question_text,
-              evaluation_criteria,
-              category,
-              tags,
-              difficulty_level,
-              is_mandatory,
-              weight,
-              max_score,
-              is_active,
-            } = JSON.parse(event.body);
-
-            if (!title || !question_text) {
-              response.statusCode = 400;
-              response.body = JSON.stringify({
-                error: "title and question_text are required",
-              });
-              break;
-            }
-
-            const newQuestion = await sqlConnectionTableCreator`
-              INSERT INTO "question_bank" (
-                question_id,
-                organization_id,
-                created_by,
-                title,
-                question_text,
-                evaluation_criteria,
-                category,
-                tags,
-                difficulty_level,
-                is_mandatory,
-                weight,
-                max_score,
-                is_active,
-                created_at
-              )
-              VALUES (
-                uuid_generate_v4(),
-                ${organization_id},
-                ${created_by},
-                ${title},
-                ${question_text},
-                ${evaluation_criteria || null},
-                ${category || null},
-                ${tags || []},
-                ${difficulty_level || null},
-                ${is_mandatory != null ? is_mandatory : false},
-                ${weight != null ? weight : 1.0},
-                ${max_score != null ? max_score : 10},
-                ${is_active != null ? is_active : true},
-                CURRENT_TIMESTAMP
-              )
-              RETURNING *;
-            `;
-
-            response.statusCode = 201;
-            response.body = JSON.stringify(newQuestion[0]);
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
-          }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "organization_id, created_by, and request body are required",
-          });
-        }
-        break;
-
-      case "PUT /admin/question_bank":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.question_id &&
-          event.body
-        ) {
-          try {
-            const { question_id } = event.queryStringParameters;
-            const {
-              title,
-              question_text,
-              evaluation_criteria,
-              category,
-              tags,
-              difficulty_level,
-              is_mandatory,
-              weight,
-              max_score,
-              is_active,
-            } = JSON.parse(event.body);
-
-            // Build SET clause dynamically so only provided fields are updated
-            const updates = {};
-            if (title !== undefined) updates.title = title;
-            if (question_text !== undefined) updates.question_text = question_text;
-            if (evaluation_criteria !== undefined) updates.evaluation_criteria = evaluation_criteria;
-            if (category !== undefined) updates.category = category;
-            if (tags !== undefined) updates.tags = tags;
-            if (difficulty_level !== undefined) updates.difficulty_level = difficulty_level;
-            if (is_mandatory !== undefined) updates.is_mandatory = is_mandatory;
-            if (weight !== undefined) updates.weight = weight;
-            if (max_score !== undefined) updates.max_score = max_score;
-            if (is_active !== undefined) updates.is_active = is_active;
-
-            if (Object.keys(updates).length === 0) {
-              response.statusCode = 400;
-              response.body = JSON.stringify({
-                error: "At least one field to update is required",
-              });
-              break;
-            }
-
-            const updated = await sqlConnectionTableCreator`
-              UPDATE "question_bank"
-              SET ${sqlConnectionTableCreator(updates)}
-              WHERE question_id = ${question_id}
-              RETURNING *;
-            `;
-
-            if (updated.length === 0) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "Question not found" });
-            } else {
-              response.body = JSON.stringify(updated[0]);
-            }
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
-          }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "question_id and request body are required",
-          });
-        }
-        break;
-
-      case "DELETE /admin/question_bank":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.question_id
-        ) {
-          try {
-            const { question_id } = event.queryStringParameters;
-
-            // CASCADE on FK will handle simulation_group_questions and question_interactions
-            const deleted = await sqlConnectionTableCreator`
-              DELETE FROM "question_bank"
-              WHERE question_id = ${question_id}
-              RETURNING question_id;
-            `;
-
-            if (deleted.length === 0) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "Question not found" });
-            } else {
-              response.body = JSON.stringify({
-                message: "Question deleted successfully",
-                question_id: deleted[0].question_id,
-              });
-            }
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
-          }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "question_id is required",
-          });
-        }
-        break;
-
-      // ================================================================
-      // ORGANIZATION CRUD
-      // ================================================================
-
+      // ── Organization CRUD ──────────────────────────────────────────────
       case "GET /admin/organizations":
         try {
           const orgs = await sqlConnectionTableCreator`
@@ -1088,7 +899,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
-
       case "GET /admin/organization":
         if (
           event.queryStringParameters != null &&
@@ -1096,12 +906,10 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { organization_id } = event.queryStringParameters;
-
             const org = await sqlConnectionTableCreator`
               SELECT * FROM "organizations"
               WHERE organization_id = ${organization_id};
             `;
-
             if (org.length === 0) {
               response.statusCode = 404;
               response.body = JSON.stringify({ error: "Organization not found" });
@@ -1115,12 +923,9 @@ exports.handler = async (event, context) => {
           }
         } else {
           response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "organization_id is required",
-          });
+          response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
-
       case "POST /admin/create_organization":
         if (event.body) {
           try {
@@ -1130,7 +935,6 @@ exports.handler = async (event, context) => {
               response.body = JSON.stringify({ error: "name is required" });
               break;
             }
-
             const newOrg = await sqlConnectionTableCreator`
               INSERT INTO "organizations" (name, description, type, ai_persona, user_role, icon_color, system_prompt)
               VALUES (
@@ -1144,7 +948,6 @@ exports.handler = async (event, context) => {
               )
               RETURNING *;
             `;
-
             response.statusCode = 201;
             response.body = JSON.stringify(newOrg[0]);
           } catch (err) {
@@ -1157,7 +960,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Request body is required" });
         }
         break;
-
       case "PUT /admin/update_organization":
         if (
           event.queryStringParameters != null &&
@@ -1195,12 +997,9 @@ exports.handler = async (event, context) => {
           }
         } else {
           response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "organization_id and request body are required",
-          });
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
         }
         break;
-
       case "DELETE /admin/delete_organization":
         if (
           event.queryStringParameters != null &&
@@ -1208,12 +1007,10 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { organization_id } = event.queryStringParameters;
-
             await sqlConnectionTableCreator`
               DELETE FROM "organizations"
               WHERE organization_id = ${organization_id};
             `;
-
             response.body = JSON.stringify({ message: "Organization deleted successfully." });
           } catch (err) {
             response.statusCode = 500;
@@ -1225,7 +1022,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
-
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }
@@ -1234,7 +1030,6 @@ exports.handler = async (event, context) => {
     logger.error("Unhandled route error", { error: error.message, stack: error.stack });
     response.body = JSON.stringify(error.message);
   }
-
   logger.logResponse(response);
   return response;
 };
