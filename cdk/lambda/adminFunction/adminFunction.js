@@ -169,8 +169,6 @@ exports.handler = async (event, context) => {
 
             logger.info("Simulation group creation start", { group_name, group_description });
 
-            const { system_prompt } = JSON.parse(event.body);
-
             // Auto-generate access code server-side (XXXX-XXXX format)
             const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
             let group_access_code = "";
