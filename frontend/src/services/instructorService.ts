@@ -656,6 +656,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
       icon_color: group.icon_color || getSimulationGroupColor(index),
       access_code: group.group_access_code || '',
       student_count: group.student_count || 0,
+      instructor_count: group.instructor_count || 0,
       patient_count: group.patient_count || 0,
       organization_id: group.organization_id || '',
     }));
@@ -907,22 +908,35 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
     );
 
     return data.map((patient) => ({
+      id: patient.persona_id,
       patient_id: patient.persona_id,
       simulation_group_id: patient.simulation_group_id,
+      name: patient.persona_name,
       patient_name: patient.persona_name,
+      age: patient.persona_age,
       patient_age: patient.persona_age,
+      gender: patient.persona_gender,
       patient_gender: patient.persona_gender,
       patient_number: patient.persona_number,
       patient_prompt: patient.persona_prompt,
       average_wpm: patient.average_wpm,
       voice_id: patient.voice_id,
       interaction_mode: patient.interaction_mode,
+      llmEvaluationEnabled: patient.llm_completion || false,
       llm_completion: patient.llm_completion || false,
       photo_url: patient.photo_url,
     }));
   } catch (error) {
     console.error('Failed to fetch manageable patients, using mock data:', error);
-    return mockManageablePatients[simulationGroupId] || [];
+    const mocks = mockManageablePatients[simulationGroupId] || [];
+    return mocks.map((p) => ({
+      ...p,
+      id: p.patient_id,
+      name: p.patient_name,
+      age: p.patient_age,
+      gender: p.patient_gender,
+      llmEvaluationEnabled: p.llm_completion,
+    })) as any[];
   }
 }
 

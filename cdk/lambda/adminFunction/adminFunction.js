@@ -62,10 +62,30 @@ exports.handler = async (event, context) => {
         break;
       case "GET /admin/simulation_groups":
         try {
-          // Query all simulation groups from simulation_groups table
+          // Query all simulation groups with student, instructor, and persona counts
           const simulationGroups = await sqlConnectionTableCreator`
-                    SELECT *
-                    FROM "simulation_groups";
+                    SELECT sg.*,
+                      COALESCE(pc.persona_count, 0)::int AS persona_count,
+                      COALESCE(sc.student_count, 0)::int AS student_count,
+                      COALESCE(ic.instructor_count, 0)::int AS instructor_count
+                    FROM "simulation_groups" sg
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS persona_count
+                      FROM "personas"
+                      GROUP BY simulation_group_id
+                    ) pc ON pc.simulation_group_id = sg.simulation_group_id
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS student_count
+                      FROM "enrollments"
+                      WHERE enrollment_type = 'student'
+                      GROUP BY simulation_group_id
+                    ) sc ON sc.simulation_group_id = sg.simulation_group_id
+                    LEFT JOIN (
+                      SELECT simulation_group_id, COUNT(*) AS instructor_count
+                      FROM "enrollments"
+                      WHERE enrollment_type = 'instructor'
+                      GROUP BY simulation_group_id
+                    ) ic ON ic.simulation_group_id = sg.simulation_group_id;
                 `;
 
           logger.info("Fetched simulation groups", { count: simulationGroups.length });
@@ -103,34 +123,34 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Insert enrollment into enrolments table with current timestamp for the 'instructor' role
+            // Insert enrollment into enrollments table with current timestamp for the 'instructor' role
             const enrollment = await sqlConnectionTableCreator`
-                  INSERT INTO "enrolments" (enrolment_id, simulation_group_id, user_id, enrolment_type, time_enroled)
+                  INSERT INTO "enrollments" (enrollment_id, simulation_group_id, user_id, enrollment_type, time_enrolled)
                   VALUES (uuid_generate_v4(), ${simulation_group_id}, ${user_id}, 'instructor', CURRENT_TIMESTAMP)
                   ON CONFLICT (simulation_group_id, user_id) 
                   DO UPDATE SET 
-                      enrolment_id = EXCLUDED.enrolment_id,
-                      enrolment_type = EXCLUDED.enrolment_type,
-                      time_enroled = EXCLUDED.time_enroled
-                  RETURNING enrolment_id;
+                      enrollment_id = EXCLUDED.enrollment_id,
+                      enrollment_type = EXCLUDED.enrollment_type,
+                      time_enrolled = EXCLUDED.time_enrolled
+                  RETURNING enrollment_id;
                 `;
 
-            const enrolment_id = enrollment[0]?.enrolment_id;
+            const enrollment_id = enrollment[0]?.enrollment_id;
 
-            if (enrolment_id) {
-              // Retrieve all patient IDs associated with the simulation group
-              const patientsResult = await sqlConnectionTableCreator`
-                    SELECT patient_id
-                    FROM "patients"
+            if (enrollment_id) {
+              // Retrieve all persona IDs associated with the simulation group
+              const personasResult = await sqlConnectionTableCreator`
+                    SELECT persona_id
+                    FROM "personas"
                     WHERE simulation_group_id = ${simulation_group_id};
                   `;
 
-              // Insert a record into student_interactions for each patient in the simulation group
-              const studentInteractionInsertions = patientsResult.map(
-                (patient) => {
+              // Insert a record into student_interactions for each persona in the simulation group
+              const studentInteractionInsertions = personasResult.map(
+                (persona) => {
                   return sqlConnectionTableCreator`
-                      INSERT INTO "student_interactions" (student_interaction_id, patient_id, enrolment_id, patient_score, last_accessed, patient_context_embedding, is_completed)
-                      VALUES (uuid_generate_v4(), ${patient.patient_id}, ${enrolment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
+                      INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
+                      VALUES (uuid_generate_v4(), ${persona.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
                     `;
                 }
               );
@@ -160,25 +180,25 @@ exports.handler = async (event, context) => {
         }
         break;
       case "POST /admin/create_simulation_group":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.group_name &&
-          event.queryStringParameters.group_description &&
-          event.queryStringParameters.group_student_access &&
-          event.body
-        ) {
+        if (event.body) {
           try {
-            logger.info("Simulation group creation start", { group_name, group_description });
+            const body = JSON.parse(event.body);
             const {
               group_name,
               group_description,
               group_student_access,
-              empathy_enabled,
-              admin_voice_enabled,
-              instructor_voice_enabled,
-            } = event.queryStringParameters;
+              system_prompt,
+              // admin_voice_enabled,      // uncomment after migration 005 runs
+              // instructor_voice_enabled,  // uncomment after migration 005 runs
+            } = body;
 
-            const { system_prompt } = JSON.parse(event.body);
+            if (!group_name || !group_description || group_student_access === undefined) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "group_name, group_description, and group_student_access are required" });
+              break;
+            }
+
+            logger.info("Simulation group creation start", { group_name, group_description });
 
             // Auto-generate access code server-side (XXXX-XXXX format)
             const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -188,6 +208,7 @@ exports.handler = async (event, context) => {
             for (let i = 0; i < 4; i++) group_access_code += chars.charAt(Math.floor(Math.random() * chars.length));
 
             // Insert new simulation group into simulation_groups table
+            // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
             const newSimulationGroup = await sqlConnectionTableCreator`
                   INSERT INTO "simulation_groups" (
                       simulation_group_id,
@@ -195,21 +216,15 @@ exports.handler = async (event, context) => {
                       group_description,
                       group_access_code,
                       group_student_access,
-                      system_prompt,
-                      empathy_enabled,
-                      admin_voice_enabled,
-                      instructor_voice_enabled
+                      system_prompt
                   )
                   VALUES (
                       uuid_generate_v4(),
                       ${group_name},
-                      ${group_description}, -- optional, can be null if not provided
+                      ${group_description},
                       ${group_access_code},
-                      ${group_student_access.toLowerCase() === "true"},
-                      ${system_prompt},
-                      ${empathy_enabled ? empathy_enabled.toLowerCase() === "true" : true},
-                      ${admin_voice_enabled ? admin_voice_enabled.toLowerCase() === "true" : true},
-                      ${instructor_voice_enabled ? instructor_voice_enabled.toLowerCase() === "true" : true}
+                      ${typeof group_student_access === "string" ? group_student_access.toLowerCase() === "true" : !!group_student_access},
+                      ${system_prompt || null}
                   )
                   RETURNING *;
               `;
@@ -235,9 +250,9 @@ exports.handler = async (event, context) => {
           // SQL query to fetch all instructors for a given group
           const instructors = await sqlConnectionTableCreator`
               SELECT u.user_email, u.first_name, u.last_name
-              FROM "enrolments" e
+              FROM "enrollments" e
               JOIN "users" u ON e.user_id = u.user_id
-              WHERE e.simulation_group_id = ${simulation_group_id} AND e.enrolment_type = 'instructor';
+              WHERE e.simulation_group_id = ${simulation_group_id} AND e.enrollment_type = 'instructor';
             `;
 
           response.body = JSON.stringify(instructors);
@@ -258,10 +273,10 @@ exports.handler = async (event, context) => {
           // SQL query to fetch all groups for a given instructor
           const groups = await sqlConnectionTableCreator`
               SELECT g.simulation_group_id, g.group_name, g.group_description
-              FROM "enrolments" e
+              FROM "enrollments" e
               JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
               JOIN "users" u ON e.user_id = u.user_id
-              WHERE u.user_email = ${instructor_email} AND e.enrolment_type = 'instructor';
+              WHERE u.user_email = ${instructor_email} AND e.enrollment_type = 'instructor';
             `;
 
           response.body = JSON.stringify(groups);
@@ -278,19 +293,15 @@ exports.handler = async (event, context) => {
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.access
         ) {
-          const { simulation_group_id, access, empathy_enabled, admin_voice_enabled, instructor_voice_enabled } = event.queryStringParameters;
+          const { simulation_group_id, access } = event.queryStringParameters;
+          // const { admin_voice_enabled, instructor_voice_enabled } = event.queryStringParameters; // uncomment after migration 005 runs
           const accessBool = access.toLowerCase() === "true";
-          const empathyBool = empathy_enabled ? empathy_enabled.toLowerCase() === "true" : true;
-          const adminVoiceBool = admin_voice_enabled ? admin_voice_enabled.toLowerCase() === "true" : true;
-          const instructorVoiceBool = instructor_voice_enabled ? instructor_voice_enabled.toLowerCase() === "true" : true;
 
-          // SQL query to update group access, empathy_enabled, and voice settings
+          // SQL query to update group access
+          // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
           await sqlConnectionTableCreator`
                     UPDATE "simulation_groups"
-                    SET group_student_access = ${accessBool}, 
-                        empathy_enabled = ${empathyBool},
-                        admin_voice_enabled = ${adminVoiceBool},
-                        instructor_voice_enabled = ${instructorVoiceBool}
+                    SET group_student_access = ${accessBool}
                     WHERE simulation_group_id = ${simulation_group_id};
                   `;
 
@@ -366,10 +377,10 @@ exports.handler = async (event, context) => {
               return;
             }
 
-            // Delete all enrolments for the instructor
+            // Delete all enrollments for the instructor
             await sqlConnectionTableCreator`
-                        DELETE FROM "enrolments"
-                        WHERE user_id = ${userId} AND enrolment_type = 'instructor';
+                        DELETE FROM "enrollments"
+                        WHERE user_id = ${userId} AND enrollment_type = 'instructor';
                     `;
 
             response.body = JSON.stringify({
@@ -393,10 +404,10 @@ exports.handler = async (event, context) => {
           try {
             const { simulation_group_id } = event.queryStringParameters;
 
-            // Delete all enrolments for the group where enrolment_type is 'instructor'
+            // Delete all enrollments for the group where enrollment_type is 'instructor'
             await sqlConnectionTableCreator`
-                      DELETE FROM "enrolments"
-                      WHERE simulation_group_id = ${simulation_group_id} AND enrolment_type = 'instructor';
+                      DELETE FROM "enrollments"
+                      WHERE simulation_group_id = ${simulation_group_id} AND enrollment_type = 'instructor';
                   `;
 
             response.body = JSON.stringify({
@@ -552,10 +563,10 @@ exports.handler = async (event, context) => {
                     WHERE user_email = ${userEmail};
                   `;
 
-            // Delete all enrolments where the enrolment type is instructor
+            // Delete all enrollments where the enrollment type is instructor
             await sqlConnectionTableCreator`
-                    DELETE FROM "enrolments"
-                    WHERE user_id = ${userId} AND enrolment_type = 'instructor';
+                    DELETE FROM "enrollments"
+                    WHERE user_id = ${userId} AND enrollment_type = 'instructor';
                   `;
 
             response.statusCode = 200;

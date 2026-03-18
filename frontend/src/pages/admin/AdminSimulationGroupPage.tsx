@@ -1293,8 +1293,8 @@ function AdminSimulationGroupPage() {
                         await adminApi.updateGroupAccess({
                           simulation_group_id: groupId,
                           access: true,
-                          admin_voice_enabled: newValue,
-                          instructor_voice_enabled: newValue,
+                          // admin_voice_enabled: newValue,      // uncomment after migration 005 runs
+                          // instructor_voice_enabled: newValue,  // uncomment after migration 005 runs
                         });
                       } catch (err) {
                         console.error('Failed to update voice setting via API:', err);
