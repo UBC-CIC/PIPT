@@ -1,11 +1,15 @@
 const { initializeConnection } = require("./libadmin.js");
+const logger = require("./logger");
 
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
 // SQL conneciton from global variable at libadmin.js
 let sqlConnectionTableCreator = global.sqlConnectionTableCreator;
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
+  logger.init(event, context);
+  logger.info("Admin handler invoked", { queryStringParameters: event.queryStringParameters });
+
   const response = {
     statusCode: 200,
     headers: {
@@ -19,8 +23,10 @@ exports.handler = async (event) => {
 
   // Initialize the database connection if not already initialized
   if (!sqlConnectionTableCreator) {
+    logger.info("Initializing database connection");
     await initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT);
     sqlConnectionTableCreator = global.sqlConnectionTableCreator;
+    logger.info("Database connection initialized");
   }
 
   // Function to format student full names (lowercase and spaces replaced with "_")
@@ -51,6 +57,7 @@ exports.handler = async (event) => {
         } else {
           response.statusCode = 400;
           response.body = "instructor_email is required";
+          logger.warn("Missing instructor_email parameter");
         }
         break;
       case "GET /admin/simulation_groups":
@@ -61,9 +68,11 @@ exports.handler = async (event) => {
                     FROM "simulation_groups";
                 `;
 
+          logger.info("Fetched simulation groups", { count: simulationGroups.length });
           response.body = JSON.stringify(simulationGroups);
         } catch (err) {
           response.statusCode = 500;
+          logger.error("Failed to fetch simulation groups", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
@@ -141,7 +150,7 @@ exports.handler = async (event) => {
             // `;
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -154,16 +163,14 @@ exports.handler = async (event) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.group_name &&
-          event.queryStringParameters.group_access_code &&
           event.queryStringParameters.group_description &&
           event.queryStringParameters.group_student_access &&
           event.body
         ) {
           try {
-            console.log("simulation group creation start");
+            logger.info("Simulation group creation start", { group_name, group_description });
             const {
               group_name,
-              group_access_code,
               group_description,
               group_student_access,
               empathy_enabled,
@@ -172,6 +179,13 @@ exports.handler = async (event) => {
             } = event.queryStringParameters;
 
             const { system_prompt } = JSON.parse(event.body);
+
+            // Auto-generate access code server-side (XXXX-XXXX format)
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let group_access_code = "";
+            for (let i = 0; i < 4; i++) group_access_code += chars.charAt(Math.floor(Math.random() * chars.length));
+            group_access_code += "-";
+            for (let i = 0; i < 4; i++) group_access_code += chars.charAt(Math.floor(Math.random() * chars.length));
 
             // Insert new simulation group into simulation_groups table
             const newSimulationGroup = await sqlConnectionTableCreator`
@@ -203,7 +217,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(newSimulationGroup[0]);
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -291,6 +305,44 @@ exports.handler = async (event) => {
           });
         }
         break;
+      case "POST /admin/regenerate_access_code":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          try {
+            const { simulation_group_id } = event.queryStringParameters;
+
+            // Generate a new random access code (8 chars, uppercase alphanumeric)
+            const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            let newCode = "";
+            for (let i = 0; i < 4; i++) newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+            newCode += "-";
+            for (let i = 0; i < 4; i++) newCode += chars.charAt(Math.floor(Math.random() * chars.length));
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "simulation_groups"
+              SET group_access_code = ${newCode}
+              WHERE simulation_group_id = ${simulation_group_id}
+              RETURNING group_access_code;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Simulation group not found" });
+            } else {
+              response.body = JSON.stringify({ access_code: updated[0].group_access_code });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "simulation_group_id is required" });
+        }
+        break;
       case "DELETE /admin/delete_instructor_enrolments":
         if (
           event.queryStringParameters != null &&
@@ -324,9 +376,8 @@ exports.handler = async (event) => {
               message: "Instructor enrolments deleted successfully.",
             });
           } catch (err) {
-            await sqlConnectionTableCreator.rollback();
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -353,7 +404,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -384,9 +435,8 @@ exports.handler = async (event) => {
               message: "Group and related records deleted successfully.",
             });
           } catch (err) {
-            await sqlConnection.rollback();
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -456,7 +506,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -513,7 +563,7 @@ exports.handler = async (event) => {
               message: `User role updated to student for ${userEmail} and all instructor enrolments deleted.`,
             });
           } catch (err) {
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
@@ -548,7 +598,7 @@ exports.handler = async (event) => {
           });
         } catch (err) {
           response.statusCode = 500;
-          console.log(err);
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
@@ -573,7 +623,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -642,7 +692,7 @@ exports.handler = async (event) => {
           }
         } catch (err) {
           response.statusCode = 500;
-          console.log(err);
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
@@ -668,7 +718,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -696,7 +746,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -728,7 +778,7 @@ exports.handler = async (event) => {
           });
         } catch (err) {
           response.statusCode = 500;
-          console.log(err);
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
@@ -753,7 +803,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -821,8 +871,144 @@ exports.handler = async (event) => {
           }
         } catch (err) {
           response.statusCode = 500;
-          console.log(err);
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
+        }
+        break;
+      // ── Organization CRUD ──────────────────────────────────────────────
+      case "GET /admin/organizations":
+        try {
+          const orgs = await sqlConnectionTableCreator`
+            SELECT * FROM "organizations" ORDER BY created_at DESC;
+          `;
+          response.body = JSON.stringify(orgs);
+        } catch (err) {
+          response.statusCode = 500;
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
+          response.body = JSON.stringify({ error: "Internal server error" });
+        }
+        break;
+      case "GET /admin/organization":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const org = await sqlConnectionTableCreator`
+              SELECT * FROM "organizations"
+              WHERE organization_id = ${organization_id};
+            `;
+            if (org.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Organization not found" });
+            } else {
+              response.body = JSON.stringify(org[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "POST /admin/create_organization":
+        if (event.body) {
+          try {
+            const { name, description, type, ai_persona, user_role, icon_color, system_prompt } = JSON.parse(event.body);
+            if (!name || !name.trim()) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "name is required" });
+              break;
+            }
+            const newOrg = await sqlConnectionTableCreator`
+              INSERT INTO "organizations" (name, description, type, ai_persona, user_role, icon_color, system_prompt)
+              VALUES (
+                ${name},
+                ${description || null},
+                ${type || null},
+                ${ai_persona || 'Patient'},
+                ${user_role || 'Student'},
+                ${icon_color || '#03045E'},
+                ${system_prompt || null}
+              )
+              RETURNING *;
+            `;
+            response.statusCode = 201;
+            response.body = JSON.stringify(newOrg[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Request body is required" });
+        }
+        break;
+      case "PUT /admin/update_organization":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const { name, description, type, ai_persona, user_role, icon_color, system_prompt } = JSON.parse(event.body);
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "organizations"
+              SET
+                name = COALESCE(${name || null}, name),
+                description = COALESCE(${description || null}, description),
+                type = COALESCE(${type || null}, type),
+                ai_persona = COALESCE(${ai_persona || null}, ai_persona),
+                user_role = COALESCE(${user_role || null}, user_role),
+                icon_color = COALESCE(${icon_color || null}, icon_color),
+                system_prompt = COALESCE(${system_prompt || null}, system_prompt)
+              WHERE organization_id = ${organization_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Organization not found" });
+            } else {
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "DELETE /admin/delete_organization":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            await sqlConnectionTableCreator`
+              DELETE FROM "organizations"
+              WHERE organization_id = ${organization_id};
+            `;
+            response.body = JSON.stringify({ message: "Organization deleted successfully." });
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
       default:
@@ -830,9 +1016,9 @@ exports.handler = async (event) => {
     }
   } catch (error) {
     response.statusCode = 400;
-    console.log(error);
+    logger.error("Unhandled route error", { error: error.message, stack: error.stack });
     response.body = JSON.stringify(error.message);
   }
-  console.log(response);
+  logger.logResponse(response);
   return response;
 };

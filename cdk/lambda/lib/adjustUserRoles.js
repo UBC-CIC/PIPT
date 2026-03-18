@@ -1,10 +1,15 @@
 const { initializeConnection } = require("./lib.js");
+const logger = require("./logger");
 const { CognitoIdentityProviderClient, AdminListGroupsForUserCommand, AdminGetUserCommand, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 let sqlConnection = global.sqlConnection;
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
+  logger.init(event, context);
+  logger.info("adjustUserRoles invoked", { userName: event.userName });
+
   if (!sqlConnection) {
+    logger.info("Initializing database connection");
     await initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT);
     sqlConnection = global.sqlConnection;
   }
@@ -49,6 +54,7 @@ exports.handler = async (event) => {
           WHERE user_email = ${email};
         `;
         console.log('DB roles updated to include admin');
+        logger.info("DB roles updated to include admin", { email });
       }
     } else if (cognitoRoles.some(role => ['instructor', 'student'].includes(role))) {
       const cognitoNonAdminRole = cognitoRoles.find(role => ['instructor', 'student'].includes(role));
@@ -78,9 +84,10 @@ exports.handler = async (event) => {
       }
     }
 
+    logger.info("User roles adjusted successfully", { email, cognitoRoles, dbRoles });
     return event;
   } catch (err) {
-    console.error(err);
+    logger.error("Error adjusting user roles", { error: err.message, stack: err.stack, userName: event.userName });
     return event;
   }
 };

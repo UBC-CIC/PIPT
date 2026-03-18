@@ -21,6 +21,9 @@ function LoginPage() {
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
   const [waitingForAuth, setWaitingForAuth] = useState(false);
+  const [needsNewPassword, setNeedsNewPassword] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const navigationAttempted = useRef(false);
 
   // Navigate once user is authenticated after sign-in
@@ -103,6 +106,12 @@ function LoginPage() {
         return;
       }
 
+      if (result.needsNewPassword) {
+        setNeedsNewPassword(true);
+        setLoading(false);
+        return;
+      }
+
       const currentUser = await refreshUser(); // Gets the user directly
 
       if (currentUser?.groups.includes('instructor')) {
@@ -137,6 +146,109 @@ function LoginPage() {
   const handleCreateAccount = () => {
     navigate('/signup');
   };
+
+  /**
+   * Handle new password submission for admin-created users
+   */
+  const handleNewPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError('');
+
+    if (newPassword !== confirmNewPassword) {
+      setError('Passwords do not match.');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      await authService.completeNewPassword(newPassword);
+      const currentUser = await refreshUser();
+
+      if (currentUser?.groups.includes('instructor')) {
+        navigate('/instructor', { replace: true });
+      } else if (currentUser?.groups.includes('admin')) {
+        navigate('/admin', { replace: true });
+      } else {
+        navigate('/', { replace: true });
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to set new password';
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Show new password form for admin-created users
+  if (needsNewPassword) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8" style={{ backgroundColor: UI_COLORS.background.white }}>
+        <div className="w-full max-w-md">
+          <h2 className="text-3xl font-bold mb-4" style={{ color: UI_COLORS.text.heading }}>
+            Set New Password
+          </h2>
+          <p className="mb-8 text-sm" style={{ color: UI_COLORS.text.body }}>
+            Your account requires a new password. Please set a permanent password to continue.
+          </p>
+
+          {error && (
+            <div
+              className="mb-6 p-4 rounded-lg text-sm"
+              style={{ backgroundColor: '#FEE2E2', color: '#991B1B', borderWidth: '1px', borderStyle: 'solid', borderColor: '#FECACA' }}
+            >
+              {error}
+            </div>
+          )}
+
+          <form onSubmit={handleNewPassword} className="space-y-6">
+            <div>
+              <Input
+                type="password"
+                placeholder="New Password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
+                required
+                disabled={loading}
+                autoFocus
+              />
+            </div>
+            <div>
+              <Input
+                type="password"
+                placeholder="Confirm New Password"
+                value={confirmNewPassword}
+                onChange={(e) => setConfirmNewPassword(e.target.value)}
+                className="w-full h-12 px-4 rounded-lg"
+                style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
+                required
+                disabled={loading}
+              />
+            </div>
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-full text-base font-medium"
+              style={{
+                backgroundColor: UI_COLORS.button.primary,
+                color: UI_COLORS.button.text,
+                opacity: loading ? 0.7 : 1,
+              }}
+              disabled={loading}
+            >
+              {loading ? 'Setting password...' : 'Set Password & Sign In'}
+            </Button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex">

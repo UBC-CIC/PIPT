@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import OrganizationCard from '@/components/OrganizationCard';
 import CreateOrganizationDialog from '@/components/CreateOrganizationDialog';
 import { Button } from '@/components/ui/button';
-import { mockAdminDataService, type Organization } from '@/services/adminService';
-import { getSimulationGroupColor } from '@/lib/colors';
+import { mockAdminDataService, mockOrganizations } from '@/services/adminService';
+import { getSimulationGroupColor, UI_COLORS } from '@/lib/colors';
+import * as adminApi from '@/services/adminApiService';
 
 /**
  * AdminHomePage Component
@@ -17,9 +18,8 @@ import { getSimulationGroupColor } from '@/lib/colors';
 function AdminHomePage() {
   const navigate = useNavigate();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-
-  // Load organizations from mock data service and store in state
-  const [organizations, setOrganizations] = useState<Organization[]>(() => mockAdminDataService.getOrganizations());
+  const [organizations, setOrganizations] = useState<adminApi.AdminOrganization[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Load user data from mock data service with error handling
   let user = mockAdminDataService.getCurrentUser();
@@ -31,6 +31,17 @@ function AdminHomePage() {
       avatarUrl: undefined
     };
   }
+
+  // Load organizations from real API, fall back to mock data
+  useEffect(() => {
+    adminApi.getOrganizations()
+      .then(setOrganizations)
+      .catch((err) => {
+        console.error('Failed to load organizations, using mock data:', err);
+        setOrganizations(mockOrganizations);
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const handleSignOut = () => {
     try {
@@ -59,28 +70,32 @@ function AdminHomePage() {
     }
   };
 
-  const handleCreateOrganizationSubmit = (data: { name: string; description: string; aiPersonaTitle: string; userRoleTitle: string; systemPrompt: string }) => {
+  const handleCreateOrganizationSubmit = async (data: { name: string; description: string; aiPersonaTitle: string; userRoleTitle: string; systemPrompt: string }) => {
     try {
-      console.log('Creating organization with data:', data);
-      
-      // Create new organization object
-      const newOrganization: Organization = {
-        id: `org-${Date.now()}`,
+      const created = await adminApi.createOrganization({
         name: data.name,
+        description: data.description,
         ai_persona: data.aiPersonaTitle,
         user_role: data.userRoleTitle,
-        icon: 'building',
         icon_color: getSimulationGroupColor(organizations.length),
-      };
-
-      // Add to state
-      setOrganizations(prevOrgs => [...prevOrgs, newOrganization]);
-
-      // Future: Call API to create organization
-      // const createdOrg = await api.createOrganization(data);
-      // setOrganizations(prevOrgs => [...prevOrgs, createdOrg]);
+        system_prompt: data.systemPrompt || undefined,
+      });
+      setOrganizations(prev => [...prev, created]);
     } catch (error) {
-      console.error('Error creating organization:', error);
+      console.error('Error creating organization via API, adding locally:', error);
+      // Fallback: add to local state so the UI still works
+      const fallbackOrg: adminApi.AdminOrganization = {
+        organization_id: `org-${Date.now()}`,
+        name: data.name,
+        description: data.description,
+        type: null,
+        ai_persona: data.aiPersonaTitle,
+        user_role: data.userRoleTitle,
+        icon_color: getSimulationGroupColor(organizations.length),
+        system_prompt: data.systemPrompt || null,
+        created_at: new Date().toISOString(),
+      };
+      setOrganizations(prev => [...prev, fallbackOrg]);
     }
   };
 
@@ -98,7 +113,7 @@ function AdminHomePage() {
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Header section */}
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-semibold text-gray-900">Sample Organizations</h2>
+          <h2 className="text-2xl font-semibold text-gray-900">Organizations</h2>
           <Button
             onClick={handleCreateNewOrganization}
             className="bg-gray-900 hover:bg-gray-800 text-white px-6"
@@ -108,19 +123,29 @@ function AdminHomePage() {
         </div>
 
         {/* Organizations grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {organizations.map((org) => (
-            <OrganizationCard
-              key={org.id}
-              name={org.name}
-              aiPersona={org.ai_persona}
-              userRole={org.user_role}
-              icon={org.icon}
-              iconColor={org.icon_color}
-              onUseOrganisation={() => handleUseOrganisation(org.id)}
-            />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <p style={{ color: UI_COLORS.text.muted }}>Loading organizations...</p>
+          </div>
+        ) : organizations.length === 0 ? (
+          <div className="flex items-center justify-center py-12">
+            <p style={{ color: UI_COLORS.text.muted }}>No organizations yet. Create one to get started.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {organizations.map((org, index) => (
+              <OrganizationCard
+                key={org.organization_id}
+                name={org.name}
+                aiPersona={org.ai_persona}
+                userRole={org.user_role}
+                icon="building"
+                iconColor={org.icon_color || getSimulationGroupColor(index)}
+                onUseOrganisation={() => handleUseOrganisation(org.organization_id)}
+              />
+            ))}
+          </div>
+        )}
       </main>
       <CreateOrganizationDialog
         open={isCreateDialogOpen}

@@ -637,6 +637,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [postgres],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -669,6 +670,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [postgres],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -700,6 +702,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [postgres],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -863,6 +866,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 128,
         layers: [postgres],
         role: coglambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -880,6 +884,7 @@ export class ApiServiceStack extends cdk.Stack {
       memorySize: 512,
       layers: [postgres],
       role: coglambdaRole,
+      logRetention: logs.RetentionDays.INFINITE,
     });
 
     this.userPool.addTrigger(
@@ -914,6 +919,7 @@ export class ApiServiceStack extends cdk.Stack {
       functionName: `${id}-preSignupLambda`,
       memorySize: 128,
       role: coglambdaRole,
+      logRetention: logs.RetentionDays.INFINITE,
     });
     this.userPool.addTrigger(
       cognito.UserPoolOperation.PRE_SIGN_UP,
@@ -940,6 +946,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [jwt],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -973,6 +980,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [jwt],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1008,6 +1016,7 @@ export class ApiServiceStack extends cdk.Stack {
         memorySize: 512,
         layers: [jwt],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1113,6 +1122,7 @@ export class ApiServiceStack extends cdk.Stack {
       timeout: cdk.Duration.seconds(900),
       functionName: `${id}-EcrImageWaiter`,
       memorySize: 128,
+      logRetention: logs.RetentionDays.INFINITE,
     });
 
     // Grant ECR read permissions
@@ -1334,6 +1344,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-GeneratePreSignedURLFunction`,
         layers: [powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1467,7 +1478,7 @@ export class ApiServiceStack extends cdk.Stack {
     // Create Log Group for dataIngestLambdaDockerFunc
     const logGroup = new logs.LogGroup(this, `${id}-DataIngestLambdaLogGroup`, {
       logGroupName: `/aws/lambda/${dataIngestLambdaDockerFunc.functionName}`,
-      retention: logs.RetentionDays.ONE_WEEK,
+      retention: logs.RetentionDays.INFINITE,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
@@ -1535,6 +1546,7 @@ export class ApiServiceStack extends cdk.Stack {
         functionName: `${id}-TimeoutHandlerLambda`,
         layers: [psycopgLayer, powertoolsLayer],
         role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1575,6 +1587,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-GetFilesFunction`,
         layers: [psycopgLayer, powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1629,6 +1642,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-GetFilesFunctionStudent`,
         layers: [psycopgLayer, powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1683,6 +1697,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-GetProfilePictures`,
         layers: [psycopgLayer, powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1737,6 +1752,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-GetProfilePicturesStudent`,
         layers: [psycopgLayer, powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1788,6 +1804,7 @@ export class ApiServiceStack extends cdk.Stack {
       },
       functionName: `${id}-DeleteFileFunction`,
       layers: [psycopgLayer, powertoolsLayer],
+      logRetention: logs.RetentionDays.INFINITE,
     });
 
     // Override the Logical ID of the Lambda Function to get ARN in OpenAPI
@@ -1837,6 +1854,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-DeletePatientFunction`,
         layers: [powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 
@@ -1878,6 +1896,7 @@ export class ApiServiceStack extends cdk.Stack {
         },
         functionName: `${id}-DeleteLastMessage`,
         layers: [psycopgLayer, powertoolsLayer],
+        logRetention: logs.RetentionDays.INFINITE,
       }
     );
 

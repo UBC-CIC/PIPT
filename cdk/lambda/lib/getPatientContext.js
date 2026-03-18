@@ -12,10 +12,14 @@ function getPool() {
   return pool;
 }
 
-exports.getPatientContext = async (event) => {
+exports.getPatientContext = async (event, context) => {
+  const requestId = context?.awsRequestId || "unknown";
   const { simulation_group_id, patient_id } = event.queryStringParameters;
 
+  console.log(JSON.stringify({ level: "INFO", requestId, message: "getPatientContext invoked", simulation_group_id, patient_id }));
+
   if (!simulation_group_id || !patient_id) {
+    console.log(JSON.stringify({ level: "WARN", requestId, message: "Missing required parameters", simulation_group_id, patient_id }));
     return {
       statusCode: 400,
       headers: {
@@ -66,6 +70,8 @@ exports.getPatientContext = async (event) => {
       llm_completion: patientResult.rows[0].llm_completion
     };
 
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Patient context fetched successfully", simulation_group_id, patient_id }));
+
     return {
       statusCode: 200,
       headers: {
@@ -77,7 +83,7 @@ exports.getPatientContext = async (event) => {
     };
 
   } catch (error) {
-    console.error('Error fetching patient context:', error);
+    console.error(JSON.stringify({ level: "ERROR", requestId, message: "Error fetching patient context", error: error.message, stack: error.stack, simulation_group_id, patient_id }));
     return {
       statusCode: 500,
       headers: {

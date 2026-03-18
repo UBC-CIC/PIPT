@@ -95,7 +95,9 @@ async function initializeConnection() {
   }
 }
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
+  const requestId = context?.awsRequestId || "unknown";
+
   if (!jwtVerifier) {
     await initializeConnection();
   }
@@ -120,9 +122,10 @@ exports.handler = async (event) => {
       userId: payload.sub,
     };
 
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Student authorization successful", userId: payload.sub }));
     return responseStruct;
   } catch (error) {
-    console.error("Authorization error:", error);
+    console.error(JSON.stringify({ level: "ERROR", requestId, message: "Student authorization failed", error: error.message }));
     // API Gateway wants this *exact* error message, otherwise it returns 500 instead of 401:
     throw new Error("Unauthorized");
   }
