@@ -6,6 +6,7 @@ import { Duration } from 'aws-cdk-lib';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
+import * as logs from 'aws-cdk-lib/aws-logs';
 
 // Stack import
 import { VpcStack } from './vpc-stack';
@@ -97,6 +98,7 @@ export class DBFlowStack extends Stack {
             code: lambda.Code.fromAsset("lambda/db_setup"),
             layers: [nodePgMigrateLayer],
             role: lambdaRole,
+            logRetention: logs.RetentionDays.INFINITE,
         });
 
         // Create security group for Lambda to connect to RDS

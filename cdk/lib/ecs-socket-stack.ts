@@ -130,7 +130,7 @@ export class EcsSocketStack extends Stack {
       portMappings: [{ containerPort: 80 }],
       logging: ecs.LogDrivers.awsLogs({
         streamPrefix: "Socket",
-        logRetention: logs.RetentionDays.THREE_MONTHS,
+        logRetention: logs.RetentionDays.INFINITE,
       }),
       environment: {
         NODE_ENV: "production",
