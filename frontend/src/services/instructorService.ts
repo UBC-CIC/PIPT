@@ -17,6 +17,7 @@ import { getSimulationGroupColor } from '@/lib/colors';
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
 import { mockAdminDataService } from '@/services/adminService';
+import { mapBackendToQuestionBankItem } from '@/services/adminApiService';
 
 /**
  * Represents a simulation group from instructor perspective
@@ -297,7 +298,7 @@ export interface InstructorDataService {
   getChatMessages: (attemptId: string) => ChatMessage[];
   getChatNotes: (attemptId: string) => string;
   getDefaultPatientPrompt: () => string;
-  getGlobalQuestionBank: () => QuestionBankItem[];
+  getGlobalQuestionBank: () => Promise<QuestionBankItem[]>;
   getPatientSpecificQuestionBank: () => QuestionBankItem[];
   addToGlobalQuestionBank: (question: QuestionBankItem) => void;
   addToPatientSpecificQuestionBank: (question: QuestionBankItem) => void;
@@ -309,6 +310,10 @@ export interface InstructorDataService {
   getKeyQuestionAnalytics: (simulationGroupId: string) => KeyQuestionAnalytics[];
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
+  getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
+  assignQuestionToGroup: (simulationGroupId: string, questionId: string, personaId: string, options?: { weight_override?: number; max_score_override?: number; order?: number }) => Promise<any>;
+  unassignQuestion: (groupQuestionId: string) => Promise<any>;
+  updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
 }
 
 /**
@@ -1334,8 +1339,14 @@ function getDefaultPatientPrompt(): string {
 /**
  * Get global question bank
  */
-function getGlobalQuestionBank(): QuestionBankItem[] {
-  return [...mockGlobalQuestionBank];
+async function getGlobalQuestionBank(): Promise<QuestionBankItem[]> {
+  try {
+    const rows = await apiClient.request<any[]>('instructor/question_bank');
+    return rows.map(mapBackendToQuestionBankItem);
+  } catch (error) {
+    console.error('Failed to fetch global question bank from API, falling back to mock data:', error);
+    return [...mockGlobalQuestionBank];
+  }
 }
 
 /**
@@ -1409,6 +1420,52 @@ function isQuestionInUse(questionId: string, questionType: 'global' | 'patientSp
 }
 
 /**
+ * Get questions assigned to a simulation group, optionally filtered by persona
+ */
+async function getSimulationGroupQuestions(simulationGroupId: string, personaId?: string): Promise<any[]> {
+  let endpoint = `instructor/simulation_group_questions?simulation_group_id=${simulationGroupId}`;
+  if (personaId) {
+    endpoint += `&persona_id=${personaId}`;
+  }
+  return apiClient.request<any[]>(endpoint);
+}
+
+/**
+ * Assign a question to a simulation group for a specific persona
+ */
+async function assignQuestionToGroup(
+  simulationGroupId: string,
+  questionId: string,
+  personaId: string,
+  options?: { weight_override?: number; max_score_override?: number; order?: number }
+): Promise<any> {
+  return apiClient.request<any>(
+    `instructor/simulation_group_questions?simulation_group_id=${simulationGroupId}&question_id=${questionId}&persona_id=${personaId}`,
+    { method: 'POST', body: options }
+  );
+}
+
+/**
+ * Unassign a question from a simulation group
+ */
+async function unassignQuestion(groupQuestionId: string): Promise<any> {
+  return apiClient.request<any>(
+    `instructor/simulation_group_questions?group_question_id=${groupQuestionId}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * Update a question assignment (weight, max score, order)
+ */
+async function updateQuestionAssignment(groupQuestionId: string, updates: any): Promise<any> {
+  return apiClient.request<any>(
+    `instructor/simulation_group_questions?group_question_id=${groupQuestionId}`,
+    { method: 'PUT', body: updates }
+  );
+}
+
+/**
  * Instructor data service object
  */
 export const instructorService: InstructorDataService = {
@@ -1458,7 +1515,11 @@ export const instructorService: InstructorDataService = {
   isQuestionInUse,
   getKeyQuestionAnalytics,
   getQuestionPerformanceScores,
-  getScoreDistribution
+  getScoreDistribution,
+  getSimulationGroupQuestions,
+  assignQuestionToGroup,
+  unassignQuestion,
+  updateQuestionAssignment
 };
 
 // Keep backward-compatible export

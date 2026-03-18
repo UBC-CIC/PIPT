@@ -21,6 +21,7 @@
 
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
+import type { QuestionBankItem } from '@/services/instructorService';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -331,6 +332,86 @@ export async function updateOrganization(
 export async function deleteOrganization(organizationId: string): Promise<{ message: string }> {
   return apiClient.request<{ message: string }>(
     `admin/delete_organization?organization_id=${encodeURIComponent(organizationId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+
+// ─── Question Bank API Functions ─────────────────────────────────────────────
+
+/**
+ * Map a snake_case backend question_bank row to a camelCase QuestionBankItem.
+ */
+export function mapBackendToQuestionBankItem(row: any): QuestionBankItem {
+  return {
+    id: row.question_id,
+    title: row.title,
+    questionText: row.question_text,
+    clinicalIntent: '',
+    evaluationCriteria: row.evaluation_criteria,
+    category: row.category,
+    difficultyLevel: row.difficulty_level,
+    isMandatory: row.is_mandatory ?? false,
+    weight: row.weight,
+    maxScore: row.max_score,
+    isActive: row.is_active ?? true,
+    usedBySimulationGroups: [],
+  };
+}
+
+/**
+ * Get all question bank questions for an organization.
+ */
+export async function getQuestionBankQuestions(organizationId: string): Promise<QuestionBankItem[]> {
+  const rows = await apiClient.request<any[]>(
+    `admin/question_bank?organization_id=${encodeURIComponent(organizationId)}`
+  );
+  return rows.map(mapBackendToQuestionBankItem);
+}
+
+/**
+ * Create a new question bank question for an organization.
+ */
+export async function createQuestionBankQuestion(
+  organizationId: string,
+  createdBy: string,
+  questionData: any
+): Promise<QuestionBankItem> {
+  const row = await apiClient.request<any>(
+    `admin/question_bank?organization_id=${encodeURIComponent(organizationId)}&created_by=${encodeURIComponent(createdBy)}`,
+    {
+      method: 'POST',
+      body: questionData,
+    }
+  );
+  return mapBackendToQuestionBankItem(row);
+}
+
+/**
+ * Update an existing question bank question.
+ */
+export async function updateQuestionBankQuestion(
+  questionId: string,
+  questionData: any
+): Promise<QuestionBankItem> {
+  const row = await apiClient.request<any>(
+    `admin/question_bank?question_id=${encodeURIComponent(questionId)}`,
+    {
+      method: 'PUT',
+      body: questionData,
+    }
+  );
+  return mapBackendToQuestionBankItem(row);
+}
+
+/**
+ * Delete (soft-delete) a question bank question.
+ */
+export async function deleteQuestionBankQuestion(
+  questionId: string
+): Promise<{ message: string }> {
+  return apiClient.request<{ message: string }>(
+    `admin/question_bank?question_id=${encodeURIComponent(questionId)}`,
     { method: 'DELETE' }
   );
 }
