@@ -40,8 +40,19 @@ function AdminOrganizationPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const groupsData = await instructorService.getSimulationGroups();
-        setGroups(groupsData);
+        const groupsData = await adminApi.getAllSimulationGroups();
+        // Map admin groups to the InstructorSimulationGroup shape used by the UI
+        setGroups(groupsData.map((g, i) => ({
+          simulation_group_id: g.simulation_group_id,
+          name: g.group_name,
+          subtitle: g.group_description || 'Simulation Group',
+          icon_color: getSimulationGroupColor(i),
+          access_code: g.group_access_code || '',
+          student_count: g.student_count || 0,
+          instructor_count: g.instructor_count || 0,
+          patient_count: g.persona_count || 0,
+          organization_id: g.organization_id || '',
+        })));
       } catch (error) {
         console.error('Failed to load simulation groups:', error);
       }
@@ -95,7 +106,7 @@ function AdminOrganizationPage() {
         group_description: data.description,
         group_student_access: data.active,
         system_prompt: data.systemPrompt || '',
-        instructor_voice_enabled: data.enableVoice,
+        // instructor_voice_enabled: data.enableVoice,  // uncomment after migration 005 runs
       });
 
       // Enroll any specified instructors

@@ -63,7 +63,7 @@ exports.handler = async (event, context) => {
 
       case "GET /admin/simulation_groups":
         try {
-          // Query all simulation groups from simulation_groups table
+          // Query all simulation groups with student, instructor, and persona counts
           const simulationGroups = await sqlConnectionTableCreator`
             SELECT *
             FROM "simulation_groups";
@@ -105,7 +105,7 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Insert enrollment into enrolments table with current timestamp for the 'instructor' role
+            // Insert enrollment into enrollments table with current timestamp for the 'instructor' role
             const enrollment = await sqlConnectionTableCreator`
               INSERT INTO "enrolments" (enrolment_id, simulation_group_id, user_id, enrolment_type, time_enroled)
               VALUES (uuid_generate_v4(), ${simulation_group_id}, ${user_id}, 'instructor', CURRENT_TIMESTAMP)
@@ -117,7 +117,7 @@ exports.handler = async (event, context) => {
               RETURNING enrolment_id;
             `;
 
-            const enrolment_id = enrollment[0]?.enrolment_id;
+            const enrollment_id = enrollment[0]?.enrollment_id;
 
             if (enrolment_id) {
               // Retrieve all patient IDs associated with the simulation group
@@ -127,9 +127,9 @@ exports.handler = async (event, context) => {
                 WHERE simulation_group_id = ${simulation_group_id};
               `;
 
-              // Insert a record into student_interactions for each patient in the simulation group
-              const studentInteractionInsertions = patientsResult.map(
-                (patient) => {
+              // Insert a record into student_interactions for each persona in the simulation group
+              const studentInteractionInsertions = personasResult.map(
+                (persona) => {
                   return sqlConnectionTableCreator`
                     INSERT INTO "student_interactions" (student_interaction_id, patient_id, enrolment_id, patient_score, last_accessed, patient_context_embedding, is_completed)
                     VALUES (uuid_generate_v4(), ${patient.patient_id}, ${enrolment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
@@ -156,22 +156,16 @@ exports.handler = async (event, context) => {
         break;
 
       case "POST /admin/create_simulation_group":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.group_name &&
-          event.queryStringParameters.group_description &&
-          event.queryStringParameters.group_student_access &&
-          event.body
-        ) {
+        if (event.body) {
           try {
             const {
               group_name,
               group_description,
               group_student_access,
-              empathy_enabled,
-              admin_voice_enabled,
-              instructor_voice_enabled,
-            } = event.queryStringParameters;
+              system_prompt,
+              // admin_voice_enabled,      // uncomment after migration 005 runs
+              // instructor_voice_enabled,  // uncomment after migration 005 runs
+            } = body;
 
             logger.info("Simulation group creation start", { group_name, group_description });
 
@@ -185,6 +179,7 @@ exports.handler = async (event, context) => {
             for (let i = 0; i < 4; i++) group_access_code += chars.charAt(Math.floor(Math.random() * chars.length));
 
             // Insert new simulation group into simulation_groups table
+            // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
             const newSimulationGroup = await sqlConnectionTableCreator`
               INSERT INTO "simulation_groups" (
                   simulation_group_id,
@@ -278,13 +273,12 @@ exports.handler = async (event, context) => {
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.access
         ) {
-          const { simulation_group_id, access, empathy_enabled, admin_voice_enabled, instructor_voice_enabled } = event.queryStringParameters;
+          const { simulation_group_id, access } = event.queryStringParameters;
+          // const { admin_voice_enabled, instructor_voice_enabled } = event.queryStringParameters; // uncomment after migration 005 runs
           const accessBool = access.toLowerCase() === "true";
-          const empathyBool = empathy_enabled ? empathy_enabled.toLowerCase() === "true" : true;
-          const adminVoiceBool = admin_voice_enabled ? admin_voice_enabled.toLowerCase() === "true" : true;
-          const instructorVoiceBool = instructor_voice_enabled ? instructor_voice_enabled.toLowerCase() === "true" : true;
 
-          // SQL query to update group access, empathy_enabled, and voice settings
+          // SQL query to update group access
+          // TODO: add admin_voice_enabled and instructor_voice_enabled after migration 005 runs
           await sqlConnectionTableCreator`
             UPDATE "simulation_groups"
             SET group_student_access = ${accessBool}, 
@@ -367,7 +361,7 @@ exports.handler = async (event, context) => {
               return;
             }
 
-            // Delete all enrolments for the instructor
+            // Delete all enrollments for the instructor
             await sqlConnectionTableCreator`
               DELETE FROM "enrolments"
               WHERE user_id = ${userId} AND enrolment_type = 'instructor';
@@ -395,7 +389,7 @@ exports.handler = async (event, context) => {
           try {
             const { simulation_group_id } = event.queryStringParameters;
 
-            // Delete all enrolments for the group where enrolment_type is 'instructor'
+            // Delete all enrollments for the group where enrollment_type is 'instructor'
             await sqlConnectionTableCreator`
               DELETE FROM "enrolments"
               WHERE simulation_group_id = ${simulation_group_id} AND enrolment_type = 'instructor';
@@ -551,7 +545,7 @@ exports.handler = async (event, context) => {
               WHERE user_email = ${userEmail};
             `;
 
-            // Delete all enrolments where the enrolment type is instructor
+            // Delete all enrollments where the enrollment type is instructor
             await sqlConnectionTableCreator`
               DELETE FROM "enrolments"
               WHERE user_id = ${userId} AND enrolment_type = 'instructor';

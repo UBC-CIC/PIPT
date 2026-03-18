@@ -203,12 +203,12 @@ function InstructorSimulationGroupPage() {
   
   // Filter patients based on search query (user searches by name, but ID is the unique identifier)
   const filteredPatients = manageablePatients.filter(patient =>
-    patient.name.toLowerCase().includes(searchQuery.toLowerCase())
+    (patient.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Filter students based on search query (user searches by name, but ID is the unique identifier)
   const filteredStudents = students.filter(student =>
-    student.name.toLowerCase().includes(studentSearchQuery.toLowerCase())
+    (student.name || '').toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
 
   /**
@@ -290,12 +290,12 @@ function InstructorSimulationGroupPage() {
    * Handle edit patient
    */
   const handleEditPatient = (patientId: string) => {
-    const patient = instructorService.getPatient(patientId);
+    const patient = manageablePatients.find(p => p.id === patientId || p.patient_id === patientId);
     if (patient) {
       setSelectedPatientForEdit(patientId);
-      setEditPatientName(patient.patient_name);
-      setEditPatientAge(patient.patient_age.toString());
-      setEditPatientGender(patient.patient_gender);
+      setEditPatientName(patient.patient_name || patient.name || '');
+      setEditPatientAge((patient.patient_age || patient.age || '').toString());
+      setEditPatientGender(patient.patient_gender || patient.gender || '');
       setEditPatientPrompt(patient.patient_prompt || instructorService.getDefaultPatientPrompt());
       setEditPatientTab('info');
       

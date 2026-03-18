@@ -37,10 +37,12 @@ export interface AdminSimulationGroup {
   group_access_code: string;
   group_student_access: boolean;
   system_prompt: string;
-  empathy_enabled: boolean;
-  admin_voice_enabled: boolean;
-  instructor_voice_enabled: boolean;
+  // admin_voice_enabled: boolean;      // uncomment after migration 005 runs
+  // instructor_voice_enabled: boolean;  // uncomment after migration 005 runs
   organization_id?: string;
+  persona_count?: number;
+  student_count?: number;
+  instructor_count?: number;
 }
 
 export interface InstructorGroup {
@@ -189,24 +191,21 @@ export async function createSimulationGroup(params: {
   group_description: string;
   group_student_access: boolean;
   system_prompt: string;
-  empathy_enabled?: boolean;
-  admin_voice_enabled?: boolean;
-  instructor_voice_enabled?: boolean;
+  // admin_voice_enabled?: boolean;      // uncomment after migration 005 runs
+  // instructor_voice_enabled?: boolean;  // uncomment after migration 005 runs
 }): Promise<AdminSimulationGroup> {
-  const queryParams = new URLSearchParams({
-    group_name: params.group_name,
-    group_description: params.group_description,
-    group_student_access: String(params.group_student_access),
-    ...(params.empathy_enabled !== undefined && { empathy_enabled: String(params.empathy_enabled) }),
-    ...(params.admin_voice_enabled !== undefined && { admin_voice_enabled: String(params.admin_voice_enabled) }),
-    ...(params.instructor_voice_enabled !== undefined && { instructor_voice_enabled: String(params.instructor_voice_enabled) }),
-  });
-
   return apiClient.request<AdminSimulationGroup>(
-    `admin/create_simulation_group?${queryParams.toString()}`,
+    `admin/create_simulation_group`,
     {
       method: 'POST',
-      body: { system_prompt: params.system_prompt },
+      body: {
+        group_name: params.group_name,
+        group_description: params.group_description,
+        group_student_access: params.group_student_access,
+        system_prompt: params.system_prompt,
+        // ...(params.admin_voice_enabled !== undefined && { admin_voice_enabled: params.admin_voice_enabled }),
+        // ...(params.instructor_voice_enabled !== undefined && { instructor_voice_enabled: params.instructor_voice_enabled }),
+      },
     }
   );
 }
@@ -227,16 +226,14 @@ export async function deleteSimulationGroup(simulationGroupId: string): Promise<
 export async function updateGroupAccess(params: {
   simulation_group_id: string;
   access: boolean;
-  empathy_enabled?: boolean;
-  admin_voice_enabled?: boolean;
-  instructor_voice_enabled?: boolean;
+  // admin_voice_enabled?: boolean;      // uncomment after migration 005 runs
+  // instructor_voice_enabled?: boolean;  // uncomment after migration 005 runs
 }): Promise<{ message: string }> {
   const queryParams = new URLSearchParams({
     simulation_group_id: params.simulation_group_id,
     access: String(params.access),
-    ...(params.empathy_enabled !== undefined && { empathy_enabled: String(params.empathy_enabled) }),
-    ...(params.admin_voice_enabled !== undefined && { admin_voice_enabled: String(params.admin_voice_enabled) }),
-    ...(params.instructor_voice_enabled !== undefined && { instructor_voice_enabled: String(params.instructor_voice_enabled) }),
+    // ...(params.admin_voice_enabled !== undefined && { admin_voice_enabled: String(params.admin_voice_enabled) }),
+    // ...(params.instructor_voice_enabled !== undefined && { instructor_voice_enabled: String(params.instructor_voice_enabled) }),
   });
 
   return apiClient.request<{ message: string }>(
