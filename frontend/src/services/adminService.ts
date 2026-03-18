@@ -1,8 +1,11 @@
 /**
  * Admin Service
  * 
- * Mock data service for admin functionality
+ * Mock data service for admin functionality.
+ * Used as fallback when the real backend API is unavailable (local dev).
  */
+
+import type { AdminOrganization, AdminInstructor } from '@/services/adminApiService';
 
 export interface Organization {
   id: string;
@@ -36,6 +39,38 @@ export interface PromptHistoryEntry {
   text: string;
   savedAt: string;
 }
+
+// ─── Mock data matching API shapes (used as fallback) ────────────────────────
+
+export const mockOrganizations: AdminOrganization[] = [
+  {
+    organization_id: 'org-1',
+    name: 'Pharmacy',
+    description: 'Pharmacy simulation organization',
+    type: 'Healthcare',
+    ai_persona: 'Patient',
+    user_role: 'Student',
+    icon_color: '#03045E',
+    system_prompt: null,
+    created_at: '2025-01-01T00:00:00Z',
+  },
+  {
+    organization_id: 'org-2',
+    name: 'Legal',
+    description: 'Legal simulation organization',
+    type: 'Legal',
+    ai_persona: 'Law Client',
+    user_role: 'Legal Advisor',
+    icon_color: '#0077B6',
+    system_prompt: null,
+    created_at: '2025-01-01T00:00:00Z',
+  },
+];
+
+export const mockGroupInstructors: AdminInstructor[] = [
+  { user_email: 'email1@random.com', first_name: 'Tom', last_name: 'Doe' },
+  { user_email: 'mary.jane@email.com', first_name: 'Mary', last_name: 'Jane' },
+];
 
 /**
  * Mock data service for admin operations

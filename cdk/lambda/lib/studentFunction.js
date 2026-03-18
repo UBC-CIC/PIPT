@@ -1,4 +1,5 @@
 const { initializeConnection } = require("./lib.js");
+const logger = require("./logger");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT, USER_POOL } = process.env;
 const {
   CognitoIdentityProviderClient,
@@ -8,7 +9,10 @@ const {
 // SQL conneciton from global variable at lib.js
 let sqlConnection = global.sqlConnection;
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
+  logger.init(event, context);
+  logger.info("Student handler invoked", { queryStringParameters: event.queryStringParameters });
+
   const cognito_id = event.requestContext.authorizer.userId;
   const client = new CognitoIdentityProviderClient();
   const userAttributesCommand = new AdminGetUserCommand({
@@ -34,6 +38,7 @@ exports.handler = async (event) => {
     (userEmail && userEmail !== userEmailAttribute);
 
   if (isUnauthorized) {
+    logger.warn("Unauthorized access attempt", { queryEmail, studentEmail, userEmail, userEmailAttribute });
     return {
       statusCode: 401,
       headers: {
@@ -59,8 +64,10 @@ exports.handler = async (event) => {
 
   // Initialize the database connection if not already initialized
   if (!sqlConnection) {
+    logger.info("Initializing database connection");
     await initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT);
     sqlConnection = global.sqlConnection;
+    logger.info("Database connection initialized");
   }
 
   // Function to format student full names (lowercase and spaces replaced with "_")
@@ -114,7 +121,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -143,7 +150,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -172,7 +179,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -213,7 +220,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(data);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -399,7 +406,7 @@ exports.handler = async (event) => {
 
             response.body = JSON.stringify(data);
           } catch (err) {
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
@@ -511,7 +518,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(sessionData);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -607,7 +614,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify({ success: "Session deleted" });
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -645,7 +652,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -724,7 +731,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(messageData);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -805,7 +812,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(messageData);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -899,7 +906,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -928,7 +935,7 @@ exports.handler = async (event) => {
 
             response.body = JSON.stringify(messages);
           } catch (err) {
-            console.log(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
@@ -966,7 +973,7 @@ exports.handler = async (event) => {
             response.statusCode = 200;
             response.body = JSON.stringify(updateResult[0]);
           } catch (err) {
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
@@ -1056,7 +1063,7 @@ exports.handler = async (event) => {
               message: "Patient score updated successfully.",
             });
           } catch (err) {
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
@@ -1091,7 +1098,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1125,7 +1132,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1163,7 +1170,7 @@ exports.handler = async (event) => {
             }
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1208,7 +1215,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(completionStatus);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1262,7 +1269,7 @@ exports.handler = async (event) => {
             response.body = JSON.stringify(context);
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1311,7 +1318,7 @@ exports.handler = async (event) => {
             });
           } catch (err) {
             response.statusCode = 500;
-            console.error(err);
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
         } else {
@@ -1326,10 +1333,10 @@ exports.handler = async (event) => {
     }
   } catch (error) {
     response.statusCode = 400;
-    console.log(error);
+    logger.error("Unhandled route error", { error: error.message, stack: error.stack });
     response.body = JSON.stringify(error.message);
   }
-  console.log(response);
+  logger.logResponse(response);
 
   return response;
 };

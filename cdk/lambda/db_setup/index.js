@@ -141,13 +141,28 @@ async function createAppUsers(
   });
 }
 
-exports.handler = async function () {
+exports.handler = async function (event, context) {
+  const requestId = context?.awsRequestId || "unknown";
+  console.log(JSON.stringify({ level: "INFO", requestId, message: "db_setup handler invoked" }));
+
   const { DB_SECRET_NAME, DB_USER_SECRET_NAME, DB_PROXY } = process.env;
-  const adminDb = await getSecret(DB_SECRET_NAME);
 
-  // Run migrations
-  await runMigrations(adminDb);
+  try {
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Fetching admin DB credentials" }));
+    const adminDb = await getSecret(DB_SECRET_NAME);
 
-  await createAppUsers(adminDb, DB_SECRET_NAME, DB_USER_SECRET_NAME, DB_PROXY);
-  return { status: "ok" };
+    // Run migrations
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Running database migrations" }));
+    await runMigrations(adminDb);
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Database migrations completed" }));
+
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Creating/updating application database users" }));
+    await createAppUsers(adminDb, DB_SECRET_NAME, DB_USER_SECRET_NAME, DB_PROXY);
+    console.log(JSON.stringify({ level: "INFO", requestId, message: "Application database users created/updated successfully" }));
+
+    return { status: "ok" };
+  } catch (error) {
+    console.error(JSON.stringify({ level: "ERROR", requestId, message: "db_setup failed", error: error.message, stack: error.stack }));
+    throw error;
+  }
 };

@@ -2,7 +2,7 @@
 // Provider-agnostic interface — swap provider by changing this file
 // See: cdk/lambda/studentAuthorizerFunction/studentAuthorizerFunction.js for backend decoupling plan
 
-import { signIn, signUp, signOut, fetchAuthSession, getCurrentUser, confirmSignUp } from 'aws-amplify/auth';
+import { signIn, signUp, signOut, fetchAuthSession, getCurrentUser, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
 
 export interface AuthTokens {
   idToken: string;
@@ -26,6 +26,7 @@ export interface AuthResult {
   user: AuthUser;
   tokens: AuthTokens;
   needsConfirmation?: boolean;
+  needsNewPassword?: boolean;
 }
 
 class AuthService {
@@ -38,6 +39,14 @@ class AuthService {
         user: { username: email, email, groups: [] },
         tokens: { idToken: '', accessToken: '' },
         needsConfirmation: true,
+      };
+    }
+
+    if (result.nextStep?.signInStep === 'CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED') {
+      return {
+        user: { username: email, email, groups: [] },
+        tokens: { idToken: '', accessToken: '' },
+        needsNewPassword: true,
       };
     }
 
@@ -66,6 +75,12 @@ class AuthService {
   // Confirm sign up with verification code
   async confirmSignUp(email: string, code: string): Promise<void> {
     await confirmSignUp({ username: email, confirmationCode: code });
+  }
+
+  // Complete new password challenge (for admin-created users with temporary passwords)
+  async completeNewPassword(newPassword: string): Promise<AuthResult> {
+    await confirmSignIn({ challengeResponse: newPassword });
+    return this.buildAuthResult();
   }
 
   // Sign out

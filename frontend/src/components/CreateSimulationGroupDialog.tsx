@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { UI_COLORS } from '@/lib/colors';
+import { getAllInstructors, type AdminInstructor } from '@/services/adminApiService';
 
 interface CreateSimulationGroupDialogProps {
   open: boolean;
@@ -23,28 +24,54 @@ function CreateSimulationGroupDialog({
 }: CreateSimulationGroupDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [instructors, setInstructors] = useState('');
+  const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
   const [systemPrompt, setSystemPrompt] = useState('');
   const [active, setActive] = useState(true);
   const [enableVoice, setEnableVoice] = useState(true);
+  const [availableInstructors, setAvailableInstructors] = useState<AdminInstructor[]>([]);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [loadingInstructors, setLoadingInstructors] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch instructors when dialog opens
+  useEffect(() => {
+    if (open) {
+      setLoadingInstructors(true);
+      getAllInstructors()
+        .then((instructors) => setAvailableInstructors(instructors))
+        .catch((err) => console.error('Failed to load instructors:', err))
+        .finally(() => setLoadingInstructors(false));
+    }
+  }, [open]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const toggleInstructor = (email: string) => {
+    setSelectedInstructors((prev) =>
+      prev.includes(email) ? prev.filter((e) => e !== email) : [...prev, email]
+    );
+  };
 
   const handleCreate = () => {
-    if (name.trim() && description.trim() && instructors.trim()) {
+    if (name.trim() && description.trim() && selectedInstructors.length > 0) {
       onCreate({
         name: name.trim(),
         description: description.trim(),
-        instructors: instructors.trim(),
+        instructors: selectedInstructors.join(', '),
         systemPrompt: systemPrompt.trim(),
         active,
         enableVoice
       });
-      // Reset form
-      setName('');
-      setDescription('');
-      setInstructors('');
-      setSystemPrompt('');
-      setActive(true);
-      setEnableVoice(true);
+      resetForm();
       onOpenChange(false);
     }
   };
@@ -52,10 +79,11 @@ function CreateSimulationGroupDialog({
   const resetForm = () => {
     setName('');
     setDescription('');
-    setInstructors('');
+    setSelectedInstructors([]);
     setSystemPrompt('');
     setActive(true);
     setEnableVoice(true);
+    setDropdownOpen(false);
   };
 
   const handleOpenChange = (open: boolean) => {
@@ -121,27 +149,102 @@ function CreateSimulationGroupDialog({
             />
           </div>
 
-          {/* Add Instructors Field */}
+          {/* Instructor Multi-Select Dropdown */}
           <div className="flex flex-col gap-2">
             <label 
-              htmlFor="group-instructors" 
               className="text-sm font-medium"
               style={{ color: UI_COLORS.text.heading }}
             >
               Add Instructors <span style={{ color: UI_COLORS.status.error }}>*</span>
             </label>
-            <Input
-              id="group-instructors"
-              placeholder="instructor1@example.com, instructor2@example.com, instructor3@example.com"
-              value={instructors}
-              onChange={(e) => setInstructors(e.target.value)}
-              className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-              style={{ 
-                borderWidth: '1px', 
-                borderStyle: 'solid', 
-                borderColor: UI_COLORS.border.default 
-              }}
-            />
+            <div ref={dropdownRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setDropdownOpen(!dropdownOpen)}
+                className="w-full flex items-center justify-between text-left px-3 py-2 rounded-md text-base"
+                style={{
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: UI_COLORS.border.default,
+                  backgroundColor: UI_COLORS.background.white,
+                  minHeight: '40px',
+                  color: selectedInstructors.length > 0 ? UI_COLORS.text.heading : '#9ca3af',
+                }}
+              >
+                <span className="truncate">
+                  {selectedInstructors.length > 0
+                    ? `${selectedInstructors.length} instructor${selectedInstructors.length > 1 ? 's' : ''} selected`
+                    : 'Select instructors...'}
+                </span>
+                <svg className="w-4 h-4 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropdownOpen ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                </svg>
+              </button>
+
+              {dropdownOpen && (
+                <div
+                  className="absolute z-50 w-full mt-1 rounded-md shadow-lg overflow-auto"
+                  style={{
+                    maxHeight: '200px',
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: UI_COLORS.border.default,
+                    backgroundColor: UI_COLORS.background.white,
+                  }}
+                >
+                  {loadingInstructors ? (
+                    <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      Loading instructors...
+                    </div>
+                  ) : availableInstructors.length === 0 ? (
+                    <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      No instructors found
+                    </div>
+                  ) : (
+                    availableInstructors.map((instructor) => (
+                      <label
+                        key={instructor.user_email}
+                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedInstructors.includes(instructor.user_email)}
+                          onChange={() => toggleInstructor(instructor.user_email)}
+                          className="rounded"
+                        />
+                        <span className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {instructor.first_name && instructor.last_name
+                            ? `${instructor.first_name} ${instructor.last_name} (${instructor.user_email})`
+                            : instructor.user_email}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Selected instructor chips */}
+            {selectedInstructors.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {selectedInstructors.map((email) => (
+                  <span
+                    key={email}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                  >
+                    {email}
+                    <button
+                      type="button"
+                      onClick={() => toggleInstructor(email)}
+                      className="hover:opacity-70"
+                      aria-label={`Remove ${email}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* System Prompt Field */}
@@ -155,7 +258,7 @@ function CreateSimulationGroupDialog({
             </label>
             <textarea
               id="group-system-prompt"
-              placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient. Engage with the pharmacist by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the pharmacist is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the pharmacist identify the proper diagnosis of the patient you are pretending to be."
+              placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient."
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={4}
@@ -229,14 +332,14 @@ function CreateSimulationGroupDialog({
           {/* Create Group Button */}
           <Button
             onClick={handleCreate}
-            disabled={!name.trim() || !description.trim() || !instructors.trim()}
+            disabled={!name.trim() || !description.trim() || selectedInstructors.length === 0}
             className="w-full py-6 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: UI_COLORS.button.primary, 
               color: UI_COLORS.button.text 
             }}
             onMouseEnter={(e) => {
-              if (name.trim() && description.trim() && instructors.trim()) {
+              if (name.trim() && description.trim() && selectedInstructors.length > 0) {
                 e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover;
               }
             }}

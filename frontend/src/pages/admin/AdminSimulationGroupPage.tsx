@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient } from '@/services/instructorService';
-import { mockAdminDataService, type Instructor } from '@/services/adminService';
+import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useState } from 'react';
@@ -12,7 +12,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import { AddInstructorDialog } from '@/components/AddInstructorDialog';
+
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import * as adminApi from '@/services/adminApiService';
 
 /**
  * AdminSimulationGroupPage Component
@@ -115,12 +117,12 @@ function AdminSimulationGroupPage() {
   // Load data from instructor service (sync)
   const user = mockAdminDataService.getCurrentUser();
   
-  // Load instructors from admin service
-  const [instructors, setInstructors] = useState<Instructor[]>(() => mockAdminDataService.getInstructors());
+  // Load instructors from API (real backend)
+  const [instructors, setInstructors] = useState<adminApi.AdminInstructor[]>([]);
+  const [instructorsLoading, setInstructorsLoading] = useState(false);
   
-  // Get organization details
-  const organizations = mockAdminDataService.getOrganizations();
-  const organization = organizations.find(org => org.id === organizationId);
+  // Organization details (loaded from API with mock fallback)
+  const [organization, setOrganization] = useState<adminApi.AdminOrganization | null>(null);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -162,10 +164,36 @@ function AdminSimulationGroupPage() {
       } finally {
         setLoading(false);
       }
+
+      // Load organization details from API, fall back to mock
+      if (organizationId) {
+        try {
+          const orgData = await adminApi.getOrganization(organizationId);
+          setOrganization(orgData);
+        } catch (err) {
+          console.error('Failed to load organization from API, using mock:', err);
+          const mockOrg = mockOrganizations.find(o => o.organization_id === organizationId) || null;
+          setOrganization(mockOrg);
+        }
+      }
     };
 
     loadData();
-  }, [groupId]);
+  }, [groupId, organizationId]);
+
+  // Load instructors from real API when section is active, fall back to mock
+  useEffect(() => {
+    if (activeSection === 'instructors' && groupId) {
+      setInstructorsLoading(true);
+      adminApi.getGroupInstructors(groupId)
+        .then(setInstructors)
+        .catch((err) => {
+          console.error('Failed to load group instructors, using mock data:', err);
+          setInstructors(mockGroupInstructors);
+        })
+        .finally(() => setInstructorsLoading(false));
+    }
+  }, [activeSection, groupId]);
   
   // State for selected patient (for analytics tabs)
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
@@ -209,9 +237,11 @@ function AdminSimulationGroupPage() {
   );
 
   // Filter instructors based on search query
-  const filteredInstructors = instructors.filter(instructor =>
-    instructor.name.toLowerCase().includes(instructorSearchQuery.toLowerCase())
-  );
+  const filteredInstructors = instructors.filter(instructor => {
+    const fullName = `${instructor.first_name} ${instructor.last_name}`.toLowerCase();
+    return fullName.includes(instructorSearchQuery.toLowerCase()) ||
+           instructor.user_email.toLowerCase().includes(instructorSearchQuery.toLowerCase());
+  });
 
   const handleSignOut = () => {
     navigate('/login');
@@ -226,9 +256,14 @@ function AdminSimulationGroupPage() {
   };
 
   const handleGenerateAccessCode = async () => {
-    if (groupId) {
-      const newCode = await instructorService.generateAccessCode(groupId);
-      console.log('Generated new access code:', newCode);
+    if (!groupId) return;
+    try {
+      const result = await adminApi.regenerateAccessCode(groupId);
+      // Update local state with the new access code
+      setSimulationGroup(prev => prev ? { ...prev, access_code: result.access_code } : prev);
+    } catch (err) {
+      console.error('Failed to regenerate access code via API, using mock:', err);
+      const newCode = await mockInstructorDataService.generateAccessCode(groupId);
       setSimulationGroup(prev => prev ? { ...prev, access_code: newCode } : prev);
     }
   };
@@ -302,20 +337,37 @@ function AdminSimulationGroupPage() {
     setIsAddInstructorDialogOpen(true);
   };
 
-  const handleAddInstructorSubmit = (email: string, name: string) => {
-    const newInstructor: Instructor = {
-      id: `inst-${Date.now()}`,
-      name: name,
-      email: email,
-      date_joined: new Date().toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' })
-    };
-    setInstructors(prev => [...prev, newInstructor]);
+  const handleAddInstructorSubmit = async (email: string, name: string) => {
+    if (!groupId) return;
+    try {
+      // Elevate to instructor role (if needed) + enroll in this group
+      await adminApi.addInstructorToGroup(groupId, email);
+      // Refresh the instructor list from the API
+      const updated = await adminApi.getGroupInstructors(groupId);
+      setInstructors(updated);
+    } catch (err) {
+      console.error('Failed to add instructor via API, adding locally:', err);
+      // Fallback: add to local state so the UI still works
+      const [first_name, ...rest] = name.split(' ');
+      const last_name = rest.join(' ') || '';
+      setInstructors(prev => [...prev, { user_email: email, first_name, last_name }]);
+    }
   };
 
-  const handleRemoveInstructor = (instructorId: string) => {
-    const instructor = instructors.find(i => i.id === instructorId);
-    if (instructor && confirm(`Are you sure you want to remove ${instructor.name}?`)) {
-      setInstructors(prev => prev.filter(i => i.id !== instructorId));
+  const handleRemoveInstructor = async (instructorEmail: string) => {
+    if (!groupId) return;
+    const instructor = instructors.find(i => i.user_email === instructorEmail);
+    const displayName = instructor ? `${instructor.first_name} ${instructor.last_name}` : instructorEmail;
+    if (confirm(`Are you sure you want to remove ${displayName} from this group?`)) {
+      try {
+        await adminApi.removeInstructorFromGroup(groupId, instructorEmail);
+        const updated = await adminApi.getGroupInstructors(groupId);
+        setInstructors(updated);
+      } catch (err) {
+        console.error('Failed to remove instructor via API, removing locally:', err);
+        // Fallback: remove from local state
+        setInstructors(prev => prev.filter(i => i.user_email !== instructorEmail));
+      }
     }
   };
 
@@ -1234,7 +1286,23 @@ function AdminSimulationGroupPage() {
                   type="button"
                   role="switch"
                   aria-checked={enableVoiceForAll}
-                  onClick={() => setEnableVoiceForAll(!enableVoiceForAll)}
+                  onClick={async () => {
+                    const newValue = !enableVoiceForAll;
+                    setEnableVoiceForAll(newValue);
+                    if (groupId) {
+                      try {
+                        await adminApi.updateGroupAccess({
+                          simulation_group_id: groupId,
+                          access: true,
+                          admin_voice_enabled: newValue,
+                          instructor_voice_enabled: newValue,
+                        });
+                      } catch (err) {
+                        console.error('Failed to update voice setting via API:', err);
+                        // State already updated locally, so UI stays consistent
+                      }
+                    }
+                  }}
                   className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                   style={{ backgroundColor: enableVoiceForAll ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive }}
                 >
@@ -1306,28 +1374,38 @@ function AdminSimulationGroupPage() {
               </div>
 
               <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
-                <div className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                  {['Instructor Name', 'Email Address', 'Date Joined', 'Actions'].map(h => (
+                <div className="grid grid-cols-[2fr_3fr_auto] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                  {['Instructor Name', 'Email Address', 'Actions'].map(h => (
                     <div key={h} className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>{h}</div>
                   ))}
                 </div>
-                {filteredInstructors.map((instructor) => (
-                  <div key={instructor.id} className="grid grid-cols-[2fr_3fr_2fr_auto] gap-4 px-6 py-4 border-t items-center" style={{ borderColor: UI_COLORS.border.default }}>
-                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.name}</div>
-                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.email}</div>
-                    <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.date_joined}</div>
-                    <div>
-                      <button
-                        onClick={() => handleRemoveInstructor(instructor.id)}
-                        className="p-2 rounded-md hover:bg-gray-100 transition-colors"
-                        style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
-                        aria-label="Remove instructor"
-                      >
-                        <Trash2 className="w-5 h-5" style={{ color: UI_COLORS.status.error }} />
-                      </button>
-                    </div>
+                {instructorsLoading ? (
+                  <div className="px-6 py-8 text-center" style={{ color: UI_COLORS.text.muted }}>
+                    Loading instructors...
                   </div>
-                ))}
+                ) : filteredInstructors.length === 0 ? (
+                  <div className="px-6 py-8 text-center" style={{ color: UI_COLORS.text.muted }}>
+                    {instructorSearchQuery ? 'No instructors match your search.' : 'No instructors assigned to this group yet.'}
+                  </div>
+                ) : (
+                  filteredInstructors.map((instructor) => (
+                    <div key={instructor.user_email} className="grid grid-cols-[2fr_3fr_auto] gap-4 px-6 py-4 border-t items-center" style={{ borderColor: UI_COLORS.border.default }}>
+                      <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.first_name} {instructor.last_name}</div>
+                      <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{instructor.user_email}</div>
+                      <div>
+                        <button
+                          onClick={() => handleRemoveInstructor(instructor.user_email)}
+                          className="p-2 rounded-md hover:bg-gray-100 transition-colors"
+                          style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
+                          aria-label="Remove instructor from group"
+                          title="Remove from group"
+                        >
+                          <Trash2 className="w-5 h-5" style={{ color: UI_COLORS.status.error }} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           )}

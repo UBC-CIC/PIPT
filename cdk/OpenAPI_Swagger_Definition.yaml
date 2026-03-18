@@ -5005,6 +5005,37 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /admin/regenerate_access_code:
+    <<: *commonOptions
+    post:
+      tags:
+        - Admin
+      summary: Regenerate access code for a simulation group
+      operationId: admin_regenerate_access_code_POST
+      parameters:
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+      responses:
+        "200":
+          description: New access code generated
+        "400":
+          description: Bad Request
+        "404":
+          description: Simulation group not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /admin/delete_instructor_enrolments:
     options:
       summary: CORS support
@@ -5458,6 +5489,183 @@ paths:
                   message:
                     type: string
                     example: "System prompt restored successfully"
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/organizations:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Get all organizations
+      operationId: admin_organizations_GET
+      responses:
+        "200":
+          description: List of organizations
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/organization:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Get a single organization by ID
+      operationId: admin_organization_GET
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Organization details
+        "400":
+          description: Bad Request
+        "404":
+          description: Organization not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/create_organization:
+    <<: *commonOptions
+    post:
+      tags:
+        - Admin
+      summary: Create a new organization
+      operationId: admin_create_organization_POST
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+                ai_persona:
+                  type: string
+                user_role:
+                  type: string
+                icon_color:
+                  type: string
+                system_prompt:
+                  type: string
+      responses:
+        "201":
+          description: Organization created
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/update_organization:
+    <<: *commonOptions
+    put:
+      tags:
+        - Admin
+      summary: Update an existing organization
+      operationId: admin_update_organization_PUT
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization to update
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                type:
+                  type: string
+                ai_persona:
+                  type: string
+                user_role:
+                  type: string
+                icon_color:
+                  type: string
+                system_prompt:
+                  type: string
+      responses:
+        "200":
+          description: Organization updated
+        "400":
+          description: Bad Request
+        "404":
+          description: Organization not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/delete_organization:
+    <<: *commonOptions
+    delete:
+      tags:
+        - Admin
+      summary: Delete an organization
+      operationId: admin_delete_organization_DELETE
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization to delete
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Organization deleted
         "400":
           description: Bad Request
         "500":
