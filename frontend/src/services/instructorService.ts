@@ -272,7 +272,7 @@ export interface InstructorDataService {
   generateAccessCode: (simulationGroupId: string) => Promise<string>;
   getManageablePatients: (simulationGroupId: string) => Promise<ManageablePatient[]>;
   getPatient: (patientId: string) => ManageablePatient | undefined;
-  createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<void>;
+  createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<string>;
   updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => Promise<void>;
   uploadPatientPhoto: (simulationGroupId: string, patientId: string, photoFile: File) => Promise<string>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
@@ -945,7 +945,7 @@ function getPatient(_patientId: string): ManageablePatient | undefined {
 /**
  * Create a new patient
  */
-async function createPatient(simulationGroupId: string, patientData: PatientCreateData): Promise<void> {
+async function createPatient(simulationGroupId: string, patientData: PatientCreateData): Promise<string> {
   try {
     const user = await authService.getCurrentUser();
     if (!user?.email) throw new Error('Not authenticated');
@@ -963,12 +963,16 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
       queryParams.append('voice_id', patientData.voice_id);
     }
 
-    await apiClient.request(`instructor/create_patient?${queryParams.toString()}`, {
-      method: 'POST',
-      body: {
-        persona_prompt: patientData.patient_prompt || '',
-      },
-    });
+    const result = await apiClient.request<{ persona_id: string }>(
+      `instructor/create_patient?${queryParams.toString()}`,
+      {
+        method: 'POST',
+        body: {
+          persona_prompt: patientData.patient_prompt || '',
+        },
+      }
+    );
+    return result.persona_id;
   } catch (error) {
     console.error('Failed to create patient:', error);
     throw error;

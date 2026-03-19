@@ -9,11 +9,11 @@ logger.setLevel(logging.INFO)
 from langchain_aws import ChatBedrock
 from langchain_aws import BedrockLLM
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
+from langchain_classic.chains.combine_documents import create_stuff_documents_chain
+from langchain_classic.chains import create_retrieval_chain
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_community.chat_message_histories import DynamoDBChatMessageHistory
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 from threading import Thread
 
 class LLM_evaluation(BaseModel):
@@ -97,7 +97,7 @@ def get_student_query(raw_query: str) -> str:
 def get_initial_student_query(patient_name: str) -> str:
     """Generate an initial query for the student to interact with the system."""
     return f"""
-    Greet me and then ask me a question related to the patient: {patient_name}. 
+    Begin the conversation as the patient: {patient_name} and greet me, the pharmacy student. 
     """
 
 def get_default_system_prompt(patient_name) -> str:
@@ -584,23 +584,25 @@ def get_response(
     is_greeting = 'Greet me' in query or 'Hello.' == query.strip()
     should_evaluate_non_streaming = len(query.strip()) > 0 and not is_greeting
     
-    if should_evaluate_non_streaming:
-        try:
-            logger.info("🧠 NON-STREAMING: Starting empathy evaluation")
-            patient_context = f"Patient: {patient_name}, Age: {patient_age}, Condition: {patient_prompt}"
-            deployment_region = os.environ.get('AWS_REGION', 'us-east-1')
-            nova_client = {
-                "client": boto3.client("bedrock-runtime", region_name=deployment_region),
-                "model_id": "amazon.nova-pro-v1:0"
-            }
-            empathy_evaluation = evaluate_empathy(query, patient_context, nova_client)
-            save_message_to_db(session_id, True, query, empathy_evaluation)
-        except Exception as e:
-            logger.error(f"Empathy evaluation failed: {e}")
-            save_message_to_db(session_id, True, query, None)
-    else:
-        logger.info(f"🔍 NON-STREAMING: Skipping empathy evaluation - Query: '{query}'")
-        save_message_to_db(session_id, True, query, None)
+    # Empathy evaluation disabled
+    # if should_evaluate_non_streaming:
+    #     try:
+    #         logger.info("🧠 NON-STREAMING: Starting empathy evaluation")
+    #         patient_context = f"Patient: {patient_name}, Age: {patient_age}, Condition: {patient_prompt}"
+    #         deployment_region = os.environ.get('AWS_REGION', 'us-east-1')
+    #         nova_client = {
+    #             "client": boto3.client("bedrock-runtime", region_name=deployment_region),
+    #             "model_id": "amazon.nova-pro-v1:0"
+    #         }
+    #         empathy_evaluation = evaluate_empathy(query, patient_context, nova_client)
+    #         save_message_to_db(session_id, True, query, empathy_evaluation)
+    #     except Exception as e:
+    #         logger.error(f"Empathy evaluation failed: {e}")
+    #         save_message_to_db(session_id, True, query, None)
+    # else:
+    #     logger.info(f"🔍 NON-STREAMING: Skipping empathy evaluation - Query: '{query}'")
+    #     save_message_to_db(session_id, True, query, None)
+    save_message_to_db(session_id, True, query, None)
     
     if empathy_evaluation:
         empathy_feedback = build_empathy_feedback(empathy_evaluation)
@@ -626,7 +628,7 @@ def get_response(
         {completion_string}
         You are a patient named {patient_name}.
          
-        {get_system_prompt(patient_name=patient_name)}
+        {get_system_prompt(patient_name=patient_name).replace("{", "{{").replace("}", "}}")}
 
         <|eot_id|>
         <|start_header_id|>documents<|end_header_id|>
@@ -746,18 +748,8 @@ def generate_streaming_response(
 
     try:
         logger.info(f"🔍 STREAMING QUERY CHECK: '{query}' (length: {len(query.strip())})")
-        is_greeting = 'Greet me' in query or 'Hello.' == query.strip()
-        should_evaluate = len(query.strip()) > 0 and not is_greeting
-        logger.info(f"🔍 IS_GREETING: {is_greeting}, SHOULD_EVALUATE: {should_evaluate}")
-        
-        if should_evaluate:
-            logger.info("✅ EMPATHY EVALUATION WILL START")
-            empathy_thread = Thread(target=empathy_async)
-            empathy_thread.start()
-            logger.info("✅ EMPATHY THREAD STARTED")
-        else:
-            logger.info(f"❌ EMPATHY EVALUATION SKIPPED - Query: '{query}'")
-            save_message_to_db(session_id, True, query, None)
+        # Empathy evaluation disabled
+        save_message_to_db(session_id, True, query, None)
 
         publish_to_appsync(session_id, {"type": "start", "content": ""})
 

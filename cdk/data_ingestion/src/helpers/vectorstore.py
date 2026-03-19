@@ -5,7 +5,7 @@ from helpers.helper import store_group_data
 def update_vectorstore(
     bucket: str,
     group: str,
-    patient_id: str,
+    persona_id: str,
     vectorstore_config_dict: Dict[str, str],
     embeddings,#: BedrockEmbeddings
     connection
@@ -25,7 +25,7 @@ def update_vectorstore(
     store_group_data(
         bucket=bucket,
         group=group,
-        patient_id=patient_id,
+        persona_id=persona_id,
         vectorstore_config_dict=vectorstore_config_dict,
         embeddings=embeddings,
         connection=connection

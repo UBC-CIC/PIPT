@@ -1,8 +1,7 @@
 from typing import Dict
 
-from langchain_core.vectorstores import VectorStoreRetriever
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.chains import create_history_aware_retriever
+from langchain_classic.chains import create_history_aware_retriever
 
 from helpers.helper import get_vectorstore
 
@@ -10,7 +9,7 @@ def get_vectorstore_retriever(
     llm,
     vectorstore_config_dict: Dict[str, str],
     embeddings#: BedrockEmbeddings
-) -> VectorStoreRetriever:
+) -> object:
     """
     Retrieve the vectorstore and return the history-aware retriever object.
 

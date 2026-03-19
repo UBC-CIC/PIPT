@@ -65,7 +65,7 @@ def connect_to_db():
             raise
     return connection
 
-def fetch_patient_ids(simulation_group_id):
+def fetch_persona_ids(simulation_group_id):
     connection = connect_to_db()
     if not connection:
         logger.error("No database connection available.")
@@ -74,17 +74,17 @@ def fetch_patient_ids(simulation_group_id):
     try:
         cur = connection.cursor()
         query = """
-            SELECT patient_id
-            FROM patients
+            SELECT persona_id
+            FROM personas
             WHERE simulation_group_id = %s;
         """
         cur.execute(query, (simulation_group_id,))
-        patient_ids = [row[0] for row in cur.fetchall()]
+        persona_ids = [row[0] for row in cur.fetchall()]
         cur.close()
         
-        return patient_ids
+        return persona_ids
     except Exception as e:
-        logger.error(f"Error fetching patient IDs: {e}")
+        logger.error(f"Error fetching persona IDs: {e}")
         if cur:
             cur.close()
         connection.rollback()
@@ -119,10 +119,10 @@ def lambda_handler(event, context):
             'body': json.dumps("Missing required parameter: simulation_group_id"),
         }
 
-    # Get patient_ids from database
-    patient_ids = fetch_patient_ids(simulation_group_id)
+    # Get persona_ids from database
+    persona_ids = fetch_persona_ids(simulation_group_id)
 
-    if not patient_ids:
+    if not persona_ids:
         return {
             'statusCode': 400,
             "headers": {
@@ -131,15 +131,15 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps("No patient IDs found"),
+            'body': json.dumps("No persona IDs found"),
         }
 
     profile_pics = {}
-    for patient_id in patient_ids:
-        key = f"{simulation_group_id}/{patient_id}/profile_picture/{patient_id}_profile_pic.png"
+    for persona_id in persona_ids:
+        key = f"{simulation_group_id}/{persona_id}/profile_picture/{persona_id}_profile_pic.png"
         url = generate_presigned_url(BUCKET, key)
         if url:
-            profile_pics[patient_id] = url
+            profile_pics[persona_id] = url
 
     return {
         'statusCode': 200,

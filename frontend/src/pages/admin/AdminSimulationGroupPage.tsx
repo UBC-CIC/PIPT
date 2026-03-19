@@ -396,15 +396,16 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  const handleSavePatientChanges = () => {
+  const handleSavePatientChanges = async () => {
     if (selectedPatientForEdit && groupId) {
       if (selectedPatientForEdit === 'new') {
-        mockInstructorDataService.createPatient(groupId, {
+        const newPersonaId = await instructorService.createPatient(groupId, {
           patient_name: editPatientName,
           patient_age: parseInt(editPatientAge) || 0,
           patient_gender: editPatientGender,
           patient_prompt: editPatientPrompt,
         });
+        setSelectedPatientForEdit(newPersonaId);
       } else {
         mockInstructorDataService.updatePatient(groupId, {
           patient_id: selectedPatientForEdit,
@@ -417,21 +418,70 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /**
+   * Auto-save a new patient before allowing file uploads or other tabs.
+   */
+  const autoSaveNewPatient = async (): Promise<string | null> => {
+    if (selectedPatientForEdit !== 'new' || !groupId) return selectedPatientForEdit;
+    if (!editPatientName.trim()) {
+      alert('Please enter a patient name before proceeding.');
+      return null;
+    }
+    try {
+      const newPersonaId = await instructorService.createPatient(groupId, {
+        patient_name: editPatientName,
+        patient_age: parseInt(editPatientAge) || 0,
+        patient_gender: editPatientGender,
+        patient_prompt: editPatientPrompt,
+      });
+      setSelectedPatientForEdit(newPersonaId);
+      setManageablePatients(await instructorService.getManageablePatients(groupId));
+      return newPersonaId;
+    } catch (error) {
+      console.error('Failed to auto-save new patient:', error);
+      alert('Failed to save patient. Please try again.');
+      return null;
+    }
+  };
+
+  /**
+   * Handle tab switch with auto-save for new patients
+   */
+  const handleEditPatientTabSwitch = async (tab: 'info' | 'questions' | 'materials') => {
+    if (tab !== 'info' && selectedPatientForEdit === 'new') {
+      const savedId = await autoSaveNewPatient();
+      if (!savedId) return;
+    }
+    setEditPatientTab(tab);
+  };
+
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
-      instructorService.uploadPatientPhoto(groupId, selectedPatientForEdit, file).then(async () => {
+      let patientId = selectedPatientForEdit;
+      if (patientId === 'new') {
+        const savedId = await autoSaveNewPatient();
+        if (!savedId) return;
+        patientId = savedId;
+      }
+      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
         const manageablePatients = await instructorService.getManageablePatients(groupId);
         setManageablePatients(manageablePatients);
       });
     }
   };
 
-  const handleFileUpload = (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
+      let patientId = selectedPatientForEdit;
+      if (patientId === 'new') {
+        const savedId = await autoSaveNewPatient();
+        if (!savedId) return;
+        patientId = savedId;
+      }
       const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
-      instructorService.uploadPatientFile(groupId, selectedPatientForEdit, file, folderType);
+      instructorService.uploadPatientFile(groupId, patientId, file, folderType);
     }
   };
 
@@ -1774,7 +1824,7 @@ function AdminSimulationGroupPage() {
                   ].map(({ tab, label }) => (
                     <button
                       key={tab}
-                      onClick={() => setEditPatientTab(tab as typeof editPatientTab)}
+                      onClick={() => handleEditPatientTabSwitch(tab as typeof editPatientTab)}
                       className="w-full text-left px-4 py-3 rounded-lg font-medium transition-colors"
                       style={{ backgroundColor: editPatientTab === tab ? UI_COLORS.background.tableHeader : 'transparent', color: UI_COLORS.text.heading, border: 'none', cursor: 'pointer' }}
                     >

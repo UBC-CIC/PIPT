@@ -69,12 +69,12 @@ def update_ingestion_status():
 
         # Fetch filenames before updating
         cur.execute("""
-            SELECT filename FROM patient_data WHERE ingestion_status = 'processing';
+            SELECT filename FROM persona_data WHERE ingestion_status = 'processing';
         """)
         filenames = [row[0] for row in cur.fetchall()]
 
         cur.execute("""
-            UPDATE "patient_data"
+            UPDATE "persona_data"
             SET ingestion_status = 'error'
             WHERE ingestion_status = 'processing';
         """)

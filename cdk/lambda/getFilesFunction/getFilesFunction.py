@@ -69,7 +69,7 @@ def list_files_in_s3_prefix(bucket, prefix):
     files = []
     continuation_token = None
 
-    # Fetch all objects in the patient directory, handling pagination
+    # Fetch all objects in the persona directory, handling pagination
     while True:
         if continuation_token:
             result = s3.list_objects_v2(
@@ -104,7 +104,7 @@ def generate_presigned_url(bucket, key):
         logger.exception(f"Error generating presigned URL for {key}: {e}")
         return None
 
-def get_file_metadata_from_db(patient_id, file_name, file_type):
+def get_file_metadata_from_db(persona_id, file_name, file_type):
     connection = connect_to_db()
     if connection is None:
         logger.error("No database connection available.")
@@ -114,17 +114,17 @@ def get_file_metadata_from_db(patient_id, file_name, file_type):
         cur = connection.cursor()
         query = """
             SELECT metadata 
-            FROM "patient_data" 
-            WHERE patient_id = %s AND filename = %s AND filetype = %s;
+            FROM "persona_data" 
+            WHERE persona_id = %s AND filename = %s AND filetype = %s;
         """
-        cur.execute(query, (patient_id, file_name, file_type))
+        cur.execute(query, (persona_id, file_name, file_type))
         result = cur.fetchone()
         cur.close()
 
         if result:
             return result[0]
         else:
-            logger.warning(f"No metadata found for {file_name}.{file_type} for patient {patient_id}")
+            logger.warning(f"No metadata found for {file_name}.{file_type} for persona {persona_id}")
             return None
 
     except Exception as e:
@@ -139,12 +139,12 @@ def lambda_handler(event, context):
     query_params = event.get("queryStringParameters", {})
 
     simulation_group_id = query_params.get("simulation_group_id", "")
-    patient_id = query_params.get("patient_id", "")
+    persona_id = query_params.get("persona_id", "")
 
-    if not simulation_group_id or not patient_id:
+    if not simulation_group_id or not persona_id:
         logger.error("Missing required parameters", extra={
             "simulation_group_id": simulation_group_id,
-            "patient_id": patient_id,
+            "persona_id": persona_id,
         })
         return {
             'statusCode': 400,
@@ -154,14 +154,14 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps('Missing required parameters: simulation_group_id or patient_id')
+            'body': json.dumps('Missing required parameters: simulation_group_id or persona_id')
         }
 
     try:
-        document_prefix = f"{simulation_group_id}/{patient_id}/documents/"
-        info_prefix = f"{simulation_group_id}/{patient_id}/info/"
-        answer_key_prefix = f"{simulation_group_id}/{patient_id}/answer_key/"
-        profile_picture_prefix = f"{simulation_group_id}/{patient_id}/profile_picture/"
+        document_prefix = f"{simulation_group_id}/{persona_id}/documents/"
+        info_prefix = f"{simulation_group_id}/{persona_id}/info/"
+        answer_key_prefix = f"{simulation_group_id}/{persona_id}/answer_key/"
+        profile_picture_prefix = f"{simulation_group_id}/{persona_id}/profile_picture/"
 
         document_files = list_files_in_s3_prefix(BUCKET, document_prefix)
         info_files = list_files_in_s3_prefix(BUCKET, info_prefix)
@@ -176,7 +176,7 @@ def lambda_handler(event, context):
         for file_name in document_files:
             file_type = file_name.split('.')[-1]  # Get the file extension
             presigned_url = generate_presigned_url(BUCKET, f"{document_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(patient_id, file_name.split('.')[0], file_type)
+            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             document_files_urls[file_name] = {
                 "url": presigned_url,
                 "metadata": metadata
@@ -185,7 +185,7 @@ def lambda_handler(event, context):
         for file_name in info_files:
             file_type = file_name.split('.')[-1]
             presigned_url = generate_presigned_url(BUCKET, f"{info_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(patient_id, file_name.split('.')[0], file_type)
+            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             info_files_urls[file_name] = {
                 "url": presigned_url,
                 "metadata": metadata
@@ -194,7 +194,7 @@ def lambda_handler(event, context):
         for file_name in answer_key_files:
             file_type = file_name.split('.')[-1]
             presigned_url = generate_presigned_url(BUCKET, f"{answer_key_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(patient_id, file_name.split('.')[0], file_type)
+            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             answer_key_files_urls[file_name] = {
                 "url": presigned_url,
                 "metadata": metadata

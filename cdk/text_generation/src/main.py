@@ -142,7 +142,7 @@ def get_system_prompt(simulation_group_id):
         return None
 
 
-def get_patient_details(patient_id):
+def get_persona_details(persona_id):
     connection = connect_to_db()
     if connection is None:
         logger.error("No database connection available.")
@@ -155,10 +155,10 @@ def get_patient_details(patient_id):
         cur = connection.cursor()
         logger.info("Connected to RDS instance!")
         cur.execute("""
-            SELECT patient_name, patient_age, patient_prompt, llm_completion
-            FROM "patients"
-            WHERE patient_id = %s;
-        """, (patient_id,))
+            SELECT persona_name, persona_age, persona_prompt
+            FROM "personas"
+            WHERE persona_id = %s;
+        """, (persona_id,))
 
         result = cur.fetchone()
         logger.info(f"Query result: {result}")
@@ -166,16 +166,17 @@ def get_patient_details(patient_id):
         cur.close()
 
         if result:
-            patient_name, patient_age, patient_prompt, llm_completion = result
-            logger.info(f"Patient details found for patient_id {patient_id}: "
-                        f"Name: {patient_name}, Age: {patient_age}, Prompt: {patient_prompt}, LLM Completion: {llm_completion}")
-            return patient_name, patient_age, patient_prompt, llm_completion
+            persona_name, persona_age, persona_prompt = result
+            llm_completion = True
+            logger.info(f"persona details found for persona_id {persona_id}: "
+                        f"Name: {persona_name}, Age: {persona_age}, Prompt: {persona_prompt}, LLM Completion: {llm_completion}")
+            return persona_name, persona_age, persona_prompt, llm_completion
         else:
-            logger.warning(f"No details found for patient_id {patient_id}")
+            logger.warning(f"No details found for persona_id {persona_id}")
             return None, None, None, None
 
     except Exception as e:
-        logger.error(f"Error fetching patient details: {e}")
+        logger.error(f"Error fetching persona details: {e}")
         if cur:
             cur.close()
         connection.rollback()
@@ -217,10 +218,10 @@ def handler(event, context):
     query_params = event.get("queryStringParameters", {})
     simulation_group_id = query_params.get("simulation_group_id", "")
     session_id = query_params.get("session_id", "")
-    patient_id = query_params.get("patient_id", "")
+    persona_id = query_params.get("patient_id", "")
     session_name = query_params.get("session_name", "New Chat")
 
-    if not simulation_group_id or not session_id or not patient_id:
+    if not simulation_group_id or not session_id or not persona_id:
         return {
             'statusCode': 400,
             "headers": {
@@ -229,7 +230,7 @@ def handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps("Missing required parameters: simulation_group_id, session_id, or patient_id")
+            'body': json.dumps("Missing required parameters: simulation_group_id, session_id, or persona_id")
         }
 
     system_prompt = get_system_prompt(simulation_group_id)
@@ -246,10 +247,9 @@ def handler(event, context):
             'body': json.dumps('Error fetching system prompt')
         }
 
-    patient_name, patient_age, patient_prompt, llm_completion = get_patient_details(
-        patient_id)
+    patient_name, patient_age, patient_prompt, llm_completion = get_persona_details(persona_id)
     if patient_name is None or patient_age is None or patient_prompt is None or llm_completion is None:
-        logger.error(f"Error fetching patient details for patient_id: {patient_id}")
+        logger.error(f"Error fetching persona details for persona_id: {persona_id}")
         return {
             'statusCode': 400,
             "headers": {
@@ -258,7 +258,7 @@ def handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps('Error fetching patient details')
+            'body': json.dumps('Error fetching persona details')
         }
 
     body = {} if event.get("body") is None else json.loads(event.get("body"))
@@ -303,7 +303,7 @@ def handler(event, context):
         logger.info("Retrieving vectorstore config.")
         db_secret = get_secret(DB_SECRET_NAME)
         vectorstore_config_dict = {
-            'collection_name': patient_id,
+            'collection_name': persona_id,
             'dbname': db_secret["dbname"],
             'user': db_secret["username"],
             'password': db_secret["password"],

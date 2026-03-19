@@ -34,7 +34,7 @@ def lambda_handler(event, context):
         }
 
     simulation_group_id = query_params.get("simulation_group_id", "")
-    patient_id = query_params.get("patient_id", "")
+    persona_id = query_params.get("patient_id", "")
     file_type = query_params.get("file_type", "")
     file_name = query_params.get("file_name", "")
     folder_type = query_params.get("folder_type", "")
@@ -45,10 +45,10 @@ def lambda_handler(event, context):
             'body': json.dumps('Missing required parameter: simulation_group_id')
         }
 
-    if not patient_id:
+    if not persona_id:
         return {
             'statusCode': 400,
-            'body': json.dumps('Missing required parameter: patient_id')
+            'body': json.dumps('Missing required parameter: persona_id')
         }
 
     if not file_name:
@@ -89,16 +89,16 @@ def lambda_handler(event, context):
     }
 
     if folder_type == "documents" and file_type in allowed_document_types:
-        key = f"{simulation_group_id}/{patient_id}/documents/{file_name}.{file_type}"
+        key = f"{simulation_group_id}/{persona_id}/documents/{file_name}.{file_type}"
         content_type = allowed_document_types[file_type]
     elif folder_type == "info" and file_type in allowed_generic_types:
-        key = f"{simulation_group_id}/{patient_id}/info/{file_name}.{file_type}"
+        key = f"{simulation_group_id}/{persona_id}/info/{file_name}.{file_type}"
         content_type = allowed_generic_types[file_type]
     elif folder_type == "answer_key" and file_type in allowed_generic_types:
-        key = f"{simulation_group_id}/{patient_id}/answer_key/{file_name}.{file_type}"
+        key = f"{simulation_group_id}/{persona_id}/answer_key/{file_name}.{file_type}"
         content_type = allowed_generic_types[file_type]
     elif folder_type == "profile_picture":
-        key = f"{simulation_group_id}/{patient_id}/profile_picture/{file_name}.{file_type}"
+        key = f"{simulation_group_id}/{persona_id}/profile_picture/{file_name}.{file_type}"
         content_type = 'image/png'
     else:
         return {
@@ -108,7 +108,7 @@ def lambda_handler(event, context):
 
     logger.info({
         "simulation_group_id": simulation_group_id,
-        "patient_id": patient_id,
+        "persona_id": persona_id,
         "file_type": file_type,
         "file_name": file_name,
     })

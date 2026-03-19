@@ -34,7 +34,7 @@ EMBEDDING_MODEL_ID = None
 # Set up class to represent parsed file path
 class ParsedFilePath(NamedTuple):
     simulation_group_id: str
-    patient_id: str 
+    persona_id: str 
     file_category: str
     file_name: str
     file_type: str
@@ -87,15 +87,15 @@ def connect_to_db():
             raise
     return connection
 
-def get_embedding_count(patient_id):
+def get_embedding_count(persona_id):
     """
-    Queries the database for the number of embeddings associated with a specific patient.
+    Queries the database for the number of embeddings associated with a specific persona.
 
     Args:
-        patient_id (str): The patient ID (collection name in the vectorstore).
+        persona_id (str): The persona ID (collection name in the vectorstore).
 
     Returns:
-        int: The count of embeddings found for the patient.
+        int: The count of embeddings found for the persona.
     """
     connection = connect_to_db()
     if connection is None:
@@ -105,44 +105,45 @@ def get_embedding_count(patient_id):
     try:
         cur = connection.cursor()
 
-        # Query to count embeddings for the patient
+        # Query to count embeddings for the persona
         query = """
         SELECT COUNT(*)
         FROM langchain_pg_embedding e
         JOIN langchain_pg_collection c ON e.collection_id = c.uuid
         WHERE c.name = %s;
         """
-        cur.execute(query, (patient_id,))
+        cur.execute(query, (persona_id,))
         result = cur.fetchone()
 
         connection.commit()
         cur.close()
 
         if result and result[0] > 0:
-            logger.info(f"Current embedding count for patient {patient_id}: {result[0]}")
+            logger.info(f"Current embedding count for persona {persona_id}: {result[0]}")
             return result[0]
         else:
-            logger.info(f"No embeddings found for patient {patient_id}. This may be a new collection.")
+            logger.info(f"No embeddings found for persona {persona_id}. This may be a new collection.")
             return 0
 
     except psycopg2.errors.UndefinedTable as e:
-        # Handles case where tables do not exist yet (first patient)
-        logger.warning(f"LangChain tables do not exist yet as this might be the first patient being created. Returning 0 embeddings for patient {patient_id}.")
+        # Handles case where tables do not exist yet (first persona)
+        connection.rollback()
+        logger.warning(f"LangChain tables do not exist yet as this might be the first persona being created. Returning 0 embeddings for persona {persona_id}.")
         return 0
 
     except Exception as e:
         if cur:
             cur.close()
         connection.rollback()
-        logger.error(f"Error retrieving embedding count for patient {patient_id}: {e}")
+        logger.error(f"Error retrieving embedding count for persona {persona_id}: {e}")
         raise
 
-def update_ingestion_status(patient_id: str, file_path: str, status: str):
+def update_ingestion_status(persona_id: str, file_path: str, status: str):
     """
-    Updates the ingestion_status of a file in the patient_data table.
+    Updates the ingestion_status of a file in the persona_data table.
 
     Args:
-        patient_id (str): The patient ID associated with the file.
+        persona_id (str): The persona ID associated with the file.
         file_path (str): The full file path stored in the database.
         status (str): The status to update ('completed' or 'error').
     """
@@ -155,26 +156,26 @@ def update_ingestion_status(patient_id: str, file_path: str, status: str):
         cur = connection.cursor()
 
         update_query = """
-        UPDATE "patient_data"
+        UPDATE "persona_data"
         SET ingestion_status = %s
-        WHERE patient_id = %s
+        WHERE persona_id = %s
         AND filepath = %s;
         """
-        cur.execute(update_query, (status, patient_id, file_path))
+        cur.execute(update_query, (status, persona_id, file_path))
         connection.commit()
         cur.close()
 
-        logger.info(f"Ingestion status for {file_path} updated to '{status}' for patient {patient_id}.")
+        logger.info(f"Ingestion status for {file_path} updated to '{status}' for persona {persona_id}.")
 
     except Exception as e:
         if cur:
             cur.close()
         connection.rollback()
-        logger.error(f"Error updating ingestion status for patient {patient_id}, file {file_path}: {e}")
+        logger.error(f"Error updating ingestion status for persona {persona_id}, file {file_path}: {e}")
         raise
 
 def parse_s3_file_path(file_key):
-    # Assuming the file path is of the format: {simulation_group_id}/{patient_id}/{documents or info}/{file_name}.{file_type}
+    # Assuming the file path is of the format: {simulation_group_id}/{persona_id}/{documents or info}/{file_name}.{file_type}
     try:
         # Split the path into components
         parts = file_key.split('/')
@@ -183,7 +184,7 @@ def parse_s3_file_path(file_key):
         if len(parts) != 4:
             raise ValueError(f"Unexpected file path format: {file_key}")
 
-        simulation_group_id, patient_id, file_category, filename_with_ext = parts
+        simulation_group_id, persona_id, file_category, filename_with_ext = parts
 
         # Split filename and extension
         if '.' not in filename_with_ext:
@@ -193,7 +194,7 @@ def parse_s3_file_path(file_key):
 
         return ParsedFilePath(
             simulation_group_id=simulation_group_id,
-            patient_id=patient_id,
+            persona_id=persona_id,
             file_category=file_category,
             file_name=file_name,
             file_type=file_type
@@ -205,7 +206,7 @@ def parse_s3_file_path(file_key):
             "body": json.dumps("Error parsing S3 file path.")
         }
 
-def insert_file_into_db(patient_id, file_name, file_type, file_path, bucket_name, file_category):    
+def insert_file_into_db(persona_id, file_name, file_type, file_path, bucket_name, file_category):    
     connection = connect_to_db()
     if connection is None:
         logger.error("No database connection available.")
@@ -218,12 +219,12 @@ def insert_file_into_db(patient_id, file_name, file_type, file_path, bucket_name
         cur = connection.cursor()
 
         select_query = """
-        SELECT * FROM "patient_data"
-        WHERE patient_id = %s
+        SELECT * FROM "persona_data"
+        WHERE persona_id = %s
         AND filename = %s
         AND filetype = %s;
         """
-        cur.execute(select_query, (patient_id, file_name, file_type))
+        cur.execute(select_query, (persona_id, file_name, file_type))
         existing_file = cur.fetchone()
 
         timestamp = datetime.now(timezone.utc)
@@ -232,30 +233,30 @@ def insert_file_into_db(patient_id, file_name, file_type, file_path, bucket_name
         if existing_file:
             # Update the existing record
             update_query = """
-                UPDATE "patient_data"
+                UPDATE "persona_data"
                 SET s3_bucket_reference = %s,
                     filepath = %s,
                     time_uploaded = %s,
                     ingestion_status = %s
-                WHERE patient_id = %s
+                WHERE persona_id = %s
                 AND filename = %s
                 AND filetype = %s;
             """
             cur.execute(update_query, (
-                bucket_name, file_path, timestamp, ingestion_status, patient_id, file_name, file_type
+                bucket_name, file_path, timestamp, ingestion_status, persona_id, file_name, file_type
             ))
-            logger.info(f"Successfully updated file {file_name}.{file_type} in database for patient {patient_id}, ingestion set to '{ingestion_status}'.")
+            logger.info(f"Successfully updated file {file_name}.{file_type} in database for persona {persona_id}, ingestion set to '{ingestion_status}'.")
         else:
             # Insert a new record
             insert_query = """
-                INSERT INTO "patient_data" 
-                (patient_id, filetype, s3_bucket_reference, filepath, filename, time_uploaded, metadata, ingestion_status)
+                INSERT INTO "persona_data" 
+                (persona_id, filetype, s3_bucket_reference, filepath, filename, time_uploaded, metadata, ingestion_status)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
             """
             cur.execute(insert_query, (
-                patient_id, file_type, bucket_name, file_path, file_name, timestamp, "", ingestion_status
+                persona_id, file_type, bucket_name, file_path, file_name, timestamp, "", ingestion_status
             ))
-            logger.info(f"Successfully inserted new file {file_name}.{file_type} for patient {patient_id}, ingestion set to '{ingestion_status}'.")
+            logger.info(f"Successfully inserted new file {file_name}.{file_type} for persona {persona_id}, ingestion set to '{ingestion_status}'.")
 
         connection.commit()
         cur.close()
@@ -266,7 +267,7 @@ def insert_file_into_db(patient_id, file_name, file_type, file_path, bucket_name
         logger.error(f"Error inserting file {file_name}.{file_type} into database: {e}")
         raise
 
-def update_vectorstore_from_s3(bucket, simulation_group_id, patient_id, file_path):
+def update_vectorstore_from_s3(bucket, simulation_group_id, persona_id, file_path):
     connection = connect_to_db()
     if connection is None:
         logger.error("Database connection failed. Unable to query embeddings.")
@@ -281,7 +282,7 @@ def update_vectorstore_from_s3(bucket, simulation_group_id, patient_id, file_pat
     secret = get_secret()
 
     vectorstore_config_dict = {
-        'collection_name': f'{patient_id}',
+        'collection_name': f'{persona_id}',
         'dbname': secret["dbname"],
         'user': secret["username"],
         'password': secret["password"],
@@ -293,7 +294,7 @@ def update_vectorstore_from_s3(bucket, simulation_group_id, patient_id, file_pat
         update_vectorstore(
             bucket=bucket,
             group=simulation_group_id,
-            patient_id=patient_id,
+            persona_id=persona_id,
             vectorstore_config_dict=vectorstore_config_dict,
             embeddings=embeddings,
             connection=connection
@@ -302,11 +303,11 @@ def update_vectorstore_from_s3(bucket, simulation_group_id, patient_id, file_pat
     except Exception as e:
         error_message = str(e)
         if "An error occurred (404) when calling the HeadObject operation: Not Found" in error_message:
-            logger.warning(f"Temporary page file not found while updating vectorstore for patient {patient_id}. "
+            logger.warning(f"Temporary page file not found while updating vectorstore for persona {persona_id}. "
                            f"Ingestion status for this document is set to completed since it has already been processed.")
         else:
-            update_ingestion_status(patient_id, file_path, "error")
-            logger.error(f"Error updating vectorstore for patient {patient_id}: {e}, ingestion_status set to 'error'.")
+            update_ingestion_status(persona_id, file_path, "error")
+            logger.error(f"Error updating vectorstore for persona {persona_id}: {e}, ingestion_status set to 'error'.")
             raise
 
 def handler(event, context):
@@ -328,12 +329,12 @@ def handler(event, context):
         file_key = record['s3']['object']['key']
         parsed = parse_s3_file_path(file_key)
         simulation_group_id = parsed.simulation_group_id
-        patient_id = parsed.patient_id
+        persona_id = parsed.persona_id
         file_category = parsed.file_category
         file_name = parsed.file_name
         file_type = parsed.file_type
 
-        if not simulation_group_id or not patient_id or not file_name or not file_type:
+        if not simulation_group_id or not persona_id or not file_name or not file_type:
             return {
                 "statusCode": 400,
                 "body": json.dumps("Error parsing S3 file path.")
@@ -341,7 +342,7 @@ def handler(event, context):
         
         # Get initial embedding count
         try:
-            initial_count = get_embedding_count(patient_id)
+            initial_count = get_embedding_count(persona_id)
             logger.info(f"Initial count of embeddings are {initial_count}")
         except Exception as e:
             initial_count = 0
@@ -350,7 +351,7 @@ def handler(event, context):
         if event_name.startswith('ObjectCreated:'):
             try:
                 insert_file_into_db(
-                    patient_id=patient_id,
+                    persona_id=persona_id,
                     file_name=file_name,
                     file_type=file_type,
                     file_path=file_key,
@@ -367,13 +368,13 @@ def handler(event, context):
         else:
             logger.info(f"File {file_name}.{file_type} is being deleted. Deleting files from database does not occur here.")
         
-        # Update embeddings for patient after the file is successfully inserted into the database. Only if document file
+        # Update embeddings for persona after the file is successfully inserted into the database. Only if document file
         if file_category == "documents":
             try:
-                update_vectorstore_from_s3(bucket_name, simulation_group_id, patient_id, file_key)
-                logger.info(f"Vectorstore updated successfully for patient {patient_id} in group {simulation_group_id}.")
+                update_vectorstore_from_s3(bucket_name, simulation_group_id, persona_id, file_key)
+                logger.info(f"Vectorstore updated successfully for persona {persona_id} in group {simulation_group_id}.")
             except Exception as e:
-                logger.error(f"Error updating vectorstore for patient {patient_id} in group {simulation_group_id}: {e}")
+                logger.error(f"Error updating vectorstore for persona {persona_id} in group {simulation_group_id}: {e}")
                 return {
                     "statusCode": 500,
                     "body": json.dumps(f"File inserted, but error updating vectorstore: {e}")
@@ -383,20 +384,20 @@ def handler(event, context):
         
         # Get final embedding count
         try:
-            final_count = get_embedding_count(patient_id)
+            final_count = get_embedding_count(persona_id)
             logger.info(f"Final count of embeddings are {final_count}")
 
             difference = final_count - initial_count
 
             if difference > 0:
-                logger.info(f"{difference} embeddings were created for patient {patient_id}.")
-                print(f"{difference} embeddings were created for patient {patient_id}.")
+                logger.info(f"{difference} embeddings were created for persona {persona_id}.")
+                print(f"{difference} embeddings were created for persona {persona_id}.")
             elif difference == 0:
-                logger.info(f"No change in embeddings for patient {patient_id}.")
-                print(f"No change in embeddings for patient {patient_id}.")
+                logger.info(f"No change in embeddings for persona {persona_id}.")
+                print(f"No change in embeddings for persona {persona_id}.")
             else:
-                logger.info(f"{difference} embeddings were removed for patient {patient_id}.")
-                print(f"{abs(difference)} embeddings were removed for patient {patient_id}.")
+                logger.info(f"{difference} embeddings were removed for persona {persona_id}.")
+                print(f"{abs(difference)} embeddings were removed for persona {persona_id}.")
         except Exception as e:
             logger.error(f"Error getting final count of embeddings: {e}")
 

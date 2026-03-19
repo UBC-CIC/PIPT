@@ -12,12 +12,12 @@ BUCKET = os.environ["BUCKET"]
 def lambda_handler(event, context):
     query_params = event.get("queryStringParameters", {})
     simulation_group_id = query_params.get("simulation_group_id", "")
-    patient_id = query_params.get("patient_id", "")
+    persona_id = query_params.get("persona_id", "")
 
-    if not simulation_group_id or not patient_id:
+    if not simulation_group_id or not persona_id:
         logger.error("Missing required parameters", extra={
             "simulation_group_id": simulation_group_id,
-            "patient_id": patient_id
+            "persona_id": persona_id
         })
         return {
             'statusCode': 400,
@@ -27,26 +27,26 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps("Missing required parameters: simulation_group_id or patient_id")
+            'body': json.dumps("Missing required parameters: simulation_group_id or persona_id")
         }
 
     try:
-        # Define the prefix for the patient’s files
-        patient_prefix = f"{simulation_group_id}/{patient_id}/"
+        # Define the prefix for the persona's files
+        persona_prefix = f"{simulation_group_id}/{persona_id}/"
 
         objects_to_delete = []
         continuation_token = None
 
-        # Fetch all objects in the patient's directory, handling pagination
+        # Fetch all objects in the persona's directory, handling pagination
         while True:
             if continuation_token:
                 response = s3.list_objects_v2(
                     Bucket=BUCKET,
-                    Prefix=patient_prefix,
+                    Prefix=persona_prefix,
                     ContinuationToken=continuation_token
                 )
             else:
-                response = s3.list_objects_v2(Bucket=BUCKET, Prefix=patient_prefix)
+                response = s3.list_objects_v2(Bucket=BUCKET, Prefix=persona_prefix)
 
             if 'Contents' in response:
                 objects_to_delete.extend([{'Key': obj['Key']} for obj in response['Contents']])
@@ -58,7 +58,7 @@ def lambda_handler(event, context):
                 break
 
         if objects_to_delete:
-            # Delete all objects in the patient's directory
+            # Delete all objects in the persona's directory
             delete_response = s3.delete_objects(
                 Bucket=BUCKET,
                 Delete={'Objects': objects_to_delete}
@@ -72,10 +72,10 @@ def lambda_handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                'body': json.dumps(f"Deleted patient directory: {patient_prefix}")
+                'body': json.dumps(f"Deleted persona directory: {persona_prefix}")
             }
         else:
-            logger.info(f"No objects found in patient directory: {patient_prefix}")
+            logger.info(f"No objects found in persona directory: {persona_prefix}")
             return {
                 'statusCode': 200,
                 "headers": {
@@ -84,11 +84,11 @@ def lambda_handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                'body': json.dumps(f"No objects found in patient directory: {patient_prefix}")
+                'body': json.dumps(f"No objects found in persona directory: {persona_prefix}")
             }
 
     except Exception as e:
-        logger.exception(f"Error deleting patient directory: {e}")
+        logger.exception(f"Error deleting persona directory: {e}")
         return {
             'statusCode': 500,
             "headers": {
