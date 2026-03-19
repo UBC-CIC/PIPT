@@ -425,7 +425,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       const filesData = await apiClient.request<{
         profile_picture_url?: string | null;
       }>(
-        `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+        `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=patient`
       );
       profilePictureUrl = filesData.profile_picture_url ?? undefined;
     } catch {
@@ -475,7 +475,7 @@ interface GetAllFilesResponse {
 async function fetchPatientFiles(simulationGroupId: string, patientId: string): Promise<PatientFile[]> {
   try {
     const data = await apiClient.request<GetAllFilesResponse>(
-      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=patient`
     );
 
     const files: PatientFile[] = [];
@@ -502,7 +502,7 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
 async function fetchCaseMaterials(simulationGroupId: string, patientId: string): Promise<StudentCaseMaterial[]> {
   try {
     const data = await apiClient.request<GetAllFilesResponse>(
-      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=patient`
     );
 
     const materials: StudentCaseMaterial[] = [];
