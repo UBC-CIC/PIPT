@@ -3669,10 +3669,10 @@ Return valid JSON in exactly this structure:
                                       messages.map((message) => (
                                         <div
                                           key={message.message_id}
-                                          className={`flex gap-3 ${message.student_sent ? 'justify-end' : 'justify-start'}`}
+                                          className={`flex gap-3 ${message.sender_type === 'student' ? 'justify-end' : 'justify-start'}`}
                                         >
                                           {/* Avatar for AI patient (left side) */}
-                                          {!message.student_sent && (
+                                          {message.sender_type !== 'student' && (
                                             <div className="flex-shrink-0">
                                               <UserAvatar
                                                 name="Pamela"
@@ -3685,23 +3685,23 @@ Return valid JSON in exactly this structure:
                                           {/* Message bubble */}
                                           <div
                                             className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                                              message.student_sent ? 'rounded-br-none' : 'rounded-bl-none'
+                                              message.sender_type === 'student' ? 'rounded-br-none' : 'rounded-bl-none'
                                             }`}
                                             style={{
-                                              backgroundColor: message.student_sent
+                                              backgroundColor: message.sender_type === 'student'
                                                 ? SIMULATION_GROUP_COLOR_PALETTE[2]
                                                 : UI_COLORS.background.hoverLight,
-                                              color: message.student_sent ? UI_COLORS.button.text : UI_COLORS.text.heading,
+                                              color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading,
                                             }}
                                           >
                                             <p className="text-sm font-semibold mb-1">
-                                              {message.student_sent ? 'Student (User)' : 'Pamela (LLM)'}:
+                                              {message.sender_type === 'student' ? 'Student (User)' : 'Pamela (LLM)'}:
                                             </p>
                                             <p className="text-sm">{message.message_content}</p>
                                           </div>
 
                                           {/* Avatar for student (right side) */}
-                                          {message.student_sent && (
+                                          {message.sender_type === 'student' && (
                                             <div className="flex-shrink-0">
                                               <UserAvatar
                                                 name="Student"

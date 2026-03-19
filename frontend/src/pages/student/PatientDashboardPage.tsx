@@ -29,7 +29,7 @@ function PatientDashboardPage() {
 
   // Load chat history from API (falls back to mock)
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
-  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
+  const [, setChatHistoryLoading] = useState(true);
 
   useEffect(() => {
     if (!groupId || !patientId) return;
