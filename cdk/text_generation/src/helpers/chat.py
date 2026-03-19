@@ -97,7 +97,7 @@ def get_student_query(raw_query: str) -> str:
 def get_initial_student_query(patient_name: str) -> str:
     """Generate an initial query for the student to interact with the system."""
     return f"""
-    Greet me and then ask me a question related to the patient: {patient_name}. 
+    Begin the conversation as the patient: {patient_name} and greet me, the pharmacy student. 
     """
 
 def get_default_system_prompt(patient_name) -> str:
