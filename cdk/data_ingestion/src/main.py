@@ -127,6 +127,7 @@ def get_embedding_count(persona_id):
 
     except psycopg2.errors.UndefinedTable as e:
         # Handles case where tables do not exist yet (first persona)
+        connection.rollback()
         logger.warning(f"LangChain tables do not exist yet as this might be the first persona being created. Returning 0 embeddings for persona {persona_id}.")
         return 0
 
