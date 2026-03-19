@@ -425,7 +425,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       const filesData = await apiClient.request<{
         profile_picture_url?: string | null;
       }>(
-        `/student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+        `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
       );
       profilePictureUrl = filesData.profile_picture_url ?? undefined;
     } catch {
@@ -438,7 +438,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       persona_age: number;
       persona_gender: string;
     }>>(
-      `/student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     const persona = data.find(p => p.persona_id === patientId);
@@ -475,7 +475,7 @@ interface GetAllFilesResponse {
 async function fetchPatientFiles(simulationGroupId: string, patientId: string): Promise<PatientFile[]> {
   try {
     const data = await apiClient.request<GetAllFilesResponse>(
-      `/student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
     );
 
     const files: PatientFile[] = [];
@@ -502,7 +502,7 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
 async function fetchCaseMaterials(simulationGroupId: string, patientId: string): Promise<StudentCaseMaterial[]> {
   try {
     const data = await apiClient.request<GetAllFilesResponse>(
-      `/student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
+      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&patient_name=patient`
     );
 
     const materials: StudentCaseMaterial[] = [];
@@ -593,7 +593,7 @@ async function getSimulationGroups(): Promise<SimulationGroup[]> {
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<SimulationGroup[]>(
-      `/student/simulation_groups?email=${encodeURIComponent(user.email)}`
+      `student/simulation_groups?email=${encodeURIComponent(user.email)}`
     );
     return data.map((g, i) => ({
       ...g,
@@ -629,7 +629,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<Patient[]>(
-      `/student/patients?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `student/patients?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
     return data;
   } catch (error) {
@@ -647,7 +647,7 @@ async function joinGroup(accessCode: string): Promise<{ success: boolean }> {
     if (!user) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `/student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`,
+      `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`,
       { method: 'POST' }
     );
     return { success: true };
@@ -666,7 +666,7 @@ async function createSession(simulationGroupId: string, patientId: string, sessi
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<Session[]>(
-      `/student/create_session?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_name=${encodeURIComponent(sessionName)}`,
+      `student/create_session?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_name=${encodeURIComponent(sessionName)}`,
       { method: 'POST' }
     );
 
@@ -687,7 +687,7 @@ async function sendMessage(
   messageContent: string
 ): Promise<{ llm_output: string; session_name?: string }> {
   const result = await apiClient.request<{ llm_output: string; session_name?: string }>(
-    `/student/text_generation?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_id=${encodeURIComponent(sessionId)}`,
+    `student/text_generation?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_id=${encodeURIComponent(sessionId)}`,
     {
       method: 'POST',
       body: { message_content: messageContent },
@@ -740,7 +740,7 @@ async function sendMessageStreaming(
 
     // Step 2: fire the REST call with stream=true to kick off generation
     apiClient.request(
-      `/student/text_generation?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_id=${encodeURIComponent(sessionId)}&stream=true`,
+      `student/text_generation?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_id=${encodeURIComponent(sessionId)}&stream=true`,
       {
         method: 'POST',
         body: { message_content: messageContent },
