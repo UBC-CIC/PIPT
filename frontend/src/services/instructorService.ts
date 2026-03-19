@@ -311,7 +311,7 @@ export interface InstructorDataService {
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
-  assignQuestionToGroup: (simulationGroupId: string, questionId: string, personaId: string, options?: { weight_override?: number; max_score_override?: number; order?: number }) => Promise<any>;
+  assignQuestionToGroup: (simulationGroupId: string, questionId: string, personaId?: string, options?: { weight_override?: number; max_score_override?: number; order?: number }) => Promise<any>;
   unassignQuestion: (groupQuestionId: string) => Promise<any>;
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
 }
@@ -1431,17 +1431,24 @@ async function getSimulationGroupQuestions(simulationGroupId: string, personaId?
 }
 
 /**
- * Assign a question to a simulation group for a specific persona
+ * Assign a question to a simulation group (persona_id is optional for global assignments)
  */
 async function assignQuestionToGroup(
   simulationGroupId: string,
   questionId: string,
-  personaId: string,
+  personaId?: string,
   options?: { weight_override?: number; max_score_override?: number; order?: number }
 ): Promise<any> {
   return apiClient.request<any>(
-    `instructor/simulation_group_questions?simulation_group_id=${simulationGroupId}&question_id=${questionId}&persona_id=${personaId}`,
-    { method: 'POST', body: options }
+    `instructor/simulation_group_questions?simulation_group_id=${simulationGroupId}`,
+    {
+      method: 'POST',
+      body: {
+        question_id: questionId,
+        ...(personaId ? { persona_id: personaId } : {}),
+        ...options,
+      },
+    }
   );
 }
 

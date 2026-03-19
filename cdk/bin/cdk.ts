@@ -82,7 +82,6 @@ const amplifyStack = new AmplifyStack(
   `${StackPrefix}-Amplify`,
   apiStack,
   ecsSocketStack,
-  apiStack,
   {
     env,
   }

@@ -1,6 +1,7 @@
 *.js
 !jest.config.js
-!lambda/db_setup/migrations/**/*.js
+!lambda/**/*.js
+!socket-server/**/*.js
 *.d.ts
 node_modules
 

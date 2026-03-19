@@ -138,7 +138,6 @@ function AdminQuestionBankPage() {
       setError(null);
       const created = await createQuestionBankQuestion(
         organizationId || '',
-        'admin',
         {
           title: question.title,
           question_text: question.keyQuestion,

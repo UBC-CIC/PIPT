@@ -77,8 +77,8 @@ function InstructorSimulationGroupPage() {
   
   // Question Bank questions - loaded from service
   const [globalBankQuestions, setGlobalBankQuestions] = useState<QuestionBankItem[]>([]);
-  const [questionBankLoading, setQuestionBankLoading] = useState(false);
-  const [questionBankError, setQuestionBankError] = useState<string | null>(null);
+  const [, setQuestionBankLoading] = useState(false);
+  const [, setQuestionBankError] = useState<string | null>(null);
   
   const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState(() => 
     instructorService.getPatientSpecificQuestionBank()
@@ -595,7 +595,7 @@ function InstructorSimulationGroupPage() {
         // Add to global rubric if it's a global question
         if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
           // Call API to assign question to group
-          await instructorService.assignQuestionToGroup(groupId || '1', questionId, '');
+          await instructorService.assignQuestionToGroup(groupId || '1', questionId);
           
           // Check if already exists in rubric
           const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);

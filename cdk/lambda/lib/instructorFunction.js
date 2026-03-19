@@ -1538,12 +1538,18 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.simulation_group_id &&
-          event.queryStringParameters.question_id &&
-          event.queryStringParameters.persona_id
+          event.body
         ) {
-          const { simulation_group_id, question_id, persona_id } =
-            event.queryStringParameters;
-          const body = event.body ? JSON.parse(event.body) : {};
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+          const { question_id, persona_id } = body;
+
+          if (!question_id) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "question_id is required in request body" });
+            break;
+          }
+
           const weight_override = body.weight_override ?? null;
           const max_score_override = body.max_score_override ?? null;
           const order = body.order ?? null;
@@ -1591,7 +1597,7 @@ exports.handler = async (event, context) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error:
-              "simulation_group_id, question_id, and persona_id are required",
+              "simulation_group_id query parameter and request body with question_id are required",
           });
         }
         break;

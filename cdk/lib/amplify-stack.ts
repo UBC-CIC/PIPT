@@ -1,6 +1,5 @@
 import * as cdk from "aws-cdk-lib";
 import * as amplify from "aws-cdk-lib/aws-amplify";
-import * as codeconnections from "aws-cdk-lib/aws-codeconnections";
 import { Construct } from "constructs";
 import { ApiServiceStack } from "./api-service-stack";
 import { EcsSocketStack } from "./ecs-socket-stack";
@@ -12,7 +11,6 @@ export class AmplifyStack extends cdk.Stack {
     id: string,
     apiStack: ApiServiceStack,
     ecsSocketStack: EcsSocketStack,
-    apiStackForAppSync: ApiServiceStack, // This is the same as apiStack now
     props?: cdk.StackProps
   ) {
     super(scope, id, props);
@@ -108,10 +106,10 @@ applications:
       branchName: "main",
       enableAutoBuild: true,
     });
-//remove when merging to main
-    const admin_functionality = new amplify.CfnBranch(this, `${id}-adminFunctionBranch`, {
+
+    const questionBankSetup = new amplify.CfnBranch(this, `${id}-questionBankSetupBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "admin_functionality",
+      branchName: "question-bank-setup",
       enableAutoBuild: true,
     });
 

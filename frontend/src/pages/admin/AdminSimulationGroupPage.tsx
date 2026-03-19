@@ -519,7 +519,7 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  const handleSaveNewQuestion = (question: {
+  const handleSaveNewQuestion = async (question: {
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
@@ -541,7 +541,8 @@ function AdminSimulationGroupPage() {
     
     if (addQuestionType === 'global') {
       instructorService.addToGlobalQuestionBank(newBankQuestion);
-      setGlobalBankQuestions(instructorService.getGlobalQuestionBank());
+      const questions = await instructorService.getGlobalQuestionBank();
+      setGlobalBankQuestions(questions);
     } else {
       instructorService.addToPatientSpecificQuestionBank(newBankQuestion);
       setPatientSpecificBankQuestions(instructorService.getPatientSpecificQuestionBank());

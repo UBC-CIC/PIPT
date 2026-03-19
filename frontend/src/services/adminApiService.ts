@@ -371,14 +371,14 @@ export async function getQuestionBankQuestions(organizationId: string): Promise<
 
 /**
  * Create a new question bank question for an organization.
+ * created_by is derived server-side from the authorizer context (Cognito sub).
  */
 export async function createQuestionBankQuestion(
   organizationId: string,
-  createdBy: string,
   questionData: any
 ): Promise<QuestionBankItem> {
   const row = await apiClient.request<any>(
-    `admin/question_bank?organization_id=${encodeURIComponent(organizationId)}&created_by=${encodeURIComponent(createdBy)}`,
+    `admin/question_bank?organization_id=${encodeURIComponent(organizationId)}`,
     {
       method: 'POST',
       body: questionData,
