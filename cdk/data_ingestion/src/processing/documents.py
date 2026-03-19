@@ -317,16 +317,9 @@ def process_documents(
             all_doc_chunks, 
             record_manager, 
             vectorstore, 
-            cleanup="full",
+            cleanup="incremental",
             source_id_key="source"
         )
         logger.info(f"Indexing updates: \n {idx}")
     else:
-        idx = index(
-            [],
-            record_manager, 
-            vectorstore, 
-            cleanup="full",
-            source_id_key="source"
-        )
         logger.info("No documents found for indexing.")
