@@ -595,11 +595,18 @@ async function getSimulationGroups(): Promise<SimulationGroup[]> {
     const data = await apiClient.request<SimulationGroup[]>(
       `student/simulation_group?email=${encodeURIComponent(user.email)}`
     );
-    return data.map((g, i) => ({
-      ...g,
+    return data.map((g: any, i: number) => ({
+      simulation_group_id: g.simulation_group_id,
+      name: g.group_name,
       subtitle: 'Medical Simulation Group',
       icon_color: g.icon_color || getSimulationGroupColor(i),
+      access_code: g.group_access_code || '',
+      student_count: g.student_count || 0,
+      instructor_count: g.instructor_count || 0,
+      patient_count: g.persona_count || 0,
+      organization_id: g.organization_id || '',
     }));
+
   } catch (error) {
     console.error('Failed to fetch simulation groups, using mock data:', error);
     return mockSimulationGroups;
@@ -628,10 +635,15 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    const data = await apiClient.request<Patient[]>(
-      `student/patients?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    const data = await apiClient.request<any[]>(
+      `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
-    return data;
+    return data.map((p) => ({
+      patient_id: p.persona_id,
+      patient_name: p.persona_name,
+      debrief_status: p.is_completed ? 'debrief_reached' as const : 'not_started' as const,
+      instructor_evaluation: p.persona_score > 0 ? 'Evaluated' : 'Not Evaluated',
+    }));
   } catch (error) {
     console.error('Failed to fetch patients, using mock data:', error);
     return mockPatients;
