@@ -5,9 +5,9 @@ import UserAvatar from '@/components/UserAvatar';
 import { ArrowLeft } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '@/App';
-import { studentService } from '@/services/studentService';
+import { studentService, type ChatHistoryEntry } from '@/services/studentService';
 
 /**
  * PatientDashboardPage Component
@@ -27,8 +27,22 @@ function PatientDashboardPage() {
   // Load patient data from mock data service
   const patient = studentService.getPatientDetail(patientId);
 
-  // Load chat history from mock data service
-  const chatHistory = studentService.getChatHistory();
+  // Load chat history from API (falls back to mock)
+  const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
+  const [chatHistoryLoading, setChatHistoryLoading] = useState(true);
+
+  useEffect(() => {
+    if (!groupId || !patientId) return;
+    let cancelled = false;
+    setChatHistoryLoading(true);
+    studentService.fetchChatHistory(groupId, patientId).then((data) => {
+      if (!cancelled) {
+        setChatHistory(data);
+        setChatHistoryLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [groupId, patientId]);
 
   // Load key questions coverage data from mock data service
   const allKeyQuestionsCoverageData = studentService.getKeyQuestionsCoverageData();
@@ -73,8 +87,8 @@ function PatientDashboardPage() {
       // Navigate to read-only chat history page
       navigate(`/patients/${groupId}/${patientId}/chat/${chatId}/history`);
     } else {
-      // Navigate to active chat page to continue
-      navigate(`/patients/${groupId}/${patientId}/chat`);
+      // Navigate to active chat page with existing session ID
+      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}`);
     }
   };
 

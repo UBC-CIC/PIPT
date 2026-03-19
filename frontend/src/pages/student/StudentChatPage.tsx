@@ -19,7 +19,7 @@ import { useAuth } from '@/App';
  */
 function StudentChatPage() {
   const navigate = useNavigate();
-  const { groupId, patientId } = useParams();
+  const { groupId, patientId, chatId: routeChatId } = useParams();
   
   // Load user data from auth context
   const { user: authUser } = useAuth();
@@ -92,17 +92,30 @@ function StudentChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
-  // Create a session on mount so we have a session_id for text generation
+  // Create a session on mount (new chat) or use existing session ID from route
   useEffect(() => {
     if (!groupId || !patientId) return;
     let cancelled = false;
-    studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
-      if (!cancelled && session) {
-        setSessionId(session.chat_id);
-      }
-    });
+
+    if (routeChatId) {
+      // Resuming an existing session — set the ID and load messages
+      setSessionId(routeChatId);
+      studentService.fetchMessages(routeChatId).then((msgs) => {
+        if (!cancelled && msgs.length > 0) {
+          setMessages(msgs);
+        }
+      });
+    } else {
+      // New chat — create a fresh session
+      studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
+        if (!cancelled && session) {
+          setSessionId(session.chat_id);
+        }
+      });
+    }
+
     return () => { cancelled = true; };
-  }, [groupId, patientId]);
+  }, [groupId, patientId, routeChatId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {

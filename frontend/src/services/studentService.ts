@@ -540,10 +540,79 @@ async function fetchCaseMaterials(simulationGroupId: string, patientId: string):
 }
 
 /**
- * Get chat history entries for patient dashboard
+ * Get chat history entries for patient dashboard (mock fallback)
  */
 function getChatHistory(): ChatHistoryEntry[] {
   return mockChatHistory;
+}
+
+/**
+ * Fetch chat history (sessions) for a patient from the API via GET /student/patient.
+ * Returns ChatHistoryEntry[] mapped from the chats table rows.
+ */
+async function fetchChatHistory(simulationGroupId: string, patientId: string): Promise<ChatHistoryEntry[]> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user) throw new Error('Not authenticated');
+
+    const data = await apiClient.request<Array<{
+      chat_id: string;
+      student_interaction_id: string;
+      chat_name: string | null;
+      last_accessed: string | null;
+      notes: string | null;
+    }>>(
+      `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
+    );
+
+    if (!Array.isArray(data) || data.length === 0) return [];
+
+    return data.map((chat, index) => {
+      const dateStr = chat.last_accessed
+        ? new Date(chat.last_accessed).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+        : '';
+      return {
+        id: chat.chat_id,
+        name: chat.chat_name || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
+        completionStatus: 'In Progress', // chats table has no completion flag; default to in-progress
+        score: null,
+      };
+    });
+  } catch (error) {
+    console.error('Failed to fetch chat history from API, using mock data:', error);
+    return mockChatHistory;
+  }
+}
+
+/**
+ * Fetch messages for an existing chat session via GET /student/get_messages.
+ */
+async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
+  try {
+    const data = await apiClient.request<Array<{
+      message_id: string;
+      chat_id: string;
+      sender_type: string;
+      message_content: string;
+      sent_at: string;
+      user_id?: string;
+    }>>(
+      `student/get_messages?session_id=${encodeURIComponent(sessionId)}`
+    );
+
+    if (!Array.isArray(data)) return [];
+
+    return data.map((msg) => ({
+      message_id: msg.message_id,
+      chat_id: msg.chat_id,
+      sender_type: (msg.sender_type as 'student' | 'ai' | 'system') || 'ai',
+      message_content: msg.message_content,
+      sent_at: msg.sent_at,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch messages:', error);
+    return [];
+  }
 }
 
 /**
@@ -787,6 +856,8 @@ export const studentService = {
   fetchPatientDetail,
   fetchPatientFiles,
   fetchCaseMaterials,
+  fetchChatHistory,
+  fetchMessages,
 };
 
 /**
