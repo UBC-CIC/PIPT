@@ -313,13 +313,44 @@ function ChatHistoryPage() {
             </div>
           )}
 
-          {/* Content Area - Empty for now */}
+          {/* Content Area - Uploaded documents grouped by category */}
           <div className="flex-1 overflow-y-auto p-4">
             {isPatientInfoSidebarOpen && (
-              <div className="space-y-4">
-                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                  Patient information content will be displayed here.
-                </p>
+              <div className="space-y-6">
+                {Object.entries(groupedCaseMaterials).map(([groupName, materials]) => (
+                  <div key={groupName}>
+                    {/* Group Header */}
+                    <h3 className="font-semibold text-base mb-3 pb-2" style={{ color: UI_COLORS.text.heading, borderBottomWidth: '2px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+                      {groupName}
+                    </h3>
+                    
+                    {/* Materials in this group */}
+                    <div className="space-y-3">
+                      {materials.map((material) => (
+                        <div
+                          key={material.id}
+                          className="p-4 rounded-lg"
+                          style={{ backgroundColor: UI_COLORS.background.hoverLight }}
+                        >
+                          <div className="flex items-start gap-3">
+                            <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
+                            <div className="flex-1">
+                              <h4 className="font-semibold text-sm mb-1" style={{ color: UI_COLORS.text.heading }}>
+                                {material.title}
+                              </h4>
+                              <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
+                                {material.description}
+                              </p>
+                              <p className="text-xs mt-1" style={{ color: UI_COLORS.text.muted }}>
+                                Type: {material.type}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -435,41 +466,9 @@ function ChatHistoryPage() {
           <div className="flex-1 overflow-y-auto p-4">
             {contentSidebarType === 'physical-assessment' && (
               <div className="space-y-6">
-                {/* Group materials by their 'group' property */}
-                {Object.entries(groupedCaseMaterials).map(([groupName, materials]) => (
-                  <div key={groupName}>
-                    {/* Group Header */}
-                    <h3 className="font-semibold text-base mb-3 pb-2" style={{ color: UI_COLORS.text.heading, borderBottomWidth: '2px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                      {groupName}
-                    </h3>
-                    
-                    {/* Materials in this group */}
-                    <div className="space-y-3">
-                      {materials.map((material) => (
-                        <div
-                          key={material.id}
-                          className="p-4 rounded-lg"
-                          style={{ backgroundColor: UI_COLORS.background.hoverLight }}
-                        >
-                          <div className="flex items-start gap-3">
-                            <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-sm mb-1" style={{ color: UI_COLORS.text.heading }}>
-                                {material.title}
-                              </h4>
-                              <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
-                                {material.description}
-                              </p>
-                              <p className="text-xs mt-1" style={{ color: UI_COLORS.text.muted }}>
-                                Type: {material.type}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                  Physical assessment content will be displayed here.
+                </p>
               </div>
             )}
           </div>
