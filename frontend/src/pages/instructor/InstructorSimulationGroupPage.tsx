@@ -411,10 +411,16 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle photo upload
    */
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
-      instructorService.uploadPatientPhoto(groupId, selectedPatientForEdit, file).then(async () => {
+      let patientId = selectedPatientForEdit;
+      if (patientId === 'new') {
+        const savedId = await autoSaveNewPatient();
+        if (!savedId) return;
+        patientId = savedId;
+      }
+      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
         setManageablePatients(await instructorService.getManageablePatients(groupId));
       });
     }
@@ -423,11 +429,17 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle file upload
    */
-  const handleFileUpload = (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
+      let patientId = selectedPatientForEdit;
+      if (patientId === 'new') {
+        const savedId = await autoSaveNewPatient();
+        if (!savedId) return;
+        patientId = savedId;
+      }
       const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
-      instructorService.uploadPatientFile(groupId, selectedPatientForEdit, file, folderType);
+      instructorService.uploadPatientFile(groupId, patientId, file, folderType);
     }
   };
 
