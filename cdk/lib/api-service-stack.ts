@@ -1234,6 +1234,7 @@ export class ApiServiceStack extends cdk.Stack {
           "::foundation-model/meta.llama3-70b-instruct-v1:0",
         "arn:aws:bedrock:us-east-1::foundation-model/cohere.embed-v4:0",
         "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-pro-v1:0",
+        `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/*`,
         `arn:aws:bedrock:${this.region}:${this.account}:guardrail/*`, // Guardrail access
       ],
     });
