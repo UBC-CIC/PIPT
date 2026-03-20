@@ -1870,6 +1870,103 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /student/conclude_interaction:
+    options:
+      summary: CORS support
+      description: |
+        Enable CORS by returning correct headers
+      responses:
+        200:
+          $ref: "#/components/responses/Success"
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: |
+            {
+              "statusCode" : 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {}
+    post:
+      tags:
+        - Student
+      summary: Conclude a student interaction session
+      description: |
+        Saves the student's recommendation, marks the chat as ended and the
+        student_interaction as completed, then asynchronously triggers debrief
+        generation via the text generation Lambda.
+      operationId: student_conclude_interaction_POST
+      parameters:
+        - in: query
+          name: session_id
+          required: true
+          description: ID of the chat session to conclude
+          schema:
+            type: string
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+        - in: query
+          name: patient_id
+          required: true
+          description: ID of the patient (persona)
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - recommendation
+              properties:
+                recommendation:
+                  type: string
+                  description: The student's recommendation text submitted when concluding the interaction
+      responses:
+        "200":
+          description: Interaction concluded successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  chat:
+                    type: object
+                    description: The updated chat record
+                  debrief_triggered:
+                    type: boolean
+                    description: Whether debrief generation was triggered
+        "400":
+          description: Bad Request — missing parameters or recommendation
+        "401":
+          description: Unauthorized
+        "404":
+          description: Session not found
+        "500":
+          description: Internal Server Error
+      security:
+        - studentAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${studentFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   # Endpoint to retrieve empathy evaluation summary and scores for a student's session
   /student/empathy_summary:
     options:

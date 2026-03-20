@@ -2,14 +2,15 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft } from 'lucide-react';
+import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData } from '@/services/studentService';
+import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2 } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
+import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
 
 /**
@@ -52,6 +53,11 @@ function StudentChatPage() {
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
+  const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
+
+  // Session lifecycle status
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'generating_debrief' | 'concluded'>('active');
+  const [debriefData, setDebriefData] = useState<AIDebriefData | null>(null);
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
@@ -233,11 +239,55 @@ function StudentChatPage() {
   /**
    * Handle conclude interaction confirmation
    */
-  const handleConcludeInteraction = () => {
-    console.log('Concluding interaction...');
+  const handleConcludeInteraction = async (recommendations: string) => {
+    if (!groupId || !patientId || !sessionId) return;
+
     setIsConfirmConcludeOpen(false);
-    // Future: Show AI debrief and disable chat input
-    // Navigate to debrief page or show debrief dialog
+    setSessionStatus('generating_debrief');
+
+    // Call the conclude API
+    const result = await studentService.concludeInteraction(groupId, patientId, sessionId, recommendations);
+
+    if (!result.success) {
+      console.error('Failed to conclude interaction');
+      setSessionStatus('active');
+      return;
+    }
+
+    // Listen for the debrief result via AppSync subscription
+    // The backend publishes a "debrief" event when generation is complete
+    try {
+      const { subscribeToTextStream } = await import('@/lib/appsync-client');
+      const unsubscribe = await subscribeToTextStream(sessionId, (event) => {
+        if (event.type === 'debrief') {
+          try {
+            const parsed = JSON.parse(event.content);
+            setDebriefData({
+              summary: parsed.summary || '',
+              questionsAddressed: parsed.questions_addressed || [],
+              missedKeyQuestionsCount: (parsed.questions_missed || []).length,
+              missedQuestionsGuidance: parsed.reasoning_gaps || '',
+              recommendationFeedback: {
+                strengths: parsed.recommendation_feedback?.strengths || [],
+                areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
+              },
+              suggestedRewrites: [],
+              rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+            });
+            setSessionStatus('concluded');
+            setIsAIDebriefOpen(true);
+          } catch (e) {
+            console.error('Failed to parse debrief data:', e);
+            setSessionStatus('concluded');
+          }
+          unsubscribe();
+        }
+      });
+    } catch (err) {
+      console.error('Failed to subscribe for debrief:', err);
+      // Even if subscription fails, the session is concluded — debrief can be fetched later
+      setSessionStatus('concluded');
+    }
   };
 
   /**
@@ -382,6 +432,13 @@ function StudentChatPage() {
         onSubmit={handleReportIssue}
       />
 
+      {/* AI Debrief Dialog */}
+      <AIDebriefDialog
+        isOpen={isAIDebriefOpen}
+        onClose={() => setIsAIDebriefOpen(false)}
+        data={debriefData}
+      />
+
       {/* Header */}
       <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
         <div className="flex items-center gap-4">
@@ -503,15 +560,29 @@ function StudentChatPage() {
               <Stethoscope className="w-5 h-5 mr-2" />
               Physical Assessment
             </Button>
-            <Button
-              variant="outline"
-              className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
-              style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
-              onClick={() => setIsConfirmConcludeOpen(true)}
-            >
-              <CheckCircle className="w-5 h-5 mr-2" />
-              Conclude Interaction
-            </Button>
+            {sessionStatus === 'active' && (
+              <Button
+                variant="outline"
+                className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
+                style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
+                onClick={() => setIsConfirmConcludeOpen(true)}
+              >
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Conclude Interaction
+              </Button>
+            )}
+            {(sessionStatus === 'generating_debrief' || sessionStatus === 'concluded') && (
+              <Button
+                variant="outline"
+                className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
+                style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2], opacity: sessionStatus === 'generating_debrief' ? 0.6 : 1 }}
+                onClick={() => sessionStatus === 'concluded' && setIsAIDebriefOpen(true)}
+                disabled={sessionStatus === 'generating_debrief'}
+              >
+                <Eye className="w-5 h-5 mr-2" />
+                {sessionStatus === 'generating_debrief' ? 'Generating Debrief...' : 'View AI Debrief'}
+              </Button>
+            )}
             <Button
               variant="outline"
               className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
@@ -762,49 +833,63 @@ function StudentChatPage() {
             )}
           </div>
 
-          {/* Message Input Area */}
-          <div className="p-6" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setIsVoiceModeActive(true)}
-                className="p-3 rounded-full transition-colors"
-                style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                aria-label="Voice input"
-              >
-                <Mic className="w-5 h-5" />
-              </button>
-              
-              <div className="flex-1 relative">
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder="Type your message..."
-                  className="w-full px-4 py-3 pr-12 rounded-lg focus:outline-none focus:ring-2"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
-                    borderColor: UI_COLORS.border.default,
-                    outlineColor: UI_COLORS.border.medium
-                  }}
-                />
+          {/* Message Input Area — only shown when session is active */}
+          {sessionStatus === 'active' && (
+            <div className="p-6" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={handleSendMessage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setIsVoiceModeActive(true)}
+                  className="p-3 rounded-full transition-colors"
                   style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => !inputMessage.trim() ? null : e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                  aria-label="Send message"
-                  disabled={!inputMessage.trim() || isAiResponding || !sessionId}
+                  aria-label="Voice input"
                 >
-                  <Send className="w-4 h-4" />
+                  <Mic className="w-5 h-5" />
                 </button>
+                
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="Type your message..."
+                    className="w-full px-4 py-3 pr-12 rounded-lg focus:outline-none focus:ring-2"
+                    style={{ 
+                      borderWidth: '1px', 
+                      borderStyle: 'solid', 
+                      borderColor: UI_COLORS.border.default,
+                      outlineColor: UI_COLORS.border.medium
+                    }}
+                  />
+                  <button
+                    onClick={handleSendMessage}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                    onMouseEnter={(e) => !inputMessage.trim() ? null : e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                    aria-label="Send message"
+                    disabled={!inputMessage.trim() || isAiResponding || !sessionId}
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Generating Debrief indicator */}
+          {sessionStatus === 'generating_debrief' && (
+            <div className="p-8 flex items-center justify-center" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+                <p className="text-base" style={{ color: UI_COLORS.text.body }}>
+                  Generating debrief...
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Content Sidebar (Case Materials or Physical Assessment) - Slides from right edge */}

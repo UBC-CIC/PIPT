@@ -478,13 +478,15 @@ exports.handler = async (event, context) => {
 
             // Step 4: Insert a new session with the session_name
             const sessionData = await sqlConnection`
-                    INSERT INTO "chats" (chat_id, student_interaction_id, chat_name, chat_context_embeddings, last_accessed, notes)
+                    INSERT INTO "chats" (chat_id, student_interaction_id, chat_name, chat_context_embeddings, started_at, last_accessed, status, notes)
                     VALUES (
                         uuid_generate_v4(),
                         ${studentPatientId},
                         ${sessionName},
                         ARRAY[]::float[],
                         CURRENT_TIMESTAMP,
+                        CURRENT_TIMESTAMP,
+                        'active',
                         NULL
                     )
                     RETURNING *;
@@ -1318,6 +1320,155 @@ exports.handler = async (event, context) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "POST /student/conclude_interaction":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.session_id &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.patient_id &&
+          event.body
+        ) {
+          const sessionId = event.queryStringParameters.session_id;
+          const simulationGroupId = event.queryStringParameters.simulation_group_id;
+          const patientId = event.queryStringParameters.patient_id;
+          const { recommendation } = JSON.parse(event.body);
+
+          if (!recommendation || !recommendation.trim()) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "recommendation is required in the request body" });
+            break;
+          }
+
+          try {
+            // Step 1: Save recommendation and mark the chat as ended
+            const updatedChat = await sqlConnection`
+              UPDATE "chats"
+              SET recommendation = ${recommendation},
+                  ended_at = CURRENT_TIMESTAMP,
+                  status = 'concluded',
+                  last_accessed = CURRENT_TIMESTAMP
+              WHERE chat_id = ${sessionId}
+              RETURNING *;
+            `;
+
+            if (updatedChat.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Session not found." });
+              break;
+            }
+
+            // Step 2: Get the student_interaction_id from the chat
+            const studentInteractionId = updatedChat[0].student_interaction_id;
+
+            // Step 3: Mark the student_interaction as completed
+            await sqlConnection`
+              UPDATE "student_interactions"
+              SET is_completed = TRUE,
+                  last_accessed = CURRENT_TIMESTAMP
+              WHERE student_interaction_id = ${studentInteractionId};
+            `;
+
+            // Step 4: Get user_id from the authorizer for engagement logging
+            const userId = cognito_id;
+            const userResult = await sqlConnection`
+              SELECT user_id FROM "users"
+              WHERE user_id = (
+                SELECT user_id FROM "enrollments"
+                WHERE enrollment_id = (
+                  SELECT enrollment_id FROM "student_interactions"
+                  WHERE student_interaction_id = ${studentInteractionId}
+                )
+              );
+            `;
+
+            const dbUserId = userResult[0]?.user_id;
+
+            if (dbUserId) {
+              const enrollmentData = await sqlConnection`
+                SELECT enrollment_id FROM "enrollments"
+                WHERE user_id = ${dbUserId} AND simulation_group_id = ${simulationGroupId};
+              `;
+
+              const enrollmentId = enrollmentData[0]?.enrollment_id;
+
+              if (enrollmentId) {
+                await sqlConnection`
+                  INSERT INTO "user_engagement_log" (
+                    log_id, user_id, simulation_group_id, persona_id, enrollment_id, timestamp, engagement_type
+                  ) VALUES (
+                    uuid_generate_v4(),
+                    ${dbUserId},
+                    ${simulationGroupId},
+                    ${patientId},
+                    ${enrollmentId},
+                    CURRENT_TIMESTAMP,
+                    'chat_concluded'
+                  );
+                `;
+              }
+            }
+
+            // Step 5: Invoke the text generation Lambda asynchronously for debrief generation
+            // The text gen Lambda will read the chat messages + recommendation from the DB
+            const { LambdaClient, InvokeCommand } = require("@aws-sdk/client-lambda");
+            const lambdaClient = new LambdaClient();
+
+            const textGenFunctionName = process.env.TEXT_GEN_FUNCTION_NAME;
+
+            if (textGenFunctionName) {
+              const debriefPayload = {
+                queryStringParameters: {
+                  simulation_group_id: simulationGroupId,
+                  session_id: sessionId,
+                  patient_id: patientId,
+                  mode: "debrief",
+                },
+                headers: event.headers,
+                requestContext: event.requestContext,
+                body: JSON.stringify({ recommendation }),
+              };
+
+              const invokeCommand = new InvokeCommand({
+                FunctionName: textGenFunctionName,
+                InvocationType: "Event", // Async invocation — fire and forget
+                Payload: JSON.stringify(debriefPayload),
+              });
+
+              try {
+                await lambdaClient.send(invokeCommand);
+                logger.info("Debrief generation Lambda invoked asynchronously", {
+                  sessionId,
+                  textGenFunctionName,
+                });
+              } catch (invokeErr) {
+                // Log but don't fail the conclude request — debrief can be retried
+                logger.error("Failed to invoke debrief generation Lambda", {
+                  error: invokeErr.message,
+                  stack: invokeErr.stack,
+                });
+              }
+            } else {
+              logger.warn("TEXT_GEN_FUNCTION_NAME not set — skipping debrief generation");
+            }
+
+            response.statusCode = 200;
+            response.body = JSON.stringify({
+              message: "Interaction concluded successfully.",
+              chat: updatedChat[0],
+              debrief_triggered: !!textGenFunctionName,
+            });
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "session_id, simulation_group_id, patient_id, and recommendation body are required",
           });
         }
         break;

@@ -848,6 +848,31 @@ async function sendMessageStreaming(
   }
 }
 
+/**
+ * Conclude a student interaction session.
+ * Saves the recommendation, marks the session as concluded, and triggers debrief generation.
+ */
+async function concludeInteraction(
+  simulationGroupId: string,
+  patientId: string,
+  sessionId: string,
+  recommendation: string
+): Promise<{ success: boolean; debrief_triggered?: boolean }> {
+  try {
+    const result = await apiClient.request<{ message: string; chat: any; debrief_triggered: boolean }>(
+      `student/conclude_interaction?session_id=${encodeURIComponent(sessionId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`,
+      {
+        method: 'POST',
+        body: { recommendation },
+      }
+    );
+    return { success: true, debrief_triggered: result.debrief_triggered };
+  } catch (error) {
+    console.error('Failed to conclude interaction:', error);
+    return { success: false };
+  }
+}
+
 async function deleteSession(
   simulationGroupId: string,
   patientId: string,
@@ -878,6 +903,7 @@ export const studentService = {
   joinGroup,
   createSession,
   deleteSession,
+  concludeInteraction,
   sendMessage,
   sendMessageStreaming,
   getPatientDetail,
