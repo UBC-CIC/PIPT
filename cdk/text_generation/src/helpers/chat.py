@@ -1,4 +1,4 @@
-import boto3, re, json, logging
+import boto3, re, json, logging, math, threading
 import psycopg2
 import os
 
@@ -192,7 +192,9 @@ def get_response(
     llm_completion: bool,
     stream: bool = False,
     student_user_id: str = "",
-    persona_id: str = ""
+    persona_id: str = "",
+    embeddings_model=None,
+    ddb_table_name: str = None
 ) -> dict:
     """
     Generates a response to a query using the LLM and a history-aware retriever for context.
@@ -201,8 +203,17 @@ def get_response(
     
     # Save the student's message for non-streaming only;
     # streaming path saves are handled inside generate_streaming_response.
+    student_message_id = None
     if not stream:
-        save_message_to_db(session_id, student_user_id, 'student', query)
+        student_message_id = save_message_to_db(session_id, student_user_id, 'student', query)
+        if student_message_id is not None and embeddings_model is not None and query.strip():
+            run_matching_async(
+                message_content=query,
+                session_id=session_id,
+                message_id=student_message_id,
+                embeddings_model=embeddings_model,
+                table_name=ddb_table_name,
+            )
     
     completion_string = """
                 Once I, the pharmacy student, have give you a diagnosis, politely leave the conversation and wish me goodbye.
@@ -265,7 +276,9 @@ def get_response(
                 patient_age,
                 patient_prompt,
                 student_user_id=student_user_id,
-                persona_id=persona_id
+                persona_id=persona_id,
+                embeddings_model=embeddings_model,
+                ddb_table_name=ddb_table_name
             )
         else:
             response = generate_response(
@@ -286,7 +299,7 @@ def get_response(
     
     result = get_llm_output(response, llm_completion)
     
-    save_message_to_db(session_id, persona_id, 'ai', result["llm_output"])
+    ai_message_id = save_message_to_db(session_id, persona_id, 'ai', result["llm_output"])
     
     return result
 
@@ -308,7 +321,9 @@ def generate_streaming_response(
     patient_age: str,
     patient_prompt: str,
     student_user_id: str = "",
-    persona_id: str = ""
+    persona_id: str = "",
+    embeddings_model=None,
+    ddb_table_name: str = None
 ) -> str:
     """
     Streams an answer via AppSync as fast as possible.
@@ -346,7 +361,15 @@ def generate_streaming_response(
     try:
         logger.info(f"🔍 STREAMING QUERY CHECK: '{query}' (length: {len(query.strip())})")
         # Empathy evaluation disabled
-        save_message_to_db(session_id, student_user_id, 'student', query)
+        student_message_id = save_message_to_db(session_id, student_user_id, 'student', query)
+        if student_message_id is not None and embeddings_model is not None and query.strip():
+            run_matching_async(
+                message_content=query,
+                session_id=session_id,
+                message_id=student_message_id,
+                embeddings_model=embeddings_model,
+                table_name=ddb_table_name,
+            )
 
         publish_to_appsync(session_id, {"type": "start", "content": ""})
 
@@ -389,7 +412,7 @@ def generate_streaming_response(
                 time.sleep(0.005)
 
         publish_to_appsync(session_id, {"type": "end", "content": full_response})
-        save_message_to_db(session_id, persona_id, 'ai', full_response)
+        ai_message_id = save_message_to_db(session_id, persona_id, 'ai', full_response)
 
         return full_response
 
@@ -464,14 +487,17 @@ def publish_to_appsync(session_id: str, data: dict):
         logger.error(f"Failed to publish to AppSync: {e}")
         logger.exception("Full AppSync error:")
 
-def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_content: str):
-    """Save message to PostgreSQL messages table.
+def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_content: str) -> str | None:
+    """Save message to PostgreSQL messages table and return the message_id.
     
     Args:
         session_id: The chat/session UUID (maps to chat_id column).
         user_id: The Cognito user UUID (student) or persona UUID (AI).
         sender_type: One of 'student', 'ai', or 'system'.
         message_content: The message text.
+
+    Returns:
+        The message_id UUID string on success, None on failure.
     """
     try:
         import psycopg2
@@ -485,7 +511,7 @@ def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_
         
         if not db_secret_name or not rds_endpoint:
             logger.warning("Database credentials not available for message storage")
-            return
+            return None
             
         secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
         secret = json.loads(secret_response['SecretString'])
@@ -501,18 +527,23 @@ def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_
         cursor = conn.cursor()
         
         cursor.execute(
-            'INSERT INTO "messages" (chat_id, user_id, sender_type, message_content, sent_at) VALUES (%s, %s, %s, %s, NOW())',
+            'INSERT INTO "messages" (chat_id, user_id, sender_type, message_content, sent_at) VALUES (%s, %s, %s, %s, NOW()) RETURNING message_id',
             (session_id, user_id, sender_type, message_content)
         )
+        
+        row = cursor.fetchone()
+        message_id = str(row[0]) if row else None
         
         conn.commit()
         cursor.close()
         conn.close()
         
-        logger.info(f"💾 Message saved: sender_type={sender_type}, user_id={user_id[:8]}...")
+        logger.info(f"💾 Message saved: sender_type={sender_type}, user_id={user_id[:8]}..., message_id={message_id}")
+        return message_id
         
     except Exception as e:
         logger.error(f"Error saving message to database: {e}")
+        return None
 
 def get_llm_output(response: str, llm_completion: bool) -> dict:
     """
@@ -654,7 +685,15 @@ Your job is to produce a structured debrief evaluation in valid JSON with these 
     "areas_for_improvement": ["list of areas for improvement"]
   },
   "reasoning_gaps": "A paragraph describing gaps in clinical reasoning.",
-  "overall_score": <float between 0.0 and 100.0>
+  "overall_score": <float between 0.0 and 100.0>,
+  "suggested_rewrites": [
+    {
+      "original_message": "The student's original message",
+      "matched_question_id": "uuid of the matched question",
+      "similarity_score": 0.68,
+      "suggested_rewrite": "An improved version of the student's message"
+    }
+  ]
 }
 
 IMPORTANT:
@@ -662,6 +701,8 @@ IMPORTANT:
 - For questions_addressed and questions_missed, use the question_id values provided.
 - Be fair but thorough. Evaluate based on clinical relevance and completeness.
 - The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
+- For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.65-0.79). Do NOT include rewrites for high-confidence matches.
+- If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
 """
 
 
@@ -729,6 +770,573 @@ def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]
     except Exception as e:
         logger.error(f"Error fetching key questions: {e}")
         return []
+
+
+def cache_key_questions(
+    session_id: str,
+    simulation_group_id: str,
+    persona_id: str,
+    embeddings_model,
+    table_name: str,
+) -> list[dict]:
+    """
+    Fetch key questions from PostgreSQL, compute embeddings, store in DynamoDB.
+    Called once per session on the first message.
+    Returns the list of questions with embeddings.
+    """
+    from datetime import datetime, timezone
+
+    # 1. Fetch key questions from PostgreSQL
+    questions = fetch_key_questions(simulation_group_id, persona_id)
+
+    # 2. Handle empty question lists
+    if not questions:
+        logger.info(f"No key questions for group={simulation_group_id}, persona={persona_id}. Caching empty list.")
+        try:
+            dynamodb = boto3.resource("dynamodb")
+            table = dynamodb.Table(table_name)
+            table.put_item(Item={
+                "SessionId": f"QCACHE#{session_id}",
+                "questions": [],
+                "cached_at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception as e:
+            logger.error(f"Failed to cache empty question list in DynamoDB: {e}")
+        return []
+
+    # 3. Compute embeddings for each question, skip failures
+    cached_questions = []
+    for q in questions:
+        try:
+            embedding = embeddings_model.embed_query(q["question_text"])
+            cached_questions.append({
+                "question_id": q["question_id"],
+                "question_text": q["question_text"],
+                "evaluation_criteria": q["evaluation_criteria"],
+                "is_mandatory": q["is_mandatory"],
+                "weight": q["weight"],
+                "embedding": embedding,
+            })
+        except Exception as e:
+            logger.error(f"Failed to compute embedding for question {q['question_id']}: {e}")
+
+    # 4. Store in DynamoDB
+    try:
+        dynamodb = boto3.resource("dynamodb")
+        table = dynamodb.Table(table_name)
+
+        # Convert floats in embeddings to Decimal for DynamoDB compatibility
+        from decimal import Decimal
+        serializable_questions = []
+        for cq in cached_questions:
+            serializable_questions.append({
+                "question_id": cq["question_id"],
+                "question_text": cq["question_text"],
+                "evaluation_criteria": cq["evaluation_criteria"],
+                "is_mandatory": cq["is_mandatory"],
+                "weight": Decimal(str(cq["weight"])) if cq["weight"] is not None else None,
+                "embedding": [Decimal(str(v)) for v in cq["embedding"]],
+            })
+
+        table.put_item(Item={
+            "SessionId": f"QCACHE#{session_id}",
+            "questions": serializable_questions,
+            "cached_at": datetime.now(timezone.utc).isoformat(),
+        })
+        logger.info(f"✅ Cached {len(cached_questions)} key questions for session={session_id}")
+    except Exception as e:
+        logger.error(f"Failed to cache key questions in DynamoDB: {e}")
+
+    return cached_questions
+
+
+def get_cached_key_questions(
+    session_id: str,
+    table_name: str,
+) -> list[dict] | None:
+    """
+    Read cached key questions + embeddings from DynamoDB.
+    Returns the list of question dicts with embeddings, or None on cache miss/failure.
+    """
+    from decimal import Decimal
+
+    try:
+        dynamodb = boto3.resource("dynamodb")
+        table = dynamodb.Table(table_name)
+        response = table.get_item(Key={"SessionId": f"QCACHE#{session_id}"})
+
+        item = response.get("Item")
+        if item is None:
+            logger.info(f"Cache miss for session={session_id}")
+            return None
+
+        questions = item.get("questions", [])
+
+        # Convert Decimal values back to native Python floats
+        result = []
+        for q in questions:
+            result.append({
+                "question_id": q["question_id"],
+                "question_text": q["question_text"],
+                "evaluation_criteria": q.get("evaluation_criteria"),
+                "is_mandatory": q.get("is_mandatory", False),
+                "weight": float(q["weight"]) if q.get("weight") is not None else None,
+                "embedding": [float(v) for v in q["embedding"]] if q.get("embedding") else [],
+            })
+
+        logger.info(f"✅ Retrieved {len(result)} cached key questions for session={session_id}")
+        return result
+
+    except Exception as e:
+        logger.warning(f"Failed to read cached key questions from DynamoDB: {e}")
+        return None
+
+
+def compute_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    """Compute cosine similarity between two embedding vectors.
+
+    Returns a float in [-1.0, 1.0]. Returns 0.0 if either vector is a
+    zero-vector (all elements are 0) to avoid division by zero.
+    """
+    dot = sum(a * b for a, b in zip(vec_a, vec_b))
+    norm_a = math.sqrt(sum(a * a for a in vec_a))
+    norm_b = math.sqrt(sum(b * b for b in vec_b))
+    if norm_a == 0.0 or norm_b == 0.0:
+        return 0.0
+    return dot / (norm_a * norm_b)
+
+
+def match_message_to_questions(
+    message_content: str,
+    session_id: str,
+    message_id: str,
+    embeddings_model,
+    table_name: str,
+) -> list[dict]:
+    """
+    Compute embedding for a student message, compare against cached question
+    embeddings, and persist matches that exceed the 0.65 threshold.
+
+    Classification tiers:
+        >= 0.80  → "high"
+        0.65–0.79 → "moderate"
+        < 0.65  → discarded
+
+    Writes the matched_question_ids JSONB to the messages table for the given
+    message_id and returns the list of match dicts.
+    """
+    matches: list[dict] = []
+
+    # 1. Embed the student message
+    try:
+        message_embedding = embeddings_model.embed_query(message_content)
+    except Exception as e:
+        logger.error(f"Failed to embed student message for matching: {e}")
+        return matches
+
+    # 2. Retrieve cached questions
+    cached_questions = get_cached_key_questions(session_id, table_name)
+    if cached_questions is None or len(cached_questions) == 0:
+        logger.info(f"No cached questions for session={session_id}, skipping matching")
+        return matches
+
+    # 3. Compute similarity and classify
+    for q in cached_questions:
+        embedding = q.get("embedding", [])
+        if not embedding:
+            continue
+        score = compute_cosine_similarity(message_embedding, embedding)
+        if score >= 0.80:
+            confidence = "high"
+        elif score >= 0.65:
+            confidence = "moderate"
+        else:
+            continue  # discard below threshold
+        matches.append({
+            "question_id": q["question_id"],
+            "similarity_score": round(score, 4),
+            "confidence": confidence,
+        })
+
+    # 4. Write matched_question_ids to the messages table
+    if matches:
+        try:
+            conn = _get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE "messages" SET matched_question_ids = %s WHERE message_id = %s',
+                (json.dumps(matches), message_id),
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            logger.info(
+                f"✅ Wrote {len(matches)} matches for message_id={message_id}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to write matched_question_ids for message_id={message_id}: {e}")
+
+    return matches
+
+
+def run_matching_async(
+    message_content: str,
+    session_id: str,
+    message_id: str,
+    embeddings_model,
+    table_name: str,
+) -> None:
+    """Run match_message_to_questions in a background daemon thread.
+
+    All exceptions are caught and logged so that matching failures never
+    propagate to or delay the LLM response.
+    """
+
+    def _target():
+        try:
+            match_message_to_questions(
+                message_content=message_content,
+                session_id=session_id,
+                message_id=message_id,
+                embeddings_model=embeddings_model,
+                table_name=table_name,
+            )
+        except Exception:
+            logger.exception(
+                f"Background matching failed for message_id={message_id}"
+            )
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    logger.info(
+        f"🔄 Started background matching thread for message_id={message_id}"
+    )
+
+
+def fetch_tagged_messages(session_id: str) -> list[dict]:
+    """
+    Fetch messages with non-NULL matched_question_ids for a session.
+    Returns list of {message_id, message_content, sender_type, sent_at, matched_question_ids}.
+    """
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT message_id, message_content, sender_type, sent_at, matched_question_ids '
+            'FROM "messages" '
+            'WHERE chat_id = %s AND matched_question_ids IS NOT NULL '
+            'ORDER BY sent_at ASC',
+            (session_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [
+            {
+                "message_id": str(r[0]),
+                "message_content": r[1],
+                "sender_type": r[2],
+                "sent_at": str(r[3]),
+                "matched_question_ids": r[4],
+            }
+            for r in rows
+        ]
+    except Exception as e:
+        logger.error(f"Error fetching tagged messages for session={session_id}: {e}")
+        return []
+
+
+def build_enhanced_debrief_prompt(
+    tagged_messages: list[dict],
+    key_questions: list[dict],
+    recommendation: str,
+) -> str:
+    """
+    Build the debrief LLM prompt using pre-tagged messages instead of the full
+    transcript.
+
+    The prompt contains:
+    - Tagged messages grouped by matched question (with similarity scores and
+      confidence tiers)
+    - A "missed questions" section for key questions with no matching messages
+    - The student's recommendation text
+    - Instructions for suggested rewrites on moderate-confidence matches only
+
+    The output format guides the LLM to produce the Enhanced Debrief JSON
+    schema defined in the design doc.
+    """
+
+    # Build a lookup of key questions by question_id
+    question_map: dict[str, dict] = {
+        q["question_id"]: q for q in key_questions
+    }
+
+    # Group tagged messages by matched question_id
+    # A single message can match multiple questions, so it may appear in
+    # multiple groups.
+    addressed: dict[str, list[dict]] = {}  # question_id -> list of message info
+    moderate_matches: list[dict] = []  # track moderate matches for rewrite instructions
+
+    for msg in tagged_messages:
+        matches = msg.get("matched_question_ids", [])
+        # matched_question_ids may be a JSON string (from psycopg2) or already a list
+        if isinstance(matches, str):
+            try:
+                matches = json.loads(matches)
+            except (json.JSONDecodeError, TypeError):
+                matches = []
+        for match in matches:
+            qid = match.get("question_id", "")
+            score = match.get("similarity_score", 0.0)
+            confidence = match.get("confidence", "moderate")
+            if qid not in addressed:
+                addressed[qid] = []
+            entry = {
+                "message_content": msg.get("message_content", ""),
+                "similarity_score": score,
+                "confidence_tier": confidence,
+            }
+            addressed[qid].append(entry)
+            if confidence == "moderate":
+                moderate_matches.append({
+                    "original_message": msg.get("message_content", ""),
+                    "matched_question_id": qid,
+                    "similarity_score": score,
+                })
+
+    # --- Addressed questions section ---
+    addressed_lines: list[str] = []
+    for qid, messages in addressed.items():
+        q = question_map.get(qid, {})
+        q_text = q.get("question_text", qid)
+        criteria = q.get("evaluation_criteria", "")
+        addressed_lines.append(f"### Question [{qid}]: {q_text}")
+        if criteria:
+            addressed_lines.append(f"   Evaluation criteria: {criteria}")
+        for m in messages:
+            tier_label = m["confidence_tier"].upper()
+            addressed_lines.append(
+                f"   - [{tier_label} match, score={m['similarity_score']:.2f}] "
+                f"\"{m['message_content']}\""
+            )
+        addressed_lines.append("")
+
+    addressed_section = "\n".join(addressed_lines) if addressed_lines else "No questions were addressed by the student."
+
+    # --- Missed questions section ---
+    addressed_ids = set(addressed.keys())
+    missed_questions = [q for q in key_questions if q["question_id"] not in addressed_ids]
+
+    missed_lines: list[str] = []
+    for q in missed_questions:
+        mandatory_label = "MANDATORY" if q.get("is_mandatory") else "optional"
+        missed_lines.append(
+            f"- [{q['question_id']}] ({mandatory_label}, weight={q.get('weight', 1.0)}): {q['question_text']}"
+        )
+
+    missed_section = "\n".join(missed_lines) if missed_lines else "All key questions were addressed."
+
+    # --- Moderate matches for rewrite instructions ---
+    rewrite_lines: list[str] = []
+    for mm in moderate_matches:
+        q = question_map.get(mm["matched_question_id"], {})
+        rewrite_lines.append(
+            f"- Original message: \"{mm['original_message']}\"\n"
+            f"  Matched question [{mm['matched_question_id']}]: {q.get('question_text', '')}\n"
+            f"  Similarity score: {mm['similarity_score']:.2f}"
+        )
+
+    rewrite_section = "\n".join(rewrite_lines) if rewrite_lines else "No moderate-confidence matches found — no rewrites needed."
+
+    # --- Recommendation ---
+    recommendation_text = recommendation if recommendation else "(No recommendation submitted)"
+
+    # --- Assemble the full prompt ---
+    prompt = f"""## Questions Addressed by the Student
+{addressed_section}
+
+## Missed Questions
+The following key questions were NOT addressed by any student message:
+{missed_section}
+
+## Student's Recommendation
+{recommendation_text}
+
+## Moderate-Confidence Matches Requiring Suggested Rewrites
+For ONLY the following moderate-confidence matches, generate a suggested rewrite that would better address the matched question. Do NOT generate rewrites for high-confidence matches.
+{rewrite_section}
+
+## Instructions
+Evaluate the student's performance and produce a JSON response with these exact keys:
+
+{{
+  "summary": "A 3-5 sentence overall summary of the student's performance.",
+  "questions_addressed": [
+    {{
+      "question_id": "uuid",
+      "question_text": "The question text",
+      "matched_messages": [
+        {{
+          "message_content": "The student's message",
+          "similarity_score": 0.87,
+          "confidence_tier": "high"
+        }}
+      ],
+      "quality_assessment": "Assessment of how well the student addressed this question."
+    }}
+  ],
+  "questions_missed": [
+    {{
+      "question_id": "uuid",
+      "question_text": "The question text",
+      "is_mandatory": true,
+      "weight": 1.5
+    }}
+  ],
+  "recommendation_feedback": {{
+    "strengths": ["list of strengths"],
+    "areas_for_improvement": ["list of areas for improvement"]
+  }},
+  "reasoning_gaps": "A paragraph describing gaps in clinical reasoning.",
+  "overall_score": 72.5,
+  "suggested_rewrites": [
+    {{
+      "original_message": "The student's original message",
+      "matched_question_id": "uuid",
+      "similarity_score": 0.68,
+      "suggested_rewrite": "An improved version of the student's message"
+    }}
+  ]
+}}
+
+IMPORTANT:
+- Only output valid JSON. No markdown, no explanation, no preamble.
+- Use the question_id values provided above.
+- For questions_addressed, use the matched messages and scores provided.
+- For questions_missed, include all questions listed in the Missed Questions section.
+- Generate suggested_rewrites ONLY for moderate-confidence matches listed above. Do NOT generate rewrites for high-confidence matches.
+- The overall_score should reflect question coverage weighted by importance, plus quality of the recommendation.
+"""
+
+    return prompt
+
+
+def validate_debrief_output(data: dict) -> dict:
+    """Validate and repair an Enhanced Debrief dict from the LLM.
+
+    Checks for all required top-level keys and validates nested structures.
+    Missing or malformed fields are filled with sensible defaults and a
+    warning is logged for each repair.
+
+    Args:
+        data: The parsed LLM JSON output (may be incomplete).
+
+    Returns:
+        A validated/repaired dict guaranteed to contain every required key
+        with the correct nested structure.
+    """
+    repaired = False
+
+    # --- Top-level defaults ---
+    top_level_defaults = {
+        "summary": "",
+        "questions_addressed": [],
+        "questions_missed": [],
+        "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+        "reasoning_gaps": "",
+        "overall_score": 0.0,
+        "suggested_rewrites": [],
+    }
+
+    for key, default in top_level_defaults.items():
+        if key not in data:
+            logger.warning(f"Debrief validation: missing top-level key '{key}', filling with default")
+            data[key] = default
+            repaired = True
+
+    # --- Validate overall_score type ---
+    if not isinstance(data["overall_score"], (int, float)):
+        logger.warning(f"Debrief validation: 'overall_score' is not numeric, resetting to 0.0")
+        data["overall_score"] = 0.0
+        repaired = True
+
+    # --- Validate recommendation_feedback structure ---
+    rec = data["recommendation_feedback"]
+    if not isinstance(rec, dict):
+        logger.warning("Debrief validation: 'recommendation_feedback' is not a dict, resetting")
+        data["recommendation_feedback"] = {"strengths": [], "areas_for_improvement": []}
+        repaired = True
+    else:
+        if "strengths" not in rec or not isinstance(rec.get("strengths"), list):
+            logger.warning("Debrief validation: 'recommendation_feedback.strengths' missing or invalid")
+            rec["strengths"] = rec.get("strengths", []) if isinstance(rec.get("strengths"), list) else []
+            repaired = True
+        if "areas_for_improvement" not in rec or not isinstance(rec.get("areas_for_improvement"), list):
+            logger.warning("Debrief validation: 'recommendation_feedback.areas_for_improvement' missing or invalid")
+            rec["areas_for_improvement"] = rec.get("areas_for_improvement", []) if isinstance(rec.get("areas_for_improvement"), list) else []
+            repaired = True
+
+    # --- Validate questions_addressed entries ---
+    qa_required_keys = {"question_id": "", "question_text": "", "matched_messages": [], "quality_assessment": ""}
+    if not isinstance(data["questions_addressed"], list):
+        logger.warning("Debrief validation: 'questions_addressed' is not a list, resetting")
+        data["questions_addressed"] = []
+        repaired = True
+    else:
+        for i, entry in enumerate(data["questions_addressed"]):
+            if not isinstance(entry, dict):
+                logger.warning(f"Debrief validation: questions_addressed[{i}] is not a dict, replacing with defaults")
+                data["questions_addressed"][i] = dict(qa_required_keys)
+                repaired = True
+                continue
+            for k, default in qa_required_keys.items():
+                if k not in entry:
+                    logger.warning(f"Debrief validation: questions_addressed[{i}] missing '{k}'")
+                    entry[k] = default
+                    repaired = True
+
+    # --- Validate questions_missed entries ---
+    qm_required_keys = {"question_id": "", "question_text": "", "is_mandatory": False, "weight": 1.0}
+    if not isinstance(data["questions_missed"], list):
+        logger.warning("Debrief validation: 'questions_missed' is not a list, resetting")
+        data["questions_missed"] = []
+        repaired = True
+    else:
+        for i, entry in enumerate(data["questions_missed"]):
+            if not isinstance(entry, dict):
+                logger.warning(f"Debrief validation: questions_missed[{i}] is not a dict, replacing with defaults")
+                data["questions_missed"][i] = dict(qm_required_keys)
+                repaired = True
+                continue
+            for k, default in qm_required_keys.items():
+                if k not in entry:
+                    logger.warning(f"Debrief validation: questions_missed[{i}] missing '{k}'")
+                    entry[k] = default
+                    repaired = True
+
+    # --- Validate suggested_rewrites entries ---
+    sr_required_keys = {"original_message": "", "matched_question_id": "", "similarity_score": 0.0, "suggested_rewrite": ""}
+    if not isinstance(data["suggested_rewrites"], list):
+        logger.warning("Debrief validation: 'suggested_rewrites' is not a list, resetting")
+        data["suggested_rewrites"] = []
+        repaired = True
+    else:
+        for i, entry in enumerate(data["suggested_rewrites"]):
+            if not isinstance(entry, dict):
+                logger.warning(f"Debrief validation: suggested_rewrites[{i}] is not a dict, replacing with defaults")
+                data["suggested_rewrites"][i] = dict(sr_required_keys)
+                repaired = True
+                continue
+            for k, default in sr_required_keys.items():
+                if k not in entry:
+                    logger.warning(f"Debrief validation: suggested_rewrites[{i}] missing '{k}'")
+                    entry[k] = default
+                    repaired = True
+
+    if repaired:
+        logger.warning("Debrief output was repaired — some fields were missing or malformed")
+
+    return data
 
 
 def fetch_student_id_for_chat(session_id: str) -> str:
@@ -868,14 +1476,17 @@ def generate_debrief(
     simulation_group_id: str,
     persona_id: str,
     llm: ChatBedrock,
+    embeddings_model=None,
+    ddb_table_name: str = None,
 ) -> dict:
     """
     Orchestrates the full debrief generation flow:
     1. Fetch transcript, recommendation, key questions, student_id
-    2. Build prompt and call LLM
-    3. Parse structured JSON response
-    4. Write to debriefs + question_interactions tables
-    5. Optionally publish result via AppSync
+    2. Check for tagged messages — if present, use enhanced prompt; otherwise fall back to full transcript
+    3. Build prompt and call LLM
+    4. Parse structured JSON response
+    5. Write to debriefs + question_interactions tables
+    6. Optionally publish result via AppSync
     Returns the parsed debrief dict.
     """
     logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
@@ -890,17 +1501,39 @@ def generate_debrief(
         logger.error("No transcript found — cannot generate debrief")
         return {"error": "No chat transcript found"}
 
-    # 2. Build the LLM prompt
-    transcript_text = "\n".join(
-        [f"[{m['sender'].upper()}]: {m['content']}" for m in transcript]
-    )
+    # 2. Check for tagged messages and decide which prompt path to use
+    tagged_messages = fetch_tagged_messages(session_id)
 
-    key_questions_text = "\n".join(
-        [f"- [{q['question_id']}] (mandatory={q['is_mandatory']}, weight={q['weight']}): {q['question_text']}"
-         for q in key_questions]
-    ) if key_questions else "No key questions were assigned for this patient."
+    if tagged_messages:
+        logger.info(f"📋 Found {len(tagged_messages)} tagged messages — using enhanced debrief prompt")
 
-    user_prompt = f"""
+        # Get key questions from DynamoDB cache first, fall back to PostgreSQL
+        cached_questions = None
+        if ddb_table_name:
+            cached_questions = get_cached_key_questions(session_id, ddb_table_name)
+        if cached_questions is None:
+            logger.info("Cache miss or unavailable — using key questions from PostgreSQL")
+            cached_questions = key_questions
+
+        user_prompt = build_enhanced_debrief_prompt(
+            tagged_messages=tagged_messages,
+            key_questions=cached_questions,
+            recommendation=recommendation,
+        )
+    else:
+        logger.info("📋 No tagged messages found — falling back to full-transcript debrief")
+
+        # Full-transcript fallback (original behavior)
+        transcript_text = "\n".join(
+            [f"[{m['sender'].upper()}]: {m['content']}" for m in transcript]
+        )
+
+        key_questions_text = "\n".join(
+            [f"- [{q['question_id']}] (mandatory={q['is_mandatory']}, weight={q['weight']}): {q['question_text']}"
+             for q in key_questions]
+        ) if key_questions else "No key questions were assigned for this patient."
+
+        user_prompt = f"""
 ## Chat Transcript
 {transcript_text}
 
@@ -950,7 +1583,11 @@ Please evaluate the student's performance and produce the JSON debrief.
             "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
             "reasoning_gaps": "",
             "overall_score": 0.0,
+            "suggested_rewrites": [],
         }
+
+    # 4b. Validate and repair the debrief output schema
+    debrief_data = validate_debrief_output(debrief_data)
 
     questions_addressed = debrief_data.get("questions_addressed", [])
     questions_missed = debrief_data.get("questions_missed", [])
