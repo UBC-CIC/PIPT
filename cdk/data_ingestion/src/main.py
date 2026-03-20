@@ -228,7 +228,7 @@ def insert_file_into_db(persona_id, file_name, file_type, file_path, bucket_name
         existing_file = cur.fetchone()
 
         timestamp = datetime.now(timezone.utc)
-        ingestion_status = "processing" if file_category == "documents" else "not processing"
+        ingestion_status = "processing" if file_category in ("documents", "info", "answer_key") else "not processing"
 
         if existing_file:
             # Update the existing record
@@ -369,7 +369,7 @@ def handler(event, context):
             logger.info(f"File {file_name}.{file_type} is being deleted. Deleting files from database does not occur here.")
         
         # Update embeddings for persona after the file is successfully inserted into the database. Only if document file
-        if file_category == "documents":
+        if file_category in ("documents", "info", "answer_key"):
             try:
                 update_vectorstore_from_s3(bucket_name, simulation_group_id, persona_id, file_key)
                 logger.info(f"Vectorstore updated successfully for persona {persona_id} in group {simulation_group_id}.")

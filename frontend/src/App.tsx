@@ -120,6 +120,7 @@ function AppRoutes() {
         <Route path="/patients/:groupId" element={<ProtectedRoute><PatientsPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId/:patientId" element={<ProtectedRoute><PatientDashboardPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId/:patientId/chat" element={<ProtectedRoute><StudentChatPage /></ProtectedRoute>} />
+        <Route path="/patients/:groupId/:patientId/chat/:chatId" element={<ProtectedRoute><StudentChatPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId/:patientId/chat/:chatId/history" element={<ProtectedRoute><ChatHistoryPage /></ProtectedRoute>} />
       </Routes>
     </AuthContext.Provider>

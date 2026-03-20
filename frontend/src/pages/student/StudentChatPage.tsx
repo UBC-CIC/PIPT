@@ -19,7 +19,7 @@ import { useAuth } from '@/App';
  */
 function StudentChatPage() {
   const navigate = useNavigate();
-  const { groupId, patientId } = useParams();
+  const { groupId, patientId, chatId: routeChatId } = useParams();
   
   // Load user data from auth context
   const { user: authUser } = useAuth();
@@ -92,22 +92,118 @@ function StudentChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
-  // Create a session on mount so we have a session_id for text generation
+  // Guard to prevent duplicate session creation (React StrictMode double-mount)
+  const sessionCreationRef = useRef(false);
+  // Ref to track if AI greeting has been triggered
+  const greetingTriggeredRef = useRef(false);
+
+  // Create a session on mount (new chat) or use existing session ID from route
   useEffect(() => {
     if (!groupId || !patientId) return;
     let cancelled = false;
-    studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
-      if (!cancelled && session) {
-        setSessionId(session.chat_id);
-      }
-    });
+
+    if (routeChatId) {
+      // Resuming an existing session — set the ID and load messages
+      setSessionId(routeChatId);
+      studentService.fetchMessages(routeChatId).then((msgs) => {
+        if (!cancelled && msgs.length > 0) {
+          setMessages(msgs);
+        }
+      });
+    } else if (!sessionCreationRef.current) {
+      // New chat — create a fresh session (guarded against StrictMode double-mount)
+      sessionCreationRef.current = true;
+      studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
+        if (session) {
+          setSessionId(session.chat_id);
+        }
+      });
+    }
+
     return () => { cancelled = true; };
-  }, [groupId, patientId]);
+  }, [groupId, patientId, routeChatId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Trigger AI greeting when a new session is created (not a resumed chat)
+  useEffect(() => {
+    if (!sessionId || !groupId || !patientId || routeChatId || greetingTriggeredRef.current) return;
+    greetingTriggeredRef.current = true;
+
+    setIsAiResponding(true);
+    const aiGreetingId = `msg-greeting-${Date.now()}`;
+    let greetingAdded = false;
+
+    studentService.sendMessageStreaming(
+      groupId, patientId, sessionId, '',
+      {
+        onChunk: (text) => {
+          if (!greetingAdded) {
+            greetingAdded = true;
+            setMessages([{
+              message_id: aiGreetingId,
+              chat_id: chatId,
+              sender_type: 'ai',
+              message_content: text,
+              sent_at: new Date().toISOString(),
+            }]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiGreetingId
+                  ? { ...m, message_content: m.message_content + text }
+                  : m
+              )
+            );
+          }
+        },
+        onDone: (fullText) => {
+          if (!greetingAdded) {
+            setMessages([{
+              message_id: aiGreetingId,
+              chat_id: chatId,
+              sender_type: 'ai',
+              message_content: fullText || 'Hello! How can I help you today?',
+              sent_at: new Date().toISOString(),
+            }]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiGreetingId
+                  ? { ...m, message_content: fullText || m.message_content }
+                  : m
+              )
+            );
+          }
+          setIsAiResponding(false);
+        },
+        onError: (error) => {
+          console.error('AI greeting error:', error);
+          setMessages([{
+            message_id: aiGreetingId,
+            chat_id: chatId,
+            sender_type: 'ai',
+            message_content: 'Hello! How can I help you today?',
+            sent_at: new Date().toISOString(),
+          }]);
+          setIsAiResponding(false);
+        },
+      },
+    ).catch((err) => {
+      console.error('AI greeting streaming failed:', err);
+      setMessages([{
+        message_id: aiGreetingId,
+        chat_id: chatId,
+        sender_type: 'ai',
+        message_content: 'Hello! How can I help you today?',
+        sent_at: new Date().toISOString(),
+      }]);
+      setIsAiResponding(false);
+    });
+  }, [sessionId]);
 
   // Memoize grouped case materials to avoid recomputing on every render
   const groupedCaseMaterials = useMemo(() => {
@@ -171,9 +267,9 @@ function StudentChatPage() {
     const studentMessage: Message = {
       message_id: `msg-${Date.now()}`,
       chat_id: chatId,
-      student_sent: true,
+      sender_type: 'student',
       message_content: inputMessage,
-      time_sent: new Date().toISOString(),
+      sent_at: new Date().toISOString(),
     };
 
     setMessages((prev) => [...prev, studentMessage]);
@@ -186,9 +282,9 @@ function StudentChatPage() {
     const aiMessage: Message = {
       message_id: aiMessageId,
       chat_id: chatId,
-      student_sent: false,
+      sender_type: 'ai',
       message_content: '',
-      time_sent: new Date().toISOString(),
+      sent_at: new Date().toISOString(),
     };
     setMessages((prev) => [...prev, aiMessage]);
 
@@ -582,18 +678,40 @@ function StudentChatPage() {
           {/* Chat Messages Area */}
           <div className="flex-1 overflow-y-auto p-6">
             {messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
-                <p>Start a conversation with the AI patient...</p>
+              <div className="flex items-center justify-center h-full">
+                {isAiResponding ? (
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <UserAvatar
+                        name={patient.name}
+                        imageUrl={patient.imageUrl}
+                        size="small"
+                      />
+                    </div>
+                    <div
+                      className="rounded-lg rounded-bl-none px-4 py-3"
+                      style={{ backgroundColor: UI_COLORS.background.hoverLight }}
+                    >
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '300ms' }} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p style={{ color: UI_COLORS.text.light }}>Start a conversation with the AI patient...</p>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.message_id}
-                    className={`flex gap-3 ${message.student_sent ? 'justify-end' : 'justify-start'}`}
+                    className={`flex gap-3 ${message.sender_type === 'student' ? 'justify-end' : 'justify-start'}`}
                   >
                     {/* Avatar for AI patient (left side) */}
-                    {!message.student_sent && (
+                    {message.sender_type !== 'student' && (
                       <div className="flex-shrink-0">
                         <UserAvatar
                           name={patient.name}
@@ -606,29 +724,29 @@ function StudentChatPage() {
                     {/* Message bubble */}
                     <div
                       className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                        message.student_sent ? 'rounded-br-none' : 'rounded-bl-none'
+                        message.sender_type === 'student' ? 'rounded-br-none' : 'rounded-bl-none'
                       }`}
                       style={{
-                        backgroundColor: message.student_sent
+                        backgroundColor: message.sender_type === 'student'
                           ? SIMULATION_GROUP_COLOR_PALETTE[2]
                           : UI_COLORS.background.hoverLight,
-                        color: message.student_sent ? UI_COLORS.button.text : UI_COLORS.text.heading,
+                        color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading,
                       }}
                     >
                       <p className="text-sm leading-relaxed">{message.message_content}</p>
                       <p
                         className="text-xs mt-1"
                         style={{
-                          color: message.student_sent ? UI_COLORS.button.text : UI_COLORS.text.muted,
-                          opacity: message.student_sent ? 0.8 : 1,
+                          color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.muted,
+                          opacity: message.sender_type === 'student' ? 0.8 : 1,
                         }}
                       >
-                        {formatTime(message.time_sent)}
+                        {formatTime(message.sent_at)}
                       </p>
                     </div>
 
                     {/* Avatar for student (right side) */}
-                    {message.student_sent && (
+                    {message.sender_type === 'student' && (
                       <div className="flex-shrink-0">
                         <UserAvatar
                           name={user.name}

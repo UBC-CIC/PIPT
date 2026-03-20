@@ -128,7 +128,8 @@ def store_doc_texts(
     group: str, 
     persona: str,
     filename: str, 
-    output_bucket: str
+    output_bucket: str,
+    folder: str = "documents"
 ) -> List[str]:
     """
     Store the text of each page of a document in an S3 bucket.
@@ -139,12 +140,13 @@ def store_doc_texts(
     persona (str): The persona name and ID folder within the group.
     filename (str): The name of the document file.
     output_bucket (str): The name of the S3 bucket for storing the extracted text.
+    folder (str): The folder category (e.g. "documents", "info", "answer_key").
     
     Returns:
     List[str]: A list of keys for the stored text files in the output bucket.
     """
     with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-        s3.download_file(bucket, f"{group}/{persona}/documents/{filename}", tmp_file.name)
+        s3.download_file(bucket, f"{group}/{persona}/{folder}/{filename}", tmp_file.name)
         file_name, file_type = filename.rsplit('.', 1)
         doc = pymupdf.open(tmp_file.name, filetype=file_type)
         
@@ -154,14 +156,14 @@ def store_doc_texts(
                 output_buffer.write(text)
                 output_buffer.write(bytes((12,)))
                 
-                page_output_key = f'{group}/{persona}/documents/{filename}_page_{page_num}.txt'
+                page_output_key = f'{group}/{persona}/{folder}/{filename}_page_{page_num}.txt'
                 
                 with BytesIO(text) as page_output_buffer:
                     s3.upload_fileobj(page_output_buffer, output_bucket, page_output_key)
 
         os.remove(tmp_file.name)
 
-    return [f'{group}/{persona}/documents/{filename}_page_{page_num}.txt' for page_num in range(1, len(doc) + 1)]
+    return [f'{group}/{persona}/{folder}/{filename}_page_{page_num}.txt' for page_num in range(1, len(doc) + 1)]
 
 def add_document(
     bucket: str, 
@@ -170,7 +172,8 @@ def add_document(
     filename: str, 
     vectorstore: PGVector, 
     embeddings: BedrockEmbeddings,
-    output_bucket: str = EMBEDDING_BUCKET_NAME
+    output_bucket: str = EMBEDDING_BUCKET_NAME,
+    folder: str = "documents"
 ) -> List[Document]:
     """
     Add a document to the vectorstore.
@@ -183,6 +186,7 @@ def add_document(
     vectorstore (PGVector): The vectorstore instance.
     embeddings (BedrockEmbeddings): The embeddings instance.
     output_bucket (str, optional): The name of the S3 bucket for storing extracted data. Defaults to 'temp-extracted-data'.
+    folder (str): The folder category (e.g. "documents", "info", "answer_key").
     
     Returns:
     List[Document]: A list of all document chunks for this document that were added to the vectorstore.
@@ -193,7 +197,8 @@ def add_document(
         group=group,
         persona=persona,
         filename=filename,
-        output_bucket=output_bucket
+        output_bucket=output_bucket,
+        folder=folder
     )
     this_doc_chunks = store_doc_chunks(
         bucket=output_bucket,
@@ -271,53 +276,50 @@ def process_documents(
     embeddings (BedrockEmbeddings): The embeddings instance.
     record_manager (SQLRecordManager): Manages list of documents in the vectorstore for indexing.
     """
-    paginator = s3.get_paginator('list_objects_v2')
-    page_iterator = paginator.paginate(Bucket=bucket, Prefix=f"{group}/{persona_id}/documents")
+    folders = ["documents", "info", "answer_key"]
     all_doc_chunks = []
     
-    for page in page_iterator:
-        if "Contents" not in page:
-            continue  # Skip pages without any content (e.g., if the bucket is empty)
-        for file in page['Contents']:
-            filename = file['Key']
-            if filename.endswith((".pdf", ".docx", ".pptx", ".txt", ".xlsx", ".xps", ".mobi", ".cbz")):
-                file_path = f"{group}/{persona_id}/documents/{os.path.basename(filename)}"
-                this_doc_chunks = []
-                print(file_path)
+    for folder in folders:
+        paginator = s3.get_paginator('list_objects_v2')
+        page_iterator = paginator.paginate(Bucket=bucket, Prefix=f"{group}/{persona_id}/{folder}")
+        
+        for page in page_iterator:
+            if "Contents" not in page:
+                continue  # Skip pages without any content (e.g., if the bucket is empty)
+            for file in page['Contents']:
+                filename = file['Key']
+                if filename.endswith((".pdf", ".docx", ".pptx", ".txt", ".xlsx", ".xps", ".mobi", ".cbz")):
+                    file_path = f"{group}/{persona_id}/{folder}/{os.path.basename(filename)}"
+                    this_doc_chunks = []
+                    print(file_path)
 
-                # Check if ingestion has already been completed
-                current_status = get_ingestion_status(persona_id, file_path, connection)
-                if current_status == "completed":
-                    logger.info(f"Ingestion already completed for {file_path}, skipping update.")
-                    continue
-                
-                this_doc_chunks = add_document(
-                    bucket=bucket,
-                    group=group,
-                    persona=persona_id,
-                    filename=os.path.basename(filename),
-                    vectorstore=vectorstore,
-                    embeddings=embeddings
-                )
+                    # Check if ingestion has already been completed
+                    current_status = get_ingestion_status(persona_id, file_path, connection)
+                    if current_status == "completed":
+                        logger.info(f"Ingestion already completed for {file_path}, skipping update.")
+                        continue
+                    
+                    this_doc_chunks = add_document(
+                        bucket=bucket,
+                        group=group,
+                        persona=persona_id,
+                        filename=os.path.basename(filename),
+                        vectorstore=vectorstore,
+                        embeddings=embeddings,
+                        folder=folder
+                    )
 
-                all_doc_chunks.extend(this_doc_chunks)
-                update_ingestion_status(persona_id, file_path, "completed", connection)
+                    all_doc_chunks.extend(this_doc_chunks)
+                    update_ingestion_status(persona_id, file_path, "completed", connection)
     
     if all_doc_chunks:  # Check if there are any documents to index
         idx = index(
             all_doc_chunks, 
             record_manager, 
             vectorstore, 
-            cleanup="full",
+            cleanup="incremental",
             source_id_key="source"
         )
         logger.info(f"Indexing updates: \n {idx}")
     else:
-        idx = index(
-            [],
-            record_manager, 
-            vectorstore, 
-            cleanup="full",
-            source_id_key="source"
-        )
         logger.info("No documents found for indexing.")

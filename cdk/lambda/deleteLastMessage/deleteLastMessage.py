@@ -82,8 +82,8 @@ def delete_last_two_db_messages(session_id):
         cur.execute("""
             SELECT message_id 
             FROM "messages" 
-            WHERE session_id = %s
-            ORDER BY time_sent DESC
+            WHERE chat_id = %s
+            ORDER BY sent_at DESC
             LIMIT 2;
         """, (session_id,))
         

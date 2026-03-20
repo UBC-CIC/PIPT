@@ -109,9 +109,9 @@ applications:
       enableAutoBuild: true,
     });
 //remove when merging to main
-    const admin_functionality = new amplify.CfnBranch(this, `${id}-adminFunctionBranch`, {
+    const data_ingestion = new amplify.CfnBranch(this, `${id}-dataIngestionBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "admin_functionality",
+      branchName: "data_ingestion",
       enableAutoBuild: true,
     });
 

@@ -187,8 +187,8 @@ exports.handler = async (event, context) => {
             // Query to get all patients and their message counts, separated by student and AI messages
             const messageCreations = await sqlConnection`
                     SELECT p.persona_id, p.persona_name, p.persona_number, 
-                        COUNT(CASE WHEN m.student_sent THEN 1 ELSE NULL END) AS student_message_count,
-                        COUNT(CASE WHEN NOT m.student_sent THEN 1 ELSE NULL END) AS ai_message_count
+                        COUNT(CASE WHEN m.sender_type = 'student' THEN 1 ELSE NULL END) AS student_message_count,
+                        COUNT(CASE WHEN m.sender_type = 'ai' THEN 1 ELSE NULL END) AS ai_message_count
                     FROM "personas" p
                     LEFT JOIN "student_interactions" sp ON p.persona_id = sp.persona_id
                     LEFT JOIN "chats" c ON sp.student_interaction_id = c.student_interaction_id
@@ -961,14 +961,14 @@ exports.handler = async (event, context) => {
 
             // Step 2: Query to get the student's messages for a specific simulation group
             const messages = await sqlConnection`
-              SELECT m.message_content, m.time_sent, m.student_sent
+              SELECT m.message_content, m.sent_at, m.sender_type
               FROM "messages" m
               JOIN "chats" c ON m.chat_id = c.chat_id
               JOIN "student_interactions" sp ON c.student_interaction_id = sp.student_interaction_id
               JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
               WHERE e.user_id = ${userId}
               AND e.simulation_group_id = ${simulationGroupId}
-              ORDER BY m.time_sent;
+              ORDER BY m.sent_at;
             `;
 
             response.statusCode = 200;
@@ -1146,19 +1146,19 @@ exports.handler = async (event, context) => {
               // Step 4: For each chat, retrieve the messages and notes
               for (const chat of chats) {
                 const messages = await sqlConnection`
-                            SELECT student_sent, message_content, time_sent
+                            SELECT sender_type, message_content, sent_at
                             FROM "messages"
                             WHERE chat_id = ${chat.chat_id}
-                            ORDER BY time_sent ASC;
+                            ORDER BY sent_at ASC;
                         `;
 
                 result[patient.persona_name].push({
                   chatName: chat.chat_name,
                   notes: chat.notes || "No notes available.",
                   messages: messages.map((msg) => ({
-                    student_sent: msg.student_sent,
+                    sender_type: msg.sender_type,
                     message_content: msg.message_content,
-                    time_sent: msg.time_sent,
+                    sent_at: msg.sent_at,
                   })),
                 });
               }

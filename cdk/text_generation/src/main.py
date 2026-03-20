@@ -188,8 +188,7 @@ def get_persona_details(persona_id):
 def handler(event, context):
     # Version: 2024-01-15-empathy-fix-v2 - Force new deployment
     logger.info("🚀 STREAMING FUNCTION STARTED - Text Generation Lambda function is called!")
-    logger.info("🔧 EMPATHY EVALUATION SYSTEM LOADED")
-    logger.info(f"📝 Event headers: {event.get('headers', {})}")
+    logger.info(f"� Event headers: {event.get('headers', {})}")
     logger.info(f"🔍 FULL EVENT: {json.dumps(event, default=str)}")
     initialize_constants()
     
@@ -220,6 +219,7 @@ def handler(event, context):
     session_id = query_params.get("session_id", "")
     persona_id = query_params.get("patient_id", "")
     session_name = query_params.get("session_name", "New Chat")
+    student_user_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', '')
 
     if not simulation_group_id or not session_id or not persona_id:
         return {
@@ -359,7 +359,9 @@ def handler(event, context):
             patient_age=patient_age,
             patient_prompt=patient_prompt,
             llm_completion=llm_completion,
-            stream=stream
+            stream=stream,
+            student_user_id=student_user_id,
+            persona_id=persona_id
         )
     except Exception as e:
         logger.error(f"Error getting response: {e}")
@@ -407,8 +409,6 @@ def handler(event, context):
         }
     else:
         logger.info("Returning the generated response.")
-        empathy_eval = response.get('empathy_evaluation', None)
-        logger.info(f"LLM RESPONSE: {empathy_eval}")
         return {
             "statusCode": 200,
             "headers": {
@@ -421,6 +421,5 @@ def handler(event, context):
                 "session_name": session_name,
                 "llm_output": response.get("llm_output", "LLM failed to create response"),
                 "llm_verdict": response.get("llm_verdict", "LLM failed to create verdict"),
-                "empathy_evaluation": response.get("empathy_evaluation", None)
             })
         }
