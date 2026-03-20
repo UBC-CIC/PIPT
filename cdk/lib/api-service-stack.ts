@@ -1303,6 +1303,13 @@ export class ApiServiceStack extends cdk.Stack {
       })
     );
 
+    // Wire up the student function to invoke the text gen Lambda for debrief generation
+    lambdaStudentFunction.addEnvironment(
+      "TEXT_GEN_FUNCTION_NAME",
+      textGenLambdaDockerFunc.functionName
+    );
+    textGenLambdaDockerFunc.grantInvoke(lambdaStudentFunction);
+
     // Create S3 Bucket to handle documents for each simulation group
     const dataIngestionBucket = new s3.Bucket(
       this,

@@ -8,7 +8,7 @@ import { appConfig } from '@/config/aws-config';
 import { authService } from '@/lib/auth';
 
 export interface TextStreamEvent {
-  type: 'start' | 'chunk' | 'end' | 'error' | 'empathy';
+  type: 'start' | 'chunk' | 'end' | 'error' | 'empathy' | 'debrief';
   content: string;
 }
 

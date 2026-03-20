@@ -631,3 +631,371 @@ def update_session_name(table_name: str, session_id: str, bedrock_llm_id: str) -
     
     session_name = llm.invoke(prompt)
     return session_name
+
+
+# =============================================================================
+# DEBRIEF GENERATION
+# =============================================================================
+
+DEBRIEF_SYSTEM_PROMPT = """
+You are an expert clinical education evaluator. You will be given:
+1. The full chat transcript between a pharmacy student and an AI patient
+2. The student's recommendation/diagnosis submitted at the end
+3. A list of key questions the student was expected to ask during the interaction
+
+Your job is to produce a structured debrief evaluation in valid JSON with these exact keys:
+
+{
+  "summary": "A 3-5 sentence overall summary of the student's performance.",
+  "questions_addressed": ["list of key question IDs the student adequately addressed"],
+  "questions_missed": ["list of key question IDs the student did NOT address"],
+  "recommendation_feedback": {
+    "strengths": ["list of strengths in the student's recommendation"],
+    "areas_for_improvement": ["list of areas for improvement"]
+  },
+  "reasoning_gaps": "A paragraph describing gaps in clinical reasoning.",
+  "overall_score": <float between 0.0 and 100.0>
+}
+
+IMPORTANT:
+- Only output valid JSON. No markdown, no explanation, no preamble.
+- For questions_addressed and questions_missed, use the question_id values provided.
+- Be fair but thorough. Evaluate based on clinical relevance and completeness.
+- The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
+"""
+
+
+def fetch_chat_transcript(session_id: str) -> list[dict]:
+    """Fetch all messages for a chat session from the messages table."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT sender_type, message_content, sent_at FROM "messages" WHERE chat_id = %s ORDER BY sent_at ASC',
+            (session_id,)
+        )
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{"sender": r[0], "content": r[1], "timestamp": str(r[2])} for r in rows]
+    except Exception as e:
+        logger.error(f"Error fetching chat transcript: {e}")
+        return []
+
+
+def fetch_recommendation(session_id: str) -> str:
+    """Fetch the student's recommendation from the chats table."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT recommendation FROM "chats" WHERE chat_id = %s',
+            (session_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return result[0] if result and result[0] else ""
+    except Exception as e:
+        logger.error(f"Error fetching recommendation: {e}")
+        return ""
+
+
+def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]:
+    """Fetch key questions assigned to this persona/group from simulation_group_questions + question_bank."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT qb.question_id, qb.question_text, qb.evaluation_criteria, qb.is_mandatory, qb.weight,
+                   sgq.custom_question_text, sgq.custom_evaluation_criteria
+            FROM "simulation_group_questions" sgq
+            JOIN "question_bank" qb ON sgq.question_id = qb.question_id
+            WHERE sgq.simulation_group_id = %s
+              AND (sgq.persona_id = %s OR sgq.persona_id IS NULL)
+              AND qb.is_active = TRUE
+            ORDER BY sgq."order" NULLS LAST, qb.question_text
+        """, (simulation_group_id, persona_id))
+        rows = cursor.fetchall()
+        cursor.close()
+        conn.close()
+        return [{
+            "question_id": str(r[0]),
+            "question_text": r[5] or r[1],  # custom overrides default
+            "evaluation_criteria": r[6] or r[2],
+            "is_mandatory": r[3],
+            "weight": r[4],
+        } for r in rows]
+    except Exception as e:
+        logger.error(f"Error fetching key questions: {e}")
+        return []
+
+
+def fetch_student_id_for_chat(session_id: str) -> str:
+    """Resolve the student's user_id from a chat_id via chats → student_interactions → enrollments."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT e.user_id
+            FROM "chats" c
+            JOIN "student_interactions" si ON c.student_interaction_id = si.student_interaction_id
+            JOIN "enrollments" e ON si.enrollment_id = e.enrollment_id
+            WHERE c.chat_id = %s
+        """, (session_id,))
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        return str(result[0]) if result else ""
+    except Exception as e:
+        logger.error(f"Error fetching student_id for chat: {e}")
+        return ""
+
+
+def save_debrief_to_db(
+    session_id: str,
+    student_id: str,
+    persona_id: str,
+    simulation_group_id: str,
+    generated_text: str,
+    missing_key_questions: list,
+    reasoning_gaps: str,
+    rubric_scores: dict,
+    total_questions_assigned: int,
+    total_questions_asked: int,
+    total_questions_missed: int,
+    overall_score: float,
+) -> str:
+    """Insert a row into the debriefs table and return the debrief_id."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO "debriefs" (
+                chat_id, student_id, persona_id, simulation_group_id,
+                generated_text, missing_key_questions, reasoning_gaps, rubric_scores,
+                total_questions_assigned, total_questions_asked, total_questions_missed,
+                overall_score, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            RETURNING debrief_id
+        """, (
+            session_id,
+            student_id if student_id else None,
+            persona_id if persona_id else None,
+            simulation_group_id if simulation_group_id else None,
+            generated_text,
+            json.dumps(missing_key_questions),
+            reasoning_gaps,
+            json.dumps(rubric_scores),
+            total_questions_assigned,
+            total_questions_asked,
+            total_questions_missed,
+            overall_score,
+        ))
+        debrief_id = cursor.fetchone()[0]
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logger.info(f"💾 Debrief saved: debrief_id={debrief_id}")
+        return str(debrief_id)
+    except Exception as e:
+        logger.error(f"Error saving debrief: {e}")
+        return ""
+
+
+def save_question_interactions(
+    debrief_id: str,
+    session_id: str,
+    student_id: str,
+    persona_id: str,
+    simulation_group_id: str,
+    questions_addressed: list[str],
+    questions_missed: list[str],
+    all_questions: list[dict],
+):
+    """Write per-question rows to question_interactions for analytics."""
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        addressed_set = set(questions_addressed)
+
+        for q in all_questions:
+            qid = q["question_id"]
+            was_asked = qid in addressed_set
+            cursor.execute("""
+                INSERT INTO "question_interactions" (
+                    chat_id, question_id, student_id, persona_id,
+                    simulation_group_id, was_asked, is_correct, created_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())
+            """, (
+                session_id,
+                qid,
+                student_id if student_id else None,
+                persona_id if persona_id else None,
+                simulation_group_id if simulation_group_id else None,
+                was_asked,
+                was_asked,  # simplified: asked = correct for now
+            ))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+        logger.info(f"💾 Saved {len(all_questions)} question_interactions")
+    except Exception as e:
+        logger.error(f"Error saving question_interactions: {e}")
+
+
+def _get_db_connection():
+    """Create a fresh DB connection using environment credentials."""
+    secrets_client = boto3.client('secretsmanager')
+    db_secret_name = os.environ.get('SM_DB_CREDENTIALS')
+    rds_endpoint = os.environ.get('RDS_PROXY_ENDPOINT')
+
+    secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
+    secret = json.loads(secret_response['SecretString'])
+
+    return psycopg2.connect(
+        host=rds_endpoint,
+        port=secret['port'],
+        database=secret['dbname'],
+        user=secret['username'],
+        password=secret['password']
+    )
+
+
+def generate_debrief(
+    session_id: str,
+    simulation_group_id: str,
+    persona_id: str,
+    llm: ChatBedrock,
+) -> dict:
+    """
+    Orchestrates the full debrief generation flow:
+    1. Fetch transcript, recommendation, key questions, student_id
+    2. Build prompt and call LLM
+    3. Parse structured JSON response
+    4. Write to debriefs + question_interactions tables
+    5. Optionally publish result via AppSync
+    Returns the parsed debrief dict.
+    """
+    logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
+
+    # 1. Gather all context
+    transcript = fetch_chat_transcript(session_id)
+    recommendation = fetch_recommendation(session_id)
+    key_questions = fetch_key_questions(simulation_group_id, persona_id)
+    student_id = fetch_student_id_for_chat(session_id)
+
+    if not transcript:
+        logger.error("No transcript found — cannot generate debrief")
+        return {"error": "No chat transcript found"}
+
+    # 2. Build the LLM prompt
+    transcript_text = "\n".join(
+        [f"[{m['sender'].upper()}]: {m['content']}" for m in transcript]
+    )
+
+    key_questions_text = "\n".join(
+        [f"- [{q['question_id']}] (mandatory={q['is_mandatory']}, weight={q['weight']}): {q['question_text']}"
+         for q in key_questions]
+    ) if key_questions else "No key questions were assigned for this patient."
+
+    user_prompt = f"""
+## Chat Transcript
+{transcript_text}
+
+## Student's Recommendation
+{recommendation if recommendation else "(No recommendation submitted)"}
+
+## Key Questions
+{key_questions_text}
+
+Please evaluate the student's performance and produce the JSON debrief.
+"""
+
+    # 3. Call the LLM
+    try:
+        from langchain_core.messages import SystemMessage, HumanMessage
+        messages = [
+            SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
+            HumanMessage(content=user_prompt),
+        ]
+        response = llm.invoke(messages)
+        raw_output = response.content if hasattr(response, 'content') else str(response)
+        logger.info(f"📋 Raw debrief LLM output: {raw_output[:500]}...")
+    except Exception as e:
+        logger.error(f"Debrief LLM call failed: {e}")
+        return {"error": f"LLM call failed: {str(e)}"}
+
+    # 4. Parse the JSON response
+    try:
+        # Strip markdown code fences if present
+        cleaned = raw_output.strip()
+        if cleaned.startswith("```"):
+            cleaned = cleaned.split("\n", 1)[1] if "\n" in cleaned else cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:].strip()
+
+        debrief_data = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse debrief JSON: {e}\nRaw: {raw_output}")
+        # Save raw text as fallback
+        debrief_data = {
+            "summary": raw_output,
+            "questions_addressed": [],
+            "questions_missed": [],
+            "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+            "reasoning_gaps": "",
+            "overall_score": 0.0,
+        }
+
+    questions_addressed = debrief_data.get("questions_addressed", [])
+    questions_missed = debrief_data.get("questions_missed", [])
+    total_assigned = len(key_questions)
+    total_asked = len(questions_addressed)
+    total_missed = len(questions_missed)
+    overall_score = debrief_data.get("overall_score", 0.0)
+
+    # 5. Write to debriefs table
+    debrief_id = save_debrief_to_db(
+        session_id=session_id,
+        student_id=student_id,
+        persona_id=persona_id,
+        simulation_group_id=simulation_group_id,
+        generated_text=json.dumps(debrief_data),
+        missing_key_questions=questions_missed,
+        reasoning_gaps=debrief_data.get("reasoning_gaps", ""),
+        rubric_scores=debrief_data.get("recommendation_feedback", {}),
+        total_questions_assigned=total_assigned,
+        total_questions_asked=total_asked,
+        total_questions_missed=total_missed,
+        overall_score=overall_score,
+    )
+
+    # 6. Write per-question analytics
+    if key_questions and student_id:
+        save_question_interactions(
+            debrief_id=debrief_id,
+            session_id=session_id,
+            student_id=student_id,
+            persona_id=persona_id,
+            simulation_group_id=simulation_group_id,
+            questions_addressed=questions_addressed,
+            questions_missed=questions_missed,
+            all_questions=key_questions,
+        )
+
+    # 7. Publish debrief via AppSync so frontend can receive it
+    try:
+        publish_to_appsync(session_id, {
+            "type": "debrief",
+            "content": json.dumps(debrief_data),
+        })
+    except Exception as e:
+        logger.error(f"Failed to publish debrief to AppSync: {e}")
+
+    logger.info(f"✅ DEBRIEF GENERATION COMPLETE for session={session_id}, score={overall_score}")
+    return debrief_data

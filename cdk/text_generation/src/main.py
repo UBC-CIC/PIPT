@@ -6,7 +6,7 @@ import psycopg2
 from langchain_aws import BedrockEmbeddings
 
 from helpers.vectorstore import get_vectorstore_retriever
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, get_response, update_session_name
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, get_response, update_session_name, generate_debrief
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -232,6 +232,49 @@ def handler(event, context):
             },
             'body': json.dumps("Missing required parameters: simulation_group_id, session_id, or persona_id")
         }
+
+    # =========================================================================
+    # MODE BRANCHING: "debrief" vs default "chat"
+    # =========================================================================
+    mode = query_params.get("mode", "chat")
+
+    if mode == "debrief":
+        logger.info(f"📋 DEBRIEF MODE — generating debrief for session={session_id}")
+        try:
+            llm = get_bedrock_llm(bedrock_llm_id=BEDROCK_LLM_ID, streaming=False)
+            debrief_result = generate_debrief(
+                session_id=session_id,
+                simulation_group_id=simulation_group_id,
+                persona_id=persona_id,
+                llm=llm,
+            )
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                "body": json.dumps(debrief_result, default=str),
+            }
+        except Exception as e:
+            logger.error(f"Debrief generation failed: {e}")
+            logger.exception("Full debrief error:")
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                "body": json.dumps({"error": f"Debrief generation failed: {str(e)}"}),
+            }
+
+    # =========================================================================
+    # DEFAULT CHAT MODE — existing flow below
+    # =========================================================================
 
     system_prompt = get_system_prompt(simulation_group_id)
     if system_prompt is None:
