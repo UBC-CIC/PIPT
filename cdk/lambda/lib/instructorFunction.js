@@ -1504,7 +1504,7 @@ exports.handler = async (event, context) => {
             let data;
             if (persona_id) {
               data = await sqlConnection`
-                SELECT sgq.*, qb.question_text, qb.category
+                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.category, qb.is_mandatory
                 FROM "simulation_group_questions" sgq
                 JOIN "question_bank" qb ON sgq.question_id = qb.question_id
                 WHERE sgq.simulation_group_id = ${simulation_group_id}
@@ -1513,7 +1513,7 @@ exports.handler = async (event, context) => {
               `;
             } else {
               data = await sqlConnection`
-                SELECT sgq.*, qb.question_text, qb.category
+                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.category, qb.is_mandatory
                 FROM "simulation_group_questions" sgq
                 JOIN "question_bank" qb ON sgq.question_id = qb.question_id
                 WHERE sgq.simulation_group_id = ${simulation_group_id}
@@ -1538,15 +1538,21 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.simulation_group_id &&
-          event.queryStringParameters.question_id &&
-          event.queryStringParameters.persona_id
+          event.body
         ) {
-          const { simulation_group_id, question_id, persona_id } =
-            event.queryStringParameters;
-          const body = event.body ? JSON.parse(event.body) : {};
-          const weight_override = body.weight_override ?? null;
-          const max_score_override = body.max_score_override ?? null;
-          const order = body.order ?? null;
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+
+          // Support both: question_id as a single string OR as an array of strings
+          const rawId = body.question_id;
+          const questionIds = Array.isArray(rawId) ? rawId : (rawId ? [rawId] : []);
+          const persona_id = body.persona_id || null;
+
+          if (questionIds.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "question_id or question_ids is required in request body" });
+            break;
+          }
 
           try {
             // Resolve the instructor's user_id for added_by
@@ -1555,33 +1561,39 @@ exports.handler = async (event, context) => {
             `;
             const addedBy = userResult.length > 0 ? userResult[0].user_id : null;
 
-            const data = await sqlConnection`
-              INSERT INTO "simulation_group_questions" (
-                group_question_id,
-                simulation_group_id,
-                question_id,
-                persona_id,
-                weight_override,
-                max_score_override,
-                "order",
-                added_by,
-                added_at
-              )
-              VALUES (
-                uuid_generate_v4(),
-                ${simulation_group_id},
-                ${question_id},
-                ${persona_id},
-                ${weight_override},
-                ${max_score_override},
-                ${order},
-                ${addedBy},
-                CURRENT_TIMESTAMP
-              )
-              RETURNING *;
-            `;
+            const results = [];
+            for (const qId of questionIds) {
+              const data = await sqlConnection`
+                INSERT INTO "simulation_group_questions" (
+                  group_question_id,
+                  simulation_group_id,
+                  question_id,
+                  persona_id,
+                  weight_override,
+                  max_score_override,
+                  "order",
+                  added_by,
+                  added_at
+                )
+                VALUES (
+                  uuid_generate_v4(),
+                  ${simulation_group_id},
+                  ${qId},
+                  ${persona_id},
+                  ${body.weight_override ?? null},
+                  ${body.max_score_override ?? null},
+                  ${body.order ?? 0},
+                  ${addedBy},
+                  CURRENT_TIMESTAMP
+                )
+                RETURNING *;
+              `;
+              results.push(data[0]);
+            }
+
             response.statusCode = 201;
-            response.body = JSON.stringify(data[0]);
+            // Return single object for single insert, array for batch
+            response.body = JSON.stringify(results.length === 1 ? results[0] : results);
           } catch (err) {
             response.statusCode = 500;
             console.error(err);
@@ -1591,7 +1603,7 @@ exports.handler = async (event, context) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error:
-              "simulation_group_id, question_id, and persona_id are required",
+              "simulation_group_id query parameter and request body with question_id(s) are required",
           });
         }
         break;

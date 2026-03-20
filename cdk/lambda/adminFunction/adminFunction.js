@@ -1022,6 +1022,161 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
+      // ── Question Bank CRUD ─────────────────────────────────────────────
+      case "GET /admin/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const questions = await sqlConnectionTableCreator`
+              SELECT * FROM "question_bank"
+              WHERE organization_id = ${organization_id}
+              ORDER BY created_at DESC;
+            `;
+            response.body = JSON.stringify(questions);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to fetch question bank", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "POST /admin/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            // Resolve created_by: look up user_id from users table using the authenticated email
+            const authEmail = event.requestContext?.authorizer?.userEmail;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnectionTableCreator`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score } = JSON.parse(event.body);
+
+            if (!title || !question_text || !evaluation_criteria) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "title, question_text, and evaluation_criteria are required" });
+              break;
+            }
+
+            const newQuestion = await sqlConnectionTableCreator`
+              INSERT INTO "question_bank" (
+                organization_id, created_by, title, question_text, evaluation_criteria,
+                category, difficulty_level, is_mandatory, weight, max_score
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${title}, ${question_text}, ${evaluation_criteria},
+                ${category || null}, ${difficulty_level || null},
+                ${is_mandatory !== undefined ? is_mandatory : false},
+                ${weight !== undefined ? weight : 1.0},
+                ${max_score !== undefined ? max_score : 100}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newQuestion[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create question", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "PUT /admin/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.question_id &&
+          event.body
+        ) {
+          try {
+            const { question_id } = event.queryStringParameters;
+            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score } = JSON.parse(event.body);
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "question_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                question_text = COALESCE(${question_text || null}, question_text),
+                evaluation_criteria = COALESCE(${evaluation_criteria || null}, evaluation_criteria),
+                category = COALESCE(${category !== undefined ? category : null}, category),
+                difficulty_level = COALESCE(${difficulty_level !== undefined ? difficulty_level : null}, difficulty_level),
+                is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory),
+                weight = COALESCE(${weight !== undefined ? weight : null}, weight),
+                max_score = COALESCE(${max_score !== undefined ? max_score : null}, max_score)
+              WHERE question_id = ${question_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Question not found" });
+            } else {
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update question", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "question_id and request body are required" });
+        }
+        break;
+      case "DELETE /admin/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.question_id
+        ) {
+          try {
+            const { question_id } = event.queryStringParameters;
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "question_bank"
+              SET is_active = false
+              WHERE question_id = ${question_id}
+              RETURNING question_id;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Question not found" });
+            } else {
+              response.body = JSON.stringify({ message: "Question deleted successfully." });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to delete question", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "question_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

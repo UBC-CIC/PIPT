@@ -194,6 +194,32 @@ function AdminSimulationGroupPage() {
         .finally(() => setInstructorsLoading(false));
     }
   }, [activeSection, groupId]);
+
+  // Load assigned questions from API when rubric or questionBank section is activated
+  useEffect(() => {
+    if ((activeSection === 'rubric' || activeSection === 'questionBank') && groupId) {
+      instructorService.getSimulationGroupQuestions(groupId)
+        .then((assigned: any[]) => {
+          // Map to GlobalRubricQuestion format for the rubric view
+          const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
+            id: q.question_id,
+            title: q.title || '',
+            keyQuestion: q.question_text || '',
+            clinicalIntent: '',
+            evaluationCriteria: q.evaluation_criteria || '',
+            required: q.is_mandatory ?? false,
+          }));
+          setGlobalRubricQuestions(rubricQuestions);
+          setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          if (rubricQuestions.length > 0 && !selectedQuestionId) {
+            setSelectedQuestionId(rubricQuestions[0].id);
+          }
+        })
+        .catch((err: any) => {
+          console.error('Failed to load assigned questions:', err);
+        });
+    }
+  }, [activeSection, groupId]);
   
   // State for selected patient (for analytics tabs)
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
@@ -569,7 +595,7 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  const handleSaveNewQuestion = (question: {
+  const handleSaveNewQuestion = async (question: {
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
@@ -590,8 +616,26 @@ function AdminSimulationGroupPage() {
     };
     
     if (addQuestionType === 'global') {
-      instructorService.addToGlobalQuestionBank(newBankQuestion);
-      setGlobalBankQuestions(instructorService.getGlobalQuestionBank());
+      if (organizationId) {
+        try {
+          await adminApi.createQuestionBankQuestion(organizationId, {
+            title: question.title,
+            question_text: question.keyQuestion,
+            evaluation_criteria: question.evaluationCriteria,
+            is_mandatory: question.required,
+          });
+          const questions = await instructorService.getGlobalQuestionBank();
+          setGlobalBankQuestions(questions);
+        } catch (err) {
+          console.error('Failed to create question via API, falling back to mock:', err);
+          instructorService.addToGlobalQuestionBank(newBankQuestion);
+          setGlobalBankQuestions(prev => [...prev, newBankQuestion]);
+        }
+      } else {
+        // No org context — local-only fallback
+        instructorService.addToGlobalQuestionBank(newBankQuestion);
+        setGlobalBankQuestions(prev => [...prev, newBankQuestion]);
+      }
     } else {
       instructorService.addToPatientSpecificQuestionBank(newBankQuestion);
       setPatientSpecificBankQuestions(instructorService.getPatientSpecificQuestionBank());
@@ -650,38 +694,48 @@ function AdminSimulationGroupPage() {
     console.log('Saved new patient-specific question:', question);
   };
 
-  const handleToggleQuestionInclusion = (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
+  const handleToggleQuestionInclusion = async (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
     const newSet = new Set(includedQuestionIds);
     
-    if (isChecked) {
-      newSet.add(questionId);
-      
-      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-        const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
-        if (!existingQuestion) {
-          const newGlobalRubricQuestion: GlobalRubricQuestion = {
-            id: questionId,
-            title: bankQuestion.title,
-            keyQuestion: bankQuestion.questionText,
-            clinicalIntent: bankQuestion.clinicalIntent,
-            evaluationCriteria: bankQuestion.evaluationCriteria,
-            required: bankQuestion.isMandatory,
-          };
+    try {
+      if (isChecked) {
+        newSet.add(questionId);
+        
+        if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
+          // Call API to assign question to group
+          await instructorService.assignQuestionToGroup(groupId || '1', questionId);
           
-          instructorService.addGlobalRubricQuestion(groupId || '1', newGlobalRubricQuestion);
+          const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
+          if (!existingQuestion) {
+            const newGlobalRubricQuestion: GlobalRubricQuestion = {
+              id: questionId,
+              title: bankQuestion.title,
+              keyQuestion: bankQuestion.questionText,
+              clinicalIntent: bankQuestion.clinicalIntent,
+              evaluationCriteria: bankQuestion.evaluationCriteria,
+              required: bankQuestion.isMandatory,
+            };
+            
+            instructorService.addGlobalRubricQuestion(groupId || '1', newGlobalRubricQuestion);
+            setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
+          }
+        }
+      } else {
+        newSet.delete(questionId);
+        
+        if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
+          // Call API to unassign question
+          await instructorService.unassignQuestion(questionId);
+          
+          instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
       }
-    } else {
-      newSet.delete(questionId);
       
-      if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-        instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
-        setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
-      }
+      setIncludedQuestionIds(newSet);
+    } catch (err) {
+      console.error('Failed to update question assignment:', err);
     }
-    
-    setIncludedQuestionIds(newSet);
   };
 
   // Reusable accordion for case-specific questions (editable)
@@ -1468,7 +1522,7 @@ function AdminSimulationGroupPage() {
                   <button
                     onClick={() => {
                       setQuestionBankTab('global');
-                      const globalRubric = mockInstructorDataService.getGlobalRubricQuestions(groupId || '1');
+                      const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                       setIncludedQuestionIds(new Set(globalRubric.map(q => q.id)));
                     }}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
@@ -1480,7 +1534,7 @@ function AdminSimulationGroupPage() {
                     onClick={() => {
                       setQuestionBankTab('patientSpecific');
                       if (selectedPatientForQuestionBank) {
-                        setIncludedQuestionIds(mockInstructorDataService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank));
+                        setIncludedQuestionIds(instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank));
                       } else {
                         setIncludedQuestionIds(new Set());
                       }
@@ -1537,7 +1591,7 @@ function AdminSimulationGroupPage() {
                             const patientId = e.target.value || null;
                             setSelectedPatientForQuestionBank(patientId);
                             if (patientId) {
-                              setIncludedQuestionIds(mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId));
+                              setIncludedQuestionIds(instructorService.getPatientCaseSpecificQuestionIds(patientId));
                             } else {
                               setIncludedQuestionIds(new Set());
                             }
@@ -1577,15 +1631,15 @@ function AdminSimulationGroupPage() {
                                       id: question.id, title: question.title, keyQuestion: question.questionText,
                                       clinicalIntent: question.clinicalIntent, evaluationCriteria: question.evaluationCriteria, required: question.isMandatory,
                                     };
-                                    mockInstructorDataService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
+                                    instructorService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
                                     if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                      setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
                                     }
                                   } else {
                                     newSet.delete(question.id);
-                                    mockInstructorDataService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
+                                    instructorService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
                                     if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                      setCaseSpecificQuestions(mockInstructorDataService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
+                                      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
                                     }
                                   }
                                   setIncludedQuestionIds(newSet);

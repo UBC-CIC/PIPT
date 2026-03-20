@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Search, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,8 +9,8 @@ import DashboardHeader from '@/components/DashboardHeader';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionBankDialog } from '@/components/AddPatientSpecificQuestionBankDialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { mockAdminDataService } from '@/services/adminService';
-import { mockInstructorDataService, type QuestionBankItem } from '@/services/instructorService';
+import { type QuestionBankItem } from '@/services/instructorService';
+import { getQuestionBankQuestions, getOrganization, createQuestionBankQuestion, deleteQuestionBankQuestion } from '@/services/adminApiService';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 
 /**
@@ -45,24 +45,41 @@ function AdminQuestionBankPage() {
     itemsPerPage: 5
   });
   
-  // Question Bank questions - loaded from service
-  const [globalBankQuestions, setGlobalBankQuestions] = useState(() => 
-    mockInstructorDataService.getGlobalQuestionBank()
-  );
+  // Loading and error state
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Question Bank questions - loaded from API
+  const [globalBankQuestions, setGlobalBankQuestions] = useState<QuestionBankItem[]>([]);
   
-  const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState(() => 
-    mockInstructorDataService.getPatientSpecificQuestionBank()
-  );
+  const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState<QuestionBankItem[]>([]);
   
-  // Get organization details
-  const organizations = mockAdminDataService.getOrganizations();
-  const organization = organizations.find(org => org.id === organizationId);
+  // Organization details
+  const [organization, setOrganization] = useState<any>(null);
   
-  // Load user data
-  let user = mockAdminDataService.getCurrentUser();
-  if (!user || !user.name) {
-    user = { name: 'Admin', avatarUrl: undefined };
-  }
+  // User data (will come from auth later)
+  const user = { name: 'Admin', avatarUrl: undefined };
+
+  // Load data on mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [questions, org] = await Promise.all([
+          getQuestionBankQuestions(organizationId || ''),
+          getOrganization(organizationId || '').catch(() => null),
+        ]);
+        setGlobalBankQuestions(questions);
+        if (org) setOrganization(org);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load question bank');
+      } finally {
+        setLoading(false);
+      }
+    };
+    if (organizationId) loadData();
+  }, [organizationId]);
   
   // Filter questions based on search
   const filteredGlobalQuestions = globalBankQuestions.filter(q =>
@@ -110,28 +127,28 @@ function AdminQuestionBankPage() {
     setPatientPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
   };
   
-  const handleSaveNewQuestion = (question: {
+  const handleSaveNewQuestion = async (question: {
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
     evaluationCriteria: string;
     required: boolean;
   }) => {
-    const newQuestionId = `bank-global-${Date.now()}`;
-    const newBankQuestion: QuestionBankItem = { 
-      id: newQuestionId, 
-      title: question.title,
-      questionText: question.keyQuestion,
-      clinicalIntent: question.clinicalIntent,
-      evaluationCriteria: question.evaluationCriteria,
-      isMandatory: question.required,
-      isActive: true,
-      usedBySimulationGroups: [],
-      usedByPatients: undefined
-    };
-    
-    mockInstructorDataService.addToGlobalQuestionBank(newBankQuestion);
-    setGlobalBankQuestions(mockInstructorDataService.getGlobalQuestionBank());
+    try {
+      setError(null);
+      const created = await createQuestionBankQuestion(
+        organizationId || '',
+        {
+          title: question.title,
+          question_text: question.keyQuestion,
+          evaluation_criteria: question.evaluationCriteria,
+          is_mandatory: question.required,
+        }
+      );
+      setGlobalBankQuestions(prev => [...prev, created]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create question');
+    }
   };
   
   const handleSaveNewPatientQuestion = (question: {
@@ -154,15 +171,20 @@ function AdminQuestionBankPage() {
       usedByPatients: []
     };
     
-    mockInstructorDataService.addToPatientSpecificQuestionBank(newBankQuestion);
-    setPatientSpecificBankQuestions(mockInstructorDataService.getPatientSpecificQuestionBank());
+    setPatientSpecificBankQuestions(prev => [...prev, newBankQuestion]);
   };
   
-  const handleDeleteQuestion = () => {
-    if (deleteConfirm.type === 'global') {
-      setGlobalBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
-    } else {
-      setPatientSpecificBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
+  const handleDeleteQuestion = async () => {
+    try {
+      setError(null);
+      await deleteQuestionBankQuestion(deleteConfirm.questionId);
+      if (deleteConfirm.type === 'global') {
+        setGlobalBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
+      } else {
+        setPatientSpecificBankQuestions(prev => prev.filter(q => q.id !== deleteConfirm.questionId));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete question');
     }
     setDeleteConfirm({ open: false, questionId: '', questionTitle: '', type: 'global' });
   };
@@ -179,6 +201,19 @@ function AdminQuestionBankPage() {
         onStudentView={() => navigate('/student')}
       />
       
+      {loading && (
+        <div className="flex-1 flex items-center justify-center p-8">
+          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>Loading question bank...</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mx-8 mt-4 p-4 rounded-md" style={{ backgroundColor: '#fef2f2', border: '1px solid #fecaca' }}>
+          <p className="text-sm" style={{ color: '#dc2626' }}>{error}</p>
+        </div>
+      )}
+
+      {!loading && (
       <main className="flex-1 overflow-y-auto">
         <div className="h-full flex flex-col">
           <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: UI_COLORS.border.default }}>
@@ -611,6 +646,7 @@ function AdminQuestionBankPage() {
           </div>
         </div>
       </main>
+      )}
       
       <AddQuestionDialog
         open={isAddQuestionDialogOpen}

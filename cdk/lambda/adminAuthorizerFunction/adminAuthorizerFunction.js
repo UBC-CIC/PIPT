@@ -65,7 +65,8 @@ exports.handler = async (event, context) => {
       "Resource": resource
     });
     responseStruct["context"] = {
-      "userId": payload.sub
+      "userId": payload.sub,
+      "userEmail": payload.email || ""
     };
 
     console.log(JSON.stringify({ level: "INFO", requestId, message: "Admin authorization successful", userId: payload.sub }));
