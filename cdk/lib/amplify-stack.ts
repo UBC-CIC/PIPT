@@ -110,7 +110,10 @@ applications:
     const questionBankSetup = new amplify.CfnBranch(this, `${id}-questionBankSetupBranch`, {
       appId: amplifyApp.attrAppId,
       branchName: "question-bank-setup",
-//remove when merging to main
+      enableAutoBuild: true,
+    });
+
+    // TODO: remove when merging to main
     const data_ingestion = new amplify.CfnBranch(this, `${id}-dataIngestionBranch`, {
       appId: amplifyApp.attrAppId,
       branchName: "data_ingestion",
