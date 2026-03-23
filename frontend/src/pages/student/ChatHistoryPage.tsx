@@ -2,7 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockDataService, type StudentChatMessage as Message } from '@/services/studentService';
+import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData } from '@/services/studentService';
 import { ArrowLeft, FileText, User, Stethoscope, Flag, Eye, Menu, ChevronRight, ChevronLeft } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useMemo } from 'react';
@@ -25,13 +25,34 @@ function ChatHistoryPage() {
   const { user: authUser } = useAuth();
   const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
-  // Load patient data from mock data service
-  const patient = mockDataService.getPatientDetail(patientId);
+  // Patient data, case materials, and patient files loaded from API
+  const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: 'Loading...', age: 0, gender: '' });
+  const [caseMaterials, setCaseMaterials] = useState<StudentCaseMaterial[]>([]);
+  const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
+
+  // Fetch patient detail, case materials, and patient files from real API
+  useEffect(() => {
+    if (!groupId || !patientId) return;
+    let cancelled = false;
+
+    studentService.fetchPatientDetail(groupId, patientId).then((data) => {
+      if (!cancelled) setPatient(data);
+    });
+    studentService.fetchCaseMaterials(groupId, patientId).then((data) => {
+      if (!cancelled) setCaseMaterials(data);
+    });
+    studentService.fetchPatientFiles(groupId, patientId).then((data) => {
+      if (!cancelled) setPatientFiles(data);
+    });
+
+    return () => { cancelled = true; };
+  }, [groupId, patientId]);
 
   // State for dialogs
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
+  const [debriefData, setDebriefData] = useState<AIDebriefData | null>(null);
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
@@ -42,11 +63,23 @@ function ChatHistoryPage() {
   // State for sidebar visibility
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
-  // Load saved note from mock data service (read-only in history view)
-  const savedNote = mockDataService.getSavedNote();
+  // Notes placeholder (to be implemented later)
+  const savedNote = '';
 
-  // Load chat messages from mock data service
-  const [messages ] = useState<Message[]>(() => mockDataService.getChatHistoryMessages(chatId || ''));
+  // Load chat messages and debrief from API
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  useEffect(() => {
+    if (!chatId) return;
+    let cancelled = false;
+    studentService.fetchMessages(chatId).then((msgs) => {
+      if (!cancelled) setMessages(msgs);
+    });
+    studentService.fetchDebrief(chatId).then((data) => {
+      if (!cancelled) setDebriefData(data);
+    });
+    return () => { cancelled = true; };
+  }, [chatId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -54,9 +87,6 @@ function ChatHistoryPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
-
-  // Load case materials from mock data service
-  const caseMaterials = mockDataService.getCaseMaterials();
 
   // Memoize grouped case materials to avoid recomputing on every render
   const groupedCaseMaterials = useMemo(() => {
@@ -68,9 +98,6 @@ function ChatHistoryPage() {
       return acc;
     }, {} as Record<string, typeof caseMaterials>);
   }, [caseMaterials]);
-
-  // Load patient files from mock data service
-  const patientFiles = mockDataService.getPatientFiles();
 
   /**
    * Handle sign out event
@@ -128,6 +155,7 @@ function ChatHistoryPage() {
       <AIDebriefDialog
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
+        data={debriefData}
       />
 
       {/* Header */}

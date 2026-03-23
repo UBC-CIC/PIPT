@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { X, Star, CheckCircle } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState } from 'react';
-import { mockDataService, type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
   isOpen: boolean;
@@ -21,8 +21,16 @@ interface AIDebriefDialogProps {
 function AIDebriefDialog({ isOpen, onClose, data }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
 
-  // Use provided data or fall back to mock data
-  const debriefData = data || mockDataService.getAIDebriefData();
+  // Use provided data or show empty state
+  const debriefData = data || {
+    summary: '',
+    questionsAddressed: [],
+    missedKeyQuestionsCount: 0,
+    missedQuestionsGuidance: '',
+    recommendationFeedback: { strengths: [], areasForImprovement: [] },
+    suggestedRewrites: [],
+    rubricDescription: '',
+  };
 
   const handleFeedbackSubmit = (helpful: boolean) => {
     console.log('Feedback submitted:', { helpful, comment: feedbackComment });

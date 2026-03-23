@@ -561,6 +561,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       chat_name: string | null;
       last_accessed: string | null;
       notes: string | null;
+      status: string | null;
     }>>(
       `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
     );
@@ -574,7 +575,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       return {
         id: chat.chat_id,
         name: chat.chat_name || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
-        completionStatus: 'In Progress', // chats table has no completion flag; default to in-progress
+        completionStatus: chat.status === 'concluded' ? 'Complete' : 'In Progress',
         score: null,
       };
     });
@@ -611,8 +612,10 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
     }));
 
     // Deduplicate by sender_type + message_content (backend may insert the same message twice with different IDs)
+    // Also filter out the system prompt that kicks off the AI patient conversation
     const seen = new Set<string>();
     return mapped.filter((msg) => {
+      if (msg.message_content.trim().startsWith('Begin the conversation as the patient:')) return false;
       const key = `${msg.sender_type}::${msg.message_content.trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -621,6 +624,34 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
   } catch (error) {
     console.error('Failed to fetch messages:', error);
     return [];
+  }
+}
+
+/**
+ * Fetch AI debrief for a concluded session via GET /student/get_debrief.
+ */
+async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
+  try {
+    const data = await apiClient.request<{ generated_text: string }>(
+      `student/get_debrief?session_id=${encodeURIComponent(sessionId)}`
+    );
+    if (!data?.generated_text) return null;
+    const parsed = JSON.parse(data.generated_text);
+    return {
+      summary: parsed.summary || '',
+      questionsAddressed: parsed.questions_addressed || [],
+      missedKeyQuestionsCount: (parsed.questions_missed || []).length,
+      missedQuestionsGuidance: parsed.reasoning_gaps || '',
+      recommendationFeedback: {
+        strengths: parsed.recommendation_feedback?.strengths || [],
+        areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
+      },
+      suggestedRewrites: [],
+      rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+    };
+  } catch (error) {
+    console.error('Failed to fetch debrief:', error);
+    return null;
   }
 }
 
@@ -914,6 +945,7 @@ export const studentService = {
   fetchCaseMaterials,
   fetchChatHistory,
   fetchMessages,
+  fetchDebrief,
 };
 
 /**
