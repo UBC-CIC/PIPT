@@ -542,10 +542,13 @@ function InstructorSimulationGroupPage() {
    * Handle save question changes
    */
   const handleSaveQuestion = async () => {
-    if (!selectedQuestion) return;
+    if (!selectedQuestion) {
+      console.warn('handleSaveQuestion: no selectedQuestion');
+      return;
+    }
     try {
       await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion);
-      console.log('Saved question:', selectedQuestion);
+      alert('Question saved successfully.');
     } catch (error) {
       console.error('Failed to save question:', error);
       alert('Failed to save question. Please try again.');
