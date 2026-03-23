@@ -734,7 +734,7 @@ IMPORTANT:
 - Be generous in matching — the student may phrase questions conversationally rather than using clinical terminology.
 - Be fair but thorough. Evaluate based on clinical relevance and completeness.
 - The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
-- For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.65-0.79). Do NOT include rewrites for high-confidence matches.
+- For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.55-0.79). Do NOT include rewrites for high-confidence matches.
 - If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
 - For answer_key_comparison: if an answer key is provided in the prompt, set answer_key_available to true and populate correct_elements, missing_elements, incorrect_elements, and overall_alignment by comparing the student's recommendation against the answer key. If no answer key is provided, set answer_key_available to false and omit the other sub-fields.
 """
@@ -950,12 +950,12 @@ def match_message_to_questions(
 ) -> list[dict]:
     """
     Compute embedding for a student message, compare against cached question
-    embeddings, and persist matches that exceed the 0.65 threshold.
+    embeddings, and persist matches that exceed the 0.55 threshold.
 
     Classification tiers:
         >= 0.80  → "high"
-        0.65–0.79 → "moderate"
-        < 0.65  → discarded
+        0.55–0.79 → "moderate"
+        < 0.55  → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
@@ -981,9 +981,12 @@ def match_message_to_questions(
         if not embedding:
             continue
         score = compute_cosine_similarity(message_embedding, embedding)
+        logger.info(
+            f"🔍 Similarity: message='{message_content[:60]}' vs question='{q.get('question_text', '')[:60]}' → score={score:.4f}"
+        )
         if score >= 0.80:
             confidence = "high"
-        elif score >= 0.65:
+        elif score >= 0.55:
             confidence = "moderate"
         else:
             continue  # discard below threshold
