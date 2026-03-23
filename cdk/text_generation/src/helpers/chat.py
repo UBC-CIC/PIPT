@@ -6,6 +6,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# Track active matching threads per session so the debrief can wait for them
+_matching_threads_lock = threading.Lock()
+_matching_threads: dict[str, list[threading.Thread]] = {}  # session_id -> [threads]
+
 from langchain_aws import ChatBedrock
 from langchain_aws import BedrockLLM
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -678,8 +682,28 @@ Your job is to produce a structured debrief evaluation in valid JSON with these 
 
 {
   "summary": "A 3-5 sentence overall summary of the student's performance.",
-  "questions_addressed": ["list of key question IDs the student adequately addressed"],
-  "questions_missed": ["list of key question IDs the student did NOT address"],
+  "questions_addressed": [
+    {
+      "question_id": "the question_id value from the key questions list",
+      "question_text": "the question text",
+      "matched_messages": [
+        {
+          "message_content": "the student's message that addressed this question",
+          "similarity_score": 0.85,
+          "confidence_tier": "high"
+        }
+      ],
+      "quality_assessment": "Assessment of how well the student addressed this question."
+    }
+  ],
+  "questions_missed": [
+    {
+      "question_id": "the question_id value",
+      "question_text": "the question text",
+      "is_mandatory": true,
+      "weight": 1.5
+    }
+  ],
   "recommendation_feedback": {
     "strengths": ["list of strengths in the student's recommendation"],
     "areas_for_improvement": ["list of areas for improvement"]
@@ -693,16 +717,26 @@ Your job is to produce a structured debrief evaluation in valid JSON with these 
       "similarity_score": 0.68,
       "suggested_rewrite": "An improved version of the student's message"
     }
-  ]
+  ],
+  "answer_key_comparison": {
+    "answer_key_available": true or false,
+    "correct_elements": ["elements from the answer key that the student correctly identified"],
+    "missing_elements": ["elements from the answer key that the student failed to mention"],
+    "incorrect_elements": ["elements the student stated that contradict the answer key"],
+    "overall_alignment": "Strong, Partial, or Weak"
+  }
 }
 
 IMPORTANT:
 - Only output valid JSON. No markdown, no explanation, no preamble.
-- For questions_addressed and questions_missed, use the question_id values provided.
+- For questions_addressed and questions_missed, use the question_id values provided in the Key Questions list.
+- Use SEMANTIC matching: if the student asked about the same topic as a key question, even using different wording, count it as addressed. For example, "do you have any chest pain?" addresses a key question about "cardiovascular symptoms" or "chest pain". Asking "what is your name?" addresses a key question about "patient name" or "identifying information".
+- Be generous in matching — the student may phrase questions conversationally rather than using clinical terminology.
 - Be fair but thorough. Evaluate based on clinical relevance and completeness.
 - The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
 - For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.65-0.79). Do NOT include rewrites for high-confidence matches.
 - If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
+- For answer_key_comparison: if an answer key is provided in the prompt, set answer_key_available to true and populate correct_elements, missing_elements, incorrect_elements, and overall_alignment by comparing the student's recommendation against the answer key. If no answer key is provided, set answer_key_available to false and omit the other sub-fields.
 """
 
 
@@ -749,7 +783,7 @@ def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]
         cursor = conn.cursor()
         cursor.execute("""
             SELECT qb.question_id, qb.question_text, qb.evaluation_criteria, qb.is_mandatory, qb.weight,
-                   sgq.custom_question_text, sgq.custom_evaluation_criteria
+                   sgq.weight_override
             FROM "simulation_group_questions" sgq
             JOIN "question_bank" qb ON sgq.question_id = qb.question_id
             WHERE sgq.simulation_group_id = %s
@@ -760,12 +794,13 @@ def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]
         rows = cursor.fetchall()
         cursor.close()
         conn.close()
+        logger.info(f"Fetched {len(rows)} key questions for group={simulation_group_id}, persona={persona_id}")
         return [{
             "question_id": str(r[0]),
-            "question_text": r[5] or r[1],  # custom overrides default
-            "evaluation_criteria": r[6] or r[2],
+            "question_text": r[1],
+            "evaluation_criteria": r[2],
             "is_mandatory": r[3],
-            "weight": r[4],
+            "weight": r[5] if r[5] is not None else r[4],  # weight_override takes precedence
         } for r in rows]
     except Exception as e:
         logger.error(f"Error fetching key questions: {e}")
@@ -989,7 +1024,9 @@ def run_matching_async(
     """Run match_message_to_questions in a background daemon thread.
 
     All exceptions are caught and logged so that matching failures never
-    propagate to or delay the LLM response.
+    propagate to or delay the LLM response.  Threads are tracked per
+    session so that ``flush_matching_threads`` can join them before
+    debrief generation.
     """
 
     def _target():
@@ -1007,10 +1044,42 @@ def run_matching_async(
             )
 
     thread = threading.Thread(target=_target, daemon=True)
+
+    with _matching_threads_lock:
+        _matching_threads.setdefault(session_id, []).append(thread)
+
     thread.start()
     logger.info(
         f"🔄 Started background matching thread for message_id={message_id}"
     )
+
+
+def flush_matching_threads(session_id: str, timeout: float = 30.0) -> None:
+    """Wait for all outstanding matching threads for a session to finish.
+
+    Called at the start of debrief generation so that every student
+    message has its ``matched_question_ids`` written before we query
+    for tagged messages.
+
+    Args:
+        session_id: The chat/session id whose threads should be joined.
+        timeout: Maximum seconds to wait *per thread*.  Threads that
+                 exceed this are logged and abandoned.
+    """
+    with _matching_threads_lock:
+        threads = _matching_threads.pop(session_id, [])
+
+    if not threads:
+        logger.info(f"flush_matching_threads: no pending threads for session={session_id}")
+        return
+
+    logger.info(f"flush_matching_threads: joining {len(threads)} thread(s) for session={session_id}")
+    for t in threads:
+        t.join(timeout=timeout)
+        if t.is_alive():
+            logger.warning(
+                f"flush_matching_threads: thread {t.name} did not finish within {timeout}s"
+            )
 
 
 def fetch_tagged_messages(session_id: str) -> list[dict]:
@@ -1050,6 +1119,7 @@ def build_enhanced_debrief_prompt(
     tagged_messages: list[dict],
     key_questions: list[dict],
     recommendation: str,
+    answer_key_text: str = "",
 ) -> str:
     """
     Build the debrief LLM prompt using pre-tagged messages instead of the full
@@ -1218,10 +1288,20 @@ IMPORTANT:
 - The overall_score should reflect question coverage weighted by importance, plus quality of the recommendation.
 """
 
+    # --- Answer Key section (only when answer key text is provided) ---
+    if answer_key_text:
+        prompt += f"""
+## Answer Key
+
+The following is the instructor's answer key for this simulation case. Compare the student's recommendation against this answer key and populate the answer_key_comparison field accordingly.
+
+{answer_key_text}
+"""
+
     return prompt
 
 
-def validate_debrief_output(data: dict) -> dict:
+def validate_debrief_output(data: dict, answer_key_provided: bool = False) -> dict:
     """Validate and repair an Enhanced Debrief dict from the LLM.
 
     Checks for all required top-level keys and validates nested structures.
@@ -1230,6 +1310,7 @@ def validate_debrief_output(data: dict) -> dict:
 
     Args:
         data: The parsed LLM JSON output (may be incomplete).
+        answer_key_provided: Whether an answer key was included in the prompt.
 
     Returns:
         A validated/repaired dict guaranteed to contain every required key
@@ -1332,6 +1413,44 @@ def validate_debrief_output(data: dict) -> dict:
                     logger.warning(f"Debrief validation: suggested_rewrites[{i}] missing '{k}'")
                     entry[k] = default
                     repaired = True
+
+    # --- Validate answer_key_comparison ---
+    if answer_key_provided:
+        akc = data.get("answer_key_comparison")
+        if not isinstance(akc, dict):
+            logger.warning("Debrief validation: 'answer_key_comparison' missing or not a dict, filling with default")
+            akc = {
+                "answer_key_available": True,
+                "correct_elements": [],
+                "missing_elements": [],
+                "incorrect_elements": [],
+                "overall_alignment": "",
+            }
+            data["answer_key_comparison"] = akc
+            repaired = True
+        else:
+            if not isinstance(akc.get("answer_key_available"), bool):
+                logger.warning("Debrief validation: 'answer_key_comparison.answer_key_available' invalid, setting to True")
+                akc["answer_key_available"] = True
+                repaired = True
+            if not isinstance(akc.get("correct_elements"), list):
+                logger.warning("Debrief validation: 'answer_key_comparison.correct_elements' invalid, resetting to []")
+                akc["correct_elements"] = []
+                repaired = True
+            if not isinstance(akc.get("missing_elements"), list):
+                logger.warning("Debrief validation: 'answer_key_comparison.missing_elements' invalid, resetting to []")
+                akc["missing_elements"] = []
+                repaired = True
+            if not isinstance(akc.get("incorrect_elements"), list):
+                logger.warning("Debrief validation: 'answer_key_comparison.incorrect_elements' invalid, resetting to []")
+                akc["incorrect_elements"] = []
+                repaired = True
+            if not isinstance(akc.get("overall_alignment"), str):
+                logger.warning("Debrief validation: 'answer_key_comparison.overall_alignment' invalid, resetting to ''")
+                akc["overall_alignment"] = ""
+                repaired = True
+    else:
+        data["answer_key_comparison"] = {"answer_key_available": False}
 
     if repaired:
         logger.warning("Debrief output was repaired — some fields were missing or malformed")
@@ -1471,6 +1590,85 @@ def _get_db_connection():
     )
 
 
+def extract_text_from_file(file_bytes: bytes, file_extension: str) -> str:
+    """
+    Extract text from file bytes using PyMuPDF.
+    Returns extracted text or empty string on failure.
+    """
+    import tempfile
+    import pymupdf
+
+    ext = file_extension.lower().lstrip(".")
+    try:
+        with tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
+
+        try:
+            doc = pymupdf.open(tmp_path, filetype=ext)
+            text_parts = []
+            for page in doc:
+                text_parts.append(page.get_text())
+            doc.close()
+            return "".join(text_parts)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    except Exception as e:
+        logger.error(f"Failed to extract text from file (ext={ext}): {e}")
+        return ""
+
+
+SUPPORTED_ANSWER_KEY_EXTENSIONS = {"pdf", "docx", "pptx", "txt", "xlsx", "xps", "mobi", "cbz"}
+
+
+def retrieve_answer_key_text(simulation_group_id: str, persona_id: str) -> str:
+    """
+    Retrieve and extract text from all answer key files in S3.
+    Returns concatenated text or empty string if none found / on error.
+    """
+    bucket_name = os.environ.get("EMBEDDING_STORAGE_BUCKET")
+    if not bucket_name:
+        logger.warning("EMBEDDING_STORAGE_BUCKET environment variable is not set; skipping answer key retrieval")
+        return ""
+
+    prefix = f"{simulation_group_id}/{persona_id}/answer_key/"
+
+    try:
+        s3_client = boto3.client("s3")
+        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+    except Exception as e:
+        logger.error(f"Error listing answer key objects at s3://{bucket_name}/{prefix}: {e}")
+        return ""
+
+    contents = response.get("Contents", [])
+    if not contents:
+        logger.info(f"No answer key files found at s3://{bucket_name}/{prefix}")
+        return ""
+
+    all_text = []
+    for obj in contents:
+        key = obj.get("Key", "")
+        # Extract extension from the object key
+        ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
+        if ext not in SUPPORTED_ANSWER_KEY_EXTENSIONS:
+            continue
+
+        try:
+            file_response = s3_client.get_object(Bucket=bucket_name, Key=key)
+            file_bytes = file_response["Body"].read()
+            text = extract_text_from_file(file_bytes, ext)
+            if text:
+                all_text.append(text)
+        except Exception as e:
+            logger.error(f"Error processing answer key file s3://{bucket_name}/{key}: {e}")
+            continue
+
+    return "".join(all_text)
+
+
 def generate_debrief(
     session_id: str,
     simulation_group_id: str,
@@ -1491,6 +1689,10 @@ def generate_debrief(
     """
     logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
 
+    # Wait for any in-flight matching threads so that all
+    # matched_question_ids are persisted before we query for them.
+    flush_matching_threads(session_id)
+
     # 1. Gather all context
     transcript = fetch_chat_transcript(session_id)
     recommendation = fetch_recommendation(session_id)
@@ -1500,6 +1702,9 @@ def generate_debrief(
     if not transcript:
         logger.error("No transcript found — cannot generate debrief")
         return {"error": "No chat transcript found"}
+
+    # Retrieve answer key text from S3 (empty string if none found)
+    answer_key_text = retrieve_answer_key_text(simulation_group_id, persona_id)
 
     # 2. Check for tagged messages and decide which prompt path to use
     tagged_messages = fetch_tagged_messages(session_id)
@@ -1519,6 +1724,7 @@ def generate_debrief(
             tagged_messages=tagged_messages,
             key_questions=cached_questions,
             recommendation=recommendation,
+            answer_key_text=answer_key_text,
         )
     else:
         logger.info("📋 No tagged messages found — falling back to full-transcript debrief")
@@ -1544,6 +1750,16 @@ def generate_debrief(
 {key_questions_text}
 
 Please evaluate the student's performance and produce the JSON debrief.
+"""
+
+        # --- Answer Key section for fallback path (only when answer key text is available) ---
+        if answer_key_text:
+            user_prompt += f"""
+## Answer Key
+
+The following is the instructor's answer key for this simulation case. Compare the student's recommendation against this answer key and populate the answer_key_comparison field accordingly.
+
+{answer_key_text}
 """
 
     # 3. Call the LLM
@@ -1587,7 +1803,7 @@ Please evaluate the student's performance and produce the JSON debrief.
         }
 
     # 4b. Validate and repair the debrief output schema
-    debrief_data = validate_debrief_output(debrief_data)
+    debrief_data = validate_debrief_output(debrief_data, answer_key_provided=bool(answer_key_text))
 
     questions_addressed = debrief_data.get("questions_addressed", [])
     questions_missed = debrief_data.get("questions_missed", [])
@@ -1595,6 +1811,20 @@ Please evaluate the student's performance and produce the JSON debrief.
     total_asked = len(questions_addressed)
     total_missed = len(questions_missed)
     overall_score = debrief_data.get("overall_score", 0.0)
+
+    # Normalize question IDs for analytics — the enhanced prompt returns
+    # dicts with question_id keys while the fallback may return bare strings.
+    def _extract_ids(items: list) -> list[str]:
+        ids = []
+        for item in items:
+            if isinstance(item, dict):
+                ids.append(item.get("question_id", ""))
+            else:
+                ids.append(str(item))
+        return [i for i in ids if i]
+
+    addressed_ids = _extract_ids(questions_addressed)
+    missed_ids = _extract_ids(questions_missed)
 
     # 5. Write to debriefs table
     debrief_id = save_debrief_to_db(
@@ -1620,8 +1850,8 @@ Please evaluate the student's performance and produce the JSON debrief.
             student_id=student_id,
             persona_id=persona_id,
             simulation_group_id=simulation_group_id,
-            questions_addressed=questions_addressed,
-            questions_missed=questions_missed,
+            questions_addressed=addressed_ids,
+            questions_missed=missed_ids,
             all_questions=key_questions,
         )
 
