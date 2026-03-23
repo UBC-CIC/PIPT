@@ -197,6 +197,7 @@ function InstructorSimulationGroupPage() {
         .then((assigned: any[]) => {
           const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
             id: q.question_id,
+            group_question_id: q.group_question_id,
             title: q.title || '',
             keyQuestion: q.question_text || '',
             clinicalIntent: '',
@@ -520,31 +521,48 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle delete question
    */
-  const handleDeleteQuestion = () => {
+  const handleDeleteQuestion = async () => {
     if (!selectedQuestionId) return;
-    if (confirm('Are you sure you want to delete this question?')) {
-      instructorService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
-      const updatedQuestions = instructorService.getGlobalRubricQuestions(groupId || '1');
-      setGlobalRubricQuestions(updatedQuestions);
-      setSelectedQuestionId(updatedQuestions[0]?.id || null);
-      
-      // Uncheck in question bank
-      setIncludedQuestionIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(selectedQuestionId);
-        return newSet;
-      });
+    const question = globalRubricQuestions.find(q => q.id === selectedQuestionId);
+    if (!question?.group_question_id) {
+      alert('Cannot remove this question — assignment ID not found.');
+      return;
+    }
+    if (confirm('Are you sure you want to remove this question?')) {
+      try {
+        await instructorService.unassignQuestion(question.group_question_id);
+        const updatedQuestions = globalRubricQuestions.filter(q => q.id !== selectedQuestionId);
+        setGlobalRubricQuestions(updatedQuestions);
+        setSelectedQuestionId(updatedQuestions[0]?.id || null);
+
+        // Uncheck in question bank
+        setIncludedQuestionIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(selectedQuestionId);
+          return newSet;
+        });
+      } catch (error) {
+        console.error('Failed to remove question:', error);
+        alert('Failed to remove question. Please try again.');
+      }
     }
   };
 
   /**
    * Handle save question changes
    */
-  const handleSaveQuestion = () => {
-    if (!selectedQuestion) return;
-    instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion);
-    console.log('Saving question:', selectedQuestion);
-    // TODO: API call to save question
+  const handleSaveQuestion = async () => {
+    if (!selectedQuestion) {
+      console.warn('handleSaveQuestion: no selectedQuestion');
+      return;
+    }
+    try {
+      await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion);
+      alert('Question saved successfully.');
+    } catch (error) {
+      console.error('Failed to save question:', error);
+      alert('Failed to save question. Please try again.');
+    }
   };
 
   /**

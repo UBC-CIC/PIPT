@@ -1203,9 +1203,13 @@ export class ApiServiceStack extends cdk.Stack {
           BEDROCK_GUARDRAIL_ID: "", // Optional: Leave empty to disable guardrails, add your guardrail ID to enable
           APPSYNC_GRAPHQL_URL: this.appSyncApi.graphqlUrl,
           APPSYNC_API_ID: this.appSyncApi.apiId,
+          EMBEDDING_STORAGE_BUCKET: embeddingStorageBucket.bucketName,
         },
       }
     );
+
+    // Grant text_generation Lambda read access to the embedding storage bucket (for answer key retrieval)
+    embeddingStorageBucket.grantRead(textGenLambdaDockerFunc);
 
     // Override the Logical ID of the Lambda Function to get ARN in OpenAPI
     const cfnTextGenDockerFunc = textGenLambdaDockerFunc.node

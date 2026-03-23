@@ -6,7 +6,7 @@ import psycopg2
 from langchain_aws import BedrockEmbeddings
 
 from helpers.vectorstore import get_vectorstore_retriever
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, get_response, update_session_name, generate_debrief
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, get_response, update_session_name, generate_debrief, cache_key_questions
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -247,6 +247,8 @@ def handler(event, context):
                 simulation_group_id=simulation_group_id,
                 persona_id=persona_id,
                 llm=llm,
+                embeddings_model=embeddings,
+                ddb_table_name=TABLE_NAME,
             )
             return {
                 "statusCode": 200,
@@ -314,6 +316,17 @@ def handler(event, context):
     if not question:
         logger.info(f"Start of conversation. Creating conversation history table in DynamoDB.")
         student_query = get_initial_student_query(patient_name)
+        # Cache key questions on first message for real-time matching
+        try:
+            cache_key_questions(
+                session_id=session_id,
+                simulation_group_id=simulation_group_id,
+                persona_id=persona_id,
+                embeddings_model=embeddings,
+                table_name=TABLE_NAME,
+            )
+        except Exception as e:
+            logger.error(f"Failed to cache key questions: {e}")
     else:
         logger.info(f"Processing student question: {question}")
         student_query = get_student_query(question)
@@ -404,7 +417,9 @@ def handler(event, context):
             llm_completion=llm_completion,
             stream=stream,
             student_user_id=student_user_id,
-            persona_id=persona_id
+            persona_id=persona_id,
+            embeddings_model=embeddings,
+            ddb_table_name=TABLE_NAME
         )
     except Exception as e:
         logger.error(f"Error getting response: {e}")

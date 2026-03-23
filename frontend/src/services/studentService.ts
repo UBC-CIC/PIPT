@@ -179,6 +179,13 @@ export interface AIDebriefData {
     suggested: string;
   }[];
   rubricDescription: string;
+  answerKeyComparison?: {
+    answerKeyAvailable: boolean;
+    correctElements?: string[];
+    missingElements?: string[];
+    incorrectElements?: string[];
+    overallAlignment?: string;
+  };
 }
 
 /**
@@ -332,6 +339,21 @@ const mockAIDebriefData: AIDebriefData = {
     },
   ],
   rubricDescription: "Compare your recommendations with the answer key provided by your instructor.",
+  answerKeyComparison: {
+    answerKeyAvailable: true,
+    correctElements: [
+      'Identified shortness of breath as primary symptom',
+      'Asked about current medications',
+    ],
+    missingElements: [
+      'Did not assess inhaler technique',
+      'Did not explore potential environmental triggers',
+    ],
+    incorrectElements: [
+      'Suggested beta-blocker instead of inhaled corticosteroid',
+    ],
+    overallAlignment: 'Partial',
+  },
 };
 
 /**
@@ -923,6 +945,27 @@ async function deleteSession(
 }
 
 /**
+ * Fetch the presigned URL for the first answer key file from the API.
+ * Returns the URL string or null if no answer key files exist.
+ */
+async function fetchAnswerKeyUrl(simulationGroupId: string, patientId: string): Promise<string | null> {
+  try {
+    const data = await apiClient.request<GetAllFilesResponse>(
+      `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=patient`
+    );
+
+    const answerKeyEntries = Object.values(data.answer_key_files ?? {});
+    if (answerKeyEntries.length > 0 && answerKeyEntries[0].url) {
+      return answerKeyEntries[0].url;
+    }
+    return null;
+  } catch (error) {
+    console.error('Failed to fetch answer key URL:', error);
+    return null;
+  }
+}
+
+/**
  * Student service — public API used by pages
  */
 export const studentService = {
@@ -943,7 +986,8 @@ export const studentService = {
   fetchCaseMaterials,
   fetchChatHistory,
   fetchMessages,
-  fetchDebrief,
+  fetchAnswerKeyUrl,
+  fetchDebrief
 };
 
 /**
@@ -963,5 +1007,7 @@ export const mockDataService = {
   getAssessmentActivities,
   getChatHistoryMessages,
   getSavedNote,
+  fetchDebrief,
+  fetchAnswerKeyUrl
 };
 

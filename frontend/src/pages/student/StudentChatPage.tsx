@@ -13,6 +13,80 @@ import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
 
 /**
+ * Attempts to extract structured debrief data from a raw JSON string.
+ * Handles both complete and truncated JSON from the LLM.
+ * Tries direct parse first, then progressively repairs truncated JSON
+ * by closing open brackets/braces.
+ */
+function extractDebriefFromRawJson(raw: string): Record<string, unknown> | null {
+  // 1. Try direct parse
+  try {
+    const obj = JSON.parse(raw);
+    if (obj && typeof obj === 'object' && obj.summary) return obj;
+  } catch { /* continue to repair attempts */ }
+
+  // 2. Find the JSON object boundaries and try to repair truncated JSON
+  const firstBrace = raw.indexOf('{');
+  if (firstBrace === -1) return null;
+
+  let jsonStr = raw.slice(firstBrace);
+
+  // Try progressively closing the JSON to make it parseable
+  // The LLM may have been cut off mid-output
+  const closers = ['"}', '"]', '}]', '}}', '}'];
+  for (let attempt = 0; attempt < 8; attempt++) {
+    for (const closer of closers) {
+      try {
+        const repaired = jsonStr + closer.repeat(attempt + 1);
+        const obj = JSON.parse(repaired);
+        if (obj && typeof obj === 'object' && obj.summary) return obj;
+      } catch { /* try next */ }
+    }
+    // Also try adding specific common truncation repairs
+    try {
+      const obj = JSON.parse(jsonStr + ']}]}');
+      if (obj && typeof obj === 'object' && obj.summary) return obj;
+    } catch { /* try next */ }
+    try {
+      const obj = JSON.parse(jsonStr + '"}]}');
+      if (obj && typeof obj === 'object' && obj.summary) return obj;
+    } catch { /* try next */ }
+  }
+
+  // 3. Last resort: truncate to the last complete key-value and close
+  const lastCompleteComma = jsonStr.lastIndexOf('",');
+  const lastCompleteBracket = jsonStr.lastIndexOf('],');
+  const lastCompleteBrace = jsonStr.lastIndexOf('},');
+  const cutPoint = Math.max(lastCompleteComma, lastCompleteBracket, lastCompleteBrace);
+  
+  if (cutPoint > 0) {
+    const truncated = jsonStr.slice(0, cutPoint + 1);
+    // Count open braces/brackets and close them
+    let openBraces = 0;
+    let openBrackets = 0;
+    let inString = false;
+    let escaped = false;
+    for (const ch of truncated) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === '\\') { escaped = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') openBraces++;
+      if (ch === '}') openBraces--;
+      if (ch === '[') openBrackets++;
+      if (ch === ']') openBrackets--;
+    }
+    const suffix = ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
+    try {
+      const obj = JSON.parse(truncated + suffix);
+      if (obj && typeof obj === 'object' && obj.summary) return obj;
+    } catch { /* give up */ }
+  }
+
+  return null;
+}
+
+/**
  * StudentChatPage Component
  * 
  * Interactive chat interface for medical simulation with AI patient.
@@ -249,18 +323,55 @@ function StudentChatPage() {
       const unsubscribe = await subscribeToTextStream(sessionId, (event) => {
         if (event.type === 'debrief') {
           try {
-            const parsed = JSON.parse(event.content);
+            let parsed = JSON.parse(event.content);
+            
+            // Safety net: if the backend JSON parse failed, the entire LLM output
+            // ends up in the "summary" field as a raw JSON string. Detect this and
+            // extract the structured data from it.
+            if (
+              parsed.summary &&
+              typeof parsed.summary === 'string' &&
+              parsed.summary.trimStart().startsWith('{') &&
+              (!parsed.questions_addressed || parsed.questions_addressed.length === 0)
+            ) {
+              const extracted = extractDebriefFromRawJson(parsed.summary);
+              if (extracted) {
+                parsed = extracted;
+              }
+            }
+
+            // questions_addressed may be strings (legacy) or objects with question_text (enhanced)
+            const addressedQuestions = (parsed.questions_addressed || []).map(
+              (q: string | { question_text?: string; quality_assessment?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
+            const missedQuestions = (parsed.questions_missed || []).map(
+              (q: string | { question_text?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
             setDebriefData({
               summary: parsed.summary || '',
-              questionsAddressed: parsed.questions_addressed || [],
-              missedKeyQuestionsCount: (parsed.questions_missed || []).length,
+              questionsAddressed: addressedQuestions,
+              missedKeyQuestionsCount: missedQuestions.length,
               missedQuestionsGuidance: parsed.reasoning_gaps || '',
               recommendationFeedback: {
                 strengths: parsed.recommendation_feedback?.strengths || [],
                 areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
               },
-              suggestedRewrites: [],
+              suggestedRewrites: (parsed.suggested_rewrites || []).map(
+                (r: { original_message?: string; suggested_rewrite?: string }) => ({
+                  original: r.original_message || '',
+                  suggested: r.suggested_rewrite || '',
+                })
+              ),
               rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+              answerKeyComparison: parsed.answer_key_comparison ? {
+                answerKeyAvailable: parsed.answer_key_comparison.answer_key_available ?? false,
+                correctElements: parsed.answer_key_comparison.correct_elements,
+                missingElements: parsed.answer_key_comparison.missing_elements,
+                incorrectElements: parsed.answer_key_comparison.incorrect_elements,
+                overallAlignment: parsed.answer_key_comparison.overall_alignment,
+              } : undefined,
             });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
@@ -418,6 +529,8 @@ function StudentChatPage() {
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
         data={debriefData}
+        simulationGroupId={groupId}
+        patientId={patientId}
       />
 
       {/* Header */}
