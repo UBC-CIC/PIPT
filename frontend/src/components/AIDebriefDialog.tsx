@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState } from 'react';
-import { mockDataService, studentService, type AIDebriefData } from '@/services/studentService';
+import { studentService, type AIDebriefData } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
   isOpen: boolean;
@@ -24,8 +24,17 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isLoadingAnswerKey, setIsLoadingAnswerKey] = useState(false);
 
-  // Use provided data or fall back to mock data
-  const debriefData = data || mockDataService.getAIDebriefData();
+  // Use provided data or show empty state
+  const debriefData = data || {
+    summary: '',
+    questionsAddressed: [],
+    missedKeyQuestionsCount: 0,
+    missedQuestions: [],
+    missedQuestionsGuidance: '',
+    recommendationFeedback: { strengths: [], areasForImprovement: [] },
+    suggestedRewrites: [],
+    rubricDescription: '',
+  };
 
   const handleFeedbackSubmit = (helpful: boolean) => {
     console.log('Feedback submitted:', { helpful, comment: feedbackComment });
@@ -90,6 +99,22 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
             <p className="text-sm leading-relaxed pl-7" style={{ color: UI_COLORS.text.body }}>
               {debriefData.summary}
             </p>
+            {debriefData.overallScore !== undefined && (
+              <div className="flex items-center gap-2 pl-7 mt-2">
+                <span className="text-sm font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  Overall Score:
+                </span>
+                <span
+                  className="text-sm font-medium px-2 py-0.5 rounded"
+                  style={{
+                    backgroundColor: debriefData.overallScore >= 70 ? '#dcfce7' : debriefData.overallScore >= 50 ? '#fef9c3' : '#fee2e2',
+                    color: debriefData.overallScore >= 70 ? '#166534' : debriefData.overallScore >= 50 ? '#854d0e' : '#991b1b',
+                  }}
+                >
+                  {debriefData.overallScore}%
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Key Questions Successfully Addressed */}
@@ -115,12 +140,24 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
             <div className="flex items-center gap-2">
               <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
               <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                You missed {debriefData.missedKeyQuestionsCount} Key Questions
+                You missed {debriefData.missedKeyQuestionsCount} Key Question{debriefData.missedKeyQuestionsCount !== 1 ? 's' : ''}
               </h3>
             </div>
-            <p className="text-sm pl-7" style={{ color: UI_COLORS.text.body }}>
-              {debriefData.missedQuestionsGuidance}
-            </p>
+            {debriefData.missedQuestions && debriefData.missedQuestions.length > 0 && (
+              <ul className="space-y-2 pl-7">
+                {debriefData.missedQuestions.map((question, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                    <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ef4444' }} />
+                    <span>{question}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {debriefData.missedQuestionsGuidance && (
+              <p className="text-sm pl-7" style={{ color: UI_COLORS.text.body }}>
+                {debriefData.missedQuestionsGuidance}
+              </p>
+            )}
           </div>
 
           {/* Suggested Question Rewrites */}

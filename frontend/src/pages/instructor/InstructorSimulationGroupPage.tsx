@@ -4,9 +4,9 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem } from '@/services/instructorService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
@@ -41,6 +41,8 @@ function InstructorSimulationGroupPage() {
   const [editPatientAge, setEditPatientAge] = useState('');
   const [editPatientGender, setEditPatientGender] = useState('');
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
+  const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   
   // Global Rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() => 
@@ -485,8 +487,19 @@ function InstructorSimulationGroupPage() {
         patientId = savedId;
       }
       const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
-      instructorService.uploadPatientFile(groupId, patientId, file, folderType);
+      if (uploadTimers.current[fileType]) clearTimeout(uploadTimers.current[fileType]);
+      setUploadStatus(prev => ({ ...prev, [fileType]: 'uploading' }));
+      try {
+        await instructorService.uploadPatientFile(groupId, patientId, file, folderType);
+        setUploadStatus(prev => ({ ...prev, [fileType]: 'success' }));
+        uploadTimers.current[fileType] = setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 3000);
+      } catch (error) {
+        console.error('Failed to upload patient file', { fileType, groupId, patientId, error });
+        setUploadStatus(prev => ({ ...prev, [fileType]: 'error' }));
+        uploadTimers.current[fileType] = setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 5000);
+      }
     }
+    e.target.value = '';
   };
 
   // Get the patient being edited
@@ -2805,10 +2818,15 @@ Return valid JSON in exactly this structure:
                       <div className="space-y-4">
                         {/* LLM Upload */}
                         <div className="flex items-center justify-between p-4 border rounded-lg" style={{ borderColor: UI_COLORS.border.default }}>
-                          <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            LLM Upload
-                          </span>
-                          <label className="cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                              LLM Upload
+                            </span>
+                            {uploadStatus['llm'] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
+                            {uploadStatus['llm'] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
+                            {uploadStatus['llm'] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
+                          </div>
+                          <label className={`cursor-pointer ${uploadStatus['llm'] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
                             <input
                               type="file"
                               onChange={(e) => handleFileUpload('llm', e)}
@@ -2829,10 +2847,15 @@ Return valid JSON in exactly this structure:
 
                         {/* Patient Information */}
                         <div className="flex items-center justify-between p-4 border rounded-lg" style={{ borderColor: UI_COLORS.border.default }}>
-                          <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            Patient Information
-                          </span>
-                          <label className="cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                              Patient Information
+                            </span>
+                            {uploadStatus['patientInfo'] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
+                            {uploadStatus['patientInfo'] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
+                            {uploadStatus['patientInfo'] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
+                          </div>
+                          <label className={`cursor-pointer ${uploadStatus['patientInfo'] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
                             <input
                               type="file"
                               onChange={(e) => handleFileUpload('patientInfo', e)}
@@ -2853,10 +2876,15 @@ Return valid JSON in exactly this structure:
 
                         {/* Answer Key */}
                         <div className="flex items-center justify-between p-4 border rounded-lg" style={{ borderColor: UI_COLORS.border.default }}>
-                          <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                            Answer Key
-                          </span>
-                          <label className="cursor-pointer">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                              Answer Key
+                            </span>
+                            {uploadStatus['answerKey'] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
+                            {uploadStatus['answerKey'] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
+                            {uploadStatus['answerKey'] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
+                          </div>
+                          <label className={`cursor-pointer ${uploadStatus['answerKey'] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
                             <input
                               type="file"
                               onChange={(e) => handleFileUpload('answerKey', e)}

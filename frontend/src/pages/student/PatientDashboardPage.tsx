@@ -7,7 +7,7 @@ import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/App';
-import { studentService, type ChatHistoryEntry } from '@/services/studentService';
+import { studentService, type ChatHistoryEntry, type PatientDetail } from '@/services/studentService';
 
 /**
  * PatientDashboardPage Component
@@ -24,8 +24,17 @@ function PatientDashboardPage() {
   // State for showing all attempts
   const [showAllAttempts, setShowAllAttempts] = useState(false);
   
-  // Load patient data from mock data service
-  const patient = studentService.getPatientDetail(patientId);
+  // Load patient data from API
+  const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: 'Loading...', age: 0, gender: '' });
+
+  useEffect(() => {
+    if (!groupId || !patientId) return;
+    let cancelled = false;
+    studentService.fetchPatientDetail(groupId, patientId).then((data) => {
+      if (!cancelled) setPatient(data);
+    });
+    return () => { cancelled = true; };
+  }, [groupId, patientId]);
 
   // Load chat history from API (falls back to mock)
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
@@ -165,18 +174,31 @@ function PatientDashboardPage() {
                 <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
                   {patient.name}
                 </h3>
-                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                  Pronouns: {patient.pronouns}
-                </p>
-                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                  Age: {patient.age}
-                </p>
-                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                  Sex: {patient.sex}
-                </p>
-                <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                  Primary Complaint: {patient.primaryComplaint}
-                </p>
+                {patient.pronouns && (
+                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                    Pronouns: {patient.pronouns}
+                  </p>
+                )}
+                {!!patient.age && (
+                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                    Age: {patient.age}
+                  </p>
+                )}
+                {patient.gender && (
+                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                    Gender: {patient.gender}
+                  </p>
+                )}
+                {patient.sex && (
+                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                    Sex: {patient.sex}
+                  </p>
+                )}
+                {patient.primaryComplaint && (
+                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                    Primary Complaint: {patient.primaryComplaint}
+                  </p>
+                )}
               </div>
             </div>
 

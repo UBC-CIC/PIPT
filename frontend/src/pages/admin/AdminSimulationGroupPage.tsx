@@ -5,7 +5,7 @@ import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -48,6 +48,7 @@ function AdminSimulationGroupPage() {
   const [editPatientAge, setEditPatientAge] = useState('');
   const [editPatientGender, setEditPatientGender] = useState('');
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
+  const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
   
   // Global Rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>([]);
@@ -507,8 +508,18 @@ function AdminSimulationGroupPage() {
         patientId = savedId;
       }
       const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
-      instructorService.uploadPatientFile(groupId, patientId, file, folderType);
+      setUploadStatus(prev => ({ ...prev, [fileType]: 'uploading' }));
+      try {
+        await instructorService.uploadPatientFile(groupId, patientId, file, folderType);
+        setUploadStatus(prev => ({ ...prev, [fileType]: 'success' }));
+        setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 3000);
+      } catch (error) {
+        console.error('Failed to upload patient file', { groupId, patientId, fileType, error });
+        setUploadStatus(prev => ({ ...prev, [fileType]: 'error' }));
+        setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 5000);
+      }
     }
+    e.target.value = '';
   };
 
   // Get the patient being edited
@@ -1945,8 +1956,13 @@ function AdminSimulationGroupPage() {
                           { label: 'Answer Key', type: 'answerKey' as const },
                         ].map(({ label, type }) => (
                           <div key={type} className="flex items-center justify-between p-4 border rounded-lg" style={{ borderColor: UI_COLORS.border.default }}>
-                            <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>{label}</span>
-                            <label className="cursor-pointer">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>{label}</span>
+                              {uploadStatus[type] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
+                              {uploadStatus[type] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
+                              {uploadStatus[type] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
+                            </div>
+                            <label className={`cursor-pointer ${uploadStatus[type] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
                               <input type="file" onChange={(e) => handleFileUpload(type, e)} className="hidden" />
                               <div className="p-2 rounded-lg transition-colors flex items-center gap-2" style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}>
                                 <Upload className="w-5 h-5" />

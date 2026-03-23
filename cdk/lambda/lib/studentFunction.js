@@ -1323,6 +1323,41 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /student/get_debrief":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.session_id
+        ) {
+          const sessionId = event.queryStringParameters.session_id;
+
+          try {
+            const debriefData = await sqlConnection`
+              SELECT generated_text
+              FROM "debriefs"
+              WHERE chat_id = ${sessionId}
+              ORDER BY created_at DESC
+              LIMIT 1;
+            `;
+
+            if (debriefData.length > 0) {
+              response.statusCode = 200;
+              response.body = JSON.stringify({ generated_text: debriefData[0].generated_text });
+            } else {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Debrief not found." });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "session_id is required",
+          });
+        }
+        break;
       case "POST /student/conclude_interaction":
         if (
           event.queryStringParameters != null &&

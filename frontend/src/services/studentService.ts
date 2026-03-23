@@ -125,6 +125,7 @@ export interface PatientFile {
   id: string;
   filename: string;
   description: string;
+  url?: string;
 }
 
 /**
@@ -168,7 +169,9 @@ export interface AIDebriefData {
   summary: string;
   questionsAddressed: string[];
   missedKeyQuestionsCount: number;
+  missedQuestions: string[];
   missedQuestionsGuidance: string;
+  overallScore?: number;
   recommendationFeedback: {
     strengths: string[];
     areasForImprovement: string[];
@@ -320,7 +323,15 @@ const mockAIDebriefData: AIDebriefData = {
     'Asked about previous diagnosis of asthma',
   ],
   missedKeyQuestionsCount: 5,
+  missedQuestions: [
+    'Did not ask about inhaler technique',
+    'Did not explore environmental triggers',
+    'Did not ask about exercise tolerance',
+    'Did not assess sleep quality',
+    'Did not ask about allergy history',
+  ],
   missedQuestionsGuidance: "These questions are important to fully assess the patient's condition and guide appropriate clinical decision-making.",
+  overallScore: 62.0,
   recommendationFeedback: {
     strengths: [
       'Identified relevant symptoms early',
@@ -500,11 +511,8 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
     const files: PatientFile[] = [];
     let idx = 1;
 
-    for (const [filename, info] of Object.entries(data.document_files ?? {})) {
-      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available' });
-    }
     for (const [filename, info] of Object.entries(data.info_files ?? {})) {
-      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available' });
+      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available', url: info.url });
     }
 
     return files.length > 0 ? files : mockPatientFiles;
@@ -583,6 +591,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       chat_name: string | null;
       last_accessed: string | null;
       notes: string | null;
+      status: string | null;
     }>>(
       `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
     );
@@ -596,7 +605,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       return {
         id: chat.chat_id,
         name: chat.chat_name || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
-        completionStatus: 'In Progress', // chats table has no completion flag; default to in-progress
+        completionStatus: chat.status === 'concluded' ? 'Complete' : 'In Progress',
         score: null,
       };
     });
@@ -633,8 +642,10 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
     }));
 
     // Deduplicate by sender_type + message_content (backend may insert the same message twice with different IDs)
+    // Also filter out the system prompt that kicks off the AI patient conversation
     const seen = new Set<string>();
     return mapped.filter((msg) => {
+      if (msg.message_content.trim().startsWith('Begin the conversation as the patient:')) return false;
       const key = `${msg.sender_type}::${msg.message_content.trim()}`;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -643,6 +654,129 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
   } catch (error) {
     console.error('Failed to fetch messages:', error);
     return [];
+  }
+}
+
+/**
+ * Recursively unwrap a value that may be a JSON string (possibly multi-encoded)
+ * or an object. Returns a plain object or null.
+ */
+function deepParseJson(value: unknown): Record<string, any> | null {
+  const MAX_DEPTH = 5;
+  let current: unknown = value;
+  for (let i = 0; i < MAX_DEPTH; i++) {
+    if (current !== null && typeof current === 'object' && !Array.isArray(current)) {
+      return current as Record<string, any>;
+    }
+    if (typeof current !== 'string') return null;
+    const str = (current as string).trim();
+    if (!str) return null;
+
+    // Try direct JSON.parse
+    try {
+      current = JSON.parse(str);
+      continue;
+    } catch { /* fall through to brace extraction */ }
+
+    // Try extracting the outermost { ... } from the string (handles LLM preamble text)
+    const firstBrace = str.indexOf('{');
+    if (firstBrace === -1) return null;
+
+    // Find the matching closing brace by counting depth
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+    let lastBrace = -1;
+    for (let j = firstBrace; j < str.length; j++) {
+      const ch = str[j];
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === '{') depth++;
+      if (ch === '}') { depth--; if (depth === 0) { lastBrace = j; break; } }
+    }
+    if (lastBrace === -1) return null;
+
+    try {
+      current = JSON.parse(str.slice(firstBrace, lastBrace + 1));
+      continue;
+    } catch { return null; }
+  }
+  return null;
+}
+
+/**
+ * Fetch AI debrief for a concluded session via GET /student/get_debrief.
+ */
+async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
+  try {
+    const data = await apiClient.request<{ generated_text: any }>(
+      `student/get_debrief?session_id=${encodeURIComponent(sessionId)}`
+    );
+    if (!data?.generated_text) return null;
+
+    // Robustly extract the debrief object from generated_text.
+    // It may be: a JSON string, a double-encoded JSON string, or an already-parsed object.
+    const raw = data.generated_text;
+    let debrief = deepParseJson(raw);
+
+    if (!debrief || typeof debrief !== 'object') return null;
+
+    // Safety net: the backend may have stuffed the entire LLM JSON output
+    // as a string inside the "summary" field.
+    if (
+      debrief.summary &&
+      typeof debrief.summary === 'string' &&
+      debrief.summary.trimStart().startsWith('{')
+    ) {
+      try {
+        const inner = deepParseJson(debrief.summary);
+        if (inner && typeof inner === 'object' && inner.summary) {
+          debrief = inner;
+        }
+      } catch { /* keep original parsed */ }
+    }
+
+    // questions_addressed may be strings or objects with question_text
+    const addressedQuestions = (debrief.questions_addressed || []).map(
+      (q: string | { question_text?: string }) =>
+        typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+    );
+    const missedQuestions = (debrief.questions_missed || []).map(
+      (q: string | { question_text?: string }) =>
+        typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+    );
+
+    return {
+      summary: typeof debrief.summary === 'string' ? debrief.summary : '',
+      questionsAddressed: addressedQuestions,
+      missedKeyQuestionsCount: missedQuestions.length,
+      missedQuestions: missedQuestions,
+      missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
+      overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+      recommendationFeedback: {
+        strengths: debrief.recommendation_feedback?.strengths || [],
+        areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
+      },
+      suggestedRewrites: (debrief.suggested_rewrites || []).map(
+        (r: { original_message?: string; suggested_rewrite?: string }) => ({
+          original: r.original_message || '',
+          suggested: r.suggested_rewrite || '',
+        })
+      ),
+      rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+      answerKeyComparison: debrief.answer_key_comparison ? {
+        answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
+        correctElements: debrief.answer_key_comparison.correct_elements,
+        missingElements: debrief.answer_key_comparison.missing_elements,
+        incorrectElements: debrief.answer_key_comparison.incorrect_elements,
+        overallAlignment: debrief.answer_key_comparison.overall_alignment,
+      } : undefined,
+    };
+  } catch (error) {
+    console.error('Failed to fetch debrief:', error);
+    return null;
   }
 }
 
@@ -958,6 +1092,7 @@ export const studentService = {
   fetchChatHistory,
   fetchMessages,
   fetchAnswerKeyUrl,
+  fetchDebrief
 };
 
 /**
@@ -977,5 +1112,7 @@ export const mockDataService = {
   getAssessmentActivities,
   getChatHistoryMessages,
   getSavedNote,
+  fetchDebrief,
+  fetchAnswerKeyUrl
 };
 
