@@ -127,6 +127,7 @@ export interface ManageablePatient {
  */
 export interface GlobalRubricQuestion {
   id: string;                           // Unique identifier (question_id in DB)
+  group_question_id?: string;           // Assignment ID (group_question_id in simulation_group_questions)
   rubric_id?: string;                   // Reference to rubric (rubric_id in DB, null for global)
   title: string;                        // Question title (derived from question_text)
   keyQuestion: string;                  // The key question text (question_text in DB)
@@ -278,7 +279,7 @@ export interface InstructorDataService {
   deletePatient: (patientId: string) => Promise<void>;
   getGlobalRubricQuestions: (simulationGroupId: string) => GlobalRubricQuestion[];
   addGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
-  updateGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
+  updateGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => Promise<any>;
   deleteGlobalRubricQuestion: (simulationGroupId: string, questionId: string) => void;
   getCaseSpecificQuestions: (patientId: string) => GlobalRubricQuestion[];
   addCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
@@ -1148,8 +1149,19 @@ function addGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubr
 /**
  * Update a global rubric question
  */
-function updateGlobalRubricQuestion(_simulationGroupId: string, _question: GlobalRubricQuestion): void {
-  // TODO: implement API call
+async function updateGlobalRubricQuestion(_simulationGroupId: string, question: GlobalRubricQuestion): Promise<any> {
+  return apiClient.request<any>(
+    `instructor/question_bank?question_id=${encodeURIComponent(question.id)}`,
+    {
+      method: 'PUT',
+      body: {
+        title: question.title,
+        question_text: question.keyQuestion,
+        evaluation_criteria: question.evaluationCriteria,
+        is_mandatory: question.required,
+      },
+    }
+  );
 }
 
 /**

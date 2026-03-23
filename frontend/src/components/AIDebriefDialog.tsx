@@ -1,14 +1,16 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, Star, CheckCircle } from 'lucide-react';
+import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState } from 'react';
-import { mockDataService, type AIDebriefData } from '@/services/studentService';
+import { mockDataService, studentService, type AIDebriefData } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
   isOpen: boolean;
   onClose: () => void;
   data?: AIDebriefData | null;
+  simulationGroupId?: string;
+  patientId?: string;
 }
 
 /**
@@ -18,8 +20,9 @@ interface AIDebriefDialogProps {
  * Includes interview summary, key questions addressed/missed, clinical reasoning feedback,
  * and suggested question rewrites.
  */
-function AIDebriefDialog({ isOpen, onClose, data }: AIDebriefDialogProps) {
+function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
+  const [isLoadingAnswerKey, setIsLoadingAnswerKey] = useState(false);
 
   // Use provided data or fall back to mock data
   const debriefData = data || mockDataService.getAIDebriefData();
@@ -33,6 +36,21 @@ function AIDebriefDialog({ isOpen, onClose, data }: AIDebriefDialogProps) {
     console.log('Comment submitted:', { comment: feedbackComment });
     // Future: Send comment to backend
     setFeedbackComment('');
+  };
+
+  const handleViewAnswerKey = async () => {
+    if (!simulationGroupId || !patientId) return;
+    setIsLoadingAnswerKey(true);
+    try {
+      const url = await studentService.fetchAnswerKeyUrl(simulationGroupId, patientId);
+      if (url) {
+        window.open(url, '_blank');
+      }
+    } catch (error) {
+      console.error('Failed to open answer key:', error);
+    } finally {
+      setIsLoadingAnswerKey(false);
+    }
   };
 
   return (
@@ -176,9 +194,10 @@ function AIDebriefDialog({ isOpen, onClose, data }: AIDebriefDialogProps) {
                 {debriefData.rubricDescription}
               </p>
               <Button
-                onClick={() => console.log('View answer key clicked')}
+                onClick={handleViewAnswerKey}
+                disabled={!debriefData.answerKeyComparison?.answerKeyAvailable || isLoadingAnswerKey}
                 variant="outline"
-                className="px-6 transition-colors flex-shrink-0"
+                className="px-6 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
                   backgroundColor: UI_COLORS.background.white,
                   color: UI_COLORS.text.heading,
@@ -187,10 +206,117 @@ function AIDebriefDialog({ isOpen, onClose, data }: AIDebriefDialogProps) {
                   borderColor: UI_COLORS.border.default,
                 }}
               >
-                View Answer Key
+                {isLoadingAnswerKey ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  'View Answer Key'
+                )}
               </Button>
             </div>
           </div>
+
+          {/* Answer Key Comparison */}
+          {debriefData.answerKeyComparison && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  Answer Key Comparison
+                </h3>
+              </div>
+              <div className="pl-7">
+                {debriefData.answerKeyComparison.answerKeyAvailable ? (
+                  <div className="space-y-4">
+                    {/* Overall Alignment */}
+                    {debriefData.answerKeyComparison.overallAlignment && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                          Overall Alignment:
+                        </span>
+                        <span
+                          className="text-sm font-medium px-2 py-0.5 rounded"
+                          style={{
+                            backgroundColor:
+                              debriefData.answerKeyComparison.overallAlignment === 'Strong'
+                                ? '#dcfce7'
+                                : debriefData.answerKeyComparison.overallAlignment === 'Partial'
+                                  ? '#fef9c3'
+                                  : '#fee2e2',
+                            color:
+                              debriefData.answerKeyComparison.overallAlignment === 'Strong'
+                                ? '#166534'
+                                : debriefData.answerKeyComparison.overallAlignment === 'Partial'
+                                  ? '#854d0e'
+                                  : '#991b1b',
+                          }}
+                        >
+                          {debriefData.answerKeyComparison.overallAlignment}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Correct Elements */}
+                    {debriefData.answerKeyComparison.correctElements && debriefData.answerKeyComparison.correctElements.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Correct Elements:
+                        </h4>
+                        <ul className="space-y-1">
+                          {debriefData.answerKeyComparison.correctElements.map((element, index) => (
+                            <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                              <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
+                              <span>{element}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Missing Elements */}
+                    {debriefData.answerKeyComparison.missingElements && debriefData.answerKeyComparison.missingElements.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Missing Elements:
+                        </h4>
+                        <ul className="space-y-1">
+                          {debriefData.answerKeyComparison.missingElements.map((element, index) => (
+                            <li key={index} className="flex items-start gap-2 text-sm" style={{ color: '#854d0e' }}>
+                              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#eab308' }} />
+                              <span>{element}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Incorrect Elements */}
+                    {debriefData.answerKeyComparison.incorrectElements && debriefData.answerKeyComparison.incorrectElements.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Incorrect Elements:
+                        </h4>
+                        <ul className="space-y-1">
+                          {debriefData.answerKeyComparison.incorrectElements.map((element, index) => (
+                            <li key={index} className="flex items-start gap-2 text-sm" style={{ color: '#991b1b' }}>
+                              <XCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ef4444' }} />
+                              <span>{element}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm italic" style={{ color: UI_COLORS.text.body }}>
+                    No answer key was provided for this simulation case.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Feedback Section */}
           <div className="pt-6 border-t space-y-4" style={{ borderColor: UI_COLORS.border.default }}>

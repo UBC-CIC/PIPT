@@ -262,17 +262,38 @@ function StudentChatPage() {
         if (event.type === 'debrief') {
           try {
             const parsed = JSON.parse(event.content);
+            // questions_addressed may be strings (legacy) or objects with question_text (enhanced)
+            const addressedQuestions = (parsed.questions_addressed || []).map(
+              (q: string | { question_text?: string; quality_assessment?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
+            const missedQuestions = (parsed.questions_missed || []).map(
+              (q: string | { question_text?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
             setDebriefData({
               summary: parsed.summary || '',
-              questionsAddressed: parsed.questions_addressed || [],
-              missedKeyQuestionsCount: (parsed.questions_missed || []).length,
+              questionsAddressed: addressedQuestions,
+              missedKeyQuestionsCount: missedQuestions.length,
               missedQuestionsGuidance: parsed.reasoning_gaps || '',
               recommendationFeedback: {
                 strengths: parsed.recommendation_feedback?.strengths || [],
                 areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
               },
-              suggestedRewrites: [],
+              suggestedRewrites: (parsed.suggested_rewrites || []).map(
+                (r: { original_message?: string; suggested_rewrite?: string }) => ({
+                  original: r.original_message || '',
+                  suggested: r.suggested_rewrite || '',
+                })
+              ),
               rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+              answerKeyComparison: parsed.answer_key_comparison ? {
+                answerKeyAvailable: parsed.answer_key_comparison.answer_key_available ?? false,
+                correctElements: parsed.answer_key_comparison.correct_elements,
+                missingElements: parsed.answer_key_comparison.missing_elements,
+                incorrectElements: parsed.answer_key_comparison.incorrect_elements,
+                overallAlignment: parsed.answer_key_comparison.overall_alignment,
+              } : undefined,
             });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
@@ -437,6 +458,8 @@ function StudentChatPage() {
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
         data={debriefData}
+        simulationGroupId={groupId}
+        patientId={patientId}
       />
 
       {/* Header */}

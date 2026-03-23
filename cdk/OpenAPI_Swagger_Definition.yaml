@@ -4214,6 +4214,52 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+    put:
+      tags:
+        - Instructor
+      summary: Update a question in the question bank
+      operationId: instructor_question_bank_PUT
+      parameters:
+        - in: query
+          name: question_id
+          required: true
+          description: ID of the question to update
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                question_text:
+                  type: string
+                evaluation_criteria:
+                  type: string
+                is_mandatory:
+                  type: boolean
+      responses:
+        "200":
+          description: Question updated successfully
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "404":
+          description: Question not found
+        "500":
+          description: Internal Server Error
+      security:
+        - instructorAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${instructorFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /instructor/simulation_group_questions:
     options:
       summary: CORS support
@@ -4350,8 +4396,6 @@ paths:
           description: Bad Request
         "401":
           description: Unauthorized
-        "403":
-          description: Cannot delete global question assignments
         "404":
           description: Assignment not found
         "500":
@@ -4399,8 +4443,6 @@ paths:
           description: Bad Request
         "401":
           description: Unauthorized
-        "403":
-          description: Cannot modify global question assignments
         "404":
           description: Assignment not found
         "500":

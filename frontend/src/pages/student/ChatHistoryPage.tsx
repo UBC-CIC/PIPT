@@ -128,6 +128,8 @@ function ChatHistoryPage() {
       <AIDebriefDialog
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
+        simulationGroupId={groupId}
+        patientId={patientId}
       />
 
       {/* Header */}

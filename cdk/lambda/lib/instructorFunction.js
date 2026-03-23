@@ -1492,6 +1492,43 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
+      case "PUT /instructor/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.question_id &&
+          event.body
+        ) {
+          try {
+            const { question_id } = event.queryStringParameters;
+            const { title, question_text, evaluation_criteria, is_mandatory } = JSON.parse(event.body);
+
+            const updated = await sqlConnection`
+              UPDATE "question_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                question_text = COALESCE(${question_text || null}, question_text),
+                evaluation_criteria = COALESCE(${evaluation_criteria || null}, evaluation_criteria),
+                is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory)
+              WHERE question_id = ${question_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Question not found" });
+            } else {
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update question", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "question_id and request body are required" });
+        }
+        break;
       case "GET /instructor/simulation_group_questions":
         if (
           event.queryStringParameters != null &&
@@ -1616,9 +1653,8 @@ exports.handler = async (event, context) => {
             event.queryStringParameters;
 
           try {
-            // Check if this is a global (persona_id IS NULL) assignment
             const existing = await sqlConnection`
-              SELECT persona_id FROM "simulation_group_questions"
+              SELECT group_question_id FROM "simulation_group_questions"
               WHERE group_question_id = ${group_question_id};
             `;
 
@@ -1626,14 +1662,6 @@ exports.handler = async (event, context) => {
               response.statusCode = 404;
               response.body = JSON.stringify({
                 error: "Assignment not found",
-              });
-              break;
-            }
-
-            if (existing[0].persona_id === null) {
-              response.statusCode = 403;
-              response.body = JSON.stringify({
-                error: "Cannot delete a global question assignment. Only patient-specific assignments can be removed by instructors.",
               });
               break;
             }
@@ -1669,9 +1697,8 @@ exports.handler = async (event, context) => {
           const body = event.body ? JSON.parse(event.body) : {};
 
           try {
-            // Check if this is a global (persona_id IS NULL) assignment
             const existing = await sqlConnection`
-              SELECT persona_id FROM "simulation_group_questions"
+              SELECT group_question_id FROM "simulation_group_questions"
               WHERE group_question_id = ${group_question_id};
             `;
 
@@ -1679,14 +1706,6 @@ exports.handler = async (event, context) => {
               response.statusCode = 404;
               response.body = JSON.stringify({
                 error: "Assignment not found",
-              });
-              break;
-            }
-
-            if (existing[0].persona_id === null) {
-              response.statusCode = 403;
-              response.body = JSON.stringify({
-                error: "Cannot modify a global question assignment. Only patient-specific assignments can be updated by instructors.",
               });
               break;
             }
