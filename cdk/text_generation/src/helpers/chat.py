@@ -1123,12 +1123,15 @@ def build_enhanced_debrief_prompt(
     key_questions: list[dict],
     recommendation: str,
     answer_key_text: str = "",
+    transcript: list[dict] | None = None,
 ) -> str:
     """
-    Build the debrief LLM prompt using pre-tagged messages instead of the full
+    Build the debrief LLM prompt using pre-tagged messages AND the full
     transcript.
 
     The prompt contains:
+    - The full chat transcript so the LLM can verify matches and catch
+      questions the embedding matcher may have missed
     - Tagged messages grouped by matched question (with similarity scores and
       confidence tiers)
     - A "missed questions" section for key questions with no matching messages
@@ -1224,12 +1227,25 @@ def build_enhanced_debrief_prompt(
     # --- Recommendation ---
     recommendation_text = recommendation if recommendation else "(No recommendation submitted)"
 
+    # --- Full transcript section ---
+    transcript_section = ""
+    if transcript:
+        transcript_lines = [
+            f"[{m['sender'].upper()}]: {m['content']}" for m in transcript
+        ]
+        transcript_section = "\n".join(transcript_lines)
+
     # --- Assemble the full prompt ---
-    prompt = f"""## Questions Addressed by the Student
+    prompt = f"""## Full Chat Transcript
+Review the complete conversation below. The automated matching system may have missed some questions — use this transcript to verify and catch any key questions the student asked that were not detected by the matcher.
+{transcript_section if transcript_section else "(No transcript available)"}
+
+## Automated Matching Results — Questions Addressed by the Student
+The following matches were detected automatically. Use these as a starting point, but cross-check against the full transcript above. If the student asked a question listed as "missed" below, move it to questions_addressed in your output.
 {addressed_section}
 
-## Missed Questions
-The following key questions were NOT addressed by any student message:
+## Potentially Missed Questions
+The following key questions were NOT detected by the automated matcher. IMPORTANT: Review the full transcript above carefully — if the student DID ask about any of these topics (even with different wording), include them in questions_addressed instead of questions_missed.
 {missed_section}
 
 ## Student's Recommendation
@@ -1285,8 +1301,9 @@ Evaluate the student's performance and produce a JSON response with these exact 
 IMPORTANT:
 - Only output valid JSON. No markdown, no explanation, no preamble.
 - Use the question_id values provided above.
-- For questions_addressed, use the matched messages and scores provided.
-- For questions_missed, include all questions listed in the Missed Questions section.
+- CROSS-CHECK the full transcript against the missed questions list. If the student asked about a topic in the transcript that matches a "missed" question (even with different phrasing), it MUST appear in questions_addressed, NOT questions_missed. The automated matcher can miss conversational phrasings.
+- For questions_addressed, include both the automated matches AND any additional matches you find in the transcript.
+- For questions_missed, only include questions that the student genuinely did NOT ask about anywhere in the transcript.
 - Generate suggested_rewrites ONLY for moderate-confidence matches listed above. Do NOT generate rewrites for high-confidence matches.
 - The overall_score should reflect question coverage weighted by importance, plus quality of the recommendation.
 """
@@ -1728,6 +1745,7 @@ def generate_debrief(
             key_questions=cached_questions,
             recommendation=recommendation,
             answer_key_text=answer_key_text,
+            transcript=transcript,
         )
     else:
         logger.info("📋 No tagged messages found — falling back to full-transcript debrief")
