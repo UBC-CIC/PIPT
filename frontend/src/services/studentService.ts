@@ -125,6 +125,7 @@ export interface PatientFile {
   id: string;
   filename: string;
   description: string;
+  url?: string;
 }
 
 /**
@@ -478,11 +479,8 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
     const files: PatientFile[] = [];
     let idx = 1;
 
-    for (const [filename, info] of Object.entries(data.document_files ?? {})) {
-      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available' });
-    }
     for (const [filename, info] of Object.entries(data.info_files ?? {})) {
-      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available' });
+      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available', url: info.url });
     }
 
     return files.length > 0 ? files : mockPatientFiles;

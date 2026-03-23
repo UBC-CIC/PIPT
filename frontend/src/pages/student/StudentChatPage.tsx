@@ -3,11 +3,10 @@ import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2 } from 'lucide-react';
+import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect } from 'react';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
-import PatientInformationDialog from '@/components/PatientInformationDialog';
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
@@ -28,7 +27,7 @@ function StudentChatPage() {
   
   // Patient data, case materials, and patient files loaded from API
   const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: 'Loading...', age: 0, gender: '' });
-  const [caseMaterials, setCaseMaterials] = useState<StudentCaseMaterial[]>([]);
+  const [, setCaseMaterials] = useState<StudentCaseMaterial[]>([]);
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
 
   // Fetch patient detail, case materials, and patient files from real API
@@ -50,7 +49,6 @@ function StudentChatPage() {
   }, [groupId, patientId]);
 
   // State for dialogs
-  const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(false);
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
@@ -64,6 +62,7 @@ function StudentChatPage() {
 
   // State for patient information sidebar
   const [isPatientInfoSidebarOpen, setIsPatientInfoSidebarOpen] = useState(false);
+  const [selectedPatientFile, setSelectedPatientFile] = useState<PatientFile | null>(null);
 
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
@@ -210,17 +209,6 @@ function StudentChatPage() {
       setIsAiResponding(false);
     });
   }, [sessionId]);
-
-  // Memoize grouped case materials to avoid recomputing on every render
-  const groupedCaseMaterials = useMemo(() => {
-    return caseMaterials.reduce((acc, material) => {
-      if (!acc[material.group]) {
-        acc[material.group] = [];
-      }
-      acc[material.group].push(material);
-      return acc;
-    }, {} as Record<string, typeof caseMaterials>);
-  }, [caseMaterials]);
 
   /**
    * Handle sign out event
@@ -411,13 +399,6 @@ function StudentChatPage() {
 
   return (
     <PageContainer>
-      {/* Patient Information Dialog */}
-      <PatientInformationDialog
-        isOpen={isPatientInfoOpen}
-        onClose={() => setIsPatientInfoOpen(false)}
-        files={patientFiles}
-      />
-
       {/* Confirm Conclude Dialog */}
       <ConfirmConcludeDialog
         isOpen={isConfirmConcludeOpen}
@@ -619,7 +600,7 @@ function StudentChatPage() {
                 Patient Information
               </h2>
               <button
-                onClick={() => setIsPatientInfoSidebarOpen(false)}
+                onClick={() => { setIsPatientInfoSidebarOpen(false); setSelectedPatientFile(null); }}
                 className="p-2 rounded-lg transition-colors"
                 style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
@@ -631,45 +612,65 @@ function StudentChatPage() {
             </div>
           )}
 
-          {/* Content Area - Uploaded documents grouped by category */}
+          {/* Content Area - Patient info files with inline PDF viewer */}
           <div className="flex-1 overflow-y-auto p-4">
             {isPatientInfoSidebarOpen && (
-              <div className="space-y-6">
-                {Object.entries(groupedCaseMaterials).map(([groupName, materials]) => (
-                  <div key={groupName}>
-                    {/* Group Header */}
-                    <h3 className="font-semibold text-base mb-3 pb-2" style={{ color: UI_COLORS.text.heading, borderBottomWidth: '2px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-                      {groupName}
-                    </h3>
-                    
-                    {/* Materials in this group */}
-                    <div className="space-y-3">
-                      {materials.map((material) => (
-                        <div
-                          key={material.id}
-                          className="p-4 rounded-lg"
-                          style={{ backgroundColor: UI_COLORS.background.hoverLight }}
-                        >
-                          <div className="flex items-start gap-3">
-                            <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
-                            <div className="flex-1">
-                              <h4 className="font-semibold text-sm mb-1" style={{ color: UI_COLORS.text.heading }}>
-                                {material.title}
-                              </h4>
-                              <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
-                                {material.description}
-                              </p>
-                              <p className="text-xs mt-1" style={{ color: UI_COLORS.text.muted }}>
-                                Type: {material.type}
-                              </p>
-                            </div>
+              selectedPatientFile ? (
+                <div className="flex flex-col h-full">
+                  <button
+                    onClick={() => setSelectedPatientFile(null)}
+                    className="flex items-center gap-1 text-sm mb-3 bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                    style={{ color: UI_COLORS.text.body }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                    onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+                  >
+                    <ArrowLeftIcon className="w-4 h-4" />
+                    Back to files
+                  </button>
+                  <h4 className="font-semibold text-sm mb-2" style={{ color: UI_COLORS.text.heading }}>
+                    {selectedPatientFile.filename}
+                  </h4>
+                  {selectedPatientFile.url ? (
+                    <iframe
+                      src={selectedPatientFile.url}
+                      title={selectedPatientFile.filename}
+                      className="w-full flex-1 rounded border"
+                      style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
+                    />
+                  ) : (
+                    <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No preview available for this file.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {patientFiles.length === 0 ? (
+                    <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>No patient information files uploaded.</p>
+                  ) : (
+                    patientFiles.map((file) => (
+                      <div
+                        key={file.id}
+                        onClick={() => setSelectedPatientFile(file)}
+                        className="p-4 rounded-lg cursor-pointer transition-colors"
+                        style={{ backgroundColor: UI_COLORS.background.hoverLight }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+                      >
+                        <div className="flex items-start gap-3">
+                          <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-sm mb-1" style={{ color: UI_COLORS.text.heading }}>
+                              {file.filename}
+                            </h4>
+                            <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
+                              {file.description}
+                            </p>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )
             )}
           </div>
         </aside>
