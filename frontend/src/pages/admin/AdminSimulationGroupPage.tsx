@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { AddInstructorDialog } from '@/components/AddInstructorDialog';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -115,6 +116,7 @@ function AdminSimulationGroupPage() {
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
 
   // Load data from instructor service (sync)
   const user = mockAdminDataService.getCurrentUser();
@@ -1081,7 +1083,7 @@ function AdminSimulationGroupPage() {
               </div>
             </div>
             <Button
-              onClick={handleGenerateAccessCode}
+              onClick={() => setIsAccessCodeDialogOpen(true)}
               variant="outline"
               className="w-full justify-start gap-2 py-2.5 h-auto font-medium"
               style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
@@ -2332,6 +2334,36 @@ function AdminSimulationGroupPage() {
         onOpenChange={setIsAddInstructorDialogOpen}
         onAddInstructor={handleAddInstructorSubmit}
       />
+
+      {/* Confirm Generate New Access Code Dialog */}
+      <Dialog open={isAccessCodeDialogOpen} onOpenChange={setIsAccessCodeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Generate New Access Code</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure? This will permanently replace the current access code. Any students using the old code will no longer be able to join.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAccessCodeDialogOpen(false)}
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setIsAccessCodeDialogOpen(false);
+                await handleGenerateAccessCode();
+              }}
+              style={{ backgroundColor: UI_COLORS.status.error, color: UI_COLORS.button.text }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }

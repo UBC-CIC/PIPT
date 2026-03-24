@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/App';
 
@@ -131,6 +132,7 @@ function InstructorSimulationGroupPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -225,15 +227,15 @@ function InstructorSimulationGroupPage() {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
   
   // Get current patient data
-  const currentPatient = patientAnalytics.find(p => p.id === selectedPatientId);
+  const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
   const messageCountData = currentPatient 
     ? [
-        { name: 'Student Messages', value: currentPatient.studentMessageCount },
-        { name: 'AI Messages', value: currentPatient.aiMessageCount },
+        { name: 'Student Messages', value: currentPatient.student_message_count },
+        { name: 'AI Messages', value: currentPatient.ai_message_count },
       ]
     : [];
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
-  const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
+  const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
   
   // Key question analytics (per patient) — uses pre-fetched data
   const keyQuestionAnalytics = currentPatient
@@ -245,7 +247,7 @@ function InstructorSimulationGroupPage() {
   
   // Score distribution for current patient
   const scoreDistribution = currentPatient 
-    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.id)
+    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.patient_id)
     : [];
   
   // Fallback values
@@ -1145,7 +1147,7 @@ function InstructorSimulationGroupPage() {
           </div>
           
           <Button
-            onClick={handleGenerateAccessCode}
+            onClick={() => setIsAccessCodeDialogOpen(true)}
             variant="outline"
             className="w-full justify-start gap-2 py-2.5 h-auto font-medium"
             style={{
@@ -1183,17 +1185,17 @@ function InstructorSimulationGroupPage() {
                 </button>
                 {patientAnalytics.map((patient) => (
                   <button
-                    key={patient.id}
-                    onClick={() => setSelectedPatientId(patient.id)}
+                    key={patient.patient_id}
+                    onClick={() => setSelectedPatientId(patient.patient_id)}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
                     style={{
-                      color: selectedPatientId === patient.id ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
-                      borderColor: selectedPatientId === patient.id ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                      color: selectedPatientId === patient.patient_id ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                      borderColor: selectedPatientId === patient.patient_id ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
                       backgroundColor: 'transparent',
                       cursor: 'pointer'
                     }}
                   >
-                    {patient.name}
+                    {patient.patient_name}
                   </button>
                 ))}
               </div>
@@ -1384,17 +1386,17 @@ function InstructorSimulationGroupPage() {
               {currentPatient && (
               <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                 <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                  {currentPatient.name} Overview
+                  {currentPatient.patient_name} Overview
                 </h3>
 
                 {/* Message Counts + Student Access */}
                 <div className="grid grid-cols-3 gap-6 mb-8">
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.studentMessageCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.student_message_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
                   </div>
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.aiMessageCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.ai_message_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
                   </div>
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
@@ -1410,7 +1412,7 @@ function InstructorSimulationGroupPage() {
                       Key Questions — Students Answered
                     </h4>
                     <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      Number of students who answered each key question for {currentPatient.name}
+                      Number of students who answered each key question for {currentPatient.patient_name}
                     </p>
                     <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
                       <BarChart
@@ -1502,7 +1504,7 @@ function InstructorSimulationGroupPage() {
                         Score Distribution
                       </h4>
                       <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                        Distribution of student scores for {currentPatient.name}
+                        Distribution of student scores for {currentPatient.patient_name}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -3926,6 +3928,36 @@ Return valid JSON in exactly this structure:
         patients={manageablePatients.map(p => ({ id: p.id, name: p.name }))}
         onSave={handleSaveNewPatientQuestion}
       />
+
+      {/* Confirm Generate New Access Code Dialog */}
+      <Dialog open={isAccessCodeDialogOpen} onOpenChange={setIsAccessCodeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Generate New Access Code</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure? This will permanently replace the current access code. Any students using the old code will no longer be able to join.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAccessCodeDialogOpen(false)}
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setIsAccessCodeDialogOpen(false);
+                await handleGenerateAccessCode();
+              }}
+              style={{ backgroundColor: UI_COLORS.status.error, color: UI_COLORS.button.text }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }
