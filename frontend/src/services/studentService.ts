@@ -816,7 +816,7 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
           parsed: Boolean(inner),
           keys: inner ? Object.keys(inner).slice(0, 20) : [],
         });
-        if (inner && typeof inner === 'object' && inner.summary) {
+        if (inner && typeof inner === 'object') {
           debrief = inner;
           console.log('[fetchDebrief] replaced debrief with inner summary JSON');
         }
@@ -836,6 +836,18 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         if (maybeInner?.summary) {
           debrief = maybeInner;
           console.log('[fetchDebrief] replaced debrief with extracted JSON from summary string');
+        }
+      }
+
+      // After safety net #2 parsing, if summary is STILL JSON, try to extract it.
+      if (typeof debrief.summary === 'string' && debrief.summary.trim().startsWith('{')) {
+        try {
+          const summaryObj = JSON.parse(debrief.summary);
+          if (typeof summaryObj.summary === 'string') {
+            debrief.summary = summaryObj.summary;
+          }
+        } catch {
+          // keeping original summary if parse fails
         }
       }
 
