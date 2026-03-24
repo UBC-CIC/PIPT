@@ -11,6 +11,7 @@ import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
+import { useResizablePanel } from '@/hooks/useResizablePanel';
 
 /**
  * Attempts to extract structured debrief data from a raw JSON string.
@@ -162,6 +163,18 @@ function StudentChatPage() {
 
   // State for sidebar visibility
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
+
+  // Resizable sidebars
+  const {
+    width: patientInfoWidth,
+    sidebarRef: patientInfoRef,
+    handleMouseDown: onPatientInfoDrag,
+  } = useResizablePanel({ defaultWidth: 320, minWidth: 250, maxWidth: 700, direction: 'left' });
+  const {
+    width: physicalAssessmentWidth,
+    sidebarRef: physicalAssessmentRef,
+    handleMouseDown: onPhysicalAssessmentDrag,
+  } = useResizablePanel({ defaultWidth: 384, minWidth: 250, maxWidth: 700, direction: 'right' });
 
   // State for chat
   const [messages, setMessages] = useState<Message[]>([]);
@@ -699,21 +712,40 @@ function StudentChatPage() {
 
         {/* Patient Information Sidebar - Slides from right of notes sidebar */}
         <aside 
-          className="flex flex-col transition-all duration-300 ease-in-out flex-shrink-0"
+          ref={patientInfoRef as React.RefObject<HTMLElement>}
+          className="flex flex-col flex-shrink-0 relative"
           aria-hidden={!isPatientInfoSidebarOpen}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
             borderRightWidth: isPatientInfoSidebarOpen ? '1px' : '0px', 
             borderRightStyle: 'solid', 
             borderRightColor: UI_COLORS.border.default,
-            width: isPatientInfoSidebarOpen ? '20rem' : '0rem',
-            minWidth: isPatientInfoSidebarOpen ? '20rem' : '0rem',
+            width: isPatientInfoSidebarOpen ? `${patientInfoWidth}px` : '0px',
+            minWidth: isPatientInfoSidebarOpen ? `${patientInfoWidth}px` : '0px',
             overflowY: isPatientInfoSidebarOpen ? 'auto' : 'hidden',
             overflowX: 'hidden',
             opacity: isPatientInfoSidebarOpen ? 1 : 0,
             pointerEvents: isPatientInfoSidebarOpen ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease-in-out',
           }}
         >
+          {/* Drag handle for resizing */}
+          {isPatientInfoSidebarOpen && (
+            <div
+              onMouseDown={onPatientInfoDrag}
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: -3,
+                bottom: 0,
+                width: 6,
+                cursor: 'col-resize',
+                zIndex: 10,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            />
+          )}
           {/* Header with close button */}
           {isPatientInfoSidebarOpen && (
             <div className="p-4 flex items-center justify-between flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
@@ -757,7 +789,6 @@ function StudentChatPage() {
                       title={selectedPatientFile.filename}
                       className="w-full flex-1 rounded border"
                       style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
-                      sandbox="allow-same-origin"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
@@ -802,7 +833,7 @@ function StudentChatPage() {
         <div 
           className="flex-1 flex flex-col transition-all duration-300 ease-in-out"
           style={{
-            marginRight: contentSidebarType ? '24rem' : '0rem',
+            marginRight: contentSidebarType ? `${physicalAssessmentWidth}px` : '0px',
           }}
         >
           {/* Voice Mode Overlay */}
@@ -928,7 +959,15 @@ function StudentChatPage() {
                         color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading,
                       }}
                     >
-                      <p className="text-sm leading-relaxed">{message.message_content}</p>
+                      {message.sender_type === 'ai' && message.message_content === '' && isAiResponding ? (
+                        <div className="flex items-center gap-1 py-1">
+                          <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '0ms' }} />
+                          <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '150ms' }} />
+                          <span className="w-2 h-2 rounded-full animate-bounce" style={{ backgroundColor: UI_COLORS.text.muted, animationDelay: '300ms' }} />
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-relaxed">{message.message_content}</p>
+                      )}
                       <p
                         className="text-xs mt-1"
                         style={{
@@ -1018,18 +1057,37 @@ function StudentChatPage() {
 
         {/* Content Sidebar (Case Materials or Physical Assessment) - Slides from right edge */}
         <aside 
-          className="flex flex-col transition-all duration-300 ease-in-out absolute top-0 bottom-0 right-0 z-30 overflow-y-auto"
+          ref={physicalAssessmentRef as React.RefObject<HTMLElement>}
+          className="flex flex-col absolute top-0 bottom-0 right-0 z-30 overflow-y-auto"
           aria-hidden={!contentSidebarType}
           style={{ 
             backgroundColor: UI_COLORS.background.white, 
             borderLeftWidth: '1px', 
             borderLeftStyle: 'solid', 
             borderLeftColor: UI_COLORS.border.default,
-            width: '24rem',
+            width: `${physicalAssessmentWidth}px`,
             transform: contentSidebarType ? 'translateX(0)' : 'translateX(100%)',
             boxShadow: contentSidebarType ? '-4px 0 6px rgba(0, 0, 0, 0.1)' : 'none',
+            transition: 'transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out',
           }}
         >
+          {/* Drag handle for resizing */}
+          {contentSidebarType && (
+            <div
+              onMouseDown={onPhysicalAssessmentDrag}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: -3,
+                bottom: 0,
+                width: 6,
+                cursor: 'col-resize',
+                zIndex: 10,
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+            />
+          )}
           {/* Header with close button */}
           {contentSidebarType && (
             <div className="p-4 flex items-center justify-between" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>

@@ -153,11 +153,31 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Query to get all simulation groups where the instructor is enrolled
+            // Query to get all simulation groups where the instructor is enrolled, with counts
             const data = await sqlConnection`
-                SELECT g.*
+                SELECT g.*,
+                  COALESCE(pc.persona_count, 0)::int AS persona_count,
+                  COALESCE(sc.student_count, 0)::int AS student_count,
+                  COALESCE(ic.instructor_count, 0)::int AS instructor_count
                 FROM "enrollments" e
                 JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS persona_count
+                  FROM "personas"
+                  GROUP BY simulation_group_id
+                ) pc ON pc.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS student_count
+                  FROM "enrollments"
+                  WHERE enrollment_type = 'student'
+                  GROUP BY simulation_group_id
+                ) sc ON sc.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS instructor_count
+                  FROM "enrollments"
+                  WHERE enrollment_type = 'instructor'
+                  GROUP BY simulation_group_id
+                ) ic ON ic.simulation_group_id = g.simulation_group_id
                 WHERE e.user_id = ${userId}
                 AND e.enrollment_type = 'instructor'
                 ORDER BY g.group_name, g.simulation_group_id;
@@ -1749,10 +1769,9 @@ exports.handler = async (event, context) => {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                JOIN "users" u ON d.student_id = u.user_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
-                  AND d.persona_id = ${persona_id}
+                JOIN "users" u ON qi.student_id = u.user_id
+                WHERE qi.simulation_group_id = ${simulation_group_id}
+                  AND qi.persona_id = ${persona_id}
                   AND u.user_email = ${student_email}
                 ORDER BY qi.created_at DESC;
               `;
@@ -1760,17 +1779,15 @@ exports.handler = async (event, context) => {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
-                  AND d.persona_id = ${persona_id}
+                WHERE qi.simulation_group_id = ${simulation_group_id}
+                  AND qi.persona_id = ${persona_id}
                 ORDER BY qi.created_at DESC;
               `;
             } else {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
+                WHERE qi.simulation_group_id = ${simulation_group_id}
                 ORDER BY qi.created_at DESC;
               `;
             }

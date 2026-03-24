@@ -34,12 +34,14 @@ function SimulationGroupCard({
   return (
     <div className="flex flex-col gap-4 p-6 rounded-lg shadow-sm hover:shadow-md transition-shadow" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
       <div className="flex items-start gap-4">
-        <UserAvatar
-          name={group.name}
-          imageUrl={group.icon_url}
-          size="medium"
-          backgroundColor={group.icon_color}
-        />
+        {!showCounts && (
+          <UserAvatar
+            name={group.name}
+            imageUrl={group.icon_url}
+            size="medium"
+            backgroundColor={group.icon_color}
+          />
+        )}
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-lg leading-tight mb-1" style={{ color: UI_COLORS.text.heading }}>
             {group.name}
@@ -52,14 +54,19 @@ function SimulationGroupCard({
           {showCounts && (
             <div className="flex flex-col gap-1 mt-2">
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.students} - {group.student_count || 0}
+                {countLabels.students} : {group.student_count || 0}
               </p>
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.instructors} - {group.instructor_count || 0}
+                {countLabels.instructors} : {group.instructor_count || 0}
               </p>
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.patients} - {group.patient_count || 0}
+                {countLabels.patients} : {group.patient_count || 0}
               </p>
+              {(group as any).access_code && (
+                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                  Access Code : {(group as any).access_code}
+                </p>
+              )}
             </div>
           )}
         </div>

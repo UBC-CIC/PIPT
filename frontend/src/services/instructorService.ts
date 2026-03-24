@@ -305,7 +305,7 @@ export interface InstructorDataService {
   getSimulationGroupsUsingQuestion: (questionId: string, questionType?: 'global' | 'patientSpecific') => string[];
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
-  getKeyQuestionAnalytics: (simulationGroupId: string) => KeyQuestionAnalytics[];
+  getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -661,7 +661,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
       access_code: group.group_access_code || '',
       student_count: group.student_count || 0,
       instructor_count: group.instructor_count || 0,
-      patient_count: group.patient_count || 0,
+      patient_count: group.persona_count || 0,
       organization_id: group.organization_id || '',
     }));
   } catch (error) {
@@ -805,11 +805,11 @@ async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAn
     return data.map((patient) => ({
       patient_id: patient.persona_id,
       patient_name: patient.persona_name,
-      instructor_completion_percentage: patient.instructor_completion_percentage || 0,
-      llm_completion_percentage: patient.ai_score_percentage || 0,
-      student_message_count: patient.student_message_count || 0,
-      ai_message_count: patient.ai_message_count || 0,
-      student_access_count: patient.access_count || 0,
+      instructor_completion_percentage: Number(patient.instructor_completion_percentage) || 0,
+      llm_completion_percentage: Number(patient.ai_score_percentage) || 0,
+      student_message_count: Number(patient.student_message_count) || 0,
+      ai_message_count: Number(patient.ai_message_count) || 0,
+      student_access_count: Number(patient.access_count) || 0,
     }));
   } catch (error) {
     console.error('Failed to fetch patient analytics, using mock data:', error);
@@ -830,13 +830,36 @@ function getMessageCountData(_patientId: string): MessageCountData[] {
  *
  * FIX: Changed from async to sync to match InstructorDataService interface.
  */
-function getKeyQuestionAnalytics(simulationGroupId: string): KeyQuestionAnalytics[] {
-  const rubricQuestions = getGlobalRubricQuestions(simulationGroupId);
+async function getKeyQuestionAnalytics(simulationGroupId: string): Promise<KeyQuestionAnalytics[]> {
+  try {
+    const [questions, interactions] = await Promise.all([
+      getSimulationGroupQuestions(simulationGroupId),
+      apiClient.request<any[]>(
+        `instructor/question_interactions?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+        { method: 'GET' }
+      ),
+    ]);
 
-  return rubricQuestions.map((q, index) => ({
-    questionTitle: q.title.length > 30 ? q.title.substring(0, 27) + '...' : q.title,
-    studentsAnswered: Math.max(1, Math.floor(10 * (0.4 + Math.sin(index * 1.7) * 0.3 + Math.cos(index * 0.9) * 0.2)))
-  }));
+    if (!questions || questions.length === 0) return [];
+
+    return questions.map((q: any) => {
+      const questionId = q.question_id;
+      const studentIds = new Set(
+        (interactions || [])
+          .filter((i: any) => i.question_id === questionId && (i.was_asked || i.is_correct != null))
+          .map((i: any) => i.student_id)
+      );
+      return {
+        questionTitle: (q.title || q.question_text || '').length > 30
+          ? (q.title || q.question_text || '').substring(0, 27) + '...'
+          : (q.title || q.question_text || ''),
+        studentsAnswered: studentIds.size,
+      };
+    });
+  } catch (error) {
+    console.error('Failed to fetch key question analytics:', error);
+    return [];
+  }
 }
 
 /**

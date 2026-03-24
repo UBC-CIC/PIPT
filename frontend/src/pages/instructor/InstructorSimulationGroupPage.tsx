@@ -3,13 +3,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/App';
 
@@ -130,6 +131,8 @@ function InstructorSimulationGroupPage() {
   const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -149,12 +152,13 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
       
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
+          instructorService.getKeyQuestionAnalytics(groupId),
         ]);
         
         setUser(userData);
@@ -162,6 +166,7 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
+        setGlobalKeyQuestionAnalytics(keyQuestionData);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -193,7 +198,7 @@ function InstructorSimulationGroupPage() {
 
   // Load assigned questions from API when rubric or questionBank section is activated
   useEffect(() => {
-    if ((activeSection === 'rubric' || activeSection === 'questionBank') && groupId) {
+    if ((activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient') && groupId) {
       instructorService.getSimulationGroupQuestions(groupId)
         .then((assigned: any[]) => {
           const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
@@ -222,19 +227,19 @@ function InstructorSimulationGroupPage() {
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
   
   // Get current patient data
-  const currentPatient = patientAnalytics.find(p => p.id === selectedPatientId);
+  const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
   const messageCountData = currentPatient 
     ? [
-        { name: 'Student Messages', value: currentPatient.studentMessageCount },
-        { name: 'AI Messages', value: currentPatient.aiMessageCount },
+        { name: 'Student Messages', value: currentPatient.student_message_count },
+        { name: 'AI Messages', value: currentPatient.ai_message_count },
       ]
     : [];
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
-  const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
+  const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
   
-  // Key question analytics (per patient)
+  // Key question analytics (per patient) — uses pre-fetched data
   const keyQuestionAnalytics = currentPatient
-    ? instructorService.getKeyQuestionAnalytics(groupId || '1')
+    ? globalKeyQuestionAnalytics
     : [];
   
   // Question performance scores
@@ -242,7 +247,7 @@ function InstructorSimulationGroupPage() {
   
   // Score distribution for current patient
   const scoreDistribution = currentPatient 
-    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.id)
+    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.patient_id)
     : [];
   
   // Fallback values
@@ -304,21 +309,6 @@ function InstructorSimulationGroupPage() {
     navigator.clipboard.writeText(accessCode);
   };
 
-  /**
-   * Handle toggle LLM evaluation for a patient
-   */
-  const handleToggleLLMEvaluation = (patientId: string, currentValue: boolean) => {
-    // Update the state directly with a new array
-    setManageablePatients(prevPatients => 
-      prevPatients.map(patient => 
-        patient.id === patientId 
-          ? { ...patient, llmEvaluationEnabled: !currentValue }
-          : patient
-      )
-    );
-    // Also update the service data for consistency
-    instructorService.updatePatientLLMEvaluation(patientId, !currentValue);
-  };
 
   /**
    * Handle delete patient
@@ -1142,7 +1132,7 @@ function InstructorSimulationGroupPage() {
           </div>
           
           <Button
-            onClick={handleGenerateAccessCode}
+            onClick={() => setIsAccessCodeDialogOpen(true)}
             variant="outline"
             className="w-full justify-start gap-2 py-2.5 h-auto font-medium"
             style={{
@@ -1180,17 +1170,17 @@ function InstructorSimulationGroupPage() {
                 </button>
                 {patientAnalytics.map((patient) => (
                   <button
-                    key={patient.id}
-                    onClick={() => setSelectedPatientId(patient.id)}
+                    key={patient.patient_id}
+                    onClick={() => setSelectedPatientId(patient.patient_id)}
                     className="px-6 py-3 font-medium transition-colors border-b-2"
                     style={{
-                      color: selectedPatientId === patient.id ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
-                      borderColor: selectedPatientId === patient.id ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                      color: selectedPatientId === patient.patient_id ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                      borderColor: selectedPatientId === patient.patient_id ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
                       backgroundColor: 'transparent',
                       cursor: 'pointer'
                     }}
                   >
-                    {patient.name}
+                    {patient.patient_name}
                   </button>
                 ))}
               </div>
@@ -1200,27 +1190,27 @@ function InstructorSimulationGroupPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-3 gap-6">
                     {/* Personas Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
-                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
+                    <div className="border rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection('patients')} style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
+                        <Users className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
                     </div>
                     {/* Students Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
-                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
+                    <div className="border rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection('students')} style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
+                        <Users className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Students</p>
                     </div>
                     {/* Instructors Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
-                        <UserCog className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
+                    <div className="border rounded-xl p-4 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
+                        <UserCog className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Instructors</p>
                     </div>
                   </div>
@@ -1233,12 +1223,10 @@ function InstructorSimulationGroupPage() {
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
                       Number of students who answered each global key question across all personas
                     </p>
-                    {(() => {
-                      const globalKeyQuestionData = instructorService.getKeyQuestionAnalytics(groupId || '1');
-                      return globalKeyQuestionData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionData.length * 50)}>
+                    {globalKeyQuestionAnalytics.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
                           <BarChart
-                            data={globalKeyQuestionData}
+                            data={globalKeyQuestionAnalytics}
                             layout="vertical"
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                           >
@@ -1274,8 +1262,7 @@ function InstructorSimulationGroupPage() {
                         </ResponsiveContainer>
                       ) : (
                         <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
-                      );
-                    })()}
+                      )}
                   </div>
 
                   {/* Question Performance Scores — Horizontal Bar */}
@@ -1384,21 +1371,21 @@ function InstructorSimulationGroupPage() {
               {currentPatient && (
               <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                 <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                  {currentPatient.name} Overview
+                  {currentPatient.patient_name} Overview
                 </h3>
 
                 {/* Message Counts + Student Access */}
                 <div className="grid grid-cols-3 gap-6 mb-8">
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.studentMessageCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.student_message_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
                   </div>
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.aiMessageCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.ai_message_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
                   </div>
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.studentAccessCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.student_access_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
                   </div>
                 </div>
@@ -1410,7 +1397,7 @@ function InstructorSimulationGroupPage() {
                       Key Questions — Students Answered
                     </h4>
                     <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      Number of students who answered each key question for {currentPatient.name}
+                      Number of students who answered each key question for {currentPatient.patient_name}
                     </p>
                     <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
                       <BarChart
@@ -1502,7 +1489,7 @@ function InstructorSimulationGroupPage() {
                         Score Distribution
                       </h4>
                       <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                        Distribution of student scores for {currentPatient.name}
+                        Distribution of student scores for {currentPatient.patient_name}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1600,7 +1587,7 @@ function InstructorSimulationGroupPage() {
               {/* Patient Table */}
               <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
                 {/* Table Header */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                <div className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
                   <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                     Patient Name
                   </div>
@@ -1611,9 +1598,6 @@ function InstructorSimulationGroupPage() {
                     Gender
                   </div>
                   <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                    LLM Evaluation
-                  </div>
-                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                     Actions
                   </div>
                 </div>
@@ -1622,7 +1606,7 @@ function InstructorSimulationGroupPage() {
                 {filteredPatients.map((patient) => (
                   <div 
                     key={patient.id}
-                    className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4 border-t items-center"
+                    className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4 border-t items-center"
                     style={{ borderColor: UI_COLORS.border.default }}
                   >
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
@@ -1633,25 +1617,6 @@ function InstructorSimulationGroupPage() {
                     </div>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
                       {patient.gender}
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={patient.llmEvaluationEnabled}
-                        onClick={() => handleToggleLLMEvaluation(patient.id, patient.llmEvaluationEnabled)}
-                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                        style={{ 
-                          backgroundColor: patient.llmEvaluationEnabled ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
-                        }}
-                      >
-                        <span
-                          className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                          style={{
-                            transform: patient.llmEvaluationEnabled ? 'translateX(22px)' : 'translateX(2px)'
-                          }}
-                        />
-                      </button>
                     </div>
                     <div className="flex items-center gap-3">
                       <Button
@@ -2077,7 +2042,8 @@ function InstructorSimulationGroupPage() {
                   {questionBankTab === 'global' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which global questions should be included in this simulation group's rubric.
+                        Select which global questions should be included in this simulation group's rubric. These are questions
+                        that are saved in the question bank and are visible to be included for all patients in this simulation group.
                       </p>
                       
                       {/* Search Bar */}
@@ -2289,7 +2255,8 @@ function InstructorSimulationGroupPage() {
                   {questionBankTab === 'patientSpecific' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select a patient to manage their patient-specific questions.
+                        Select a patient to manage their patient-specific questions. A patient-specific question
+                        is asked in the context of one particular patient and will depend on the patient's unique details.
                       </p>
                       
                       {/* Patient Selector */}
@@ -3188,9 +3155,7 @@ Return valid JSON in exactly this structure:
 
                         <Accordion type="single" collapsible className="space-y-2">
                           {(() => {
-                            const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
-                            const patientGlobalRubric = instructorService.getGlobalRubricQuestions(patientSimGroupId);
-                            const filteredGlobalRubric = patientGlobalRubric.filter(q =>
+                            const filteredGlobalRubric = globalRubricQuestions.filter(q =>
                               q.title.toLowerCase().includes(globalRubricSearchQuery.toLowerCase())
                             );
                             return filteredGlobalRubric.map((question, index) => (
@@ -3926,6 +3891,36 @@ Return valid JSON in exactly this structure:
         patients={manageablePatients.map(p => ({ id: p.id, name: p.name }))}
         onSave={handleSaveNewPatientQuestion}
       />
+
+      {/* Confirm Generate New Access Code Dialog */}
+      <Dialog open={isAccessCodeDialogOpen} onOpenChange={setIsAccessCodeDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Generate New Access Code</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure? This will permanently replace the current access code. Any students using the old code will no longer be able to join.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsAccessCodeDialogOpen(false)}
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setIsAccessCodeDialogOpen(false);
+                await handleGenerateAccessCode();
+              }}
+              style={{ backgroundColor: UI_COLORS.status.error, color: UI_COLORS.button.text }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }
