@@ -1400,7 +1400,7 @@ function InstructorSimulationGroupPage() {
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
                   </div>
                   <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.studentAccessCount}</p>
+                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.student_access_count}</p>
                     <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
                   </div>
                 </div>

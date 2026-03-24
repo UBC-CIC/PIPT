@@ -805,11 +805,11 @@ async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAn
     return data.map((patient) => ({
       patient_id: patient.persona_id,
       patient_name: patient.persona_name,
-      instructor_completion_percentage: patient.instructor_completion_percentage || 0,
-      llm_completion_percentage: patient.ai_score_percentage || 0,
-      student_message_count: patient.student_message_count || 0,
-      ai_message_count: patient.ai_message_count || 0,
-      student_access_count: patient.access_count || 0,
+      instructor_completion_percentage: Number(patient.instructor_completion_percentage) || 0,
+      llm_completion_percentage: Number(patient.ai_score_percentage) || 0,
+      student_message_count: Number(patient.student_message_count) || 0,
+      ai_message_count: Number(patient.ai_message_count) || 0,
+      student_access_count: Number(patient.access_count) || 0,
     }));
   } catch (error) {
     console.error('Failed to fetch patient analytics, using mock data:', error);
