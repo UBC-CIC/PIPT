@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -114,6 +114,7 @@ function AdminSimulationGroupPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
   const [loading, setLoading] = useState(true);
+  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
 
   // Load data from instructor service (sync)
   const user = mockAdminDataService.getCurrentUser();
@@ -140,13 +141,14 @@ function AdminSimulationGroupPage() {
       if (!groupId) return;
       
       try {
-        const [groupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient] = await Promise.all([
+        const [groupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData] = await Promise.all([
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
           Promise.resolve(instructorService.getGlobalQuestionBank()),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
+          instructorService.getKeyQuestionAnalytics(groupId),
         ]);
         
         setSimulationGroup(groupData);
@@ -155,6 +157,7 @@ function AdminSimulationGroupPage() {
         setManageablePatients(patientsData);
         setGlobalBankQuestions(bankGlobal);
         setPatientSpecificBankQuestions(bankPatient);
+        setGlobalKeyQuestionAnalytics(keyQuestionData);
         
         // Set initial selected patient if analytics available
         if (analyticsData.length > 0) {
@@ -236,9 +239,9 @@ function AdminSimulationGroupPage() {
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
   
-  // Key question analytics (per patient)
+  // Key question analytics (per patient) — uses pre-fetched data
   const keyQuestionAnalytics = currentPatient
-    ? mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1')
+    ? globalKeyQuestionAnalytics
     : [];
   
   // Question performance scores
@@ -1154,11 +1157,9 @@ function AdminSimulationGroupPage() {
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
                       Number of students who answered each global key question across all personas
                     </p>
-                    {(() => {
-                      const globalKeyQuestionData = mockInstructorDataService.getKeyQuestionAnalytics(groupId || '1');
-                      return globalKeyQuestionData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionData.length * 50)}>
-                          <BarChart data={globalKeyQuestionData} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    {globalKeyQuestionAnalytics.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
+                          <BarChart data={globalKeyQuestionAnalytics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                             <XAxis type="number" tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} allowDecimals={false} />
                             <YAxis type="category" dataKey="questionTitle" width={180} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} />
@@ -1168,8 +1169,7 @@ function AdminSimulationGroupPage() {
                         </ResponsiveContainer>
                       ) : (
                         <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
-                      );
-                    })()}
+                      )}
                   </div>
 
                   {/* Question Performance Scores */}

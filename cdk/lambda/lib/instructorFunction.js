@@ -1769,10 +1769,9 @@ exports.handler = async (event, context) => {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                JOIN "users" u ON d.student_id = u.user_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
-                  AND d.persona_id = ${persona_id}
+                JOIN "users" u ON qi.student_id = u.user_id
+                WHERE qi.simulation_group_id = ${simulation_group_id}
+                  AND qi.persona_id = ${persona_id}
                   AND u.user_email = ${student_email}
                 ORDER BY qi.created_at DESC;
               `;
@@ -1780,17 +1779,15 @@ exports.handler = async (event, context) => {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
-                  AND d.persona_id = ${persona_id}
+                WHERE qi.simulation_group_id = ${simulation_group_id}
+                  AND qi.persona_id = ${persona_id}
                 ORDER BY qi.created_at DESC;
               `;
             } else {
               data = await sqlConnection`
                 SELECT qi.*
                 FROM "question_interactions" qi
-                JOIN "debriefs" d ON qi.debrief_id = d.debrief_id
-                WHERE d.simulation_group_id = ${simulation_group_id}
+                WHERE qi.simulation_group_id = ${simulation_group_id}
                 ORDER BY qi.created_at DESC;
               `;
             }

@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -130,6 +130,7 @@ function InstructorSimulationGroupPage() {
   const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -149,12 +150,13 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
       
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
+          instructorService.getKeyQuestionAnalytics(groupId),
         ]);
         
         setUser(userData);
@@ -162,6 +164,7 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
+        setGlobalKeyQuestionAnalytics(keyQuestionData);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -232,9 +235,9 @@ function InstructorSimulationGroupPage() {
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.studentMessageCount + currentPatient.aiMessageCount : 0;
   
-  // Key question analytics (per patient)
+  // Key question analytics (per patient) — uses pre-fetched data
   const keyQuestionAnalytics = currentPatient
-    ? instructorService.getKeyQuestionAnalytics(groupId || '1')
+    ? globalKeyQuestionAnalytics
     : [];
   
   // Question performance scores
@@ -1200,27 +1203,27 @@ function InstructorSimulationGroupPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-3 gap-6">
                     {/* Personas Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
-                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
+                    <div className="border rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection('patients')} style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
+                        <Users className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
                     </div>
                     {/* Students Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
-                        <Users className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
+                    <div className="border rounded-xl p-4 text-center cursor-pointer hover:shadow-md transition-shadow" onClick={() => setActiveSection('students')} style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[5] + '1a' }}>
+                        <Users className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.student_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Students</p>
                     </div>
                     {/* Instructors Card */}
-                    <div className="border rounded-xl p-6 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                      <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
-                        <UserCog className="w-6 h-6" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
+                    <div className="border rounded-xl p-4 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[4] + '1a' }}>
+                        <UserCog className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }} />
                       </div>
-                      <p className="text-3xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.instructor_count ?? 0}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Instructors</p>
                     </div>
                   </div>
@@ -1233,12 +1236,10 @@ function InstructorSimulationGroupPage() {
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
                       Number of students who answered each global key question across all personas
                     </p>
-                    {(() => {
-                      const globalKeyQuestionData = instructorService.getKeyQuestionAnalytics(groupId || '1');
-                      return globalKeyQuestionData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionData.length * 50)}>
+                    {globalKeyQuestionAnalytics.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
                           <BarChart
-                            data={globalKeyQuestionData}
+                            data={globalKeyQuestionAnalytics}
                             layout="vertical"
                             margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                           >
@@ -1274,8 +1275,7 @@ function InstructorSimulationGroupPage() {
                         </ResponsiveContainer>
                       ) : (
                         <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
-                      );
-                    })()}
+                      )}
                   </div>
 
                   {/* Question Performance Scores — Horizontal Bar */}
