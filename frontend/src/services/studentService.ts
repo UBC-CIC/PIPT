@@ -823,7 +823,18 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
             console.log('[fetchDebrief] extracted summary from nested JSON');
           }
         } catch {
-          // Keep original summary if parse fails
+          // JSON is likely truncated LLM output stuffed into summary by the
+          // backend fallback path. Try to pull the "summary" value out with a
+          // regex so the user sees readable text instead of a raw JSON blob.
+          const m = debrief.summary.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+          if (m) {
+            debrief.summary = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+            console.log('[fetchDebrief] extracted summary via regex from truncated JSON');
+          } else {
+            // Last resort: strip JSON-ish characters so it's at least readable
+            debrief.summary = 'AI debrief summary could not be fully parsed. Please try concluding the session again.';
+            console.log('[fetchDebrief] summary was unparseable JSON, replaced with fallback message');
+          }
         }
       }
 

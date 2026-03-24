@@ -182,11 +182,17 @@ function StudentChatPage() {
     let cancelled = false;
 
     if (routeChatId) {
-      // Resuming an existing session — set the ID and load messages
+      // Resuming an existing session — set the ID and load messages + debrief
       setSessionId(routeChatId);
       studentService.fetchMessages(routeChatId).then((msgs) => {
         if (!cancelled && msgs.length > 0) {
           setMessages(msgs);
+        }
+      });
+      studentService.fetchDebrief(routeChatId).then((data) => {
+        if (!cancelled && data) {
+          setDebriefData(data);
+          setSessionStatus('concluded');
         }
       });
     } else if (!sessionCreationRef.current) {
