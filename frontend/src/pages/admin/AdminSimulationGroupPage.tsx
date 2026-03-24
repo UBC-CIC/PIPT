@@ -203,7 +203,7 @@ function AdminSimulationGroupPage() {
 
   // Load assigned questions from API when rubric or questionBank section is activated
   useEffect(() => {
-    if ((activeSection === 'rubric' || activeSection === 'questionBank') && groupId) {
+    if ((activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient') && groupId) {
       instructorService.getSimulationGroupQuestions(groupId)
         .then((assigned: any[]) => {
           // Map to GlobalRubricQuestion format for the rubric view
@@ -304,16 +304,6 @@ function AdminSimulationGroupPage() {
     navigator.clipboard.writeText(accessCode);
   };
 
-  const handleToggleLLMEvaluation = (patientId: string, currentValue: boolean) => {
-    setManageablePatients(prevPatients => 
-      prevPatients.map(patient => 
-        patient.patient_id === patientId 
-          ? { ...patient, llm_completion: !currentValue }
-          : patient
-      )
-    );
-    mockInstructorDataService.updatePatientLLMEvaluation(patientId, !currentValue);
-  };
 
   const handleDeletePatient = (patientId: string) => {
     if (confirm(`Are you sure you want to delete this ${aiPersonaLabelLower}?`)) {
@@ -873,9 +863,7 @@ function AdminSimulationGroupPage() {
 
   // Reusable accordion for global rubric questions (read-only)
   const renderGlobalRubricAccordion = () => {
-    const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
-    const patientGlobalRubric = mockInstructorDataService.getGlobalRubricQuestions(patientSimGroupId);
-    const filteredGlobalRubric = patientGlobalRubric.filter(q =>
+    const filteredGlobalRubric = globalRubricQuestions.filter(q =>
       q.title.toLowerCase().includes(globalRubricSearchQuery.toLowerCase())
     );
     return (
@@ -1339,29 +1327,17 @@ function AdminSimulationGroupPage() {
               </div>
 
               <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
-                <div className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
-                  {['Patient Name', 'Age', 'Gender', 'LLM Evaluation', 'Actions'].map(h => (
+                <div className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                  {['Patient Name', 'Age', 'Gender', 'Actions'].map(h => (
                     <div key={h} className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>{h}</div>
                   ))}
                 </div>
 
                 {filteredPatients.map((patient) => (
-                  <div key={patient.patient_id} className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4 border-t items-center" style={{ borderColor: UI_COLORS.border.default }}>
+                  <div key={patient.patient_id} className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4 border-t items-center" style={{ borderColor: UI_COLORS.border.default }}>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{patient.patient_name}</div>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{patient.patient_age}</div>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{patient.patient_gender}</div>
-                    <div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={patient.llm_completion}
-                        onClick={() => handleToggleLLMEvaluation(patient.patient_id, patient.llm_completion)}
-                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                        style={{ backgroundColor: patient.llm_completion ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive }}
-                      >
-                        <span className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform" style={{ transform: patient.llm_completion ? 'translateX(22px)' : 'translateX(2px)' }} />
-                      </button>
-                    </div>
                     <div className="flex items-center gap-3">
                       <Button
                         onClick={() => handleEditPatient(patient.patient_id)}

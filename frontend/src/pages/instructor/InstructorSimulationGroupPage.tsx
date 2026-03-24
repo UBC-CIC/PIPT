@@ -198,7 +198,7 @@ function InstructorSimulationGroupPage() {
 
   // Load assigned questions from API when rubric or questionBank section is activated
   useEffect(() => {
-    if ((activeSection === 'rubric' || activeSection === 'questionBank') && groupId) {
+    if ((activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient') && groupId) {
       instructorService.getSimulationGroupQuestions(groupId)
         .then((assigned: any[]) => {
           const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
@@ -309,21 +309,6 @@ function InstructorSimulationGroupPage() {
     navigator.clipboard.writeText(accessCode);
   };
 
-  /**
-   * Handle toggle LLM evaluation for a patient
-   */
-  const handleToggleLLMEvaluation = (patientId: string, currentValue: boolean) => {
-    // Update the state directly with a new array
-    setManageablePatients(prevPatients => 
-      prevPatients.map(patient => 
-        patient.id === patientId 
-          ? { ...patient, llmEvaluationEnabled: !currentValue }
-          : patient
-      )
-    );
-    // Also update the service data for consistency
-    instructorService.updatePatientLLMEvaluation(patientId, !currentValue);
-  };
 
   /**
    * Handle delete patient
@@ -1602,7 +1587,7 @@ function InstructorSimulationGroupPage() {
               {/* Patient Table */}
               <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
                 {/* Table Header */}
-                <div className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+                <div className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
                   <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                     Patient Name
                   </div>
@@ -1613,9 +1598,6 @@ function InstructorSimulationGroupPage() {
                     Gender
                   </div>
                   <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                    LLM Evaluation
-                  </div>
-                  <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                     Actions
                   </div>
                 </div>
@@ -1624,7 +1606,7 @@ function InstructorSimulationGroupPage() {
                 {filteredPatients.map((patient) => (
                   <div 
                     key={patient.id}
-                    className="grid grid-cols-[2fr_1fr_1fr_2fr_2fr] gap-4 px-6 py-4 border-t items-center"
+                    className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4 border-t items-center"
                     style={{ borderColor: UI_COLORS.border.default }}
                   >
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
@@ -1635,25 +1617,6 @@ function InstructorSimulationGroupPage() {
                     </div>
                     <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
                       {patient.gender}
-                    </div>
-                    <div>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={patient.llmEvaluationEnabled}
-                        onClick={() => handleToggleLLMEvaluation(patient.id, patient.llmEvaluationEnabled)}
-                        className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                        style={{ 
-                          backgroundColor: patient.llmEvaluationEnabled ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
-                        }}
-                      >
-                        <span
-                          className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform"
-                          style={{
-                            transform: patient.llmEvaluationEnabled ? 'translateX(22px)' : 'translateX(2px)'
-                          }}
-                        />
-                      </button>
                     </div>
                     <div className="flex items-center gap-3">
                       <Button
@@ -2079,7 +2042,8 @@ function InstructorSimulationGroupPage() {
                   {questionBankTab === 'global' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which global questions should be included in this simulation group's rubric.
+                        Select which global questions should be included in this simulation group's rubric. These are questions
+                        that are saved in the question bank and are visible to be included for all patients in this simulation group.
                       </p>
                       
                       {/* Search Bar */}
@@ -2291,7 +2255,8 @@ function InstructorSimulationGroupPage() {
                   {questionBankTab === 'patientSpecific' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select a patient to manage their patient-specific questions.
+                        Select a patient to manage their patient-specific questions. A patient-specific question
+                        is asked in the context of one particular patient and will depend on the patient's unique details.
                       </p>
                       
                       {/* Patient Selector */}
@@ -3190,9 +3155,7 @@ Return valid JSON in exactly this structure:
 
                         <Accordion type="single" collapsible className="space-y-2">
                           {(() => {
-                            const patientSimGroupId = patientBeingEdited?.simulation_group_id || groupId || '1';
-                            const patientGlobalRubric = instructorService.getGlobalRubricQuestions(patientSimGroupId);
-                            const filteredGlobalRubric = patientGlobalRubric.filter(q =>
+                            const filteredGlobalRubric = globalRubricQuestions.filter(q =>
                               q.title.toLowerCase().includes(globalRubricSearchQuery.toLowerCase())
                             );
                             return filteredGlobalRubric.map((question, index) => (

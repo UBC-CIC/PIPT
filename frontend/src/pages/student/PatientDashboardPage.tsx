@@ -375,7 +375,7 @@ function PatientDashboardPage() {
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                       >
                         <td className="px-6 py-4" style={{ color: UI_COLORS.text.heading }}>{chat.name}</td>
-                        <td className="px-6 py-4 text-center" style={{ color: UI_COLORS.text.body }}>{chat.completionStatus}</td>
+                        <td className="px-6 py-4 text-center" style={{ color: UI_COLORS.text.body }}>{chat.completionStatus === 'Complete' ? 'Debrief Reached' : chat.completionStatus}</td>
                         <td className="px-6 py-4 text-center">
                           <button
                             onClick={(e) => handleDeleteSession(e, chat.id)}
