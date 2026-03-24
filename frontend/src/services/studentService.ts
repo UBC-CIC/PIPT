@@ -711,69 +711,85 @@ function deepParseJson(value: unknown): Record<string, any> | null {
  */
 async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
   try {
-    const data = await apiClient.request<{ generated_text: any }>(
-      `student/get_debrief?session_id=${encodeURIComponent(sessionId)}`
-    );
-    if (!data?.generated_text) return null;
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
 
-    // Robustly extract the debrief object from generated_text.
-    // It may be: a JSON string, a double-encoded JSON string, or an already-parsed object.
-    const raw = data.generated_text;
-    let debrief = deepParseJson(raw);
+    // Retry to handle async debrief generation delay
+    const maxAttempts = 6;
+    const baseDelayMs = 400;
 
-    if (!debrief || typeof debrief !== 'object') return null;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
+        `student/get_debrief?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}`
+      );
 
-    // Safety net: the backend may have stuffed the entire LLM JSON output
-    // as a string inside the "summary" field.
-    if (
-      debrief.summary &&
-      typeof debrief.summary === 'string' &&
-      debrief.summary.trimStart().startsWith('{')
-    ) {
-      try {
+      // If backend says it's still generating, wait and retry
+      if (data?.status === 'generating') {
+        const delay = baseDelayMs * Math.pow(2, attempt);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        continue;
+      }
+
+      if (!data?.generated_text) return null;
+
+      // Robustly extract the debrief object from generated_text.
+      const raw = data.generated_text;
+      let debrief = deepParseJson(raw);
+
+      if (!debrief || typeof debrief !== 'object') return null;
+
+      // Safety net: the backend may have stuffed the entire LLM JSON output
+      // as a string inside the "summary" field.
+      if (
+        debrief.summary &&
+        typeof debrief.summary === 'string' &&
+        debrief.summary.trimStart().startsWith('{')
+      ) {
         const inner = deepParseJson(debrief.summary);
         if (inner && typeof inner === 'object' && inner.summary) {
           debrief = inner;
         }
-      } catch { /* keep original parsed */ }
+      }
+
+      const addressedQuestions = (debrief.questions_addressed || []).map(
+        (q: string | { question_text?: string }) =>
+          typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+      );
+      const missedQuestions = (debrief.questions_missed || []).map(
+        (q: string | { question_text?: string }) =>
+          typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+      );
+
+      return {
+        summary: typeof debrief.summary === 'string' ? debrief.summary : '',
+        questionsAddressed: addressedQuestions,
+        missedKeyQuestionsCount: missedQuestions.length,
+        missedQuestions: missedQuestions,
+        missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
+        overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+        recommendationFeedback: {
+          strengths: debrief.recommendation_feedback?.strengths || [],
+          areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
+        },
+        suggestedRewrites: (debrief.suggested_rewrites || []).map(
+          (r: { original_message?: string; suggested_rewrite?: string }) => ({
+            original: r.original_message || '',
+            suggested: r.suggested_rewrite || '',
+          })
+        ),
+        rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+        answerKeyComparison: debrief.answer_key_comparison ? {
+          answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
+          correctElements: debrief.answer_key_comparison.correct_elements,
+          missingElements: debrief.answer_key_comparison.missing_elements,
+          incorrectElements: debrief.answer_key_comparison.incorrect_elements,
+          overallAlignment: debrief.answer_key_comparison.overall_alignment,
+        } : undefined,
+      };
     }
 
-    // questions_addressed may be strings or objects with question_text
-    const addressedQuestions = (debrief.questions_addressed || []).map(
-      (q: string | { question_text?: string }) =>
-        typeof q === 'string' ? q : (q.question_text || 'Unknown question')
-    );
-    const missedQuestions = (debrief.questions_missed || []).map(
-      (q: string | { question_text?: string }) =>
-        typeof q === 'string' ? q : (q.question_text || 'Unknown question')
-    );
-
-    return {
-      summary: typeof debrief.summary === 'string' ? debrief.summary : '',
-      questionsAddressed: addressedQuestions,
-      missedKeyQuestionsCount: missedQuestions.length,
-      missedQuestions: missedQuestions,
-      missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
-      overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
-      recommendationFeedback: {
-        strengths: debrief.recommendation_feedback?.strengths || [],
-        areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
-      },
-      suggestedRewrites: (debrief.suggested_rewrites || []).map(
-        (r: { original_message?: string; suggested_rewrite?: string }) => ({
-          original: r.original_message || '',
-          suggested: r.suggested_rewrite || '',
-        })
-      ),
-      rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
-      answerKeyComparison: debrief.answer_key_comparison ? {
-        answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
-        correctElements: debrief.answer_key_comparison.correct_elements,
-        missingElements: debrief.answer_key_comparison.missing_elements,
-        incorrectElements: debrief.answer_key_comparison.incorrect_elements,
-        overallAlignment: debrief.answer_key_comparison.overall_alignment,
-      } : undefined,
-    };
+    // If we exhausted retries, treat as not available yet
+    return null;
   } catch (error) {
     console.error('Failed to fetch debrief:', error);
     return null;
