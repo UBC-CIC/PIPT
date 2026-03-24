@@ -737,7 +737,7 @@ function extractJsonObjectFromText(text: string): Record<string, any> | null {
 /**
  * Fetch AI debrief for a concluded session via GET /student/get_debrief.
  */
-async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
+export async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
   try {
     const user = await authService.getCurrentUser();
     if (!user?.email) throw new Error('Not authenticated');
@@ -776,8 +776,6 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
 
       let raw = data.generated_text;
 
-      // ✅ NEW: If raw is a string (backend returned JSON string instead of object),
-      // treat it as raw debrief JSON. Otherwise use it directly.
       if (typeof raw === 'string') {
         console.log('[fetchDebrief] generated_text is a string, will parse');
       } else {
@@ -800,38 +798,55 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         return null;
       }
 
-      // ✅ NEW: If summary is JSON string, try extraction
+      // Check if summary contains '{' instead of strictly starting with it
       if (
         debrief.summary &&
         typeof debrief.summary === 'string' &&
-        debrief.summary.trimStart().startsWith('{')
+        debrief.summary.includes('{')
       ) {
-        console.log('[fetchDebrief] summary starts with { -> attempting to extract');
-        const extracted = extractJsonObjectFromText(debrief.summary);
-        if (extracted && typeof extracted === 'object' && extracted.summary) {
-          debrief = extracted as Record<string, any>;
+        console.log('[fetchDebrief] summary contains { -> attempting to extract');
+        
+        let extracted = extractJsonObjectFromText(debrief.summary);
+        
+        // Robust fallback: if standard extraction failed, forcefully pull from first { to last }
+        if (!extracted) {
+          const firstBrace = debrief.summary.indexOf('{');
+          const lastBrace = debrief.summary.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            try {
+              extracted = JSON.parse(debrief.summary.substring(firstBrace, lastBrace + 1));
+            } catch (e) {
+              console.warn('[fetchDebrief] Robust fallback extraction failed', e);
+            }
+          }
+        }
+
+        if (extracted && typeof extracted === 'object') {
+          // If the extracted object itself wraps everything under a "summary" key or similar,
+          // we merge/replace it. We assume it contains the full debrief object.
+          debrief = { ...debrief, ...extracted } as Record<string, any>;
           console.log('[fetchDebrief] replaced debrief with extracted JSON from summary');
         }
       }
 
-      // ✅ NEW: If summary is STILL JSON, try JSON.parse
-      if (typeof debrief.summary === 'string' && debrief.summary.trim().startsWith('{')) {
+      // Final fallback if summary somehow remains a JSON string with leading/trailing spaces
+      if (typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
         try {
-          const summaryObj = JSON.parse(debrief.summary);
-          if (typeof summaryObj.summary === 'string') {
-            debrief.summary = summaryObj.summary;
-            console.log('[fetchDebrief] extracted summary from nested JSON');
+          const firstBrace = debrief.summary.indexOf('{');
+          const lastBrace = debrief.summary.lastIndexOf('}');
+          if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+            const summaryObj = JSON.parse(debrief.summary.substring(firstBrace, lastBrace + 1));
+            if (summaryObj.summary) {
+              debrief.summary = summaryObj.summary;
+            }
           }
-        } catch {
-          // JSON is likely truncated LLM output stuffed into summary by the
-          // backend fallback path. Try to pull the "summary" value out with a
-          // regex so the user sees readable text instead of a raw JSON blob.
-          const m = debrief.summary.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        } catch (e) {
+          console.warn('[fetchDebrief] could not parse summary as JSON, extracting text', e);
+          const m = debrief.summary.match(/"summary"\s*:\s*"([^"]+)"/);
           if (m) {
             debrief.summary = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
             console.log('[fetchDebrief] extracted summary via regex from truncated JSON');
           } else {
-            // Last resort: strip JSON-ish characters so it's at least readable
             debrief.summary = 'AI debrief summary could not be fully parsed. Please try concluding the session again.';
             console.log('[fetchDebrief] summary was unparseable JSON, replaced with fallback message');
           }
