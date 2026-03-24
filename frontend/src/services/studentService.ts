@@ -744,7 +744,6 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
 
     console.log('[fetchDebrief] start', { sessionId, email: user.email });
 
-    // Retry to handle async debrief generation delay
     const maxAttempts = 6;
     const baseDelayMs = 400;
 
@@ -763,7 +762,6 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         generatedTextType: typeof data?.generated_text,
       });
 
-      // If backend says it's still generating, wait and retry
       if (data?.status === 'generating') {
         const delay = baseDelayMs * Math.pow(2, attempt);
         console.log('[fetchDebrief] generating -> retrying after delay', { delayMs: delay, attempt: attempt + 1 });
@@ -776,15 +774,17 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         return null;
       }
 
-      // Robustly extract the debrief object from generated_text.
-      const raw = data.generated_text;
+      let raw = data.generated_text;
 
-      // Log a short preview for debugging
-      const rawPreview =
-        typeof raw === 'string'
-          ? raw.slice(0, 200)
-          : JSON.stringify(raw).slice(0, 200);
+      // ✅ NEW: If raw is a string (backend returned JSON string instead of object),
+      // treat it as raw debrief JSON. Otherwise use it directly.
+      if (typeof raw === 'string') {
+        console.log('[fetchDebrief] generated_text is a string, will parse');
+      } else {
+        console.log('[fetchDebrief] generated_text is already an object');
+      }
 
+      const rawPreview = typeof raw === 'string' ? raw.slice(0, 200) : JSON.stringify(raw).slice(0, 200);
       console.log('[fetchDebrief] raw generated_text preview', rawPreview);
 
       let debrief = deepParseJson(raw);
@@ -793,10 +793,6 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         parsed: Boolean(debrief),
         keys: debrief ? Object.keys(debrief).slice(0, 20) : [],
         summaryType: debrief ? typeof debrief.summary : undefined,
-        summaryPreview:
-          debrief && typeof debrief.summary === 'string'
-            ? debrief.summary.slice(0, 200)
-            : undefined,
       });
 
       if (!debrief || typeof debrief !== 'object') {
@@ -804,54 +800,33 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         return null;
       }
 
-      // Safety net #1: summary is *itself* JSON (starts with '{')
+      // ✅ NEW: If summary is JSON string, try extraction
       if (
         debrief.summary &&
         typeof debrief.summary === 'string' &&
         debrief.summary.trimStart().startsWith('{')
       ) {
-        console.log('[fetchDebrief] summary starts with { -> attempting to parse inner JSON');
-        const inner = deepParseJson(debrief.summary);
-        console.log('[fetchDebrief] inner-from-summary parse result', {
-          parsed: Boolean(inner),
-          keys: inner ? Object.keys(inner).slice(0, 20) : [],
-        });
-        if (inner && typeof inner === 'object') {
-          debrief = inner;
-          console.log('[fetchDebrief] replaced debrief with inner summary JSON');
+        console.log('[fetchDebrief] summary starts with { -> attempting to extract');
+        const extracted = extractJsonObjectFromText(debrief.summary);
+        if (extracted && typeof extracted === 'object' && extracted.summary) {
+          debrief = extracted as Record<string, any>;
+          console.log('[fetchDebrief] replaced debrief with extracted JSON from summary');
         }
       }
 
-      // Safety net #2: summary contains embedded JSON later in the string (e.g. "Interview Summary\n{...}")
-      if (typeof debrief.summary === 'string') {
-        const maybeInner = extractJsonObjectFromText(debrief.summary);
-        console.log('[fetchDebrief] extractJsonObjectFromText(summary) result', {
-          parsed: Boolean(maybeInner),
-          keys: maybeInner ? Object.keys(maybeInner).slice(0, 20) : [],
-          summaryPreview:
-            maybeInner && typeof maybeInner.summary === 'string'
-              ? maybeInner.summary.slice(0, 200)
-              : undefined,
-        });
-        if (maybeInner?.summary) {
-          debrief = maybeInner;
-          console.log('[fetchDebrief] replaced debrief with extracted JSON from summary string');
-        }
-      }
-
-      // After safety net #2 parsing, if summary is STILL JSON, try to extract it.
+      // ✅ NEW: If summary is STILL JSON, try JSON.parse
       if (typeof debrief.summary === 'string' && debrief.summary.trim().startsWith('{')) {
         try {
           const summaryObj = JSON.parse(debrief.summary);
           if (typeof summaryObj.summary === 'string') {
             debrief.summary = summaryObj.summary;
+            console.log('[fetchDebrief] extracted summary from nested JSON');
           }
         } catch {
-          // keeping original summary if parse fails
+          // Keep original summary if parse fails
         }
       }
 
-      // Now compute mapped fields (do this AFTER possible replacements above)
       const addressedQuestions = (debrief.questions_addressed || []).map(
         (q: string | { question_text?: string }) =>
           typeof q === 'string' ? q : (q.question_text || 'Unknown question')
@@ -888,11 +863,10 @@ async function fetchDebrief(sessionId: string): Promise<AIDebriefData | null> {
         } : undefined,
       };
 
-      console.log('[fetchDebrief] mapped result summary preview', {
+      console.log('[fetchDebrief] mapped result', {
         summaryPreview: mapped.summary.slice(0, 200),
         addressedCount: mapped.questionsAddressed.length,
         missedCount: mapped.missedQuestions.length,
-        overallScore: mapped.overallScore,
       });
 
       return mapped;

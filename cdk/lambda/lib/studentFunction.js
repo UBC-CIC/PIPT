@@ -1395,9 +1395,22 @@ exports.handler = async (event, context) => {
             }
 
             if (debriefRow) {
+              let parsedDebrief = debriefRow.generated_text;
+              // If it's a string, parse it
+              if (typeof parsedDebrief === 'string') {
+                try {
+                  parsedDebrief = JSON.parse(parsedDebrief);
+                } catch (parseErr) {
+                  logger.error("Failed to parse debrief JSON from DB", { 
+                    error: parseErr.message,
+                    raw: parsedDebrief.substring(0, 200)
+                  });
+                  // Return unparsed if parse fails — let frontend handle it
+                }
+              }
               response.statusCode = 200;
               response.body = JSON.stringify({
-                generated_text: debriefRow.generated_text,
+                generated_text:parsedDebrief, // no double encoding
                 status: "complete",
               });
             } else {
