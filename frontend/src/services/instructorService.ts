@@ -661,7 +661,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
       access_code: group.group_access_code || '',
       student_count: group.student_count || 0,
       instructor_count: group.instructor_count || 0,
-      patient_count: group.patient_count || 0,
+      patient_count: group.persona_count || 0,
       organization_id: group.organization_id || '',
     }));
   } catch (error) {

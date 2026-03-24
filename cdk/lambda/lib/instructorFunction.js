@@ -153,11 +153,31 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Query to get all simulation groups where the instructor is enrolled
+            // Query to get all simulation groups where the instructor is enrolled, with counts
             const data = await sqlConnection`
-                SELECT g.*
+                SELECT g.*,
+                  COALESCE(pc.persona_count, 0)::int AS persona_count,
+                  COALESCE(sc.student_count, 0)::int AS student_count,
+                  COALESCE(ic.instructor_count, 0)::int AS instructor_count
                 FROM "enrollments" e
                 JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS persona_count
+                  FROM "personas"
+                  GROUP BY simulation_group_id
+                ) pc ON pc.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS student_count
+                  FROM "enrollments"
+                  WHERE enrollment_type = 'student'
+                  GROUP BY simulation_group_id
+                ) sc ON sc.simulation_group_id = g.simulation_group_id
+                LEFT JOIN (
+                  SELECT simulation_group_id, COUNT(*) AS instructor_count
+                  FROM "enrollments"
+                  WHERE enrollment_type = 'instructor'
+                  GROUP BY simulation_group_id
+                ) ic ON ic.simulation_group_id = g.simulation_group_id
                 WHERE e.user_id = ${userId}
                 AND e.enrollment_type = 'instructor'
                 ORDER BY g.group_name, g.simulation_group_id;
