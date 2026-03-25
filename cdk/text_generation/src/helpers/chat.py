@@ -74,7 +74,7 @@ def get_bedrock_llm(
     
     base_kwargs = {
         "model_id": bedrock_llm_id,
-        "model_kwargs": dict(temperature=temperature, max_tokens=8192),
+        "model_kwargs": dict(temperature=temperature),
         "streaming": streaming,
         "region_name": region
     }
@@ -1870,67 +1870,16 @@ The following is the instructor's answer key for this simulation case. Compare t
             return {"error": f"LLM call failed: {str(e)}"}
 
     if debrief_data is None:
-        logger.error("All debrief LLM attempts failed to produce valid JSON — attempting partial extraction")
-
-        # Try to salvage partial data from truncated JSON by closing open brackets/braces
-        partial_data = None
-        try:
-            cleaned = raw_output.strip()
-            cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
-            cleaned = re.sub(r'\n?\s*```\s*$', '', cleaned)
-            cleaned = cleaned.strip()
-            first_brace = cleaned.find('{')
-            if first_brace != -1:
-                json_str = cleaned[first_brace:]
-                # Truncate to last complete value boundary and try to close brackets
-                for cut_pattern in ['",', '"],', '},', '],']:
-                    cut_idx = json_str.rfind(cut_pattern)
-                    if cut_idx > 0:
-                        candidate = json_str[:cut_idx + len(cut_pattern)]
-                        # Count open brackets for the truncated version
-                        ob, osb = 0, 0
-                        ins, esc = False, False
-                        for ch in candidate:
-                            if esc:
-                                esc = False
-                                continue
-                            if ch == '\\':
-                                esc = True
-                                continue
-                            if ch == '"':
-                                ins = not ins
-                                continue
-                            if ins:
-                                continue
-                            if ch == '{': ob += 1
-                            elif ch == '}': ob -= 1
-                            elif ch == '[': osb += 1
-                            elif ch == ']': osb -= 1
-                        suffix = ']' * max(0, osb) + '}' * max(0, ob)
-                        try:
-                            partial_data = json.loads(candidate + suffix)
-                            if isinstance(partial_data, dict) and partial_data.get("summary"):
-                                logger.info("📋 Successfully extracted partial debrief from truncated JSON")
-                                break
-                            partial_data = None
-                        except json.JSONDecodeError:
-                            partial_data = None
-        except Exception as repair_err:
-            logger.error(f"Partial JSON extraction failed: {repair_err}")
-
-        if partial_data and isinstance(partial_data, dict):
-            debrief_data = partial_data
-        else:
-            logger.error("Partial extraction also failed — using empty fallback")
-            debrief_data = {
-                "summary": "The AI debrief could not be fully generated. Please try concluding the session again.",
-                "questions_addressed": [],
-                "questions_missed": [],
-                "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
-                "reasoning_gaps": "",
-                "overall_score": 0.0,
-                "suggested_rewrites": [],
-            }
+        logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
+        debrief_data = {
+            "summary": raw_output,
+            "questions_addressed": [],
+            "questions_missed": [],
+            "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+            "reasoning_gaps": "",
+            "overall_score": 0.0,
+            "suggested_rewrites": [],
+        }
 
     # 4b. Validate and repair the debrief output schema
     debrief_data = validate_debrief_output(debrief_data, answer_key_provided=bool(answer_key_text))
