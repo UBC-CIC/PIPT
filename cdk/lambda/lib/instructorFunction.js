@@ -1807,6 +1807,96 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /instructor/get_debrief":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.session_id &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const sessionId = event.queryStringParameters.session_id;
+          const simulationGroupId = event.queryStringParameters.simulation_group_id;
+
+          try {
+            // Verify the chat belongs to a student in this instructor's simulation group
+            const accessCheck = await sqlConnection`
+              SELECT c.chat_id
+              FROM "chats" c
+              JOIN "student_interactions" si
+                ON c.student_interaction_id = si.student_interaction_id
+              JOIN "enrollments" e
+                ON si.enrollment_id = e.enrollment_id
+              WHERE c.chat_id = ${sessionId}
+                AND e.simulation_group_id = ${simulationGroupId}
+              LIMIT 1;
+            `;
+
+            if (accessCheck.length === 0) {
+              response.statusCode = 403;
+              response.body = JSON.stringify({
+                error: "Forbidden: chat not found in this simulation group.",
+              });
+              break;
+            }
+
+            // Retry for race condition (debrief inserted async after conclude)
+            const maxRetries = 6;
+            const baseDelayMs = 300;
+            let debriefRow = null;
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              const debriefData = await sqlConnection`
+                SELECT generated_text
+                FROM "debriefs"
+                WHERE chat_id = ${sessionId}
+                ORDER BY created_at DESC
+                LIMIT 1;
+              `;
+
+              if (debriefData.length > 0) {
+                debriefRow = debriefData[0];
+                break;
+              }
+
+              const delay = baseDelayMs * Math.pow(2, attempt);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            if (debriefRow) {
+              let parsedDebrief = debriefRow.generated_text;
+              if (typeof parsedDebrief === 'string') {
+                try {
+                  parsedDebrief = JSON.parse(parsedDebrief);
+                } catch (parseErr) {
+                  logger.error("Failed to parse debrief JSON from DB", {
+                    error: parseErr.message,
+                    raw: parsedDebrief.substring(0, 200)
+                  });
+                }
+              }
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                generated_text: parsedDebrief,
+                status: "complete",
+              });
+            } else {
+              response.statusCode = 202;
+              response.body = JSON.stringify({
+                status: "generating",
+                error: "Debrief is still being generated. Please try again shortly.",
+              });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "session_id and simulation_group_id are required",
+          });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

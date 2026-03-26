@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
-import { studentService, type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -931,7 +931,7 @@ function InstructorSimulationGroupPage() {
   const handleViewAIDebrief = async (attemptId: string) => {
     setIsFetchingDebrief(attemptId);
     try {
-      const data = await studentService.fetchDebrief(attemptId);
+      const data = await instructorService.fetchDebrief(attemptId, groupId || '');
       if (data) {
         setSelectedDebriefData(data);
         setIsAIDebriefOpen(true);

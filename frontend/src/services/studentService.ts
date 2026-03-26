@@ -677,7 +677,7 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
  * Recursively unwrap a value that may be a JSON string (possibly multi-encoded)
  * or an object. Returns a plain object or null.
  */
-function deepParseJson(value: unknown): Record<string, any> | null {
+export function deepParseJson(value: unknown): Record<string, any> | null {
   const MAX_DEPTH = 5;
   let current: unknown = value;
   for (let i = 0; i < MAX_DEPTH; i++) {
@@ -728,7 +728,7 @@ function deepParseJson(value: unknown): Record<string, any> | null {
  * Tries direct parse first, then progressively repairs truncated JSON
  * by closing open brackets/braces.
  */
-function extractDebriefFromRawJson(raw: string): Record<string, any> | null {
+export function extractDebriefFromRawJson(raw: string): Record<string, any> | null {
   try {
     const obj = JSON.parse(raw);
     if (obj && typeof obj === 'object' && obj.summary) return obj;
