@@ -70,7 +70,18 @@ function AdminQuestionBankPage() {
           getQuestionBankQuestions(organizationId || ''),
           getOrganization(organizationId || '').catch(() => null),
         ]);
-        setGlobalBankQuestions(questions);
+        // Split questions by tags: patient_specific vs global
+        const global: QuestionBankItem[] = [];
+        const patientSpecific: QuestionBankItem[] = [];
+        for (const q of questions) {
+          if (q.tags?.includes('patient_specific')) {
+            patientSpecific.push(q);
+          } else {
+            global.push(q);
+          }
+        }
+        setGlobalBankQuestions(global);
+        setPatientSpecificBankQuestions(patientSpecific);
         if (org) setOrganization(org);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load question bank');
@@ -89,6 +100,15 @@ function AdminQuestionBankPage() {
   const filteredPatientQuestions = patientSpecificBankQuestions.filter(q =>
     q.title.toLowerCase().includes(patientQuestionSearchQuery.toLowerCase())
   );
+
+  // Collect all unique tags from existing questions for autocomplete
+  const allExistingTags = Array.from(
+    new Set(
+      [...globalBankQuestions, ...patientSpecificBankQuestions]
+        .flatMap(q => q.tags || [])
+        .filter(t => t !== 'patient_specific')
+    )
+  ).sort();
   
   // Pagination calculations
   const globalTotalPages = Math.ceil(filteredGlobalQuestions.length / globalPagination.itemsPerPage);
@@ -133,6 +153,7 @@ function AdminQuestionBankPage() {
     clinicalIntent: string;
     evaluationCriteria: string;
     required: boolean;
+    tags?: string[];
   }) => {
     try {
       setError(null);
@@ -143,6 +164,7 @@ function AdminQuestionBankPage() {
           question_text: question.keyQuestion,
           evaluation_criteria: question.evaluationCriteria,
           is_mandatory: question.required,
+          tags: question.tags || [],
         }
       );
       setGlobalBankQuestions(prev => [...prev, created]);
@@ -151,27 +173,30 @@ function AdminQuestionBankPage() {
     }
   };
   
-  const handleSaveNewPatientQuestion = (question: {
+  const handleSaveNewPatientQuestion = async (question: {
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
     evaluationCriteria: string;
     required: boolean;
+    tags?: string[];
   }) => {
-    const newQuestionId = `bank-patient-${Date.now()}`;
-    const newBankQuestion: QuestionBankItem = { 
-      id: newQuestionId, 
-      title: question.title,
-      questionText: question.keyQuestion,
-      clinicalIntent: question.clinicalIntent,
-      evaluationCriteria: question.evaluationCriteria,
-      isMandatory: question.required,
-      isActive: true,
-      usedBySimulationGroups: [],
-      usedByPatients: []
-    };
-    
-    setPatientSpecificBankQuestions(prev => [...prev, newBankQuestion]);
+    try {
+      setError(null);
+      const created = await createQuestionBankQuestion(
+        organizationId || '',
+        {
+          title: question.title,
+          question_text: question.keyQuestion,
+          evaluation_criteria: question.evaluationCriteria,
+          is_mandatory: question.required,
+          tags: ['patient_specific', ...(question.tags || [])],
+        }
+      );
+      setPatientSpecificBankQuestions(prev => [...prev, created]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create patient-specific question');
+    }
   };
   
   const handleDeleteQuestion = async () => {
@@ -391,6 +416,22 @@ function AdminQuestionBankPage() {
                                 {question.isMandatory ? 'Required' : 'Optional'}
                               </span>
                             </div>
+                            {question.tags && question.tags.length > 0 && (
+                            <div>
+                              <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
+                              <div className="flex flex-wrap gap-1">
+                                {question.tags.map(tag => (
+                                  <span
+                                    key={tag}
+                                    className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            )}
                           </div>
                         </AccordionContent>
                       </AccordionItem>
@@ -579,6 +620,22 @@ function AdminQuestionBankPage() {
                                 {question.isMandatory ? 'Required' : 'Optional'}
                               </span>
                             </div>
+                            {question.tags && question.tags.filter(t => t !== 'patient_specific').length > 0 && (
+                            <div>
+                              <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
+                              <div className="flex flex-wrap gap-1">
+                                {question.tags.filter(t => t !== 'patient_specific').map(tag => (
+                                  <span
+                                    key={tag}
+                                    className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                                  >
+                                    {tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            )}
                           </div>
                         </AccordionContent>
                       </AccordionItem>
@@ -652,6 +709,7 @@ function AdminQuestionBankPage() {
         open={isAddQuestionDialogOpen}
         onOpenChange={setIsAddQuestionDialogOpen}
         questionType="global"
+        existingTags={allExistingTags}
         onSave={handleSaveNewQuestion}
       />
       

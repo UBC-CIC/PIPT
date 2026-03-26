@@ -58,15 +58,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// Role-based dashboard redirect
+// Role-based dashboard redirect (admin > instructor > student)
 function DashboardRedirect() {
   const { user } = useAuth();
   
-  // Redirect based on user role
-  if (user?.groups.includes('instructor')) {
-    return <Navigate to="/instructor" replace />;
-  } else if (user?.groups.includes('admin')) {
+  if (user?.groups.includes('admin')) {
     return <Navigate to="/admin" replace />;
+  } else if (user?.groups.includes('instructor')) {
+    return <Navigate to="/instructor" replace />;
   }
   
   // Default to student dashboard

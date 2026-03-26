@@ -1070,7 +1070,7 @@ exports.handler = async (event, context) => {
               break;
             }
             const created_by = userLookup[0].user_id;
-            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
 
             if (!title || !question_text || !evaluation_criteria) {
               response.statusCode = 400;
@@ -1078,17 +1078,20 @@ exports.handler = async (event, context) => {
               break;
             }
 
+            const safeTags = Array.isArray(tags) ? tags : [];
+
             const newQuestion = await sqlConnectionTableCreator`
               INSERT INTO "question_bank" (
                 organization_id, created_by, title, question_text, evaluation_criteria,
-                category, difficulty_level, is_mandatory, weight, max_score
+                category, difficulty_level, is_mandatory, weight, max_score, tags
               )
               VALUES (
                 ${organization_id}, ${created_by}, ${title}, ${question_text}, ${evaluation_criteria},
                 ${category || null}, ${difficulty_level || null},
                 ${is_mandatory !== undefined ? is_mandatory : false},
                 ${weight !== undefined ? weight : 1.0},
-                ${max_score !== undefined ? max_score : 100}
+                ${max_score !== undefined ? max_score : 100},
+                ${safeTags}
               )
               RETURNING *;
             `;
@@ -1113,7 +1116,7 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { question_id } = event.queryStringParameters;
-            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
 
             const updated = await sqlConnectionTableCreator`
               UPDATE "question_bank"
@@ -1125,7 +1128,8 @@ exports.handler = async (event, context) => {
                 difficulty_level = COALESCE(${difficulty_level !== undefined ? difficulty_level : null}, difficulty_level),
                 is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory),
                 weight = COALESCE(${weight !== undefined ? weight : null}, weight),
-                max_score = COALESCE(${max_score !== undefined ? max_score : null}, max_score)
+                max_score = COALESCE(${max_score !== undefined ? max_score : null}, max_score),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags)
               WHERE question_id = ${question_id}
               RETURNING *;
             `;
@@ -1155,8 +1159,7 @@ exports.handler = async (event, context) => {
             const { question_id } = event.queryStringParameters;
 
             const updated = await sqlConnectionTableCreator`
-              UPDATE "question_bank"
-              SET is_active = false
+              DELETE FROM "question_bank"
               WHERE question_id = ${question_id}
               RETURNING question_id;
             `;

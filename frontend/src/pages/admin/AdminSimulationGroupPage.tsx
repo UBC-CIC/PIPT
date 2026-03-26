@@ -5,7 +5,7 @@ import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -65,10 +65,33 @@ function AdminSimulationGroupPage() {
   const [isAddInstructorDialogOpen, setIsAddInstructorDialogOpen] = useState(false);
   const [addQuestionType, setAddQuestionType] = useState<'global' | 'patientSpecific'>('global');
   const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
+  const [questionBankSearchQuery, setQuestionBankSearchQuery] = useState('');
+  const [questionBankTagFilter, setQuestionBankTagFilter] = useState<string>('');
   
   // Question Bank questions - loaded from service
   const [globalBankQuestions, setGlobalBankQuestions] = useState<QuestionBankItem[]>([]);
   const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState<QuestionBankItem[]>([]);
+
+  // Collect all unique tags from existing questions for autocomplete
+  const allExistingTags = Array.from(
+    new Set(
+      [...globalBankQuestions, ...patientSpecificBankQuestions]
+        .flatMap(q => q.tags || [])
+        .filter(t => t !== 'patient_specific')
+    )
+  ).sort();
+
+  // Filter question bank questions by search query and tag
+  const filteredGlobalBankQuestions = globalBankQuestions.filter(q => {
+    const matchesSearch = !questionBankSearchQuery || q.title.toLowerCase().includes(questionBankSearchQuery.toLowerCase());
+    const matchesTag = !questionBankTagFilter || (q.tags || []).includes(questionBankTagFilter);
+    return matchesSearch && matchesTag;
+  });
+  const filteredPatientBankQuestions = patientSpecificBankQuestions.filter(q => {
+    const matchesSearch = !questionBankSearchQuery || q.title.toLowerCase().includes(questionBankSearchQuery.toLowerCase());
+    const matchesTag = !questionBankTagFilter || (q.tags || []).includes(questionBankTagFilter);
+    return matchesSearch && matchesTag;
+  });
   
   // Case-Specific Key Questions state
   const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() => 
@@ -143,22 +166,54 @@ function AdminSimulationGroupPage() {
       if (!groupId) return;
       
       try {
-        const [groupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData] = await Promise.all([
-          instructorService.getSimulationGroup(groupId),
-          instructorService.getPatientAnalytics(groupId),
-          instructorService.getStudents(groupId),
-          instructorService.getManageablePatients(groupId),
-          Promise.resolve(instructorService.getGlobalQuestionBank()),
+        // Load each data source independently so one failure doesn't block the rest
+        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData] = await Promise.all([
+          adminApi.getSimulationGroup(groupId).catch(err => { console.error('Failed to load group:', err); return undefined; }),
+          instructorService.getPatientAnalytics(groupId).catch(err => { console.error('Failed to load analytics:', err); return [] as PatientAnalytics[]; }),
+          instructorService.getStudents(groupId).catch(err => { console.error('Failed to load students:', err); return [] as Student[]; }),
+          instructorService.getManageablePatients(groupId).catch(err => { console.error('Failed to load patients:', err); return [] as ManageablePatient[]; }),
+          organizationId
+            ? adminApi.getQuestionBankQuestions(organizationId).catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; })
+            : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
-          instructorService.getKeyQuestionAnalytics(groupId),
+          instructorService.getKeyQuestionAnalytics(groupId).catch(err => { console.error('Failed to load key question analytics:', err); return [] as KeyQuestionAnalytics[]; }),
         ]);
+
+        // Map admin API shape to InstructorSimulationGroup
+        const groupData = adminGroupData ? {
+          simulation_group_id: adminGroupData.simulation_group_id,
+          name: adminGroupData.group_name,
+          subtitle: adminGroupData.group_description || 'Simulation Group',
+          access_code: adminGroupData.group_access_code || '',
+          student_count: adminGroupData.student_count || 0,
+          instructor_count: adminGroupData.instructor_count || 0,
+          patient_count: adminGroupData.persona_count || 0,
+          organization_id: adminGroupData.organization_id || '',
+        } as InstructorSimulationGroup : undefined;
         
         setSimulationGroup(groupData);
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
-        setGlobalBankQuestions(bankGlobal);
-        setPatientSpecificBankQuestions(bankPatient);
+
+        // Split questions by tags: patient_specific vs global
+        if (organizationId) {
+          const global: QuestionBankItem[] = [];
+          const patientSpecific: QuestionBankItem[] = [];
+          for (const q of bankGlobal) {
+            if (q.tags?.includes('patient_specific')) {
+              patientSpecific.push(q);
+            } else {
+              global.push(q);
+            }
+          }
+          setGlobalBankQuestions(global);
+          setPatientSpecificBankQuestions(patientSpecific);
+        } else {
+          setGlobalBankQuestions(bankGlobal);
+          setPatientSpecificBankQuestions(bankPatient);
+        }
+
         setGlobalKeyQuestionAnalytics(keyQuestionData);
         
         // Set initial selected patient if analytics available
@@ -206,8 +261,9 @@ function AdminSimulationGroupPage() {
     if ((activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient') && groupId) {
       instructorService.getSimulationGroupQuestions(groupId)
         .then((assigned: any[]) => {
-          // Map to GlobalRubricQuestion format for the rubric view
-          const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
+          // Filter to only global questions (no persona_id) for the global rubric view
+          const globalAssigned = assigned.filter((q: any) => !q.persona_id);
+          const rubricQuestions: GlobalRubricQuestion[] = globalAssigned.map((q: any) => ({
             id: q.question_id,
             title: q.title || '',
             keyQuestion: q.question_text || '',
@@ -216,7 +272,10 @@ function AdminSimulationGroupPage() {
             required: q.is_mandatory ?? false,
           }));
           setGlobalRubricQuestions(rubricQuestions);
-          setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          // Only update includedQuestionIds for rubric/questionBank (not editPatient, which handles its own)
+          if (activeSection !== 'editPatient') {
+            setIncludedQuestionIds(new Set(globalAssigned.map((q: any) => q.question_id)));
+          }
           if (rubricQuestions.length > 0 && !selectedQuestionId) {
             setSelectedQuestionId(rubricQuestions[0].id);
           }
@@ -324,12 +383,28 @@ function AdminSimulationGroupPage() {
       setEditPatientPrompt(patient.patient_prompt || instructorService.getDefaultPatientPrompt());
       setEditPatientTab('info');
       
-      const questions = mockInstructorDataService.getCaseSpecificQuestions(patientId);
-      setCaseSpecificQuestions(questions);
-      setSelectedCaseQuestionId(questions[0]?.id || '');
-      
-      const questionIds = mockInstructorDataService.getPatientCaseSpecificQuestionIds(patientId);
-      setIncludedQuestionIds(questionIds);
+      // Load patient-specific questions from API
+      if (groupId) {
+        instructorService.getSimulationGroupQuestions(groupId, patientId)
+          .then((assigned: any[]) => {
+            const patientQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
+              id: q.question_id,
+              title: q.title || '',
+              keyQuestion: q.question_text || '',
+              clinicalIntent: '',
+              evaluationCriteria: q.evaluation_criteria || '',
+              required: q.is_mandatory ?? false,
+            }));
+            setCaseSpecificQuestions(patientQuestions);
+            setSelectedCaseQuestionId(patientQuestions[0]?.id || '');
+            setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          })
+          .catch(() => {
+            setCaseSpecificQuestions([]);
+            setSelectedCaseQuestionId('');
+            setIncludedQuestionIds(new Set());
+          });
+      }
       
       const materials = instructorService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
@@ -617,6 +692,7 @@ function AdminSimulationGroupPage() {
       evaluationCriteria: question.evaluationCriteria,
       isMandatory: question.required,
       isActive: true,
+      tags: addQuestionType === 'patientSpecific' ? ['patient_specific'] : [],
       usedBySimulationGroups: [],
       usedByPatients: addQuestionType === 'patientSpecific' ? [] : undefined
     };
@@ -629,9 +705,12 @@ function AdminSimulationGroupPage() {
             question_text: question.keyQuestion,
             evaluation_criteria: question.evaluationCriteria,
             is_mandatory: question.required,
+            tags: [],
           });
-          const questions = await instructorService.getGlobalQuestionBank();
-          setGlobalBankQuestions(questions);
+          // Reload questions from admin API (org-scoped)
+          const allQuestions = await adminApi.getQuestionBankQuestions(organizationId);
+          const global = allQuestions.filter(q => !q.tags?.includes('patient_specific'));
+          setGlobalBankQuestions(global);
         } catch (err) {
           console.error('Failed to create question via API, falling back to mock:', err);
           instructorService.addToGlobalQuestionBank(newBankQuestion);
@@ -667,6 +746,7 @@ function AdminSimulationGroupPage() {
       evaluationCriteria: question.evaluationCriteria,
       isMandatory: question.required,
       isActive: true,
+      tags: ['patient_specific'],
       usedBySimulationGroups: [],
       usedByPatients: []
     };
@@ -702,15 +782,17 @@ function AdminSimulationGroupPage() {
 
   const handleToggleQuestionInclusion = async (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
     const newSet = new Set(includedQuestionIds);
+    const isGlobal = questionBankTab === 'global' || questionId.startsWith('bank-global-');
+    const personaId = !isGlobal ? selectedPatientForQuestionBank : undefined;
     
     try {
       if (isChecked) {
         newSet.add(questionId);
         
-        if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          // Call API to assign question to group
-          await instructorService.assignQuestionToGroup(groupId || '1', questionId);
-          
+        // Call API to assign question to group (with persona for patient-specific)
+        await instructorService.assignQuestionToGroup(groupId || '1', questionId, personaId || undefined);
+        
+        if (isGlobal) {
           const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
           if (!existingQuestion) {
             const newGlobalRubricQuestion: GlobalRubricQuestion = {
@@ -729,10 +811,10 @@ function AdminSimulationGroupPage() {
       } else {
         newSet.delete(questionId);
         
-        if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          // Call API to unassign question
-          await instructorService.unassignQuestion(questionId);
-          
+        // Call API to unassign question
+        await instructorService.unassignQuestion(questionId);
+        
+        if (isGlobal) {
           instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
@@ -1023,6 +1105,7 @@ function AdminSimulationGroupPage() {
               { section: 'students', icon: <UserCog className="w-5 h-5" />, label: `Manage ${userRoleLabel}s` },
               { section: 'instructors', icon: <UserPlus className="w-5 h-5" />, label: 'Manage Instructors' },
               { section: 'rubric', icon: <FileText className="w-5 h-5" />, label: 'Global Rubric' },
+              { section: 'questionBank', icon: <HelpCircle className="w-5 h-5" />, label: 'Question Bank' },
             ].map(({ section, icon, label }) => (
               <Button
                 key={section}
@@ -1511,6 +1594,8 @@ function AdminSimulationGroupPage() {
                   <button
                     onClick={() => {
                       setQuestionBankTab('global');
+                      setQuestionBankSearchQuery('');
+                      setQuestionBankTagFilter('');
                       const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                       setIncludedQuestionIds(new Set(globalRubric.map(q => q.id)));
                     }}
@@ -1522,8 +1607,14 @@ function AdminSimulationGroupPage() {
                   <button
                     onClick={() => {
                       setQuestionBankTab('patientSpecific');
-                      if (selectedPatientForQuestionBank) {
-                        setIncludedQuestionIds(instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank));
+                      setQuestionBankSearchQuery('');
+                      setQuestionBankTagFilter('');
+                      if (selectedPatientForQuestionBank && groupId) {
+                        instructorService.getSimulationGroupQuestions(groupId, selectedPatientForQuestionBank)
+                          .then((assigned: any[]) => {
+                            setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+                          })
+                          .catch(() => setIncludedQuestionIds(new Set()));
                       } else {
                         setIncludedQuestionIds(new Set());
                       }
@@ -1538,6 +1629,31 @@ function AdminSimulationGroupPage() {
 
               <div className="flex-1 overflow-y-auto px-8 py-6">
                 <div className="space-y-3">
+                  {/* Search and Tag Filter */}
+                  <div className="flex gap-3 mb-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                      <Input
+                        placeholder="Search questions..."
+                        value={questionBankSearchQuery}
+                        onChange={(e) => setQuestionBankSearchQuery(e.target.value)}
+                        className="pl-9 py-2 text-sm"
+                        style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
+                      />
+                    </div>
+                    <select
+                      value={questionBankTagFilter}
+                      onChange={(e) => setQuestionBankTagFilter(e.target.value)}
+                      className="px-3 py-2 rounded-md border text-sm"
+                      style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading, minWidth: '10rem' }}
+                    >
+                      <option value="">All Tags</option>
+                      {allExistingTags.map(tag => (
+                        <option key={tag} value={tag}>{tag}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   {questionBankTab === 'global' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>Select which global questions should be included in this simulation group's rubric.</p>
@@ -1551,9 +1667,22 @@ function AdminSimulationGroupPage() {
                         <Plus className="w-5 h-5" />
                         Add New Global Question
                       </Button>
-                      {globalBankQuestions.map((question) => (
+                      {filteredGlobalBankQuestions.length === 0 ? (
+                        <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
+                          {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No global questions yet.'}
+                        </p>
+                      ) : filteredGlobalBankQuestions.map((question) => (
                         <div key={question.id} className="flex items-center justify-between p-4 rounded-lg border transition-colors" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                          <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>{question.title}</span>
+                          <div className="flex-1 min-w-0 mr-3">
+                            <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>{question.title}</span>
+                            {(question.tags || []).filter(t => t !== 'patient_specific').length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {question.tags!.filter(t => t !== 'patient_specific').map(tag => (
+                                  <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
@@ -1579,8 +1708,13 @@ function AdminSimulationGroupPage() {
                           onChange={(e) => {
                             const patientId = e.target.value || null;
                             setSelectedPatientForQuestionBank(patientId);
-                            if (patientId) {
-                              setIncludedQuestionIds(instructorService.getPatientCaseSpecificQuestionIds(patientId));
+                            if (patientId && groupId) {
+                              // Load assigned questions for this patient from API
+                              instructorService.getSimulationGroupQuestions(groupId, patientId)
+                                .then((assigned: any[]) => {
+                                  setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+                                })
+                                .catch(() => setIncludedQuestionIds(new Set()));
                             } else {
                               setIncludedQuestionIds(new Set());
                             }
@@ -1605,34 +1739,27 @@ function AdminSimulationGroupPage() {
                         Add New Patient-Specific Question
                       </Button>
                       {selectedPatientForQuestionBank ? (
-                        patientSpecificBankQuestions.map((question) => (
+                        filteredPatientBankQuestions.length === 0 ? (
+                          <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
+                            {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No patient-specific questions yet.'}
+                          </p>
+                        ) : filteredPatientBankQuestions.map((question) => (
                           <div key={question.id} className="flex items-center justify-between p-4 rounded-lg border transition-colors" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                            <span className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>{question.title}</span>
+                            <div className="flex-1 min-w-0 mr-3">
+                              <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>{question.title}</span>
+                              {(question.tags || []).filter(t => t !== 'patient_specific').length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {question.tags!.filter(t => t !== 'patient_specific').map(tag => (
+                                    <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
                             <label className="flex items-center gap-2 cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={includedQuestionIds.has(question.id)}
-                                onChange={(e) => {
-                                  const newSet = new Set(includedQuestionIds);
-                                  if (e.target.checked) {
-                                    newSet.add(question.id);
-                                    const newCaseQuestion: GlobalRubricQuestion = {
-                                      id: question.id, title: question.title, keyQuestion: question.questionText,
-                                      clinicalIntent: question.clinicalIntent, evaluationCriteria: question.evaluationCriteria, required: question.isMandatory,
-                                    };
-                                    instructorService.addCaseSpecificQuestion(selectedPatientForQuestionBank!, newCaseQuestion);
-                                    if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                    }
-                                  } else {
-                                    newSet.delete(question.id);
-                                    instructorService.deleteCaseSpecificQuestion(selectedPatientForQuestionBank!, question.id);
-                                    if (selectedPatientForEdit === selectedPatientForQuestionBank) {
-                                      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(selectedPatientForQuestionBank!));
-                                    }
-                                  }
-                                  setIncludedQuestionIds(newSet);
-                                }}
+                                onChange={(e) => handleToggleQuestionInclusion(question.id, question, e.target.checked)}
                                 className="w-5 h-5 rounded cursor-pointer"
                                 style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
                               />
@@ -2295,6 +2422,7 @@ function AdminSimulationGroupPage() {
         open={isAddQuestionDialogOpen}
         onOpenChange={setIsAddQuestionDialogOpen}
         questionType={addQuestionType}
+        existingTags={allExistingTags}
         onSave={handleSaveNewQuestion}
       />
       

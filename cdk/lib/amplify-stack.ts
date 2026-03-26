@@ -107,9 +107,9 @@ applications:
       enableAutoBuild: true,
     });
 
-    const questionBankSetup = new amplify.CfnBranch(this, `${id}-questionBankSetupBranch`, {
+    const debrief = new amplify.CfnBranch(this, `${id}-debriefBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "question-bank-setup",
+      branchName: "debrief",
       enableAutoBuild: true,
     });
 

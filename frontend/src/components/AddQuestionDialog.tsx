@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,21 +8,60 @@ interface AddQuestionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   questionType: 'global' | 'patientSpecific';
+  existingTags?: string[];
   onSave: (question: {
     title: string;
     keyQuestion: string;
     clinicalIntent: string;
     evaluationCriteria: string;
     required: boolean;
+    tags?: string[];
   }) => void;
 }
 
-export function AddQuestionDialog({ open, onOpenChange, questionType, onSave }: AddQuestionDialogProps) {
+export function AddQuestionDialog({ open, onOpenChange, questionType, existingTags = [], onSave }: AddQuestionDialogProps) {
   const [title, setTitle] = useState('');
   const [keyQuestion, setKeyQuestion] = useState('');
   const [clinicalIntent, setClinicalIntent] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [required, setRequired] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+
+  // Filter suggestions: match input, exclude already-added tags
+  const suggestions = existingTags.filter(
+    t => t.toLowerCase().includes(tagInput.toLowerCase()) && !tags.includes(t)
+  );
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node) &&
+        tagInputRef.current && !tagInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const addTag = (tag: string) => {
+    const trimmed = tag.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags(prev => [...prev, trimmed]);
+    }
+    setTagInput('');
+    setShowSuggestions(false);
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setTags(prev => prev.filter(t => t !== tag));
+  };
 
   const handleSave = () => {
     if (!title.trim() || !keyQuestion.trim()) {
@@ -36,6 +75,7 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, onSave }: 
       clinicalIntent: clinicalIntent.trim(),
       evaluationCriteria: evaluationCriteria.trim(),
       required,
+      tags,
     });
 
     // Reset form
@@ -44,6 +84,8 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, onSave }: 
     setClinicalIntent('');
     setEvaluationCriteria('');
     setRequired(false);
+    setTagInput('');
+    setTags([]);
     onOpenChange(false);
   };
 
@@ -54,6 +96,8 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, onSave }: 
     setClinicalIntent('');
     setEvaluationCriteria('');
     setRequired(false);
+    setTagInput('');
+    setTags([]);
     onOpenChange(false);
   };
 
@@ -139,6 +183,103 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, onSave }: 
                 color: UI_COLORS.text.heading,
               }}
             />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
+              Tags
+            </label>
+            <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
+              Add tags for filtering (e.g. Health, Physio, Mental Health). Press Enter or comma to add.
+            </p>
+            <div className="relative">
+              <div className="flex gap-2 mb-2">
+                <Input
+                  ref={tagInputRef}
+                  value={tagInput}
+                  onChange={(e) => {
+                    setTagInput(e.target.value);
+                    setShowSuggestions(true);
+                  }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault();
+                      addTag(tagInput);
+                    }
+                  }}
+                  placeholder="Type a tag..."
+                  className="flex-1"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-expanded={showSuggestions && suggestions.length > 0}
+                  aria-controls="tag-suggestions"
+                  aria-autocomplete="list"
+                  style={{
+                    borderColor: UI_COLORS.border.default,
+                    backgroundColor: UI_COLORS.background.white,
+                  }}
+                />
+                <Button
+                  type="button"
+                  onClick={() => addTag(tagInput)}
+                  variant="outline"
+                  style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+                >
+                  Add
+                </Button>
+              </div>
+              {showSuggestions && tagInput.length > 0 && suggestions.length > 0 && (
+                <div
+                  ref={suggestionsRef}
+                  id="tag-suggestions"
+                  role="listbox"
+                  className="absolute z-50 w-full max-h-40 overflow-y-auto rounded-md border shadow-md"
+                  style={{
+                    backgroundColor: UI_COLORS.background.white,
+                    borderColor: UI_COLORS.border.default,
+                    top: '100%',
+                    marginTop: '-0.5rem',
+                  }}
+                >
+                  {suggestions.map(tag => (
+                    <button
+                      key={tag}
+                      type="button"
+                      role="option"
+                      aria-selected={false}
+                      className="w-full text-left px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 transition-colors border-0 bg-transparent"
+                      style={{ color: UI_COLORS.text.heading }}
+                      onClick={() => addTag(tag)}
+                    >
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {tags.map(tag => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="ml-1 hover:text-red-600 transition-colors bg-transparent border-0 cursor-pointer p-0"
+                      aria-label={`Remove tag ${tag}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Required Toggle */}

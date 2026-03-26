@@ -13,6 +13,7 @@ interface AddPatientSpecificQuestionBankDialogProps {
     clinicalIntent: string;
     evaluationCriteria: string;
     required: boolean;
+    tags: string[];
   }) => void;
 }
 
@@ -26,6 +27,27 @@ export function AddPatientSpecificQuestionBankDialog({
   const [clinicalIntent, setClinicalIntent] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [required, setRequired] = useState(false);
+  const [tagInput, setTagInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
+
+  const handleAddTag = () => {
+    const trimmed = tagInput.trim();
+    if (trimmed && !tags.includes(trimmed)) {
+      setTags(prev => [...prev, trimmed]);
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setTags(prev => prev.filter(t => t !== tag));
+  };
+
+  const handleTagKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      handleAddTag();
+    }
+  };
 
   const handleSave = () => {
     if (!title.trim() || !keyQuestion.trim()) {
@@ -39,6 +61,7 @@ export function AddPatientSpecificQuestionBankDialog({
       clinicalIntent: clinicalIntent.trim(),
       evaluationCriteria: evaluationCriteria.trim(),
       required,
+      tags,
     });
 
     // Reset form
@@ -47,6 +70,8 @@ export function AddPatientSpecificQuestionBankDialog({
     setClinicalIntent('');
     setEvaluationCriteria('');
     setRequired(false);
+    setTagInput('');
+    setTags([]);
     onOpenChange(false);
   };
 
@@ -56,6 +81,8 @@ export function AddPatientSpecificQuestionBankDialog({
     setClinicalIntent('');
     setEvaluationCriteria('');
     setRequired(false);
+    setTagInput('');
+    setTags([]);
     onOpenChange(false);
   };
 
@@ -141,6 +168,58 @@ export function AddPatientSpecificQuestionBankDialog({
                 color: UI_COLORS.text.heading,
               }}
             />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
+              Tags
+            </label>
+            <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
+              Add tags for filtering (e.g. Health, Physio, Mental Health). Press Enter or comma to add.
+            </p>
+            <div className="flex gap-2 mb-2">
+              <Input
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder="Type a tag and press Enter..."
+                className="flex-1"
+                style={{
+                  borderColor: UI_COLORS.border.default,
+                  backgroundColor: UI_COLORS.background.white,
+                }}
+              />
+              <Button
+                type="button"
+                onClick={handleAddTag}
+                variant="outline"
+                style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+              >
+                Add
+              </Button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {tags.map(tag => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full"
+                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                  >
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(tag)}
+                      className="ml-1 hover:text-red-600 bg-transparent border-0 cursor-pointer p-0 text-xs"
+                      aria-label={`Remove tag ${tag}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Required Toggle */}

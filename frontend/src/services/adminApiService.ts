@@ -74,6 +74,14 @@ export async function getAllSimulationGroups(): Promise<AdminSimulationGroup[]> 
 }
 
 /**
+ * Get a single simulation group by ID (fetches all and filters).
+ */
+export async function getSimulationGroup(groupId: string): Promise<AdminSimulationGroup | undefined> {
+  const groups = await getAllSimulationGroups();
+  return groups.find(g => g.simulation_group_id === groupId);
+}
+
+/**
  * Get instructors enrolled in a specific simulation group
  */
 export async function getGroupInstructors(simulationGroupId: string): Promise<AdminInstructor[]> {
@@ -355,6 +363,7 @@ export function mapBackendToQuestionBankItem(row: any): QuestionBankItem {
     weight: row.weight,
     maxScore: row.max_score,
     isActive: row.is_active ?? true,
+    tags: Array.isArray(row.tags) ? row.tags : [],
     usedBySimulationGroups: [],
   };
 }
