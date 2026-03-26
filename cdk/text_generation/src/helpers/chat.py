@@ -1130,6 +1130,310 @@ def fetch_tagged_messages(session_id: str) -> list[dict]:
         return []
 
 
+def build_questions_from_matched_data(
+    tagged_messages: list[dict],
+    key_questions: list[dict],
+) -> tuple[list[dict], list[dict]]:
+    """
+    Build questions_addressed and questions_missed deterministically from
+    pre-matched embedding data — no LLM involved.
+
+    Returns (questions_addressed, questions_missed) where each entry matches
+    the Enhanced Debrief JSON schema.
+    """
+    # Lookup key questions by question_id
+    question_map: dict[str, dict] = {
+        q["question_id"]: q for q in key_questions
+    }
+
+    # Group tagged messages by matched question_id
+    addressed: dict[str, list[dict]] = {}  # question_id -> list of match info
+
+    for msg in tagged_messages:
+        matches = msg.get("matched_question_ids", [])
+        # matched_question_ids may be a JSON string (from psycopg2) or already a list
+        if isinstance(matches, str):
+            try:
+                matches = json.loads(matches)
+            except (json.JSONDecodeError, TypeError):
+                matches = []
+        for match in matches:
+            qid = match.get("question_id", "")
+            if not qid:
+                continue
+            score = match.get("similarity_score", 0.0)
+            confidence = match.get("confidence", "moderate")
+            if qid not in addressed:
+                addressed[qid] = []
+            addressed[qid].append({
+                "message_content": msg.get("message_content", ""),
+                "similarity_score": score,
+                "confidence_tier": confidence,
+            })
+
+    # Build questions_addressed list
+    questions_addressed: list[dict] = []
+    for qid, matched_messages in addressed.items():
+        q = question_map.get(qid, {})
+        questions_addressed.append({
+            "question_id": qid,
+            "question_text": q.get("question_text", qid),
+            "matched_messages": matched_messages,
+            "quality_assessment": "Matched via automated embedding analysis.",
+        })
+
+    # Build questions_missed list
+    addressed_ids = set(addressed.keys())
+    questions_missed: list[dict] = [
+        {
+            "question_id": q["question_id"],
+            "question_text": q.get("question_text", ""),
+            "is_mandatory": q.get("is_mandatory", False),
+            "weight": q.get("weight", 1.0),
+        }
+        for q in key_questions
+        if q["question_id"] not in addressed_ids
+    ]
+
+    return questions_addressed, questions_missed
+
+
+def compute_overall_score(
+    key_questions: list[dict],
+    addressed_question_ids: set[str],
+    mandatory_cap: float = 70.0,
+) -> float:
+    """
+    Compute a deterministic overall debrief score from question weights and
+    mandatory flags — no LLM involved.
+
+    Score = (sum of weights for addressed questions / sum of all weights) × 100,
+    capped at *mandatory_cap* if any mandatory question was missed.
+
+    Returns a float in [0.0, 100.0].
+    """
+    if not key_questions:
+        return 0.0
+
+    total_weight = sum(q.get("weight", 1.0) for q in key_questions)
+    if total_weight == 0.0:
+        return 0.0
+
+    addressed_weight = sum(
+        q.get("weight", 1.0)
+        for q in key_questions
+        if q["question_id"] in addressed_question_ids
+    )
+
+    score = (addressed_weight / total_weight) * 100.0
+
+    # Apply mandatory penalty: cap score if any mandatory question is missed
+    has_missed_mandatory = any(
+        q.get("is_mandatory", False)
+        for q in key_questions
+        if q["question_id"] not in addressed_question_ids
+    )
+    if has_missed_mandatory:
+        score = min(score, mandatory_cap)
+
+    # Clamp to [0.0, 100.0]
+    return max(0.0, min(score, 100.0))
+
+
+def build_summary_feedback_prompt(
+    transcript: list[dict],
+    questions_addressed: list[dict],
+    questions_missed: list[dict],
+    recommendation: str,
+) -> str:
+    """
+    Build a focused prompt that asks the LLM to generate ONLY:
+    ``summary``, ``recommendation_feedback``, and ``reasoning_gaps``.
+
+    The transcript and pre-built question lists are included as read-only
+    context.  The LLM is explicitly told NOT to re-evaluate question matching
+    or compute a score — those are handled deterministically elsewhere.
+
+    Target output: ~500-800 tokens (well within model limits).
+    """
+
+    # --- Format transcript ---
+    if transcript:
+        transcript_lines = [
+            f"[{m.get('sender', 'UNKNOWN').upper()}]: {m.get('content', '')}"
+            for m in transcript
+        ]
+        transcript_section = "\n".join(transcript_lines)
+    else:
+        transcript_section = "(No transcript available)"
+
+    # --- Summarise addressed questions (read-only) ---
+    if questions_addressed:
+        addr_lines: list[str] = []
+        for q in questions_addressed:
+            qid = q.get("question_id", "")
+            q_text = q.get("question_text", "")
+            num_matches = len(q.get("matched_messages", []))
+            addr_lines.append(f"- [{qid}] {q_text} ({num_matches} matched message(s))")
+        addressed_section = "\n".join(addr_lines)
+    else:
+        addressed_section = "No questions were addressed."
+
+    # --- Summarise missed questions (read-only) ---
+    if questions_missed:
+        missed_lines: list[str] = []
+        for q in questions_missed:
+            mandatory_label = "MANDATORY" if q.get("is_mandatory") else "optional"
+            missed_lines.append(
+                f"- [{q.get('question_id', '')}] ({mandatory_label}) {q.get('question_text', '')}"
+            )
+        missed_section = "\n".join(missed_lines)
+    else:
+        missed_section = "All key questions were addressed."
+
+    # --- Recommendation ---
+    recommendation_text = recommendation if recommendation else "(No recommendation submitted)"
+
+    # --- Assemble prompt ---
+    prompt = f"""## Chat Transcript (read-only context)
+{transcript_section}
+
+## Questions Addressed (pre-computed — do NOT modify)
+{addressed_section}
+
+## Questions Missed (pre-computed — do NOT modify)
+{missed_section}
+
+## Student's Recommendation
+{recommendation_text}
+
+## Your Task
+Using the transcript and the pre-computed question lists above as context, produce a JSON object with EXACTLY these three keys:
+
+{{
+  "summary": "A 3-5 sentence overall summary of the student's clinical performance.",
+  "recommendation_feedback": {{
+    "strengths": ["strength 1", "strength 2"],
+    "areas_for_improvement": ["area 1", "area 2"]
+  }},
+  "reasoning_gaps": "A paragraph describing any gaps in the student's clinical reasoning."
+}}
+
+IMPORTANT CONSTRAINTS:
+- Do NOT re-evaluate which questions were addressed or missed — that has already been determined.
+- Do NOT compute or include an overall score — that is calculated separately.
+- Focus ONLY on generating the summary, recommendation feedback, and reasoning gaps.
+
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no ```json or ```).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{{' and the very last character MUST be '}}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\", newlines must be \\n).
+- Ensure all arrays and objects are properly closed with matching brackets/braces.
+- Do NOT use trailing commas in arrays or objects.
+"""
+
+    return prompt
+
+
+def build_rewrite_prompt(
+    original_message: str,
+    question_text: str,
+    evaluation_criteria: str,
+) -> str:
+    """
+    Build a focused prompt that asks the LLM to generate a single suggested
+    rewrite for a student message that only partially addressed a question.
+
+    Called only for moderate-confidence matches (similarity < 0.85).  The
+    threshold enforcement is NOT in this function — it is applied in
+    ``generate_debrief()`` when deciding whether to call this function.
+
+    Target output: ~100-200 tokens (a single JSON object with one key).
+    """
+
+    prompt = f"""## Student's Original Message
+{original_message}
+
+## Matched Question
+{question_text}
+
+## Evaluation Criteria
+{evaluation_criteria if evaluation_criteria else "(No specific evaluation criteria provided)"}
+
+## Your Task
+The student's message above was matched to the question shown, but with only moderate confidence.  Generate an improved version of the student's message that more directly and thoroughly addresses the matched question while preserving the student's intent.
+
+Return a JSON object with EXACTLY one key:
+
+{{
+  "suggested_rewrite": "An improved version of the student's message that better addresses the question."
+}}
+
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no ```json or ```).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{{' and the very last character MUST be '}}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\", newlines must be \\n).
+"""
+
+    return prompt
+
+
+def build_answer_key_prompt(recommendation: str, answer_key_text: str) -> str:
+    """
+    Build a focused prompt asking the LLM to compare the student's
+    recommendation against the provided answer key.
+
+    Generates only the ``answer_key_comparison`` fields:
+    ``answer_key_available``, ``correct_elements``, ``missing_elements``,
+    ``incorrect_elements``, ``overall_alignment``.
+
+    This function is only called when *answer_key_text* is non-empty.
+    The emptiness check is enforced in ``generate_debrief()``, not here.
+
+    Target output: ~200-400 tokens (a single JSON object).
+    """
+
+    prompt = f"""## Student's Recommendation
+{recommendation}
+
+## Answer Key
+{answer_key_text}
+
+## Your Task
+Compare the student's recommendation above against the answer key.  Identify which elements the student got correct, which are missing, and which are incorrect.
+
+Return a JSON object with EXACTLY these keys:
+
+{{
+  "answer_key_available": true,
+  "correct_elements": ["element the student correctly identified or addressed"],
+  "missing_elements": ["element from the answer key the student did not mention or address"],
+  "incorrect_elements": ["element the student stated incorrectly compared to the answer key"],
+  "overall_alignment": "A brief sentence describing how well the student's recommendation aligns with the answer key."
+}}
+
+Guidelines:
+- "correct_elements": list every distinct point from the answer key that the student's recommendation correctly covers.
+- "missing_elements": list every distinct point from the answer key that the student's recommendation does NOT address.
+- "incorrect_elements": list every distinct point where the student's recommendation contradicts or misrepresents the answer key.
+- "overall_alignment": provide a concise one-to-two sentence qualitative summary (e.g., "Strong alignment", "Partial alignment", "Weak alignment").
+- Each list may be empty if there are no items for that category.
+
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no ```json or ```).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{{' and the very last character MUST be '}}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\", newlines must be \\n).
+"""
+
+    return prompt
+
+
 def build_enhanced_debrief_prompt(
     tagged_messages: list[dict],
     key_questions: list[dict],
@@ -1138,6 +1442,14 @@ def build_enhanced_debrief_prompt(
     transcript: list[dict] | None = None,
 ) -> str:
     """
+    .. deprecated::
+        This function is no longer called in the enhanced debrief path
+        (when tagged_messages exist).  The multi-prompt pipeline
+        (``build_questions_from_matched_data``, ``compute_overall_score``,
+        ``build_summary_feedback_prompt``, ``build_rewrite_prompt``,
+        ``build_answer_key_prompt``) replaces it.  Kept for potential
+        fallback use or future removal.
+
     Build the debrief LLM prompt using pre-tagged messages AND the full
     transcript.
 
@@ -1753,8 +2065,46 @@ def generate_debrief(
     # 2. Check for tagged messages and decide which prompt path to use
     tagged_messages = fetch_tagged_messages(session_id)
 
+    # --- Shared helpers for LLM JSON parsing ---
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    def _extract_json(raw: str) -> dict:
+        """Strip markdown fences and extract the JSON object from raw LLM output."""
+        cleaned = raw.strip()
+        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
+        cleaned = re.sub(r'\n?\s*```\s*$', '', cleaned)
+        cleaned = cleaned.strip()
+        if not cleaned.startswith('{'):
+            first_brace = cleaned.find('{')
+            if first_brace != -1:
+                cleaned = cleaned[first_brace:]
+        if not cleaned.endswith('}'):
+            last_brace = cleaned.rfind('}')
+            if last_brace != -1:
+                cleaned = cleaned[:last_brace + 1]
+        return json.loads(cleaned)
+
+    def _invoke_llm_json(prompt_text: str, max_retries: int = 2) -> dict:
+        """Invoke LLM with a prompt and parse JSON response with retries."""
+        last_error = None
+        for attempt in range(1, max_retries + 2):
+            try:
+                messages = [
+                    SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
+                    HumanMessage(content=prompt_text if attempt == 1 else prompt_text + f"\n\nRETRY: Previous response was not valid JSON. Error: {last_error}. Return ONLY valid JSON."),
+                ]
+                resp = llm.invoke(messages)
+                raw = resp.content if hasattr(resp, 'content') else str(resp)
+                return _extract_json(raw)
+            except json.JSONDecodeError as e:
+                last_error = str(e)
+            except Exception as e:
+                logger.error(f"LLM call failed: {e}")
+                break
+        return {}
+
     if tagged_messages:
-        logger.info(f"📋 Found {len(tagged_messages)} tagged messages — using enhanced debrief prompt")
+        logger.info(f"📋 Found {len(tagged_messages)} tagged messages — using multi-step debrief pipeline")
 
         # Get key questions from DynamoDB cache first, fall back to PostgreSQL
         cached_questions = None
@@ -1764,13 +2114,63 @@ def generate_debrief(
             logger.info("Cache miss or unavailable — using key questions from PostgreSQL")
             cached_questions = key_questions
 
-        user_prompt = build_enhanced_debrief_prompt(
-            tagged_messages=tagged_messages,
-            key_questions=cached_questions,
-            recommendation=recommendation,
-            answer_key_text=answer_key_text,
-            transcript=transcript,
-        )
+        # Step a: Build questions deterministically from pre-matched data
+        questions_addressed, questions_missed = build_questions_from_matched_data(tagged_messages, cached_questions)
+
+        # Step b: Compute overall score deterministically
+        addressed_ids_set = {q["question_id"] for q in questions_addressed}
+        overall_score = compute_overall_score(cached_questions, addressed_ids_set)
+
+        # Step c: Call summary/feedback prompt via LLM
+        summary_prompt = build_summary_feedback_prompt(transcript, questions_addressed, questions_missed, recommendation)
+        summary_data = _invoke_llm_json(summary_prompt)
+        logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
+
+        # Step d: Generate rewrites for moderate-confidence matches
+        REWRITE_THRESHOLD = 0.85
+        suggested_rewrites = []
+        question_map = {q["question_id"]: q for q in cached_questions}
+        for qa_entry in questions_addressed:
+            for msg_match in qa_entry.get("matched_messages", []):
+                if msg_match.get("similarity_score", 1.0) < REWRITE_THRESHOLD:
+                    q = question_map.get(qa_entry["question_id"], {})
+                    rewrite_prompt = build_rewrite_prompt(
+                        msg_match["message_content"],
+                        qa_entry["question_text"],
+                        q.get("evaluation_criteria", ""),
+                    )
+                    rewrite_data = _invoke_llm_json(rewrite_prompt)
+                    suggested_rewrites.append({
+                        "original_message": msg_match["message_content"],
+                        "matched_question_id": qa_entry["question_id"],
+                        "similarity_score": msg_match.get("similarity_score", 0.0),
+                        "suggested_rewrite": rewrite_data.get("suggested_rewrite", ""),
+                    })
+        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites")
+
+        # Step e: Answer key comparison
+        if answer_key_text:
+            ak_prompt = build_answer_key_prompt(recommendation, answer_key_text)
+            answer_key_comparison = _invoke_llm_json(ak_prompt)
+            # Ensure answer_key_available is set
+            if "answer_key_available" not in answer_key_comparison:
+                answer_key_comparison["answer_key_available"] = True
+            logger.info(f"📋 Answer key comparison LLM call returned keys: {list(answer_key_comparison.keys())}")
+        else:
+            answer_key_comparison = {"answer_key_available": False}
+
+        # Step f: Assemble final debrief dict
+        debrief_data = {
+            "summary": summary_data.get("summary", ""),
+            "questions_addressed": questions_addressed,
+            "questions_missed": questions_missed,
+            "recommendation_feedback": summary_data.get("recommendation_feedback", {"strengths": [], "areas_for_improvement": []}),
+            "reasoning_gaps": summary_data.get("reasoning_gaps", ""),
+            "overall_score": overall_score,
+            "suggested_rewrites": suggested_rewrites,
+            "answer_key_comparison": answer_key_comparison,
+        }
+
     else:
         logger.info("📋 No tagged messages found — falling back to full-transcript debrief")
 
@@ -1807,79 +2207,61 @@ The following is the instructor's answer key for this simulation case. Compare t
 {answer_key_text}
 """
 
-    # 3. Call the LLM with retry on invalid JSON
-    from langchain_core.messages import SystemMessage, HumanMessage
+        # Call the LLM with retry on invalid JSON (fallback path only)
+        def _attempt_llm_call(extra_instruction: str = "") -> str:
+            """Invoke the LLM and return raw string output."""
+            prompt_content = user_prompt
+            if extra_instruction:
+                prompt_content = user_prompt + f"\n\n{extra_instruction}"
+            messages = [
+                SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
+                HumanMessage(content=prompt_content),
+            ]
+            resp = llm.invoke(messages)
+            return resp.content if hasattr(resp, 'content') else str(resp)
 
-    def _attempt_llm_call(extra_instruction: str = "") -> str:
-        """Invoke the LLM and return raw string output."""
-        prompt_content = user_prompt
-        if extra_instruction:
-            prompt_content = user_prompt + f"\n\n{extra_instruction}"
-        messages = [
-            SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
-            HumanMessage(content=prompt_content),
-        ]
-        resp = llm.invoke(messages)
-        return resp.content if hasattr(resp, 'content') else str(resp)
+        MAX_DEBRIEF_RETRIES = 2
+        raw_output = ""
+        debrief_data = None
+        last_parse_error = None
 
-    def _extract_json(raw: str) -> dict:
-        """Strip markdown fences and extract the JSON object from raw LLM output."""
-        cleaned = raw.strip()
-        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
-        cleaned = re.sub(r'\n?\s*```\s*$', '', cleaned)
-        cleaned = cleaned.strip()
-        if not cleaned.startswith('{'):
-            first_brace = cleaned.find('{')
-            if first_brace != -1:
-                cleaned = cleaned[first_brace:]
-        if not cleaned.endswith('}'):
-            last_brace = cleaned.rfind('}')
-            if last_brace != -1:
-                cleaned = cleaned[:last_brace + 1]
-        return json.loads(cleaned)
+        for attempt in range(1, MAX_DEBRIEF_RETRIES + 2):  # attempts: 1, 2, 3
+            try:
+                if attempt == 1:
+                    raw_output = _attempt_llm_call()
+                else:
+                    retry_msg = (
+                        f"RETRY ATTEMPT {attempt}: Your previous response was not valid JSON. "
+                        f"Error: {last_parse_error}. "
+                        "You MUST respond with ONLY a valid JSON object. "
+                        "The first character must be '{' and the last must be '}'. "
+                        "No markdown, no explanation, no preamble. Complete all arrays and objects."
+                    )
+                    logger.warning(f"📋 Retrying debrief LLM call (attempt {attempt}) due to JSON parse error")
+                    raw_output = _attempt_llm_call(extra_instruction=retry_msg)
 
-    MAX_DEBRIEF_RETRIES = 2
-    raw_output = ""
-    debrief_data = None
-    last_parse_error = None
+                logger.info(f"📋 Raw debrief LLM output (attempt {attempt}): {raw_output[:500]}...")
+                debrief_data = _extract_json(raw_output)
+                logger.info(f"📋 Successfully parsed debrief JSON on attempt {attempt}")
+                break
+            except json.JSONDecodeError as e:
+                last_parse_error = str(e)
+                logger.error(f"Failed to parse debrief JSON (attempt {attempt}): {e}\nRaw: {raw_output[:500]}")
+            except Exception as e:
+                logger.error(f"Debrief LLM call failed (attempt {attempt}): {e}")
+                return {"error": f"LLM call failed: {str(e)}"}
 
-    for attempt in range(1, MAX_DEBRIEF_RETRIES + 2):  # attempts: 1, 2, 3
-        try:
-            if attempt == 1:
-                raw_output = _attempt_llm_call()
-            else:
-                retry_msg = (
-                    f"RETRY ATTEMPT {attempt}: Your previous response was not valid JSON. "
-                    f"Error: {last_parse_error}. "
-                    "You MUST respond with ONLY a valid JSON object. "
-                    "The first character must be '{' and the last must be '}'. "
-                    "No markdown, no explanation, no preamble. Complete all arrays and objects."
-                )
-                logger.warning(f"📋 Retrying debrief LLM call (attempt {attempt}) due to JSON parse error")
-                raw_output = _attempt_llm_call(extra_instruction=retry_msg)
-
-            logger.info(f"📋 Raw debrief LLM output (attempt {attempt}): {raw_output[:500]}...")
-            debrief_data = _extract_json(raw_output)
-            logger.info(f"📋 Successfully parsed debrief JSON on attempt {attempt}")
-            break
-        except json.JSONDecodeError as e:
-            last_parse_error = str(e)
-            logger.error(f"Failed to parse debrief JSON (attempt {attempt}): {e}\nRaw: {raw_output[:500]}")
-        except Exception as e:
-            logger.error(f"Debrief LLM call failed (attempt {attempt}): {e}")
-            return {"error": f"LLM call failed: {str(e)}"}
-
-    if debrief_data is None:
-        logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
-        debrief_data = {
-            "summary": raw_output,
-            "questions_addressed": [],
-            "questions_missed": [],
-            "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
-            "reasoning_gaps": "",
-            "overall_score": 0.0,
-            "suggested_rewrites": [],
-        }
+        if debrief_data is None:
+            logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
+            debrief_data = {
+                "summary": raw_output,
+                "questions_addressed": [],
+                "questions_missed": [],
+                "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+                "reasoning_gaps": "",
+                "overall_score": 0.0,
+                "suggested_rewrites": [],
+            }
 
     # 4b. Validate and repair the debrief output schema
     debrief_data = validate_debrief_output(debrief_data, answer_key_provided=bool(answer_key_text))
