@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
+import { studentService, type AIDebriefData } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -13,6 +14,7 @@ import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecifi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/App';
+import AIDebriefDialog from '../../components/AIDebriefDialog';
 
 /**
  * InstructorSimulationGroupPage Component
@@ -136,6 +138,12 @@ function InstructorSimulationGroupPage() {
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
+
+  // new states for AI Debrief and loading states
+  const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
+  const [selectedDebriefData, setSelectedDebriefData] = useState<AIDebriefData | null>(null);
+  const [isFetchingDebrief, setIsFetchingDebrief] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<string | null>(null);
   
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
@@ -537,35 +545,6 @@ function InstructorSimulationGroupPage() {
   };
 
 
-  /**
-   * Handle delete question
-   */
-  const handleDeleteQuestion = async () => {
-    if (!selectedQuestionId) return;
-    const question = globalRubricQuestions.find(q => q.id === selectedQuestionId);
-    if (!question?.group_question_id) {
-      alert('Cannot remove this question — assignment ID not found.');
-      return;
-    }
-    if (confirm('Are you sure you want to remove this question?')) {
-      try {
-        await instructorService.unassignQuestion(question.group_question_id);
-        const updatedQuestions = globalRubricQuestions.filter(q => q.id !== selectedQuestionId);
-        setGlobalRubricQuestions(updatedQuestions);
-        setSelectedQuestionId(updatedQuestions[0]?.id || null);
-
-        // Uncheck in question bank
-        setIncludedQuestionIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(selectedQuestionId);
-          return newSet;
-        });
-      } catch (error) {
-        console.error('Failed to remove question:', error);
-        alert('Failed to remove question. Please try again.');
-      }
-    }
-  };
 
   /**
    * Handle save question changes
@@ -945,6 +924,74 @@ function InstructorSimulationGroupPage() {
       </PageContainer>
     );
   }
+
+    /**
+   * Handle fetching and viewing the AI Debrief for a specific session/attempt
+   */
+  const handleViewAIDebrief = async (attemptId: string) => {
+    setIsFetchingDebrief(attemptId);
+    try {
+      const data = await studentService.fetchDebrief(attemptId);
+      if (data) {
+        setSelectedDebriefData(data);
+        setIsAIDebriefOpen(true);
+      } else {
+        alert("Debrief is still generating or not available for this session.");
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI debrief:', error);
+      alert("Failed to load AI Debrief. Please try again.");
+    } finally {
+      setIsFetchingDebrief(null);
+    }
+  };
+
+  /**
+   * Handle downloading the Chat PDF
+   */
+  const handleDownloadChatPDF = (attemptId: string) => {
+    setIsGeneratingPdf(attemptId);
+    try {
+      const messages = studentPatientData?.messages[attemptId] || [];
+      const studentName = studentDetails?.name || 'Student';
+      const patientName = selectedPatientFilter || 'Patient';
+
+      let chatText = `Chat History\nStudent: ${studentName}\nPatient: ${patientName}\n${'='.repeat(60)}\n\n`;
+      chatText += messages.map(m => 
+        `[${m.sent_at}] ${m.sender_type === 'student' ? studentName : patientName}: ${m.message_content}`
+      ).join('\n\n');
+      
+      const blob = new Blob([chatText], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Chat_History_${attemptId}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download chat:', error);
+    } finally {
+      setIsGeneratingPdf(null);
+    }
+  };
+
+  /**
+   * Handle downloading the Notes PDF
+   */
+  const handleDownloadNotesPDF = (attemptId: string) => {
+    try {
+      const notes = studentPatientData?.notes[attemptId] || '';
+      const blob = new Blob([notes || 'No notes available.'], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Notes_${attemptId}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download notes:', error);
+    }
+  };
 
   return (
     <PageContainer>
@@ -1967,35 +2014,6 @@ function InstructorSimulationGroupPage() {
                         <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                           Required for Case Completion
                         </span>
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-4 pt-4">
-                        <Button
-                          onClick={handleSaveQuestion}
-                          className="px-8 py-3 text-base font-medium transition-colors"
-                          style={{ 
-                            backgroundColor: UI_COLORS.button.primary, 
-                            color: UI_COLORS.button.text 
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                        >
-                          Save Changes
-                        </Button>
-                        <Button
-                          onClick={handleDeleteQuestion}
-                          variant="outline"
-                          className="px-8 py-3 text-base font-medium transition-colors text-white"
-                          style={{ 
-                            backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                            borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        >
-                          Remove
-                        </Button>
                       </div>
                     </div>
                   ) : (
@@ -3861,8 +3879,9 @@ Return valid JSON in exactly this structure:
                                     }}
                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onClick={() => handleDownloadChatPDF(attempt.id)}
                                   >
-                                    Download Chat PDF
+                                    {isGeneratingPdf === attempt.id ? 'Generating...' : 'Download Chat PDF'}
                                   </Button>
                                   <Button
                                     className="px-6 py-3 text-base font-medium transition-colors"
@@ -3872,21 +3891,29 @@ Return valid JSON in exactly this structure:
                                     }}
                                     onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                                     onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onClick={() => handleDownloadNotesPDF(attempt.id)}
                                   >
                                     Download Notes PDF
                                   </Button>
-                                  <Button
-                                    className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                                  >
-                                    View AI Debrief
-                                  </Button>
+                                  {attempt.completionStatus === 'Debrief Reached' && (
+                                    <Button
+                                      className="px-6 py-3 text-base font-medium transition-colors"
+                                      style={{ 
+                                        backgroundColor: UI_COLORS.button.secondary, 
+                                        color: UI_COLORS.button.text 
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                      onClick={() => handleViewAIDebrief(attempt.id)}
+                                      disabled={!!isFetchingDebrief}
+                                    >
+                                      {isFetchingDebrief === attempt.id ? (
+                                        <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</span>
+                                      ) : 'View AI Debrief'}
+                                    </Button>
+                                  )}
                                 </div>
+
                               </div>
                             )}
                           </div>
@@ -3900,6 +3927,14 @@ Return valid JSON in exactly this structure:
           )}
         </main>
       </div>
+
+      {/* AI Debrief Dialog */}
+      <AIDebriefDialog
+        isOpen={isAIDebriefOpen}
+        onClose={() => setIsAIDebriefOpen(false)}
+        data={selectedDebriefData}
+        simulationGroupId={groupId}
+      />
       
       {/* Add Question Dialog */}
       <AddQuestionDialog

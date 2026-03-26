@@ -1173,6 +1173,7 @@ exports.handler = async (event, context) => {
                         `;
 
                 result[patient.persona_name].push({
+                  chatId: chat.chat_id,
                   chatName: chat.chat_name,
                   notes: chat.notes || "No notes available.",
                   status: chat.status || "active",

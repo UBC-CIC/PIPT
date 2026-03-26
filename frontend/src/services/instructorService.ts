@@ -1345,7 +1345,7 @@ async function getStudentPatientData(studentEmail: string, simulationGroupId: st
 
       // Build attempt objects with a raw timestamp for sorting
       const unsorted = chats.map((chat: any, index: number) => {
-        const attemptId = chat.chatName || `chat-${index}`;
+        const attemptId = chat.chatId || chat.chatName || `chat-${index}`;
 
         // Filter out "Begin the conversation as the patient" messages and deduplicate
         const seen = new Set<string>();
