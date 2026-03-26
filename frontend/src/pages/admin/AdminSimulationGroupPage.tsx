@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics, type StudentDetails } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -37,6 +37,8 @@ function AdminSimulationGroupPage() {
   const [promptHistory] = useState(() => mockAdminDataService.getPromptHistory());
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
+  const [studentDetailsLoading, setStudentDetailsLoading] = useState(false);
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
   const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('pamela');
   const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
@@ -344,14 +346,25 @@ function AdminSimulationGroupPage() {
     setActiveSection('patients');
   };
 
-  const handleViewStudent = (studentId: string) => {
+  const handleViewStudent = async (studentId: string) => {
     setSelectedStudentId(studentId);
     setStudentViewTab('overview');
     setActiveSection('viewStudent');
+    setStudentDetails(null);
+    setStudentDetailsLoading(true);
+    try {
+      const details = await instructorService.getStudentDetails(studentId, groupId || '');
+      setStudentDetails(details || null);
+    } catch (error) {
+      console.error('Error loading student details:', error);
+    } finally {
+      setStudentDetailsLoading(false);
+    }
   };
 
   const handleBackFromViewStudent = () => {
     setSelectedStudentId(null);
+    setStudentDetails(null);
     setActiveSection('students');
   };
 
@@ -2154,26 +2167,27 @@ function AdminSimulationGroupPage() {
                   <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Overview</h2>
                 </div>
                 <nav className="flex-1 px-6 space-y-4">
-                  {(() => {
-                    const studentDetails = instructorService.getStudentDetails(selectedStudentId);
-                    if (!studentDetails) return null;
-                    return (
-                      <>
-                        {[
-                          { label: 'Student Name', value: studentDetails.name },
-                          { label: 'Student Email', value: studentDetails.email },
-                          { label: 'Group Name', value: studentDetails.groupName },
-                          { label: 'Cases Attempted', value: String(studentDetails.casesAttempted) },
-                          { label: 'Case Completion Rate', value: `${studentDetails.caseCompletionRate}%` },
-                        ].map(({ label, value }) => (
-                          <div key={label}>
-                            <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>{label}</p>
-                            <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>{value}</p>
-                          </div>
-                        ))}
-                      </>
-                    );
-                  })()}
+                  {studentDetailsLoading ? (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : studentDetails ? (
+                    <>
+                      {[
+                        { label: 'Student Name', value: studentDetails.name },
+                        { label: 'Student Email', value: studentDetails.email },
+                        { label: 'Group Name', value: studentDetails.groupName },
+                        { label: 'Cases Attempted', value: String(studentDetails.casesAttempted) },
+                        { label: 'Case Completion Rate', value: `${studentDetails.caseCompletionRate}%` },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>{label}</p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>{value}</p>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
                 </nav>
                 <div className="p-6 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                   <Button

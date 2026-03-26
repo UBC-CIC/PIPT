@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails } from '@/services/instructorService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -32,6 +32,8 @@ function InstructorSimulationGroupPage() {
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
+  const [studentDetailsLoading, setStudentDetailsLoading] = useState(false);
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
   const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('pamela');
   
@@ -365,10 +367,20 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle view student
    */
-  const handleViewStudent = (studentId: string) => {
+  const handleViewStudent = async (studentId: string) => {
     setSelectedStudentId(studentId);
     setStudentViewTab('overview');
     setActiveSection('viewStudent');
+    setStudentDetails(null);
+    setStudentDetailsLoading(true);
+    try {
+      const details = await instructorService.getStudentDetails(studentId, groupId || '');
+      setStudentDetails(details || null);
+    } catch (error) {
+      console.error('Error loading student details:', error);
+    } finally {
+      setStudentDetailsLoading(false);
+    }
   };
 
   /**
@@ -376,6 +388,7 @@ function InstructorSimulationGroupPage() {
    */
   const handleBackFromViewStudent = () => {
     setSelectedStudentId(null);
+    setStudentDetails(null);
     setActiveSection('students');
   };
 
@@ -3593,55 +3606,55 @@ Return valid JSON in exactly this structure:
                 </div>
                 
                 <nav className="flex-1 px-6 space-y-4">
-                  {(() => {
-                    const studentDetails = instructorService.getStudentDetails(selectedStudentId);
-                    if (!studentDetails) return null;
-                    
-                    return (
-                      <>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Student Name
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.name}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Student Email
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.email}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Group Name
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.groupName}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Cases Attempted
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.casesAttempted}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Case Completion Rate
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.caseCompletionRate}%
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  {studentDetailsLoading ? (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : studentDetails ? (
+                    <>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Student Name
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Student Email
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.email}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Group Name
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.groupName}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Cases Attempted
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.casesAttempted}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Case Completion Rate
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.caseCompletionRate}%
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
                 </nav>
 
                 <div className="p-6 border-t" style={{ borderColor: UI_COLORS.border.default }}>

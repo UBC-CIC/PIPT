@@ -1148,7 +1148,7 @@ exports.handler = async (event, context) => {
             // Step 3: Iterate through the patients and get chats for each patient
             for (const patient of studentPatients) {
               const chats = await sqlConnection`
-                        SELECT c.chat_id, c.chat_name, c.notes
+                        SELECT c.chat_id, c.chat_name, c.notes, c.status
                         FROM "chats" c
                         WHERE c.student_interaction_id IN (
                             SELECT student_interaction_id 
@@ -1175,6 +1175,7 @@ exports.handler = async (event, context) => {
                 result[patient.persona_name].push({
                   chatName: chat.chat_name,
                   notes: chat.notes || "No notes available.",
+                  status: chat.status || "active",
                   messages: messages.map((msg) => ({
                     sender_type: msg.sender_type,
                     message_content: msg.message_content,

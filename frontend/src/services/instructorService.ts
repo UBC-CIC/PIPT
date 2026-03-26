@@ -291,7 +291,7 @@ export interface InstructorDataService {
   deleteCaseMaterial: (patientId: string, materialId: string) => void;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
   getStudents: (simulationGroupId: string) => Promise<Student[]>;
-  getStudentDetails: (studentId: string) => StudentDetails | undefined;
+  getStudentDetails: (studentId: string, simulationGroupId: string) => Promise<StudentDetails | undefined>;
   getChatAttempts: (studentId: string, patientId: string) => ChatAttempt[];
   getChatMessages: (attemptId: string) => ChatMessage[];
   getChatNotes: (attemptId: string) => string;
@@ -1231,7 +1231,7 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
     );
 
     return data.map((student) => ({
-      id: student.user_id,
+      id: student.user_id || student.user_email,
       name: `${student.first_name} ${student.last_name}`.trim() || student.username,
       email: student.user_email,
     }));
@@ -1244,10 +1244,68 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
 /**
  * Get student details by ID
  *
- * FIX: Return undefined instead of [] as any to match StudentDetails | undefined.
+ * Fetches real student data from the backend using the student's email and simulation group ID.
+ * Computes casesAttempted and caseCompletionRate from student_patients_messages endpoint.
+ * Falls back to mock data if API calls fail.
  */
-function getStudentDetails(studentId: string): StudentDetails | undefined {
-  return mockStudentDetails[studentId];
+async function getStudentDetails(studentId: string, simulationGroupId: string): Promise<StudentDetails | undefined> {
+  // Step 1: Get basic student info (name, email) from the students list
+  let studentName = '';
+  let studentEmail = '';
+  let groupName = '';
+
+  try {
+    const students = await getStudents(simulationGroupId);
+    const student = students.find(s => s.id === studentId) || students.find(s => s.email === studentId);
+    if (!student) {
+      console.warn('Student not found in group, falling back to mock');
+      return mockStudentDetails[studentId];
+    }
+    studentName = student.name;
+    studentEmail = student.email;
+  } catch (error) {
+    console.error('Failed to fetch students list, falling back to mock:', error);
+    return mockStudentDetails[studentId];
+  }
+
+  // Step 2: Get group name
+  try {
+    const group = await getSimulationGroup(simulationGroupId);
+    groupName = group?.name || '';
+  } catch {
+    groupName = '';
+  }
+
+  // Step 3: Get cases attempted and completion rate from student_patients_messages
+  // chat.status === 'concluded' means debrief was reached
+  let totalChats = 0;
+  let completedChats = 0;
+  try {
+    const patientData = await apiClient.request<Record<string, any[]>>(
+      `instructor/student_patients_messages?student_email=${encodeURIComponent(studentEmail)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    for (const pName of Object.keys(patientData)) {
+      const chats = patientData[pName];
+      if (Array.isArray(chats)) {
+        totalChats += chats.length;
+        completedChats += chats.filter((chat: any) => chat.status === 'concluded').length;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to fetch student patient messages, stats will show 0:', error);
+  }
+
+  const caseCompletionRate = totalChats > 0 ? Math.round((completedChats / totalChats) * 100) : 0;
+
+  return {
+    id: studentId,
+    name: studentName,
+    email: studentEmail,
+    groupName,
+    casesAttempted: totalChats,
+    caseCompletionRate,
+  };
 }
 
 /**
