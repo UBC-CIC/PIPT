@@ -727,8 +727,20 @@ Your job is to produce a structured debrief evaluation in valid JSON with these 
   }
 }
 
-IMPORTANT:
-- Only output valid JSON. No markdown, no explanation, no preamble.
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no ```json or ```).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{' and the very last character MUST be '}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\", newlines must be \\n).
+- Ensure all arrays and objects are properly closed with matching brackets/braces.
+- Do NOT use trailing commas in arrays or objects.
+- Do NOT truncate the output. If the response is long, you MUST still complete the entire JSON object with all closing braces and brackets.
+- Double-check that every opened { has a matching } and every opened [ has a matching ] before finishing your response.
+- The overall_score MUST be a number (float), not a string.
+- All list fields (questions_addressed, questions_missed, strengths, areas_for_improvement, suggested_rewrites) MUST be arrays, even if empty (use []).
+
+EVALUATION RULES:
 - For questions_addressed and questions_missed, use the question_id values provided in the Key Questions list.
 - Use SEMANTIC matching: if the student asked about the same topic as a key question, even using different wording, count it as addressed. For example, "do you have any chest pain?" addresses a key question about "cardiovascular symptoms" or "chest pain". Asking "what is your name?" addresses a key question about "patient name" or "identifying information".
 - Be generous in matching — the student may phrase questions conversationally rather than using clinical terminology.
@@ -1298,8 +1310,20 @@ Evaluate the student's performance and produce a JSON response with these exact 
   ]
 }}
 
-IMPORTANT:
-- Only output valid JSON. No markdown, no explanation, no preamble.
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no ```json or ```).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{{' and the very last character MUST be '}}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\", newlines must be \\n).
+- Ensure all arrays and objects are properly closed with matching brackets/braces.
+- Do NOT use trailing commas in arrays or objects.
+- Do NOT truncate the output. You MUST complete the entire JSON object with all closing braces and brackets.
+- Double-check that every opened {{ has a matching }} and every opened [ has a matching ] before finishing.
+- The overall_score MUST be a number (float), not a string.
+- All list fields (questions_addressed, questions_missed, strengths, areas_for_improvement, suggested_rewrites) MUST be arrays, even if empty (use []).
+
+EVALUATION RULES:
 - Use the question_id values provided above.
 - CROSS-CHECK the full transcript against the missed questions list. If the student asked about a topic in the transcript that matches a "missed" question (even with different phrasing), it MUST appear in questions_addressed, NOT questions_missed. The automated matcher can miss conversational phrasings.
 - For questions_addressed, include both the automated matches AND any additional matches you find in the transcript.
@@ -1783,47 +1807,70 @@ The following is the instructor's answer key for this simulation case. Compare t
 {answer_key_text}
 """
 
-    # 3. Call the LLM
-    try:
-        from langchain_core.messages import SystemMessage, HumanMessage
+    # 3. Call the LLM with retry on invalid JSON
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    def _attempt_llm_call(extra_instruction: str = "") -> str:
+        """Invoke the LLM and return raw string output."""
+        prompt_content = user_prompt
+        if extra_instruction:
+            prompt_content = user_prompt + f"\n\n{extra_instruction}"
         messages = [
             SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
-            HumanMessage(content=user_prompt),
+            HumanMessage(content=prompt_content),
         ]
-        response = llm.invoke(messages)
-        raw_output = response.content if hasattr(response, 'content') else str(response)
-        logger.info(f"📋 Raw debrief LLM output: {raw_output[:500]}...")
-    except Exception as e:
-        logger.error(f"Debrief LLM call failed: {e}")
-        return {"error": f"LLM call failed: {str(e)}"}
+        resp = llm.invoke(messages)
+        return resp.content if hasattr(resp, 'content') else str(resp)
 
-    # 4. Parse the JSON response
-    try:
-        # Robust JSON extraction: find the first { and last } to extract the JSON object
-        cleaned = raw_output.strip()
-        
-        # Strip markdown code fences if present (handles various formats)
-        # Remove leading ```json or ``` with optional whitespace/newlines
+    def _extract_json(raw: str) -> dict:
+        """Strip markdown fences and extract the JSON object from raw LLM output."""
+        cleaned = raw.strip()
         cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
         cleaned = re.sub(r'\n?\s*```\s*$', '', cleaned)
         cleaned = cleaned.strip()
-        
-        # If still not starting with {, try to find the JSON object
         if not cleaned.startswith('{'):
             first_brace = cleaned.find('{')
             if first_brace != -1:
                 cleaned = cleaned[first_brace:]
-        
-        # If not ending with }, find the last }
         if not cleaned.endswith('}'):
             last_brace = cleaned.rfind('}')
             if last_brace != -1:
                 cleaned = cleaned[:last_brace + 1]
+        return json.loads(cleaned)
 
-        debrief_data = json.loads(cleaned)
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse debrief JSON: {e}\nRaw: {raw_output}")
-        # Save raw text as fallback
+    MAX_DEBRIEF_RETRIES = 2
+    raw_output = ""
+    debrief_data = None
+    last_parse_error = None
+
+    for attempt in range(1, MAX_DEBRIEF_RETRIES + 2):  # attempts: 1, 2, 3
+        try:
+            if attempt == 1:
+                raw_output = _attempt_llm_call()
+            else:
+                retry_msg = (
+                    f"RETRY ATTEMPT {attempt}: Your previous response was not valid JSON. "
+                    f"Error: {last_parse_error}. "
+                    "You MUST respond with ONLY a valid JSON object. "
+                    "The first character must be '{' and the last must be '}'. "
+                    "No markdown, no explanation, no preamble. Complete all arrays and objects."
+                )
+                logger.warning(f"📋 Retrying debrief LLM call (attempt {attempt}) due to JSON parse error")
+                raw_output = _attempt_llm_call(extra_instruction=retry_msg)
+
+            logger.info(f"📋 Raw debrief LLM output (attempt {attempt}): {raw_output[:500]}...")
+            debrief_data = _extract_json(raw_output)
+            logger.info(f"📋 Successfully parsed debrief JSON on attempt {attempt}")
+            break
+        except json.JSONDecodeError as e:
+            last_parse_error = str(e)
+            logger.error(f"Failed to parse debrief JSON (attempt {attempt}): {e}\nRaw: {raw_output[:500]}")
+        except Exception as e:
+            logger.error(f"Debrief LLM call failed (attempt {attempt}): {e}")
+            return {"error": f"LLM call failed: {str(e)}"}
+
+    if debrief_data is None:
+        logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
         debrief_data = {
             "summary": raw_output,
             "questions_addressed": [],
