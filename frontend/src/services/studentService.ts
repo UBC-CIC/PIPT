@@ -598,6 +598,13 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
 
     if (!Array.isArray(data) || data.length === 0) return [];
 
+    // Sort by last_accessed descending so the most recent chat appears first
+    data.sort((a, b) => {
+      const dateA = a.last_accessed ? new Date(a.last_accessed).getTime() : 0;
+      const dateB = b.last_accessed ? new Date(b.last_accessed).getTime() : 0;
+      return dateB - dateA;
+    });
+
     return data.map((chat, index) => {
       const dateStr = chat.last_accessed
         ? new Date(chat.last_accessed).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
