@@ -40,7 +40,7 @@ function AdminOrganizationPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const groupsData = await adminApi.getAllSimulationGroups();
+        const groupsData = await adminApi.getAllSimulationGroups(organizationId);
         // Map admin groups to the InstructorSimulationGroup shape used by the UI
         setGroups(groupsData.map((g, i) => ({
           simulation_group_id: g.simulation_group_id,
@@ -106,6 +106,7 @@ function AdminOrganizationPage() {
         group_description: data.description,
         group_student_access: data.active,
         system_prompt: data.systemPrompt || '',
+        organization_id: organizationId,
         // instructor_voice_enabled: data.enableVoice,  // uncomment after migration 005 runs
       });
 
