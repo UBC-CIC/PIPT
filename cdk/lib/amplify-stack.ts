@@ -71,8 +71,8 @@ applications:
         preBuild:
           commands:
             - pwd
-            - nvm install 20
-            - nvm use 20
+            - nvm install 22
+            - nvm use 22
             - npm ci
         build:
           commands:
@@ -114,9 +114,9 @@ applications:
     });
 
     // TODO: remove when merging to main
-    const data_ingestion = new amplify.CfnBranch(this, `${id}-dataIngestionBranch`, {
+    const frontendChanges = new amplify.CfnBranch(this, `${id}-frontendChangesBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "data_ingestion",
+      branchName: "frontend-changes",
       enableAutoBuild: true,
     });
 

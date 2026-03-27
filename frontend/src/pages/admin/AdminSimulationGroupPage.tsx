@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -37,8 +37,11 @@ function AdminSimulationGroupPage() {
   const [promptHistory] = useState(() => mockAdminDataService.getPromptHistory());
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
+  const [studentDetailsLoading, setStudentDetailsLoading] = useState(false);
+  const [studentPatientData, setStudentPatientData] = useState<StudentPatientData | null>(null);
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
-  const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('pamela');
+  const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('');
   const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   
@@ -191,7 +194,16 @@ function AdminSimulationGroupPage() {
           organization_id: adminGroupData.organization_id || '',
         } as InstructorSimulationGroup : undefined;
         
-        setSimulationGroup(groupData);
+        setSimulationGroup(groupData ? {
+          simulation_group_id: groupData.simulation_group_id,
+          name: groupData.group_name,
+          subtitle: 'Medical Simulation Group',
+          access_code: groupData.group_access_code || '',
+          student_count: groupData.student_count || 0,
+          instructor_count: groupData.instructor_count || 0,
+          patient_count: groupData.persona_count || 0,
+          organization_id: groupData.organization_id || '',
+        } : undefined);
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
@@ -419,14 +431,35 @@ function AdminSimulationGroupPage() {
     setActiveSection('patients');
   };
 
-  const handleViewStudent = (studentId: string) => {
+  const handleViewStudent = async (studentId: string) => {
     setSelectedStudentId(studentId);
     setStudentViewTab('overview');
     setActiveSection('viewStudent');
+    setStudentDetails(null);
+    setStudentPatientData(null);
+    setStudentDetailsLoading(true);
+    try {
+      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.name);
+      setStudentDetails(details || null);
+
+      if (details?.email) {
+        const patientData = await instructorService.getStudentPatientData(details.email, groupId || '');
+        setStudentPatientData(patientData);
+        if (patientData.patientNames.length > 0) {
+          setSelectedPatientFilter(patientData.patientNames[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading student details:', error);
+    } finally {
+      setStudentDetailsLoading(false);
+    }
   };
 
   const handleBackFromViewStudent = () => {
     setSelectedStudentId(null);
+    setStudentDetails(null);
+    setStudentPatientData(null);
     setActiveSection('students');
   };
 
@@ -729,7 +762,7 @@ function AdminSimulationGroupPage() {
     console.log('Saved new question to bank:', addQuestionType, question);
   };
 
-  const handleSaveNewPatientQuestion = (question: {
+  const handleSaveNewPatientQuestion = async (question: {
     patientId: string;
     title: string;
     keyQuestion: string;
@@ -772,12 +805,40 @@ function AdminSimulationGroupPage() {
         return newSet;
       });
     }
-    
-    if (selectedPatientForEdit === question.patientId) {
-      setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(question.patientId));
+
+    try {
+      // 1. Create the question in the question_bank via real API
+      const created = await adminApi.createQuestionBankQuestion(organizationId, {
+        title: question.title,
+        question_text: question.keyQuestion,
+        evaluation_criteria: question.evaluationCriteria,
+        is_mandatory: question.required,
+      });
+
+      // 2. Assign it to the group with persona_id to make it patient-specific
+      await instructorService.assignQuestionToGroup(
+        groupId || '',
+        created.id,
+        question.patientId
+      );
+
+      // 3. Refresh the question bank from the API
+      const updatedBank = await instructorService.getGlobalQuestionBank();
+      setGlobalBankQuestions(updatedBank);
+
+      // 4. Update UI state for the included checkmark
+      if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank === question.patientId) {
+        setIncludedQuestionIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(created.id);
+          return newSet;
+        });
+      }
+
+      console.log('Created patient-specific question via API:', created.id);
+    } catch (err) {
+      console.error('Failed to create patient-specific question:', err);
     }
-    
-    console.log('Saved new patient-specific question:', question);
   };
 
   const handleToggleQuestionInclusion = async (questionId: string, bankQuestion: QuestionBankItem, isChecked: boolean) => {
@@ -2283,26 +2344,27 @@ function AdminSimulationGroupPage() {
                   <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Overview</h2>
                 </div>
                 <nav className="flex-1 px-6 space-y-4">
-                  {(() => {
-                    const studentDetails = instructorService.getStudentDetails(selectedStudentId);
-                    if (!studentDetails) return null;
-                    return (
-                      <>
-                        {[
-                          { label: 'Student Name', value: studentDetails.name },
-                          { label: 'Student Email', value: studentDetails.email },
-                          { label: 'Group Name', value: studentDetails.groupName },
-                          { label: 'Cases Attempted', value: String(studentDetails.casesAttempted) },
-                          { label: 'Case Completion Rate', value: `${studentDetails.caseCompletionRate}%` },
-                        ].map(({ label, value }) => (
-                          <div key={label}>
-                            <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>{label}</p>
-                            <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>{value}</p>
-                          </div>
-                        ))}
-                      </>
-                    );
-                  })()}
+                  {studentDetailsLoading ? (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : studentDetails ? (
+                    <>
+                      {[
+                        { label: 'Student Name', value: studentDetails.name },
+                        { label: 'Student Email', value: studentDetails.email },
+                        { label: 'Group Name', value: studentDetails.groupName },
+                        { label: 'Cases Attempted', value: String(studentDetails.casesAttempted) },
+                        { label: 'Case Completion Rate', value: `${studentDetails.caseCompletionRate}%` },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>{label}</p>
+                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>{value}</p>
+                        </div>
+                      ))}
+                    </>
+                  ) : null}
                 </nav>
                 <div className="p-6 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                   <Button
@@ -2329,18 +2391,19 @@ function AdminSimulationGroupPage() {
                         className="w-full px-4 py-3 rounded-lg text-base"
                         style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }}
                       >
-                        <option value="pamela">Pamela</option>
-                        <option value="timothy">Timothy</option>
+                        {(studentPatientData?.patientNames || []).map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
                       </select>
                     </div>
 
                     <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Click on the dropdown icon to view the student's chat history and export per-case reports.</p>
 
                     <div className="space-y-4">
-                      {instructorService.getChatAttempts(selectedStudentId, selectedPatientFilter).map((attempt) => {
+                      {(studentPatientData?.attempts[selectedPatientFilter] || []).map((attempt) => {
                         const isExpanded = expandedAttemptId === attempt.id;
-                        const messages = instructorService.getChatMessages(attempt.id);
-                        const notes = instructorService.getChatNotes(attempt.id);
+                        const messages = studentPatientData?.messages[attempt.id] || [];
+                        const notes = studentPatientData?.notes[attempt.id] || '';
 
                         return (
                           <div key={attempt.id} className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
@@ -2349,9 +2412,8 @@ function AdminSimulationGroupPage() {
                               style={{ backgroundColor: isExpanded ? UI_COLORS.background.tableHeader : UI_COLORS.background.white }}
                               onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
                             >
-                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>Attempt {attempt.attemptNumber} - {attempt.date}</div>
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{attempt.date}</div>
                               <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{attempt.completionStatus}</div>
-                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>{attempt.score !== null ? `${attempt.score}%` : '-'}</div>
                               <div className="flex justify-end">
                                 <button className="p-2 rounded transition-transform" style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>
                                   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -2368,15 +2430,15 @@ function AdminSimulationGroupPage() {
                                   <div className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
                                     {messages.length > 0 ? messages.map((message) => (
                                       <div key={message.message_id} className={`flex gap-3 ${message.sender_type === 'student' ? 'justify-end' : 'justify-start'}`}>
-                                        {message.sender_type !== 'student' && <div className="flex-shrink-0"><UserAvatar name="Pamela" imageUrl={undefined} size="small" /></div>}
+                                        {message.sender_type !== 'student' && <div className="flex-shrink-0"><UserAvatar name={selectedPatientFilter || 'Patient'} imageUrl={undefined} size="small" /></div>}
                                         <div
                                           className={`max-w-[70%] rounded-lg px-4 py-3 ${message.sender_type === 'student' ? 'rounded-br-none' : 'rounded-bl-none'}`}
                                           style={{ backgroundColor: message.sender_type === 'student' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.background.hoverLight, color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading }}
                                         >
-                                          <p className="text-sm font-semibold mb-1">{message.sender_type === 'student' ? 'Student (User)' : 'Pamela (LLM)'}:</p>
+                                          <p className="text-sm font-semibold mb-1">{message.sender_type === 'student' ? `${studentDetails?.name || 'Student'} (User)` : `${selectedPatientFilter || 'Patient'} (LLM)`}:</p>
                                           <p className="text-sm">{message.message_content}</p>
                                         </div>
-                                        {message.sender_type === 'student' && <div className="flex-shrink-0"><UserAvatar name="Student" imageUrl={undefined} size="small" /></div>}
+                                        {message.sender_type === 'student' && <div className="flex-shrink-0"><UserAvatar name={studentDetails?.name || 'Student'} imageUrl={undefined} size="small" /></div>}
                                       </div>
                                     )) : (
                                       <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No chat history available.</p>

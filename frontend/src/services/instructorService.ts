@@ -18,6 +18,7 @@ import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
 import { mockAdminDataService } from '@/services/adminService';
 import { mapBackendToQuestionBankItem } from '@/services/adminApiService';
+import { type AIDebriefData, deepParseJson, extractDebriefFromRawJson } from '@/services/studentService';
 
 /**
  * Represents a simulation group from instructor perspective
@@ -180,7 +181,7 @@ export interface ChatAttempt {
   student_interaction_id: string;       // Reference to student interaction (student_interaction_id in DB)
   attemptNumber: number;                // Attempt number (derived from ordering)
   date: string;                         // Date of attempt (derived from last_accessed in DB)
-  completionStatus: 'In Progress' | 'Complete'; // Status (derived from completion state)
+  completionStatus: 'In Progress' | 'Debrief Reached'; // Status (derived from completion state)
   score: number | null;                 // Score percentage (null if in progress)
   notes?: string;                       // Notes text (notes field in DB)
 }
@@ -202,6 +203,17 @@ export interface ChatMessage {
 export interface ChatNotes {
   attemptId: string;                    // Chat attempt ID (chat_id in DB)
   notes: string;                        // Notes text (notes field in chats table)
+}
+
+/**
+ * Represents the full patient data for a student, fetched from student_patients_messages.
+ * Keys are patient names, values are arrays of chat attempts with messages and notes.
+ */
+export interface StudentPatientData {
+  patientNames: string[];
+  attempts: Record<string, ChatAttempt[]>;
+  messages: Record<string, ChatMessage[]>;
+  notes: Record<string, string>;
 }
 
 /**
@@ -292,7 +304,8 @@ export interface InstructorDataService {
   deleteCaseMaterial: (patientId: string, materialId: string) => void;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
   getStudents: (simulationGroupId: string) => Promise<Student[]>;
-  getStudentDetails: (studentId: string) => StudentDetails | undefined;
+  getStudentDetails: (studentId: string, simulationGroupId: string, groupName?: string) => Promise<StudentDetails | undefined>;
+  getStudentPatientData: (studentEmail: string, simulationGroupId: string) => Promise<StudentPatientData>;
   getChatAttempts: (studentId: string, patientId: string) => ChatAttempt[];
   getChatMessages: (attemptId: string) => ChatMessage[];
   getChatNotes: (attemptId: string) => string;
@@ -313,6 +326,7 @@ export interface InstructorDataService {
   assignQuestionToGroup: (simulationGroupId: string, questionIds: string | string[], personaId?: string, options?: { weight_override?: number; max_score_override?: number; order?: number }) => Promise<any>;
   unassignQuestion: (groupQuestionId: string) => Promise<any>;
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
+  fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
 }
 
 /**
@@ -551,7 +565,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
         student_interaction_id: 'interaction-1',
         attemptNumber: 3,
         date: 'Feb 18, 2026',
-        completionStatus: 'Complete',
+        completionStatus: 'Debrief Reached',
         score: 67
       },
       {
@@ -559,7 +573,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
         student_interaction_id: 'interaction-1',
         attemptNumber: 2,
         date: 'Feb 14, 2026',
-        completionStatus: 'Complete',
+        completionStatus: 'Debrief Reached',
         score: 88
       },
       {
@@ -577,7 +591,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
         student_interaction_id: 'interaction-2',
         attemptNumber: 2,
         date: 'Feb 20, 2026',
-        completionStatus: 'Complete',
+        completionStatus: 'Debrief Reached',
         score: 75
       },
       {
@@ -585,7 +599,7 @@ const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
         student_interaction_id: 'interaction-2',
         attemptNumber: 1,
         date: 'Feb 10, 2026',
-        completionStatus: 'Complete',
+        completionStatus: 'Debrief Reached',
         score: 82
       }
     ]
@@ -1232,7 +1246,7 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
     );
 
     return data.map((student) => ({
-      id: student.user_id,
+      id: student.user_id || student.user_email,
       name: `${student.first_name} ${student.last_name}`.trim() || student.username,
       email: student.user_email,
     }));
@@ -1245,10 +1259,180 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
 /**
  * Get student details by ID
  *
- * FIX: Return undefined instead of [] as any to match StudentDetails | undefined.
+ * Fetches real student data from the backend using the student's email and simulation group ID.
+ * Computes casesAttempted and caseCompletionRate from student_patients_messages endpoint.
+ * Falls back to mock data if API calls fail.
  */
-function getStudentDetails(studentId: string): StudentDetails | undefined {
-  return mockStudentDetails[studentId];
+async function getStudentDetails(studentId: string, simulationGroupId: string, groupNameOverride?: string): Promise<StudentDetails | undefined> {
+  // Step 1: Get basic student info (name, email) from the students list
+  let studentName = '';
+  let studentEmail = '';
+  let groupName = groupNameOverride || '';
+
+  try {
+    const students = await getStudents(simulationGroupId);
+    const student = students.find(s => s.id === studentId) || students.find(s => s.email === studentId);
+    if (!student) {
+      console.warn('Student not found in group, falling back to mock');
+      return mockStudentDetails[studentId];
+    }
+    studentName = student.name;
+    studentEmail = student.email;
+  } catch (error) {
+    console.error('Failed to fetch students list, falling back to mock:', error);
+    return mockStudentDetails[studentId];
+  }
+
+  // Step 2: Get group name if not provided
+  if (!groupName) {
+    try {
+      const group = await getSimulationGroup(simulationGroupId);
+      groupName = group?.name || '';
+    } catch {
+      groupName = '';
+    }
+  }
+
+  // Step 3: Get cases attempted and completion rate from student_patients_messages
+  // chat.status === 'concluded' means debrief was reached
+  let totalChats = 0;
+  let completedChats = 0;
+  try {
+    const patientData = await apiClient.request<Record<string, any[]>>(
+      `instructor/student_patients_messages?student_email=${encodeURIComponent(studentEmail)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    for (const pName of Object.keys(patientData)) {
+      const chats = patientData[pName];
+      if (Array.isArray(chats)) {
+        totalChats += chats.length;
+        completedChats += chats.filter((chat: any) => chat.status === 'concluded').length;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to fetch student patient messages, stats will show 0:', error);
+  }
+
+  const caseCompletionRate = totalChats > 0 ? Math.round((completedChats / totalChats) * 100) : 0;
+
+  return {
+    id: studentId,
+    name: studentName,
+    email: studentEmail,
+    groupName,
+    casesAttempted: totalChats,
+    caseCompletionRate,
+  };
+}
+
+/**
+ * Fetch all patient data for a student from the backend.
+ * Returns structured data with patient names, chat attempts, messages, and notes.
+ */
+async function getStudentPatientData(studentEmail: string, simulationGroupId: string): Promise<StudentPatientData> {
+  const empty: StudentPatientData = { patientNames: [], attempts: {}, messages: {}, notes: {} };
+
+  try {
+    const raw = await apiClient.request<Record<string, any[]>>(
+      `instructor/student_patients_messages?student_email=${encodeURIComponent(studentEmail)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    const patientNames = Object.keys(raw);
+    const attempts: Record<string, ChatAttempt[]> = {};
+    const messages: Record<string, ChatMessage[]> = {};
+    const notes: Record<string, string> = {};
+
+    for (const patientName of patientNames) {
+      const chats = raw[patientName];
+      if (!Array.isArray(chats)) continue;
+
+      // Build attempt objects with a raw timestamp for sorting
+      const unsorted = chats.map((chat: any, index: number) => {
+        const attemptId = chat.chatId || chat.chatName || `chat-${index}`;
+
+        // Filter out "Begin the conversation as the patient" messages and deduplicate
+        const seen = new Set<string>();
+        const chatMessages: ChatMessage[] = (chat.messages || [])
+          .filter((msg: any) => {
+            if (typeof msg.message_content === 'string' && msg.message_content.trim().startsWith('Begin the conversation as the patient:')) return false;
+            const key = `${msg.sender_type}::${(msg.message_content || '').trim()}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          })
+          .map((msg: any, msgIdx: number) => ({
+            message_id: `${attemptId}-msg-${msgIdx}`,
+            chat_id: attemptId,
+            sender_type: msg.sender_type as 'student' | 'ai' | 'system',
+            message_content: msg.message_content,
+            sent_at: msg.sent_at ? new Date(msg.sent_at).toLocaleString() : '',
+          }));
+
+        messages[attemptId] = chatMessages;
+        notes[attemptId] = chat.notes || '';
+
+        // Derive date from the first message timestamp (session start)
+        const firstMsg = chat.messages?.[0];
+        const rawTimestamp = firstMsg?.sent_at ? new Date(firstMsg.sent_at).getTime() : 0;
+        const dateStr = rawTimestamp
+          ? new Date(rawTimestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : '';
+
+        // Format name like student view: "Session Mar 23, 2026"
+        let displayName = chat.chatName || '';
+        if (displayName) {
+          const timestampMatch = displayName.match(/(\d{10,13})/);
+          if (timestampMatch) {
+            const ts = Number(timestampMatch[1]);
+            const parsed = new Date(ts < 1e12 ? ts * 1000 : ts);
+            if (!isNaN(parsed.getTime())) {
+              displayName = `Session ${parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+            }
+          }
+        }
+        if (!displayName && dateStr) {
+          const fallbackDate = new Date(firstMsg?.sent_at);
+          const timeStr = !isNaN(fallbackDate.getTime())
+            ? ' ' + fallbackDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
+            : '';
+          displayName = `Session ${dateStr}${timeStr}`;
+        }
+
+        const isCompleted = chat.status === 'concluded';
+
+        return {
+          rawTimestamp,
+          attempt: {
+            id: attemptId,
+            student_interaction_id: '',
+            attemptNumber: 0, // will be assigned after sorting
+            date: dateStr,
+            completionStatus: isCompleted ? 'Debrief Reached' as const : 'In Progress' as const,
+            score: null,
+            notes: chat.notes || '',
+            displayName,
+          } as ChatAttempt & { displayName: string },
+        };
+      });
+
+      // Sort most recent first
+      unsorted.sort((a, b) => b.rawTimestamp - a.rawTimestamp);
+
+      // Assign attempt numbers (most recent = highest number)
+      const patientAttempts: ChatAttempt[] = unsorted.map((item, idx) => ({
+        ...item.attempt,
+        attemptNumber: unsorted.length - idx,
+        date: item.attempt.displayName || item.attempt.date,
+      }));
+
+      attempts[patientName] = patientAttempts;
+    }
+
+    return { patientNames, attempts, messages, notes };
+  } catch (error) {
+    console.error('Failed to fetch student patient data:', error);
+    return empty;
+  }
 }
 
 /**
@@ -1512,6 +1696,83 @@ async function updateQuestionAssignment(groupQuestionId: string, updates: any): 
 }
 
 /**
+ * Fetch AI debrief for a concluded session via GET /instructor/get_debrief.
+ */
+async function fetchInstructorDebrief(sessionId: string, simulationGroupId: string): Promise<AIDebriefData | null> {
+  try {
+    const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
+      `instructor/get_debrief?session_id=${encodeURIComponent(sessionId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    if (!data?.generated_text) return null;
+
+    let debrief = deepParseJson(data.generated_text);
+    if (!debrief || typeof debrief !== 'object') return null;
+
+    if (debrief.summary && typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+      const extracted = extractDebriefFromRawJson(debrief.summary);
+      if (extracted && typeof extracted === 'object') {
+        debrief = { ...debrief, ...extracted } as Record<string, any>;
+      }
+    }
+
+    if (typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+      try {
+        const firstBrace = debrief.summary.indexOf('{');
+        const lastBrace = debrief.summary.lastIndexOf('}');
+        if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+          const summaryObj = JSON.parse(debrief.summary.substring(firstBrace, lastBrace + 1));
+          if (summaryObj.summary) debrief.summary = summaryObj.summary;
+        }
+      } catch {
+        const m = debrief.summary.match(/"summary"\s*:\s*"([^"]+)"/);
+        if (m) {
+          debrief.summary = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+        } else {
+          debrief.summary = 'AI debrief summary could not be fully parsed.';
+        }
+      }
+    }
+
+    const toStrArray = (arr: any[]) => arr.map(
+      (q: string | { question_text?: string }) => typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+    );
+    const addressedQuestions = toStrArray(debrief.questions_addressed || []);
+    const missedQuestions = toStrArray(debrief.questions_missed || []);
+
+    return {
+      summary: typeof debrief.summary === 'string' ? debrief.summary : '',
+      questionsAddressed: addressedQuestions,
+      missedKeyQuestionsCount: missedQuestions.length,
+      missedQuestions,
+      missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
+      overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+      recommendationFeedback: {
+        strengths: debrief.recommendation_feedback?.strengths || [],
+        areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
+      },
+      suggestedRewrites: (debrief.suggested_rewrites || []).map(
+        (r: { original_message?: string; suggested_rewrite?: string }) => ({
+          original: r.original_message || '',
+          suggested: r.suggested_rewrite || '',
+        })
+      ),
+      rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+      answerKeyComparison: debrief.answer_key_comparison ? {
+        answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
+        correctElements: debrief.answer_key_comparison.correct_elements,
+        missingElements: debrief.answer_key_comparison.missing_elements,
+        incorrectElements: debrief.answer_key_comparison.incorrect_elements,
+        overallAlignment: debrief.answer_key_comparison.overall_alignment,
+      } : undefined,
+    };
+  } catch (error) {
+    console.error('[fetchInstructorDebrief] failed', { sessionId, error });
+    return null;
+  }
+}
+
+/**
  * Instructor data service object
  */
 export const instructorService: InstructorDataService = {
@@ -1546,6 +1807,7 @@ export const instructorService: InstructorDataService = {
   getEvaluationPrompt,
   getStudents,
   getStudentDetails,
+  getStudentPatientData,
   getChatAttempts,
   getChatMessages,
   getChatNotes,
@@ -1565,7 +1827,8 @@ export const instructorService: InstructorDataService = {
   getSimulationGroupQuestions,
   assignQuestionToGroup,
   unassignQuestion,
-  updateQuestionAssignment
+  updateQuestionAssignment,
+  fetchDebrief: fetchInstructorDebrief
 };
 
 // Keep backward-compatible export

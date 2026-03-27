@@ -211,7 +211,7 @@ function StudentChatPage() {
     } else if (!sessionCreationRef.current) {
       // New chat — create a fresh session (guarded against StrictMode double-mount)
       sessionCreationRef.current = true;
-      studentService.createSession(groupId, patientId, `Session ${Date.now()}`).then((session) => {
+      studentService.createSession(groupId, patientId, `Session ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}`).then((session) => {
         if (session) {
           setSessionId(session.chat_id);
         }

@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
+import { type AIDebriefData } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -13,10 +14,12 @@ import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecifi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/App';
+import { downloadChatPdf } from "@/lib/download-chat-pdf";
+import AIDebriefDialog from '../../components/AIDebriefDialog';
 
 /**
  * InstructorSimulationGroupPage Component
- * 
+ *
  * Displays the simulation group management view for instructors.
  * Includes sidebar navigation and content area for analytics, patient management, etc.
  */
@@ -32,9 +35,12 @@ function InstructorSimulationGroupPage() {
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
+  const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
+  const [studentDetailsLoading, setStudentDetailsLoading] = useState(false);
+  const [studentPatientData, setStudentPatientData] = useState<StudentPatientData | null>(null);
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
-  const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('pamela');
-  
+  const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('');
+
   // Edit Patient state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
   const [editPatientTab, setEditPatientTab] = useState<'info' | 'questions' | 'materials'>('info');
@@ -44,9 +50,10 @@ function InstructorSimulationGroupPage() {
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  
+  const attemptPdfRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
   // Global Rubric state
-  const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() => 
+  const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() =>
     instructorService.getGlobalRubricQuestions(groupId || '1')
   );
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(() => {
@@ -55,7 +62,7 @@ function InstructorSimulationGroupPage() {
   });
   const [rubricSearchQuery, setRubricSearchQuery] = useState('');
   const [isMainSidebarVisible, setIsMainSidebarVisible] = useState(true);
-  
+
   // Question Bank state
   const [questionBankTab, setQuestionBankTab] = useState<'global' | 'patientSpecific'>('global');
   const [includedQuestionIds, setIncludedQuestionIds] = useState<Set<string>>(new Set());
@@ -66,24 +73,24 @@ function InstructorSimulationGroupPage() {
   const [selectedPatientForQuestionBank, setSelectedPatientForQuestionBank] = useState<string | null>(null);
   const [globalQuestionSearchQuery, setGlobalQuestionSearchQuery] = useState('');
   const [patientQuestionSearchQuery, setPatientQuestionSearchQuery] = useState('');
-  
+
   // Pagination state for Question Bank
   const [globalPagination, setGlobalPagination] = useState({
     currentPage: 1,
     itemsPerPage: 5
   });
-  
+
   const [patientPagination, setPatientPagination] = useState({
     currentPage: 1,
     itemsPerPage: 5
   });
-  
+
   // Question Bank questions - loaded from service
   const [globalBankQuestions, setGlobalBankQuestions] = useState<QuestionBankItem[]>([]);
   const [, setQuestionBankLoading] = useState(false);
   const [, setQuestionBankError] = useState<string | null>(null);
-  
-  const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState(() => 
+
+  const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState(() =>
     instructorService.getPatientSpecificQuestionBank()
   );
 
@@ -97,19 +104,19 @@ function InstructorSimulationGroupPage() {
   ).sort();
   
   // Case-Specific Key Questions state
-  const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() => 
+  const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() =>
     selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : []
   );
   const [caseQuestionSearchQuery, setCaseQuestionSearchQuery] = useState('');
   const [globalRubricSearchQuery, setGlobalRubricSearchQuery] = useState('');
-  
+
   // Filter case questions based on search
   const filteredCaseQuestions = caseSpecificQuestions.filter(q =>
     q.title.toLowerCase().includes(caseQuestionSearchQuery.toLowerCase())
   );
 
   // Case Materials state
-  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>(() => 
+  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>(() =>
     selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : []
   );
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>(() => {
@@ -117,23 +124,23 @@ function InstructorSimulationGroupPage() {
     return materials[0]?.id || '';
   });
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
-  
+
   // Get selected material
   const selectedMaterial = caseMaterials.find(m => m.id === selectedMaterialId);
-  
+
   // Filter materials based on search
   const filteredMaterials = caseMaterials.filter(m =>
     m.title.toLowerCase().includes(materialSearchQuery.toLowerCase())
   );
-  
+
   // Get selected question
   const selectedQuestion = globalRubricQuestions.find(q => q.id === selectedQuestionId);
-  
+
   // Filter questions based on search
   const filteredRubricQuestions = globalRubricQuestions.filter(q =>
     q.title.toLowerCase().includes(rubricSearchQuery.toLowerCase())
   );
-  
+
   // Load data from instructor service
   const [user, setUser] = useState<UserData>({ name: 'Instructor', avatarUrl: undefined });
   const [simulationGroup, setSimulationGroup] = useState<any>(null);
@@ -142,7 +149,13 @@ function InstructorSimulationGroupPage() {
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
-  
+
+  // new states for AI Debrief and loading states
+  const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
+  const [selectedDebriefData, setSelectedDebriefData] = useState<AIDebriefData | null>(null);
+  const [isFetchingDebrief, setIsFetchingDebrief] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<string | null>(null);
+
   // Get organization-specific labels from service
   const labels = instructorService.getOrganizationLabels(groupId || '1');
   const {
@@ -151,15 +164,15 @@ function InstructorSimulationGroupPage() {
     aiPersonaLower: aiPersonaLabelLower,
     userRole: userRoleLabel,
   } = labels;
-  
+
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState<any[]>([]);
-  
+
   // Load initial data
   useEffect(() => {
     const loadData = async () => {
       if (!groupId) return;
-      
+
       try {
         const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData] = await Promise.all([
           instructorService.getCurrentUser(),
@@ -169,7 +182,7 @@ function InstructorSimulationGroupPage() {
           instructorService.getManageablePatients(groupId),
           instructorService.getKeyQuestionAnalytics(groupId),
         ]);
-        
+
         setUser(userData);
         setSimulationGroup(groupData);
         setPatientAnalytics(analyticsData);
@@ -231,13 +244,13 @@ function InstructorSimulationGroupPage() {
         });
     }
   }, [activeSection, groupId]);
-  
+
   // State for selected patient
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
-  
+
   // Get current patient data
   const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
-  const messageCountData = currentPatient 
+  const messageCountData = currentPatient
     ? [
         { name: 'Student Messages', value: currentPatient.student_message_count },
         { name: 'AI Messages', value: currentPatient.ai_message_count },
@@ -245,30 +258,30 @@ function InstructorSimulationGroupPage() {
     : [];
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
-  
-  // Key question analytics (per patient) — uses pre-fetched data
+
+  // Key question analytics (per patient) - uses pre-fetched data
   const keyQuestionAnalytics = currentPatient
     ? globalKeyQuestionAnalytics
     : [];
-  
+
   // Question performance scores
   const questionPerformanceScores = instructorService.getQuestionPerformanceScores(groupId || '1');
-  
+
   // Score distribution for current patient
-  const scoreDistribution = currentPatient 
+  const scoreDistribution = currentPatient
     ? instructorService.getScoreDistribution(groupId || '1', currentPatient.patient_id)
     : [];
-  
+
   // Fallback values
   const simulationGroupName = simulationGroup?.name || 'Simulation Group';
   const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
-  
-  // Filter patients based on search query (user searches by name, but ID is the unique identifier)
+
+  // Filter patients based on search query
   const filteredPatients = manageablePatients.filter(patient =>
     (patient.name || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Filter students based on search query (user searches by name, but ID is the unique identifier)
+  // Filter students based on search query
   const filteredStudents = students.filter(student =>
     (student.name || '').toLowerCase().includes(studentSearchQuery.toLowerCase())
   );
@@ -302,7 +315,6 @@ function InstructorSimulationGroupPage() {
       try {
         const newCode = await instructorService.generateAccessCode(groupId);
         console.log('Generated new access code:', newCode);
-        // Reload simulation group data
         const groupData = await instructorService.getSimulationGroup(groupId);
         setSimulationGroup(groupData);
       } catch (error) {
@@ -318,17 +330,14 @@ function InstructorSimulationGroupPage() {
     navigator.clipboard.writeText(accessCode);
   };
 
-
   /**
    * Handle delete patient
    */
   const handleDeletePatient = (patientId: string) => {
     if (confirm(`Are you sure you want to delete this ${aiPersonaLabelLower}?`)) {
-      // Update the state directly with filtered array
-      setManageablePatients(prevPatients => 
+      setManageablePatients(prevPatients =>
         prevPatients.filter(patient => patient.id !== patientId)
       );
-      // Also update the service data for consistency
       instructorService.deletePatient(patientId);
     }
   };
@@ -345,20 +354,18 @@ function InstructorSimulationGroupPage() {
       setEditPatientGender(patient.patient_gender || patient.gender || '');
       setEditPatientPrompt(patient.patient_prompt || instructorService.getDefaultPatientPrompt());
       setEditPatientTab('info');
-      
-      // Load case-specific questions and materials
+
       const questions = instructorService.getCaseSpecificQuestions(patientId);
       setCaseSpecificQuestions(questions);
-      
-      // Initialize includedQuestionIds with the patient's current questions
+
       const questionIds = instructorService.getPatientCaseSpecificQuestionIds(patientId);
       setIncludedQuestionIds(questionIds);
       setPendingQuestionIds(new Set(questionIds));
-      
+
       const materials = instructorService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
       setSelectedMaterialId(materials[0]?.id || '');
-      
+
       setActiveSection('editPatient');
     }
   };
@@ -374,10 +381,29 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle view student
    */
-  const handleViewStudent = (studentId: string) => {
+  const handleViewStudent = async (studentId: string) => {
     setSelectedStudentId(studentId);
     setStudentViewTab('overview');
     setActiveSection('viewStudent');
+    setStudentDetails(null);
+    setStudentPatientData(null);
+    setStudentDetailsLoading(true);
+    try {
+      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.name);
+      setStudentDetails(details || null);
+
+      if (details?.email) {
+        const patientData = await instructorService.getStudentPatientData(details.email, groupId || '');
+        setStudentPatientData(patientData);
+        if (patientData.patientNames.length > 0) {
+          setSelectedPatientFilter(patientData.patientNames[0]);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading student details:', error);
+    } finally {
+      setStudentDetailsLoading(false);
+    }
   };
 
   /**
@@ -385,6 +411,8 @@ function InstructorSimulationGroupPage() {
    */
   const handleBackFromViewStudent = () => {
     setSelectedStudentId(null);
+    setStudentDetails(null);
+    setStudentPatientData(null);
     setActiveSection('students');
   };
 
@@ -394,7 +422,6 @@ function InstructorSimulationGroupPage() {
   const handleSavePatientChanges = async () => {
     if (selectedPatientForEdit && groupId) {
       if (selectedPatientForEdit === 'new') {
-        // Create new patient and get the real persona_id
         const newPersonaId = await instructorService.createPatient(groupId, {
           patient_name: editPatientName,
           patient_age: parseInt(editPatientAge) || 0,
@@ -403,7 +430,6 @@ function InstructorSimulationGroupPage() {
         });
         setSelectedPatientForEdit(newPersonaId);
       } else {
-        // Update existing patient
         instructorService.updatePatient(groupId, {
           patient_id: selectedPatientForEdit,
           patient_name: editPatientName,
@@ -419,7 +445,6 @@ function InstructorSimulationGroupPage() {
 
   /**
    * Auto-save a new patient before allowing file uploads or other tabs.
-   * Returns the real persona_id, or null if save failed.
    */
   const autoSaveNewPatient = async (): Promise<string | null> => {
     if (selectedPatientForEdit !== 'new' || !groupId) return selectedPatientForEdit;
@@ -450,7 +475,7 @@ function InstructorSimulationGroupPage() {
   const handleEditPatientTabSwitch = async (tab: 'info' | 'questions' | 'materials') => {
     if (tab !== 'info' && selectedPatientForEdit === 'new') {
       const savedId = await autoSaveNewPatient();
-      if (!savedId) return; // Stay on info tab if save failed
+      if (!savedId) return;
     }
     setEditPatientTab(tab);
   };
@@ -502,7 +527,7 @@ function InstructorSimulationGroupPage() {
   };
 
   // Get the patient being edited
-  const patientBeingEdited = selectedPatientForEdit 
+  const patientBeingEdited = selectedPatientForEdit
     ? instructorService.getPatient(selectedPatientForEdit)
     : null;
 
@@ -517,37 +542,6 @@ function InstructorSimulationGroupPage() {
     setEditPatientPrompt(instructorService.getDefaultPatientPrompt());
     setEditPatientTab('info');
     setActiveSection('editPatient');
-  };
-
-
-  /**
-   * Handle delete question
-   */
-  const handleDeleteQuestion = async () => {
-    if (!selectedQuestionId) return;
-    const question = globalRubricQuestions.find(q => q.id === selectedQuestionId);
-    if (!question?.group_question_id) {
-      alert('Cannot remove this question — assignment ID not found.');
-      return;
-    }
-    if (confirm('Are you sure you want to remove this question?')) {
-      try {
-        await instructorService.unassignQuestion(question.group_question_id);
-        const updatedQuestions = globalRubricQuestions.filter(q => q.id !== selectedQuestionId);
-        setGlobalRubricQuestions(updatedQuestions);
-        setSelectedQuestionId(updatedQuestions[0]?.id || null);
-
-        // Uncheck in question bank
-        setIncludedQuestionIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(selectedQuestionId);
-          return newSet;
-        });
-      } catch (error) {
-        console.error('Failed to remove question:', error);
-        alert('Failed to remove question. Please try again.');
-      }
-    }
   };
 
   /**
@@ -572,18 +566,17 @@ function InstructorSimulationGroupPage() {
    */
   const handleUpdateQuestionField = (field: keyof GlobalRubricQuestion, value: string | boolean) => {
     if (!selectedQuestionId) return;
-    setGlobalRubricQuestions(globalRubricQuestions.map(q => 
+    setGlobalRubricQuestions(globalRubricQuestions.map(q =>
       q.id === selectedQuestionId ? { ...q, [field]: value } : q
     ));
   };
 
   /**
-  /**
    * Handle update case material field
    */
   const handleUpdateMaterialField = (field: keyof CaseMaterial, value: string) => {
     if (!selectedMaterialId) return;
-    setCaseMaterials(caseMaterials.map(m => 
+    setCaseMaterials(caseMaterials.map(m =>
       m.id === selectedMaterialId ? { ...m, [field]: value } : m
     ));
   };
@@ -606,8 +599,6 @@ function InstructorSimulationGroupPage() {
     setSelectedMaterialId(newMaterial.id);
   };
 
-
-
   /**
    * Handle save case material changes
    */
@@ -615,7 +606,6 @@ function InstructorSimulationGroupPage() {
     if (!selectedMaterial || !selectedPatientForEdit) return;
     instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
     console.log('Saving case material:', selectedMaterial);
-    // TODO: API call to save material
   };
 
   /**
@@ -625,12 +615,9 @@ function InstructorSimulationGroupPage() {
     const file = e.target.files?.[0];
     if (file && selectedMaterialId) {
       console.log('Uploading material file:', file.name);
-      // TODO: Implement file upload to server
-      // For now, just update the contentUrl with a placeholder
       handleUpdateMaterialField('contentUrl', URL.createObjectURL(file));
     }
   };
-
 
   /**
    * Handle save new patient-specific question from dialog
@@ -644,8 +631,8 @@ function InstructorSimulationGroupPage() {
     required: boolean;
   }) => {
     const newQuestionId = `bank-patient-${Date.now()}`;
-    const newBankQuestion: any = { 
-      id: newQuestionId, 
+    const newBankQuestion: any = {
+      id: newQuestionId,
       title: question.title,
       questionText: question.keyQuestion,
       clinicalIntent: question.clinicalIntent,
@@ -655,12 +642,10 @@ function InstructorSimulationGroupPage() {
       usedBySimulationGroups: [],
       usedByPatients: []
     };
-    
-    // Add to question bank via service
+
     instructorService.addToPatientSpecificQuestionBank(newBankQuestion);
     setPatientSpecificBankQuestions(instructorService.getPatientSpecificQuestionBank());
-    
-    // Add to case-specific questions for the selected patient
+
     const newCaseQuestion: GlobalRubricQuestion = {
       id: newQuestionId,
       title: question.title,
@@ -669,10 +654,9 @@ function InstructorSimulationGroupPage() {
       evaluationCriteria: question.evaluationCriteria,
       required: question.required,
     };
-    
+
     instructorService.addCaseSpecificQuestion(question.patientId, newCaseQuestion);
-    
-    // Update includedQuestionIds to checkmark this question for this patient
+
     if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank === question.patientId) {
       setIncludedQuestionIds(prev => {
         const newSet = new Set(prev);
@@ -680,12 +664,11 @@ function InstructorSimulationGroupPage() {
         return newSet;
       });
     }
-    
-    // Update case-specific questions if we're editing this patient
+
     if (selectedPatientForEdit === question.patientId) {
       setCaseSpecificQuestions(instructorService.getCaseSpecificQuestions(question.patientId));
     }
-    
+
     console.log('Saved new patient-specific question:', question);
   };
 
@@ -694,17 +677,14 @@ function InstructorSimulationGroupPage() {
    */
   const handleToggleQuestionInclusion = async (questionId: string, bankQuestion: any, isChecked: boolean) => {
     const newSet = new Set(includedQuestionIds);
-    
+
     try {
       if (isChecked) {
         newSet.add(questionId);
-        
-        // Add to global rubric if it's a global question
+
         if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          // Call API to assign question to group
           await instructorService.assignQuestionToGroup(groupId || '1', questionId);
-          
-          // Check if already exists in rubric
+
           const existingQuestion = globalRubricQuestions.find(q => q.id === questionId);
           if (!existingQuestion) {
             const newGlobalRubricQuestion: GlobalRubricQuestion = {
@@ -715,24 +695,22 @@ function InstructorSimulationGroupPage() {
               evaluationCriteria: bankQuestion.evaluationCriteria,
               required: bankQuestion.isMandatory,
             };
-            
+
             instructorService.addGlobalRubricQuestion(groupId || '1', newGlobalRubricQuestion);
             setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
           }
         }
       } else {
         newSet.delete(questionId);
-        
-        // Remove from global rubric when unchecked
+
         if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          // Call API to unassign question
           await instructorService.unassignQuestion(questionId);
-          
+
           instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
       }
-      
+
       setIncludedQuestionIds(newSet);
     } catch (err) {
       setQuestionBankError(err instanceof Error ? err.message : 'Failed to update question assignment');
@@ -740,7 +718,7 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle toggling a pending checkbox (does NOT apply to rubric immediately)
+   * Handle toggling a pending checkbox
    */
   const handleTogglePendingQuestion = (questionId: string) => {
     setPendingQuestionIds(prev => {
@@ -759,14 +737,12 @@ function InstructorSimulationGroupPage() {
    */
   const handleConfirmSelections = async () => {
     const allBankQuestions = questionBankTab === 'global' ? globalBankQuestions : patientSpecificBankQuestions;
-    
+
     try {
       if (questionBankTab === 'global') {
-        // Collect IDs to add and remove
         const idsToAdd = Array.from(pendingQuestionIds).filter(id => !includedQuestionIds.has(id));
         const idsToRemove = Array.from(includedQuestionIds).filter(id => !pendingQuestionIds.has(id));
 
-        // Batch assign all new questions in one API call
         if (idsToAdd.length > 0) {
           await instructorService.assignQuestionToGroup(groupId || '1', idsToAdd);
           for (const id of idsToAdd) {
@@ -789,18 +765,15 @@ function InstructorSimulationGroupPage() {
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
 
-        // Unassign removed questions one by one (DELETE uses group_question_id)
         for (const id of idsToRemove) {
           const bankQ = allBankQuestions.find(q => q.id === id);
           if (bankQ) await handleToggleQuestionInclusion(id, bankQ, false);
         }
       } else if (questionBankTab === 'patientSpecific' && selectedPatientForQuestionBank) {
-        // Handle patient-specific confirmation (local mock operations for now)
         pendingQuestionIds.forEach(id => {
           if (!includedQuestionIds.has(id)) {
             const bankQ = allBankQuestions.find(q => q.id === id);
             if (bankQ) {
-              // Add to patient's case-specific questions
               const newCaseQuestion: GlobalRubricQuestion = {
                 id: bankQ.id,
                 title: bankQ.title,
@@ -825,7 +798,7 @@ function InstructorSimulationGroupPage() {
           }
         });
       }
-      
+
       setIncludedQuestionIds(new Set(pendingQuestionIds));
     } catch (err) {
       setQuestionBankError(err instanceof Error ? err.message : 'Failed to confirm selections');
@@ -867,43 +840,30 @@ function InstructorSimulationGroupPage() {
     return Math.ceil(totalItems / itemsPerPage);
   };
 
-  /**
-   * Handle page change for global questions
-   */
   const handleGlobalPageChange = (newPage: number) => {
     setGlobalPagination(prev => ({ ...prev, currentPage: newPage }));
   };
 
-  /**
-   * Handle page change for patient-specific questions
-   */
   const handlePatientPageChange = (newPage: number) => {
     setPatientPagination(prev => ({ ...prev, currentPage: newPage }));
   };
 
-  /**
-   * Handle items per page change for global questions
-   */
   const handleGlobalItemsPerPageChange = (newItemsPerPage: number) => {
     setGlobalPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
   };
 
-  /**
-   * Handle items per page change for patient-specific questions
-   */
   const handlePatientItemsPerPageChange = (newItemsPerPage: number) => {
     setPatientPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
   };
 
-  // Get paginated questions for current view
   const filteredGlobalQuestions = globalBankQuestions.filter(q =>
     q.title.toLowerCase().includes(globalQuestionSearchQuery.toLowerCase())
   );
-  
+
   const filteredPatientQuestions = patientSpecificBankQuestions.filter(q =>
     q.title.toLowerCase().includes(patientQuestionSearchQuery.toLowerCase())
   );
-  
+
   const paginatedGlobalQuestions = getPaginatedQuestions(
     filteredGlobalQuestions,
     globalPagination.currentPage,
@@ -928,6 +888,45 @@ function InstructorSimulationGroupPage() {
       </PageContainer>
     );
   }
+
+  /**
+   * Handle fetching and viewing the AI Debrief for a specific session/attempt
+   */
+  const handleViewAIDebrief = async (attemptId: string) => {
+    setIsFetchingDebrief(attemptId);
+    try {
+      const data = await instructorService.fetchDebrief(attemptId, groupId || '');
+      if (data) {
+        setSelectedDebriefData(data);
+        setIsAIDebriefOpen(true);
+      } else {
+        alert('Debrief is still generating or not available for this session.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI debrief:', error);
+      alert('Failed to load AI Debrief. Please try again.');
+    } finally {
+      setIsFetchingDebrief(null);
+    }
+  };
+
+  /**
+   * Handle downloading the Notes PDF
+   */
+  const handleDownloadNotesPDF = (attemptId: string) => {
+    try {
+      const notes = studentPatientData?.notes[attemptId] || '';
+      const blob = new Blob([notes || 'No notes available.'], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Notes_${attemptId}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download notes:', error);
+    }
+  };
 
   return (
     <PageContainer>
@@ -973,7 +972,7 @@ function InstructorSimulationGroupPage() {
             variant="default"
             onClick={handleStudentView}
             className="px-6 transition-colors"
-            style={{ 
+            style={{
               backgroundColor: UI_COLORS.button.primary,
               color: UI_COLORS.button.text
             }}
@@ -982,7 +981,7 @@ function InstructorSimulationGroupPage() {
           >
             Student View
           </Button>
-          
+
           <Button
             variant="default"
             onClick={handleSignOut}
@@ -998,11 +997,11 @@ function InstructorSimulationGroupPage() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside 
+        <aside
           className="flex flex-col transition-all duration-300 ease-in-out border-r"
           aria-hidden={!isMainSidebarVisible}
-          style={{ 
-            backgroundColor: UI_COLORS.background.white, 
+          style={{
+            backgroundColor: UI_COLORS.background.white,
             borderRightWidth: isMainSidebarVisible ? '1px' : '0px',
             borderRightStyle: 'solid',
             borderRightColor: UI_COLORS.border.default,
@@ -1016,142 +1015,138 @@ function InstructorSimulationGroupPage() {
         >
           {/* Navigation Buttons */}
           <nav className="flex-1 p-4 space-y-2">
-          <Button
-            onClick={() => setActiveSection('analytics')}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'analytics' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <BarChart3 className="w-5 h-5" />
-            Analytics
-          </Button>
+            <Button
+              onClick={() => setActiveSection('analytics')}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'analytics' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <BarChart3 className="w-5 h-5" />
+              Analytics
+            </Button>
 
-          <Button
-            onClick={() => setActiveSection('patients')}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'patients' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <Users className="w-5 h-5" />
-            Manage {aiPersonaLabelPlural}
-          </Button>
+            <Button
+              onClick={() => setActiveSection('patients')}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'patients' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <Users className="w-5 h-5" />
+              Manage {aiPersonaLabelPlural}
+            </Button>
 
-          <Button
-            onClick={() => setActiveSection('students')}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'students' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <UserCog className="w-5 h-5" />
-            Manage {userRoleLabel}s
-          </Button>
+            <Button
+              onClick={() => setActiveSection('students')}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'students' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <UserCog className="w-5 h-5" />
+              Manage {userRoleLabel}s
+            </Button>
 
-          <Button
-            onClick={() => setActiveSection('rubric')}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'rubric' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <FileText className="w-5 h-5" />
-            Global Key Questions
-          </Button>
+            <Button
+              onClick={() => setActiveSection('rubric')}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'rubric' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <FileText className="w-5 h-5" />
+              Global Key Questions
+            </Button>
 
-          <Button
-            onClick={() => {
-              setActiveSection('questionBank');
-              
-              // Load included question IDs based on current tab
-              if (questionBankTab === 'global') {
-                // Get IDs of questions already in global rubric
-                const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
-                const questionIds = new Set(globalRubric.map(q => q.id));
-                setIncludedQuestionIds(questionIds);
-                setPendingQuestionIds(new Set(questionIds));
-              } else if (selectedPatientForQuestionBank) {
-                // Get IDs of questions already in patient's case-specific rubric
-                const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
-                setIncludedQuestionIds(questionIds);
-                setPendingQuestionIds(new Set(questionIds));
-              } else {
-                // No patient selected, clear checkmarks
-                setIncludedQuestionIds(new Set());
-                setPendingQuestionIds(new Set());
-              }
-            }}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'questionBank' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <HelpCircle className="w-5 h-5" />
-            Question Bank
-          </Button>
+            <Button
+              onClick={() => {
+                setActiveSection('questionBank');
 
-          <Button
-            onClick={() => setActiveSection('prompt')}
-            variant="ghost"
-            className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
-            style={{
-              backgroundColor: activeSection === 'prompt' ? UI_COLORS.background.tableHeader : 'transparent',
-              color: UI_COLORS.text.heading
-            }}
-          >
-            <Eye className="w-5 h-5" />
-            View Evaluation Prompt
-          </Button>
-        </nav>
+                if (questionBankTab === 'global') {
+                  const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
+                  const questionIds = new Set(globalRubric.map(q => q.id));
+                  setIncludedQuestionIds(questionIds);
+                  setPendingQuestionIds(new Set(questionIds));
+                } else if (selectedPatientForQuestionBank) {
+                  const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
+                  setIncludedQuestionIds(questionIds);
+                  setPendingQuestionIds(new Set(questionIds));
+                } else {
+                  setIncludedQuestionIds(new Set());
+                  setPendingQuestionIds(new Set());
+                }
+              }}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'questionBank' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <HelpCircle className="w-5 h-5" />
+              Question Bank
+            </Button>
 
-        {/* Access Code Section */}
-        <div className="border-t p-4 space-y-3" style={{ borderColor: UI_COLORS.border.default }}>
-          <div>
-            <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-              Access Code
-            </p>
-            <div className="flex items-center gap-2 p-3 rounded-md border" style={{ 
-              backgroundColor: UI_COLORS.background.tableHeader,
-              borderColor: UI_COLORS.border.default
-            }}>
-              <Key className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
-              <span className="font-mono text-sm flex-1" style={{ color: UI_COLORS.text.heading }}>
-                {accessCode}
-              </span>
-              <button
-                onClick={handleCopyAccessCode}
-                className="p-1 rounded hover:bg-gray-200 transition-colors"
-                style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
-                title="Copy access code"
-              >
-                <Copy className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
-              </button>
+            <Button
+              onClick={() => setActiveSection('prompt')}
+              variant="ghost"
+              className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
+              style={{
+                backgroundColor: activeSection === 'prompt' ? UI_COLORS.background.tableHeader : 'transparent',
+                color: UI_COLORS.text.heading
+              }}
+            >
+              <Eye className="w-5 h-5" />
+              View Evaluation Prompt
+            </Button>
+          </nav>
+
+          {/* Access Code Section */}
+          <div className="border-t p-4 space-y-3" style={{ borderColor: UI_COLORS.border.default }}>
+            <div>
+              <p className="text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+                Access Code
+              </p>
+              <div className="flex items-center gap-2 p-3 rounded-md border" style={{
+                backgroundColor: UI_COLORS.background.tableHeader,
+                borderColor: UI_COLORS.border.default
+              }}>
+                <Key className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+                <span className="font-mono text-sm flex-1" style={{ color: UI_COLORS.text.heading }}>
+                  {accessCode}
+                </span>
+                <button
+                  onClick={handleCopyAccessCode}
+                  className="p-1 rounded hover:bg-gray-200 transition-colors"
+                  style={{ border: 'none', cursor: 'pointer', backgroundColor: 'transparent' }}
+                  title="Copy access code"
+                >
+                  <Copy className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+                </button>
+              </div>
             </div>
+
+            <Button
+              onClick={() => setIsAccessCodeDialogOpen(true)}
+              variant="outline"
+              className="w-full justify-start gap-2 py-2.5 h-auto font-medium"
+              style={{
+                borderColor: UI_COLORS.border.default,
+                color: UI_COLORS.text.heading
+              }}
+            >
+              Generate new access code
+            </Button>
           </div>
-          
-          <Button
-            onClick={() => setIsAccessCodeDialogOpen(true)}
-            variant="outline"
-            className="w-full justify-start gap-2 py-2.5 h-auto font-medium"
-            style={{
-              borderColor: UI_COLORS.border.default,
-              color: UI_COLORS.text.heading
-            }}
-          >
-            Generate new access code
-          </Button>
-        </div>
         </aside>
 
         {/* Main Content Area */}
@@ -1224,57 +1219,57 @@ function InstructorSimulationGroupPage() {
                     </div>
                   </div>
 
-                  {/* Global Key Questions Answered — Horizontal Bar Graph */}
+                  {/* Global Key Questions Answered - Horizontal Bar Graph */}
                   <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                     <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                      Global Key Questions — Students Answered
+                      Global Key Questions &mdash; Students Answered
                     </h3>
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
                       Number of students who answered each global key question across all personas
                     </p>
                     {globalKeyQuestionAnalytics.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
-                          <BarChart
-                            data={globalKeyQuestionAnalytics}
-                            layout="vertical"
-                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                            <XAxis 
-                              type="number" 
-                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                              axisLine={{ stroke: UI_COLORS.border.default }}
-                              allowDecimals={false}
-                            />
-                            <YAxis 
-                              type="category" 
-                              dataKey="questionTitle" 
-                              width={180}
-                              tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                              axisLine={{ stroke: UI_COLORS.border.default }}
-                            />
-                            <Tooltip 
-                              contentStyle={{ 
-                                backgroundColor: UI_COLORS.background.white,
-                                border: `1px solid ${UI_COLORS.border.default}`,
-                                borderRadius: '6px'
-                              }}
-                              formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
-                            />
-                            <Bar 
-                              dataKey="studentsAnswered" 
-                              fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
-                              radius={[0, 4, 4, 0]}
-                              barSize={28}
-                            />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
-                      )}
+                      <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
+                        <BarChart
+                          data={globalKeyQuestionAnalytics}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis
+                            type="number"
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            allowDecimals={false}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="questionTitle"
+                            width={180}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px'
+                            }}
+                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                          />
+                          <Bar
+                            dataKey="studentsAnswered"
+                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
+                            radius={[0, 4, 4, 0]}
+                            barSize={28}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
+                    )}
                   </div>
 
-                  {/* Question Performance Scores — Horizontal Bar */}
+                  {/* Question Performance Scores - Horizontal Bar */}
                   {questionPerformanceScores.length > 0 && (
                     <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                       <div className="flex items-start justify-between mb-6">
@@ -1314,22 +1309,22 @@ function InstructorSimulationGroupPage() {
                           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
                           <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                          <XAxis 
-                            type="number" 
+                          <XAxis
+                            type="number"
                             domain={[0, 100]}
                             tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                             axisLine={{ stroke: UI_COLORS.border.default }}
                             tickFormatter={(val: number) => `${val}%`}
                           />
-                          <YAxis 
-                            type="category" 
-                            dataKey="questionTitle" 
+                          <YAxis
+                            type="category"
+                            dataKey="questionTitle"
                             width={180}
                             tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                             axisLine={{ stroke: UI_COLORS.border.default }}
                           />
-                          <Tooltip 
-                            contentStyle={{ 
+                          <Tooltip
+                            contentStyle={{
                               backgroundColor: UI_COLORS.background.white,
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
@@ -1339,19 +1334,19 @@ function InstructorSimulationGroupPage() {
                               'Score'
                             ]}
                           />
-                          <Bar 
-                            dataKey="averageScore" 
+                          <Bar
+                            dataKey="averageScore"
                             radius={[0, 4, 4, 0]}
                             barSize={28}
                           >
                             {questionPerformanceScores.map((entry, index) => (
-                              <Cell 
-                                key={`perf-${index}`} 
+                              <Cell
+                                key={`perf-${index}`}
                                 fill={
                                   entry.averageScore >= 75 ? '#22c55e' :
                                   entry.averageScore >= 55 ? '#eab308' :
                                   '#ef4444'
-                                } 
+                                }
                               />
                             ))}
                           </Bar>
@@ -1360,11 +1355,11 @@ function InstructorSimulationGroupPage() {
                       <div className="flex items-center justify-center gap-6 mt-3">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
-                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (≥75%)</span>
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (&ge;75%)</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
-                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55–74%)</span>
+                          <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55&ndash;74%)</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
@@ -1378,202 +1373,202 @@ function InstructorSimulationGroupPage() {
 
               {/* ===== PER-PATIENT TAB ===== */}
               {currentPatient && (
-              <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                  {currentPatient.patient_name} Overview
-                </h3>
+                <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                  <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
+                    {currentPatient.patient_name} Overview
+                  </h3>
 
-                {/* Message Counts + Student Access */}
-                <div className="grid grid-cols-3 gap-6 mb-8">
-                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.student_message_count}</p>
-                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
+                  {/* Message Counts + Student Access */}
+                  <div className="grid grid-cols-3 gap-6 mb-8">
+                    <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}>{currentPatient.student_message_count}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Messages</p>
+                    </div>
+                    <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.ai_message_count}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
+                    </div>
+                    <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                      <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.student_access_count}</p>
+                      <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
+                    </div>
                   </div>
-                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[5] }}>{currentPatient.ai_message_count}</p>
-                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>AI Messages</p>
-                  </div>
-                  <div className="border rounded-xl p-5 text-center" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-                    <p className="text-2xl font-bold" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[4] }}>{currentPatient.student_access_count}</p>
-                    <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>Student Access Count</p>
-                  </div>
-                </div>
 
-                {/* Key Questions Answered — Horizontal Bar Graph (per persona) */}
-                {keyQuestionAnalytics.length > 0 && (
+                  {/* Key Questions Answered - Horizontal Bar Graph (per persona) */}
+                  {keyQuestionAnalytics.length > 0 && (
+                    <div className="mt-8">
+                      <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Key Questions &mdash; Students Answered
+                      </h4>
+                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                        Number of students who answered each key question for {currentPatient.patient_name}
+                      </p>
+                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
+                        <BarChart
+                          data={keyQuestionAnalytics}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis
+                            type="number"
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            allowDecimals={false}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="questionTitle"
+                            width={180}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px'
+                            }}
+                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                          />
+                          <Bar
+                            dataKey="studentsAnswered"
+                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
+                            radius={[0, 4, 4, 0]}
+                            barSize={28}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+
+                  {/* Donut Chart - Message Distribution */}
                   <div className="mt-8">
-                    <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                      Key Questions — Students Answered
+                    <h4 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                      Message Distribution
                     </h4>
-                    <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      Number of students who answered each key question for {currentPatient.patient_name}
-                    </p>
-                    <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
-                      <BarChart
-                        data={keyQuestionAnalytics}
-                        layout="vertical"
-                        margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                        <XAxis 
-                          type="number" 
-                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                          axisLine={{ stroke: UI_COLORS.border.default }}
-                          allowDecimals={false}
-                        />
-                        <YAxis 
-                          type="category" 
-                          dataKey="questionTitle" 
-                          width={180}
-                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                          axisLine={{ stroke: UI_COLORS.border.default }}
-                        />
-                        <Tooltip 
-                          contentStyle={{ 
+                    <ResponsiveContainer width="100%" height={320}>
+                      <PieChart>
+                        <Pie
+                          data={messageCountData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={80}
+                          outerRadius={120}
+                          paddingAngle={4}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                          {messageCountData.map((_, index) => (
+                            <Cell key={`cell-${index}`} fill={donutColors[index % donutColors.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
                             backgroundColor: UI_COLORS.background.white,
                             border: `1px solid ${UI_COLORS.border.default}`,
                             borderRadius: '6px'
                           }}
-                          formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                          formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} messages`, name ?? '']}
                         />
-                        <Bar 
-                          dataKey="studentsAnswered" 
-                          fill={SIMULATION_GROUP_COLOR_PALETTE[2]} 
-                          radius={[0, 4, 4, 0]}
-                          barSize={28}
+                        <Legend
+                          wrapperStyle={{ color: UI_COLORS.text.body }}
                         />
+                        {/* Center text */}
+                        <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.heading, fontSize: '28px', fontWeight: 700 }}>
+                          {totalMessages}
+                        </text>
+                        <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.muted, fontSize: '13px' }}>
+                          Total Messages
+                        </text>
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Score Distribution - Histogram */}
+                  <div className="mt-8">
+                    <div className="flex items-start justify-between mb-4">
+                      <div>
+                        <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Score Distribution
+                        </h4>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                          Distribution of student scores for {currentPatient.patient_name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
+                          Time Period:
+                        </label>
+                        <select
+                          value={scoreDistributionTimePeriod}
+                          onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
+                          className="px-3 py-2 rounded-lg border text-sm"
+                          style={{
+                            borderColor: UI_COLORS.border.default,
+                            backgroundColor: UI_COLORS.background.white,
+                            color: UI_COLORS.text.heading,
+                          }}
+                        >
+                          <option value="week">Last Week</option>
+                          <option value="month">Last Month</option>
+                          <option value="year">Last Year</option>
+                          <option value="all">All Time</option>
+                        </select>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart
+                        data={scoreDistribution}
+                        margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                        barSize={50}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                        <XAxis
+                          dataKey="range"
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          label={{ value: 'Score Range (%)', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
+                        />
+                        <YAxis
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          allowDecimals={false}
+                          label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: UI_COLORS.background.white,
+                            border: `1px solid ${UI_COLORS.border.default}`,
+                            borderRadius: '6px'
+                          }}
+                          formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Count']}
+                        />
+                        <Bar
+                          dataKey="count"
+                          radius={[4, 4, 0, 0]}
+                        >
+                          {scoreDistribution.map((_entry, index) => (
+                            <Cell
+                              key={`dist-${index}`}
+                              fill={[
+                                '#ef4444',
+                                '#f97316',
+                                '#eab308',
+                                '#22c55e',
+                                SIMULATION_GROUP_COLOR_PALETTE[2]
+                              ][index] || SIMULATION_GROUP_COLOR_PALETTE[2]}
+                            />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                )}
-
-                {/* Donut Chart — Message Distribution */}
-                <div className="mt-8">
-                  <h4 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                    Message Distribution
-                  </h4>
-                  <ResponsiveContainer width="100%" height={320}>
-                    <PieChart>
-                      <Pie
-                        data={messageCountData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={80}
-                        outerRadius={120}
-                        paddingAngle={4}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {messageCountData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={donutColors[index % donutColors.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: UI_COLORS.background.white,
-                          border: `1px solid ${UI_COLORS.border.default}`,
-                          borderRadius: '6px'
-                        }}
-                        formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} messages`, name ?? '']}
-                      />
-                      <Legend 
-                        wrapperStyle={{ color: UI_COLORS.text.body }}
-                      />
-                      {/* Center text */}
-                      <text x="50%" y="47%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.heading, fontSize: '28px', fontWeight: 700 }}>
-                        {totalMessages}
-                      </text>
-                      <text x="50%" y="56%" textAnchor="middle" dominantBaseline="central" style={{ fill: UI_COLORS.text.muted, fontSize: '13px' }}>
-                        Total Messages
-                      </text>
-                    </PieChart>
-                  </ResponsiveContainer>
                 </div>
-
-                {/* Score Distribution — Histogram */}
-                <div className="mt-8">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                        Score Distribution
-                      </h4>
-                      <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                        Distribution of student scores for {currentPatient.patient_name}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
-                        Time Period:
-                      </label>
-                      <select
-                        value={scoreDistributionTimePeriod}
-                        onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                        className="px-3 py-2 rounded-lg border text-sm"
-                        style={{
-                          borderColor: UI_COLORS.border.default,
-                          backgroundColor: UI_COLORS.background.white,
-                          color: UI_COLORS.text.heading,
-                        }}
-                      >
-                        <option value="week">Last Week</option>
-                        <option value="month">Last Month</option>
-                        <option value="year">Last Year</option>
-                        <option value="all">All Time</option>
-                      </select>
-                    </div>
-                  </div>
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart
-                      data={scoreDistribution}
-                      margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
-                      barSize={50}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                      <XAxis 
-                        dataKey="range" 
-                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                        axisLine={{ stroke: UI_COLORS.border.default }}
-                        label={{ value: 'Score Range (%)', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
-                      />
-                      <YAxis 
-                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                        axisLine={{ stroke: UI_COLORS.border.default }}
-                        allowDecimals={false}
-                        label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: UI_COLORS.background.white,
-                          border: `1px solid ${UI_COLORS.border.default}`,
-                          borderRadius: '6px'
-                        }}
-                        formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Count']}
-                      />
-                      <Bar 
-                        dataKey="count" 
-                        radius={[4, 4, 0, 0]}
-                      >
-                        {scoreDistribution.map((_entry, index) => (
-                          <Cell 
-                            key={`dist-${index}`} 
-                            fill={[
-                              '#ef4444',  // 0-20: red
-                              '#f97316',  // 21-40: orange  
-                              '#eab308',  // 41-60: yellow
-                              '#22c55e',  // 61-80: green
-                              SIMULATION_GROUP_COLOR_PALETTE[2]  // 81-100: brand
-                            ][index] || SIMULATION_GROUP_COLOR_PALETTE[2]}
-                          />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
               )}
             </div>
           )}
-          
+
           {activeSection === 'patients' && (
             <div className="space-y-6 max-w-4xl">
               {/* Search Bar */}
@@ -1584,9 +1579,9 @@ function InstructorSimulationGroupPage() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
                     borderColor: UI_COLORS.border.default,
                     backgroundColor: UI_COLORS.background.white
                   }}
@@ -1613,7 +1608,7 @@ function InstructorSimulationGroupPage() {
 
                 {/* Table Rows */}
                 {filteredPatients.map((patient) => (
-                  <div 
+                  <div
                     key={patient.id}
                     className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4 border-t items-center"
                     style={{ borderColor: UI_COLORS.border.default }}
@@ -1631,9 +1626,9 @@ function InstructorSimulationGroupPage() {
                       <Button
                         onClick={() => handleEditPatient(patient.id)}
                         className="px-6 py-2 text-sm font-medium transition-colors"
-                        style={{ 
-                          backgroundColor: UI_COLORS.button.primary, 
-                          color: UI_COLORS.button.text 
+                        style={{
+                          backgroundColor: UI_COLORS.button.primary,
+                          color: UI_COLORS.button.text
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                         onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -1644,7 +1639,7 @@ function InstructorSimulationGroupPage() {
                       <button
                         onClick={() => handleDeletePatient(patient.id)}
                         className="p-2 rounded transition-colors"
-                        style={{ 
+                        style={{
                           border: 'none',
                           cursor: 'pointer',
                           backgroundColor: 'transparent'
@@ -1663,9 +1658,9 @@ function InstructorSimulationGroupPage() {
               <Button
                 onClick={handleCreateNewPatient}
                 className="px-6 py-6 text-base font-medium transition-colors"
-                style={{ 
-                  backgroundColor: UI_COLORS.button.primary, 
-                  color: UI_COLORS.button.text 
+                style={{
+                  backgroundColor: UI_COLORS.button.primary,
+                  color: UI_COLORS.button.text
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -1682,8 +1677,8 @@ function InstructorSimulationGroupPage() {
                   aria-checked={enableVoiceForAll}
                   onClick={() => setEnableVoiceForAll(!enableVoiceForAll)}
                   className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                  style={{ 
-                    backgroundColor: enableVoiceForAll ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
+                  style={{
+                    backgroundColor: enableVoiceForAll ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
                   }}
                 >
                   <span
@@ -1693,7 +1688,7 @@ function InstructorSimulationGroupPage() {
                     }}
                   />
                 </button>
-                <span 
+                <span
                   className="text-sm font-medium"
                   style={{ color: UI_COLORS.text.body }}
                 >
@@ -1702,7 +1697,7 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
-          
+
           {activeSection === 'students' && (
             <div className="space-y-6 max-w-4xl">
               {/* Search Bar */}
@@ -1713,9 +1708,9 @@ function InstructorSimulationGroupPage() {
                   value={studentSearchQuery}
                   onChange={(e) => setStudentSearchQuery(e.target.value)}
                   className="pl-10 py-6 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
                     borderColor: UI_COLORS.border.default,
                     backgroundColor: UI_COLORS.background.white
                   }}
@@ -1740,7 +1735,7 @@ function InstructorSimulationGroupPage() {
 
                 {/* Table Rows */}
                 {filteredStudents.map((student) => (
-                  <div 
+                  <div
                     key={student.id}
                     className="grid grid-cols-2 gap-4 px-6 py-4 border-t items-center cursor-pointer transition-colors hover:bg-gray-50"
                     style={{ borderColor: UI_COLORS.border.default }}
@@ -1757,14 +1752,14 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
-          
+
           {activeSection === 'rubric' && (
             <div className="flex h-full relative">
               {/* Question List Sidebar */}
-              <aside 
+              <aside
                 className="flex flex-col border-r overflow-y-auto"
-                style={{ 
-                  backgroundColor: UI_COLORS.background.white, 
+                style={{
+                  backgroundColor: UI_COLORS.background.white,
                   borderRightWidth: '1px',
                   borderRightStyle: 'solid',
                   borderRightColor: UI_COLORS.border.default,
@@ -1783,9 +1778,9 @@ function InstructorSimulationGroupPage() {
                       Global key questions can only be edited here.
                     </p>
                     <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
-                      In each patient's page, global key questions are view-only.
+                      In each patient&apos;s page, global key questions are view-only.
                     </p>
-                    
+
                     {/* Search */}
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
@@ -1794,9 +1789,9 @@ function InstructorSimulationGroupPage() {
                         value={rubricSearchQuery}
                         onChange={(e) => setRubricSearchQuery(e.target.value)}
                         className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                        style={{ 
-                          borderWidth: '1px', 
-                          borderStyle: 'solid', 
+                        style={{
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
                           borderColor: UI_COLORS.border.default,
                           backgroundColor: UI_COLORS.background.white
                         }}
@@ -1862,9 +1857,9 @@ function InstructorSimulationGroupPage() {
                           value={selectedQuestion.title}
                           onChange={(e) => handleUpdateQuestionField('title', e.target.value)}
                           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -1880,9 +1875,9 @@ function InstructorSimulationGroupPage() {
                           value={selectedQuestion.keyQuestion}
                           onChange={(e) => handleUpdateQuestionField('keyQuestion', e.target.value)}
                           className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             outlineColor: UI_COLORS.border.medium,
                             minHeight: '100px',
@@ -1899,9 +1894,9 @@ function InstructorSimulationGroupPage() {
                           value={selectedQuestion.clinicalIntent}
                           onChange={(e) => handleUpdateQuestionField('clinicalIntent', e.target.value)}
                           className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             outlineColor: UI_COLORS.border.medium,
                             minHeight: '100px',
@@ -1918,9 +1913,9 @@ function InstructorSimulationGroupPage() {
                           value={selectedQuestion.evaluationCriteria}
                           onChange={(e) => handleUpdateQuestionField('evaluationCriteria', e.target.value)}
                           className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             outlineColor: UI_COLORS.border.medium,
                             minHeight: '150px',
@@ -1936,8 +1931,8 @@ function InstructorSimulationGroupPage() {
                           aria-checked={selectedQuestion.required}
                           onClick={() => handleUpdateQuestionField('required', !selectedQuestion.required)}
                           className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                          style={{ 
-                            backgroundColor: selectedQuestion.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive 
+                          style={{
+                            backgroundColor: selectedQuestion.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
                           }}
                         >
                           <span
@@ -1951,35 +1946,6 @@ function InstructorSimulationGroupPage() {
                           Required for Case Completion
                         </span>
                       </div>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-4 pt-4">
-                        <Button
-                          onClick={handleSaveQuestion}
-                          className="px-8 py-3 text-base font-medium transition-colors"
-                          style={{ 
-                            backgroundColor: UI_COLORS.button.primary, 
-                            color: UI_COLORS.button.text 
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                        >
-                          Save Changes
-                        </Button>
-                        <Button
-                          onClick={handleDeleteQuestion}
-                          variant="outline"
-                          className="px-8 py-3 text-base font-medium transition-colors text-white"
-                          style={{ 
-                            backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                            borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        >
-                          Remove
-                        </Button>
-                      </div>
                     </div>
                   ) : (
                     <div className="flex items-center justify-center h-full" style={{ color: UI_COLORS.text.light }}>
@@ -1990,20 +1956,19 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
-          
+
           {activeSection === 'questionBank' && (
             <div className="h-full flex flex-col">
               <div className="px-8 pt-8 pb-6 border-b" style={{ borderColor: UI_COLORS.border.default }}>
                 <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
                   Question Bank
                 </h2>
-                
+
                 {/* Tab Switcher */}
                 <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
                   <button
                     onClick={() => {
                       setQuestionBankTab('global');
-                      // Load global rubric question IDs when switching to global tab
                       const globalRubric = instructorService.getGlobalRubricQuestions(groupId || '1');
                       const questionIds = new Set(globalRubric.map(q => q.id));
                       setIncludedQuestionIds(questionIds);
@@ -2022,7 +1987,6 @@ function InstructorSimulationGroupPage() {
                   <button
                     onClick={() => {
                       setQuestionBankTab('patientSpecific');
-                      // Load patient-specific question IDs when switching to patient-specific tab
                       if (selectedPatientForQuestionBank) {
                         const questionIds = instructorService.getPatientCaseSpecificQuestionIds(selectedPatientForQuestionBank);
                         setIncludedQuestionIds(questionIds);
@@ -2051,10 +2015,10 @@ function InstructorSimulationGroupPage() {
                   {questionBankTab === 'global' && (
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Select which global questions should be included in this simulation group's rubric. These are questions
+                        Select which global questions should be included in this simulation group&apos;s rubric. These are questions
                         that are saved in the question bank and are visible to be included for all patients in this simulation group.
                       </p>
-                      
+
                       {/* Search Bar */}
                       <div className="relative mb-4">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
@@ -2069,22 +2033,22 @@ function InstructorSimulationGroupPage() {
                           }}
                         />
                       </div>
-                      
+
                       {/* Pagination Info */}
                       {filteredGlobalQuestions.length > 0 && (
                         <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                           <span>
-                            Showing {((globalPagination.currentPage - 1) * globalPagination.itemsPerPage) + 1}-
+                            Showing {((globalPagination.currentPage - 1) * globalPagination.itemsPerPage) + 1}&ndash;
                             {Math.min(globalPagination.currentPage * globalPagination.itemsPerPage, filteredGlobalQuestions.length)} of {filteredGlobalQuestions.length} questions
                           </span>
                         </div>
                       )}
-                      
+
                       {/* Global questions from question bank */}
                       <Accordion type="single" collapsible className="space-y-2">
                         {paginatedGlobalQuestions.map((question) => (
-                          <AccordionItem 
-                            key={question.id} 
+                          <AccordionItem
+                            key={question.id}
                             value={question.id}
                             style={{
                               borderWidth: '1px',
@@ -2094,9 +2058,9 @@ function InstructorSimulationGroupPage() {
                               overflow: 'hidden'
                             }}
                           >
-                            <AccordionTrigger 
+                            <AccordionTrigger
                               className="px-4 hover:no-underline"
-                              style={{ 
+                              style={{
                                 backgroundColor: UI_COLORS.background.white,
                                 color: UI_COLORS.text.heading
                               }}
@@ -2126,32 +2090,32 @@ function InstructorSimulationGroupPage() {
                                 </div>
                               </div>
                             </AccordionTrigger>
-                            <AccordionContent 
+                            <AccordionContent
                               className="px-4 pb-4"
                               style={{ backgroundColor: UI_COLORS.background.white }}
                             >
                               <div className="space-y-3 pt-3">
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
-                                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '\u2014'}</p>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
-                                  <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                  <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '\u2014'}</p>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
-                                  <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                  <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '\u2014'}</p>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
-                                  <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                  <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '\u2014'}</p>
                                 </div>
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
-                                  <span 
+                                  <span
                                     className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-                                    style={{ 
+                                    style={{
                                       backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
                                       color: question.isMandatory ? '#166534' : '#6b7280'
                                     }}
@@ -2164,7 +2128,7 @@ function InstructorSimulationGroupPage() {
                           </AccordionItem>
                         ))}
                       </Accordion>
-                      
+
                       {/* Confirm / Reset Buttons */}
                       <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                         <div className="flex items-center gap-3">
@@ -2172,8 +2136,8 @@ function InstructorSimulationGroupPage() {
                             onClick={handleConfirmSelections}
                             disabled={!hasPendingChanges}
                             className="px-6 py-2 font-medium transition-colors"
-                            style={{ 
-                              backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                            style={{
+                              backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader,
                               color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
                               cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
                             }}
@@ -2224,7 +2188,7 @@ function InstructorSimulationGroupPage() {
                               <option value={50}>50</option>
                             </select>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             <Button
                               onClick={() => handleGlobalPageChange(globalPagination.currentPage - 1)}
@@ -2238,11 +2202,11 @@ function InstructorSimulationGroupPage() {
                             >
                               Previous
                             </Button>
-                            
+
                             <span className="text-sm px-3" style={{ color: UI_COLORS.text.body }}>
                               Page {globalPagination.currentPage} of {globalTotalPages}
                             </span>
-                            
+
                             <Button
                               onClick={() => handleGlobalPageChange(globalPagination.currentPage + 1)}
                               disabled={globalPagination.currentPage === globalTotalPages}
@@ -2265,9 +2229,9 @@ function InstructorSimulationGroupPage() {
                     <>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
                         Select a patient to manage their patient-specific questions. A patient-specific question
-                        is asked in the context of one particular patient and will depend on the patient's unique details.
+                        is asked in the context of one particular patient and will depend on the patient&apos;s unique details.
                       </p>
-                      
+
                       {/* Patient Selector */}
                       <div className="mb-4">
                         <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
@@ -2278,7 +2242,6 @@ function InstructorSimulationGroupPage() {
                           onChange={(e) => {
                             const patientId = e.target.value || null;
                             setSelectedPatientForQuestionBank(patientId);
-                            // Reset pagination when changing patient
                             setPatientPagination({ currentPage: 1, itemsPerPage: patientPagination.itemsPerPage });
                             if (patientId) {
                               const questionIds = instructorService.getPatientCaseSpecificQuestionIds(patientId);
@@ -2304,7 +2267,7 @@ function InstructorSimulationGroupPage() {
                           ))}
                         </select>
                       </div>
-                      
+
                       {/* Search Bar */}
                       <div className="relative mb-4">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
@@ -2319,24 +2282,24 @@ function InstructorSimulationGroupPage() {
                           }}
                         />
                       </div>
-                      
+
                       {selectedPatientForQuestionBank ? (
                         <>
                           {/* Pagination Info */}
                           {filteredPatientQuestions.length > 0 && (
                             <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                               <span>
-                                Showing {((patientPagination.currentPage - 1) * patientPagination.itemsPerPage) + 1}-
+                                Showing {((patientPagination.currentPage - 1) * patientPagination.itemsPerPage) + 1}&ndash;
                                 {Math.min(patientPagination.currentPage * patientPagination.itemsPerPage, filteredPatientQuestions.length)} of {filteredPatientQuestions.length} questions
                               </span>
                             </div>
                           )}
-                          
+
                           {/* Patient-specific questions from question bank */}
                           <Accordion type="single" collapsible className="space-y-2">
                             {paginatedPatientQuestions.map((question) => (
-                              <AccordionItem 
-                                key={question.id} 
+                              <AccordionItem
+                                key={question.id}
                                 value={question.id}
                                 style={{
                                   borderWidth: '1px',
@@ -2346,9 +2309,9 @@ function InstructorSimulationGroupPage() {
                                   overflow: 'hidden'
                                 }}
                               >
-                                <AccordionTrigger 
+                                <AccordionTrigger
                                   className="px-4 hover:no-underline"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: UI_COLORS.background.white,
                                     color: UI_COLORS.text.heading
                                   }}
@@ -2378,32 +2341,32 @@ function InstructorSimulationGroupPage() {
                                     </div>
                                   </div>
                                 </AccordionTrigger>
-                                <AccordionContent 
+                                <AccordionContent
                                   className="px-4 pb-4"
                                   style={{ backgroundColor: UI_COLORS.background.white }}
                                 >
                                   <div className="space-y-3 pt-3">
                                     <div>
                                       <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
-                                      <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '—'}</p>
+                                      <p className="text-sm" style={{ color: UI_COLORS.text.body }}>{question.title || '\u2014'}</p>
                                     </div>
                                     <div>
                                       <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Key Question</label>
-                                      <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '—'}</p>
+                                      <p className="text-sm" style={{ color: question.questionText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.questionText || '\u2014'}</p>
                                     </div>
                                     <div>
                                       <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
-                                      <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '—'}</p>
+                                      <p className="text-sm" style={{ color: question.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.clinicalIntent || '\u2014'}</p>
                                     </div>
                                     <div>
                                       <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
-                                      <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '—'}</p>
+                                      <p className="text-sm whitespace-pre-line" style={{ color: question.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>{question.evaluationCriteria || '\u2014'}</p>
                                     </div>
                                     <div>
                                       <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
-                                      <span 
+                                      <span
                                         className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-                                        style={{ 
+                                        style={{
                                           backgroundColor: question.isMandatory ? '#dcfce7' : '#f3f4f6',
                                           color: question.isMandatory ? '#166534' : '#6b7280'
                                         }}
@@ -2416,7 +2379,7 @@ function InstructorSimulationGroupPage() {
                               </AccordionItem>
                             ))}
                           </Accordion>
-                          
+
                           {/* Confirm / Reset Buttons */}
                           <div className="flex items-center justify-between mt-6 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                             <div className="flex items-center gap-3">
@@ -2424,8 +2387,8 @@ function InstructorSimulationGroupPage() {
                                 onClick={handleConfirmSelections}
                                 disabled={!hasPendingChanges}
                                 className="px-6 py-2 font-medium transition-colors"
-                                style={{ 
-                                  backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader, 
+                                style={{
+                                  backgroundColor: hasPendingChanges ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader,
                                   color: hasPendingChanges ? UI_COLORS.button.text : UI_COLORS.text.muted,
                                   cursor: hasPendingChanges ? 'pointer' : 'not-allowed',
                                 }}
@@ -2476,7 +2439,7 @@ function InstructorSimulationGroupPage() {
                                   <option value={50}>50</option>
                                 </select>
                               </div>
-                              
+
                               <div className="flex items-center gap-2">
                                 <Button
                                   onClick={() => handlePatientPageChange(patientPagination.currentPage - 1)}
@@ -2490,11 +2453,11 @@ function InstructorSimulationGroupPage() {
                                 >
                                   Previous
                                 </Button>
-                                
+
                                 <span className="text-sm px-3" style={{ color: UI_COLORS.text.body }}>
                                   Page {patientPagination.currentPage} of {patientTotalPages}
                                 </span>
-                                
+
                                 <Button
                                   onClick={() => handlePatientPageChange(patientPagination.currentPage + 1)}
                                   disabled={patientPagination.currentPage === patientTotalPages}
@@ -2522,70 +2485,25 @@ function InstructorSimulationGroupPage() {
               </div>
             </div>
           )}
-          
+
           {activeSection === 'prompt' && (
             <div className="space-y-4">
               <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
                 Evaluation Prompt
               </h2>
-              
+
               <div>
                 <textarea
                   readOnly
                   className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default"
-                  style={{ 
-                    borderWidth: '1px', 
-                    borderStyle: 'solid', 
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
                     borderColor: UI_COLORS.border.default,
                     backgroundColor: UI_COLORS.background.tableHeader,
                     minHeight: '500px',
                   }}
-                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.
-Use only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.
-
-Assess:
-- which key questions were addressed, partially addressed, or missed
-- how well the student's questions align with the rubric
-- overall clinical reasoning and question quality
-
-Generate an AI debrief with:
-- Interview Summary (3-5 sentences)
-- Key Questions Successfully Addressed
-- Key Questions Missed or Incomplete
-- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)
-- Overall Assessment (rubric alignment score + summary)
-
-OUTPUT FORMAT
-Return valid JSON in exactly this structure:
-
-{
-  "interview_summary": "string",
-  "key_questions_successfully_addressed": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "feedback": "string"
-    }
-  ],
-  "key_questions_missed_or_incomplete": [
-    {
-      "question_id": "string",
-      "question_content": "string",
-      "status": "missed | partially_addressed",
-      "feedback": "string",
-      "clinical_importance": "string"
-    }
-  ],
-  "rubric_based_feedback": {
-    "strengths": ["string", "string"],
-    "areas_for_improvement": ["string", "string"],
-    "recommended_focus_next_time": ["string", "string"]
-  },
-  "overall_assessment": {
-    "rubric_alignment_score": 0,
-    "summary": "string"
-  }
-}`}
+                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.\nUse only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.\n\nAssess:\n- which key questions were addressed, partially addressed, or missed\n- how well the student's questions align with the rubric\n- overall clinical reasoning and question quality\n\nGenerate an AI debrief with:\n- Interview Summary (3-5 sentences)\n- Key Questions Successfully Addressed\n- Key Questions Missed or Incomplete\n- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)\n- Overall Assessment (rubric alignment score + summary)\n\nOUTPUT FORMAT\nReturn valid JSON in exactly this structure:\n\n{\n  "interview_summary": "string",\n  "key_questions_successfully_addressed": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "feedback": "string"\n    }\n  ],\n  "key_questions_missed_or_incomplete": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "status": "missed | partially_addressed",\n      "feedback": "string",\n      "clinical_importance": "string"\n    }\n  ],\n  "rubric_based_feedback": {\n    "strengths": ["string", "string"],\n    "areas_for_improvement": ["string", "string"],\n    "recommended_focus_next_time": ["string", "string"]\n  },\n  "overall_assessment": {\n    "rubric_alignment_score": 0,\n    "summary": "string"\n  }\n}`}
                 />
               </div>
             </div>
@@ -2594,10 +2512,10 @@ Return valid JSON in exactly this structure:
           {activeSection === 'editPatient' && (
             <div className="flex h-full">
               {/* Edit Patient Sidebar */}
-              <aside 
+              <aside
                 className="flex flex-col border-r overflow-y-auto"
-                style={{ 
-                  backgroundColor: UI_COLORS.background.white, 
+                style={{
+                  backgroundColor: UI_COLORS.background.white,
                   borderRightWidth: '1px',
                   borderRightStyle: 'solid',
                   borderRightColor: UI_COLORS.border.default,
@@ -2609,7 +2527,7 @@ Return valid JSON in exactly this structure:
                   <button
                     onClick={handleBackFromEditPatient}
                     className="flex items-center gap-2 mb-4 text-sm transition-colors"
-                    style={{ 
+                    style={{
                       color: UI_COLORS.text.body,
                       backgroundColor: 'transparent',
                       border: 'none',
@@ -2625,7 +2543,7 @@ Return valid JSON in exactly this structure:
                     {selectedPatientForEdit === 'new' ? `Create ${aiPersonaLabel}` : `Edit ${aiPersonaLabel}`}
                   </h2>
                 </div>
-                
+
                 <nav className="flex-1 px-3 space-y-1">
                   <button
                     onClick={() => handleEditPatientTabSwitch('info')}
@@ -2689,9 +2607,9 @@ Return valid JSON in exactly this structure:
                             onChange={handlePhotoUpload}
                             className="hidden"
                           />
-                          <div 
+                          <div
                             className="p-3 rounded-full transition-colors"
-                            style={{ 
+                            style={{
                               backgroundColor: UI_COLORS.background.tableHeader,
                               color: UI_COLORS.text.body
                             }}
@@ -2710,9 +2628,9 @@ Return valid JSON in exactly this structure:
                           value={editPatientName}
                           onChange={(e) => setEditPatientName(e.target.value)}
                           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -2731,21 +2649,19 @@ Return valid JSON in exactly this structure:
                           value={editPatientAge}
                           onChange={(e) => {
                             const value = e.target.value;
-                            // Only allow numbers and empty string
                             if (value === '' || (/^\d+$/.test(value) && parseInt(value) >= 0 && parseInt(value) <= 100)) {
                               setEditPatientAge(value);
                             }
                           }}
                           onKeyDown={(e) => {
-                            // Prevent non-numeric characters except backspace, delete, arrow keys, tab
                             if (!/[0-9]/.test(e.key) && !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab'].includes(e.key)) {
                               e.preventDefault();
                             }
                           }}
                           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -2761,9 +2677,9 @@ Return valid JSON in exactly this structure:
                           value={editPatientGender}
                           onChange={(e) => setEditPatientGender(e.target.value)}
                           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -2779,9 +2695,9 @@ Return valid JSON in exactly this structure:
                           value={editPatientPrompt}
                           onChange={(e) => setEditPatientPrompt(e.target.value)}
                           className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             outlineColor: UI_COLORS.border.medium,
                             minHeight: '120px',
@@ -2808,9 +2724,9 @@ Return valid JSON in exactly this structure:
                               onChange={(e) => handleFileUpload('llm', e)}
                               className="hidden"
                             />
-                            <div 
+                            <div
                               className="p-2 rounded-lg transition-colors flex items-center gap-2"
-                              style={{ 
+                              style={{
                                 backgroundColor: UI_COLORS.background.tableHeader,
                                 color: UI_COLORS.text.body
                               }}
@@ -2837,9 +2753,9 @@ Return valid JSON in exactly this structure:
                               onChange={(e) => handleFileUpload('patientInfo', e)}
                               className="hidden"
                             />
-                            <div 
+                            <div
                               className="p-2 rounded-lg transition-colors flex items-center gap-2"
-                              style={{ 
+                              style={{
                                 backgroundColor: UI_COLORS.background.tableHeader,
                                 color: UI_COLORS.text.body
                               }}
@@ -2866,9 +2782,9 @@ Return valid JSON in exactly this structure:
                               onChange={(e) => handleFileUpload('answerKey', e)}
                               className="hidden"
                             />
-                            <div 
+                            <div
                               className="p-2 rounded-lg transition-colors flex items-center gap-2"
-                              style={{ 
+                              style={{
                                 backgroundColor: UI_COLORS.background.tableHeader,
                                 color: UI_COLORS.text.body
                               }}
@@ -2885,9 +2801,9 @@ Return valid JSON in exactly this structure:
                         <Button
                           onClick={handleSavePatientChanges}
                           className="px-8 py-3 text-base font-medium transition-colors"
-                          style={{ 
-                            backgroundColor: UI_COLORS.button.primary, 
-                            color: UI_COLORS.button.text 
+                          style={{
+                            backgroundColor: UI_COLORS.button.primary,
+                            color: UI_COLORS.button.text
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -2912,9 +2828,9 @@ Return valid JSON in exactly this structure:
                           value={caseQuestionSearchQuery}
                           onChange={(e) => setCaseQuestionSearchQuery(e.target.value)}
                           className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -2929,8 +2845,8 @@ Return valid JSON in exactly this structure:
 
                         <Accordion type="single" collapsible className="space-y-2">
                           {filteredCaseQuestions.map((question, index) => (
-                            <AccordionItem 
-                              key={question.id} 
+                            <AccordionItem
+                              key={question.id}
                               value={question.id}
                               style={{
                                 borderWidth: '1px',
@@ -2940,9 +2856,9 @@ Return valid JSON in exactly this structure:
                                 overflow: 'hidden'
                               }}
                             >
-                              <AccordionTrigger 
+                              <AccordionTrigger
                                 className="px-4 hover:no-underline"
-                                style={{ 
+                                style={{
                                   backgroundColor: UI_COLORS.background.white,
                                   color: UI_COLORS.text.heading
                                 }}
@@ -2956,7 +2872,7 @@ Return valid JSON in exactly this structure:
                                   </span>
                                 </div>
                               </AccordionTrigger>
-                              <AccordionContent 
+                              <AccordionContent
                                 className="px-4 pb-4"
                                 style={{ backgroundColor: UI_COLORS.background.white }}
                               >
@@ -2976,9 +2892,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="Chest Pain Characterization"
                                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.white
                                       }}
@@ -3000,9 +2916,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="Assess the characteristics of the patient's chest pain..."
                                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         outlineColor: UI_COLORS.border.medium,
                                         minHeight: '100px',
@@ -3025,9 +2941,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="This question evaluates the student's ability..."
                                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         outlineColor: UI_COLORS.border.medium,
                                         minHeight: '100px',
@@ -3050,9 +2966,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="The student attempts to identify at least 3-4 of the following..."
                                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         outlineColor: UI_COLORS.border.medium,
                                         minHeight: '150px',
@@ -3073,7 +2989,7 @@ Return valid JSON in exactly this structure:
                                         setCaseSpecificQuestions(updatedQuestions);
                                       }}
                                       className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-                                      style={{ 
+                                      style={{
                                         backgroundColor: question.required ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
                                       }}
                                     >
@@ -3098,9 +3014,9 @@ Return valid JSON in exactly this structure:
                                         }
                                       }}
                                       className="px-8 py-3 text-base font-medium transition-colors"
-                                      style={{ 
-                                        backgroundColor: UI_COLORS.button.primary, 
-                                        color: UI_COLORS.button.text 
+                                      style={{
+                                        backgroundColor: UI_COLORS.button.primary,
+                                        color: UI_COLORS.button.text
                                       }}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -3116,7 +3032,7 @@ Return valid JSON in exactly this structure:
                                       }}
                                       variant="outline"
                                       className="px-8 py-3 text-base font-medium transition-colors text-white"
-                                      style={{ 
+                                      style={{
                                         backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                                         borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                                       }}
@@ -3153,9 +3069,9 @@ Return valid JSON in exactly this structure:
                             value={globalRubricSearchQuery}
                             onChange={(e) => setGlobalRubricSearchQuery(e.target.value)}
                             className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                            style={{ 
-                              borderWidth: '1px', 
-                              borderStyle: 'solid', 
+                            style={{
+                              borderWidth: '1px',
+                              borderStyle: 'solid',
                               borderColor: UI_COLORS.border.default,
                               backgroundColor: UI_COLORS.background.white
                             }}
@@ -3168,8 +3084,8 @@ Return valid JSON in exactly this structure:
                               q.title.toLowerCase().includes(globalRubricSearchQuery.toLowerCase())
                             );
                             return filteredGlobalRubric.map((question, index) => (
-                              <AccordionItem 
-                                key={question.id} 
+                              <AccordionItem
+                                key={question.id}
                                 value={question.id}
                                 style={{
                                   borderWidth: '1px',
@@ -3180,9 +3096,9 @@ Return valid JSON in exactly this structure:
                                   opacity: 0.7,
                                 }}
                               >
-                                <AccordionTrigger 
+                                <AccordionTrigger
                                   className="px-4 hover:no-underline"
-                                  style={{ 
+                                  style={{
                                     backgroundColor: UI_COLORS.background.tableHeader,
                                     color: UI_COLORS.text.heading
                                   }}
@@ -3196,19 +3112,16 @@ Return valid JSON in exactly this structure:
                                     </span>
                                   </div>
                                 </AccordionTrigger>
-                                <AccordionContent 
+                                <AccordionContent
                                   className="px-4 pb-4"
                                   style={{ backgroundColor: UI_COLORS.background.white }}
                                 >
                                   <div className="space-y-4 pt-4">
-                                    {/* Title */}
                                     <div>
-                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                        Title
-                                      </label>
-                                      <div className="w-full px-3 py-3 rounded-lg text-base" style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Title</label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base" style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.hoverLight,
                                         color: UI_COLORS.text.body
@@ -3216,15 +3129,11 @@ Return valid JSON in exactly this structure:
                                         {question.title}
                                       </div>
                                     </div>
-
-                                    {/* Key Question */}
                                     <div>
-                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                        Key Question
-                                      </label>
-                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Key Question</label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.hoverLight,
                                         color: UI_COLORS.text.body,
@@ -3233,15 +3142,11 @@ Return valid JSON in exactly this structure:
                                         {question.keyQuestion}
                                       </div>
                                     </div>
-
-                                    {/* Clinical Intent */}
                                     <div>
-                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                        Clinical Intent
-                                      </label>
-                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Clinical Intent</label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.hoverLight,
                                         color: UI_COLORS.text.body,
@@ -3250,15 +3155,11 @@ Return valid JSON in exactly this structure:
                                         {question.clinicalIntent}
                                       </div>
                                     </div>
-
-                                    {/* Evaluation Criteria */}
                                     <div>
-                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                        Evaluation Criteria
-                                      </label>
-                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Evaluation Criteria</label>
+                                      <div className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap" style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.hoverLight,
                                         color: UI_COLORS.text.body,
@@ -3267,8 +3168,6 @@ Return valid JSON in exactly this structure:
                                         {question.evaluationCriteria}
                                       </div>
                                     </div>
-
-                                    {/* Required/Optional Display */}
                                     <div className="flex items-center gap-3">
                                       <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
                                         {question.required ? 'Required for Case Completion' : 'Optional'}
@@ -3290,14 +3189,14 @@ Return valid JSON in exactly this structure:
                         Physical Assessment Materials
                       </h2>
 
-                      {/* Add New Material Button - At the top */}
+                      {/* Add New Material Button */}
                       <div className="mb-6">
                         <Button
                           onClick={handleAddNewCaseMaterial}
                           className="justify-start gap-2 py-2.5 h-auto font-medium transition-colors"
-                          style={{ 
-                            backgroundColor: UI_COLORS.button.primary, 
-                            color: UI_COLORS.button.text 
+                          style={{
+                            backgroundColor: UI_COLORS.button.primary,
+                            color: UI_COLORS.button.text
                           }}
                           onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                           onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -3315,9 +3214,9 @@ Return valid JSON in exactly this structure:
                           value={materialSearchQuery}
                           onChange={(e) => setMaterialSearchQuery(e.target.value)}
                           className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
-                          style={{ 
-                            borderWidth: '1px', 
-                            borderStyle: 'solid', 
+                          style={{
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                             backgroundColor: UI_COLORS.background.white
                           }}
@@ -3332,8 +3231,8 @@ Return valid JSON in exactly this structure:
 
                         <Accordion type="single" collapsible className="space-y-2">
                           {filteredMaterials.map((material) => (
-                            <AccordionItem 
-                              key={material.id} 
+                            <AccordionItem
+                              key={material.id}
                               value={material.id}
                               style={{
                                 borderWidth: '1px',
@@ -3343,9 +3242,9 @@ Return valid JSON in exactly this structure:
                                 overflow: 'hidden'
                               }}
                             >
-                              <AccordionTrigger 
+                              <AccordionTrigger
                                 className="px-4 hover:no-underline"
-                                style={{ 
+                                style={{
                                   backgroundColor: UI_COLORS.background.white,
                                   color: UI_COLORS.text.heading
                                 }}
@@ -3359,7 +3258,7 @@ Return valid JSON in exactly this structure:
                                   </span>
                                 </div>
                               </AccordionTrigger>
-                              <AccordionContent 
+                              <AccordionContent
                                 className="px-4 pb-4"
                                 style={{ backgroundColor: UI_COLORS.background.white }}
                               >
@@ -3379,9 +3278,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="Chest X-Ray"
                                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.white
                                       }}
@@ -3403,9 +3302,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="Frontal chest radiograph obtained as part of the patient's clinical evaluation."
                                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         outlineColor: UI_COLORS.border.medium,
                                         minHeight: '80px',
@@ -3427,9 +3326,9 @@ Return valid JSON in exactly this structure:
                                         setCaseMaterials(updatedMaterials);
                                       }}
                                       className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.white,
                                         outlineColor: UI_COLORS.border.medium,
@@ -3452,15 +3351,14 @@ Return valid JSON in exactly this structure:
                                       <input
                                         type="file"
                                         onChange={(e) => {
-                                          // Handle file upload for this specific material
                                           setSelectedMaterialId(material.id);
                                           handleMaterialFileUpload(e);
                                         }}
                                         className="hidden"
                                       />
-                                      <div 
+                                      <div
                                         className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
-                                        style={{ 
+                                        style={{
                                           backgroundColor: UI_COLORS.button.primary,
                                           color: UI_COLORS.button.text
                                         }}
@@ -3487,9 +3385,9 @@ Return valid JSON in exactly this structure:
                                       }}
                                       placeholder="Value"
                                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
-                                      style={{ 
-                                        borderWidth: '1px', 
-                                        borderStyle: 'solid', 
+                                      style={{
+                                        borderWidth: '1px',
+                                        borderStyle: 'solid',
                                         borderColor: UI_COLORS.border.default,
                                         backgroundColor: UI_COLORS.background.white
                                       }}
@@ -3497,9 +3395,9 @@ Return valid JSON in exactly this structure:
                                   </div>
 
                                   {/* Preview */}
-                                  <div 
+                                  <div
                                     className="border rounded-lg p-8 flex flex-col items-center justify-center"
-                                    style={{ 
+                                    style={{
                                       borderColor: UI_COLORS.border.default,
                                       minHeight: '200px'
                                     }}
@@ -3525,9 +3423,9 @@ Return valid JSON in exactly this structure:
                                         }
                                       }}
                                       className="px-8 py-3 text-base font-medium transition-colors"
-                                      style={{ 
-                                        backgroundColor: UI_COLORS.button.primary, 
-                                        color: UI_COLORS.button.text 
+                                      style={{
+                                        backgroundColor: UI_COLORS.button.primary,
+                                        color: UI_COLORS.button.text
                                       }}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
@@ -3543,7 +3441,7 @@ Return valid JSON in exactly this structure:
                                       }}
                                       variant="outline"
                                       className="px-8 py-3 text-base font-medium transition-colors text-white"
-                                      style={{ 
+                                      style={{
                                         backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                                         borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                                       }}
@@ -3569,10 +3467,10 @@ Return valid JSON in exactly this structure:
           {activeSection === 'viewStudent' && selectedStudentId && (
             <div className="flex h-full">
               {/* Student View Sidebar */}
-              <aside 
+              <aside
                 className="flex flex-col border-r overflow-y-auto"
-                style={{ 
-                  backgroundColor: UI_COLORS.background.white, 
+                style={{
+                  backgroundColor: UI_COLORS.background.white,
                   borderRightWidth: '1px',
                   borderRightStyle: 'solid',
                   borderRightColor: UI_COLORS.border.default,
@@ -3584,7 +3482,7 @@ Return valid JSON in exactly this structure:
                   <button
                     onClick={handleBackFromViewStudent}
                     className="flex items-center gap-2 mb-4 text-sm transition-colors"
-                    style={{ 
+                    style={{
                       color: UI_COLORS.text.body,
                       backgroundColor: 'transparent',
                       border: 'none',
@@ -3600,63 +3498,63 @@ Return valid JSON in exactly this structure:
                     Overview
                   </h2>
                 </div>
-                
+
                 <nav className="flex-1 px-6 space-y-4">
-                  {(() => {
-                    const studentDetails = instructorService.getStudentDetails(selectedStudentId);
-                    if (!studentDetails) return null;
-                    
-                    return (
-                      <>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Student Name
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.name}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Student Email
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.email}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Group Name
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.groupName}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Cases Attempted
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.casesAttempted}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
-                            Case Completion Rate
-                          </p>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                            {studentDetails.caseCompletionRate}%
-                          </p>
-                        </div>
-                      </>
-                    );
-                  })()}
+                  {studentDetailsLoading ? (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Loading...
+                    </div>
+                  ) : studentDetails ? (
+                    <>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Student Name
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.name}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Student Email
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.email}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Group Name
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.groupName}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Cases Attempted
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.casesAttempted}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ color: UI_COLORS.text.muted }}>
+                          Case Completion Rate
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {studentDetails.caseCompletionRate}%
+                        </p>
+                      </div>
+                    </>
+                  ) : null}
                 </nav>
 
                 <div className="p-6 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                   <Button
                     className="w-full justify-center gap-2 py-2.5 h-auto font-medium transition-colors text-white"
-                    style={{ 
+                    style={{
                       backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                       borderColor: SIMULATION_GROUP_COLOR_PALETTE[0],
                     }}
@@ -3685,63 +3583,76 @@ Return valid JSON in exactly this structure:
                         value={selectedPatientFilter}
                         onChange={(e) => setSelectedPatientFilter(e.target.value)}
                         className="w-full px-4 py-3 rounded-lg text-base"
-                        style={{ 
-                          borderWidth: '1px', 
-                          borderStyle: 'solid', 
+                        style={{
+                          borderWidth: '1px',
+                          borderStyle: 'solid',
                           borderColor: UI_COLORS.border.default,
                           backgroundColor: UI_COLORS.background.white,
                           color: UI_COLORS.text.heading
                         }}
                       >
-                        <option value="pamela">Pamela</option>
-                        <option value="timothy">Timothy</option>
+                        {(studentPatientData?.patientNames || []).map((name) => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
                       </select>
                     </div>
 
                     <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                      Click on the dropdown icon to view the student's chat history and export per-case reports.
+                      Click on the dropdown icon to view the student&apos;s chat history and export per-case reports.
                     </p>
 
                     {/* Chat Attempts */}
                     <div className="space-y-4">
-                      {instructorService.getChatAttempts(selectedStudentId, selectedPatientFilter).map((attempt) => {
+                      {(studentPatientData?.attempts[selectedPatientFilter] || []).map((attempt) => {
                         const isExpanded = expandedAttemptId === attempt.id;
-                        const messages = instructorService.getChatMessages(attempt.id);
-                        const notes = instructorService.getChatNotes(attempt.id);
-
+                        const messages = studentPatientData?.messages[attempt.id] || [];
+                        const notes = studentPatientData?.notes[attempt.id] || '';
                         return (
-                          <div 
+                          <div
                             key={attempt.id}
                             className="border rounded-lg overflow-hidden"
                             style={{ borderColor: UI_COLORS.border.default }}
                           >
                             {/* Attempt Header Row */}
-                            <div 
+                            <div
                               className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 items-center cursor-pointer transition-colors hover:bg-gray-50"
-                              style={{ backgroundColor: isExpanded ? UI_COLORS.background.tableHeader : UI_COLORS.background.white }}
+                              style={{
+                                backgroundColor: isExpanded
+                                  ? UI_COLORS.background.tableHeader
+                                  : UI_COLORS.background.white,
+                              }}
                               onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
                             >
                               <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                                Attempt {attempt.attemptNumber} - {attempt.date}
+                                {attempt.date}
                               </div>
                               <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
                                 {attempt.completionStatus}
                               </div>
-                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                                {attempt.score !== null ? `${attempt.score}%` : '-'}
-                              </div>
                               <div className="flex justify-end">
                                 <button
                                   className="p-2 rounded transition-transform"
-                                  style={{ 
+                                  style={{
                                     border: 'none',
                                     cursor: 'pointer',
                                     backgroundColor: 'transparent',
-                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
                                   }}
                                 >
-                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 16 16"
+                                    fill="none"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path
+                                      d="M4 6L8 10L12 6"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
                                   </svg>
                                 </button>
                               </div>
@@ -3750,86 +3661,132 @@ Return valid JSON in exactly this structure:
                             {/* Expanded Content */}
                             {isExpanded && (
                               <div className="border-t" style={{ borderColor: UI_COLORS.border.default }}>
-                                {/* Chat History Section */}
-                                <div className="p-6">
-                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                                    Chat History
-                                  </h3>
-                                  <div 
-                                    className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto"
-                                    style={{ 
-                                      borderColor: UI_COLORS.border.default,
-                                      backgroundColor: UI_COLORS.background.white
-                                    }}
-                                  >
-                                    {messages.length > 0 ? (
-                                      messages.map((message) => (
-                                        <div
-                                          key={message.message_id}
-                                          className={`flex gap-3 ${message.sender_type === 'student' ? 'justify-end' : 'justify-start'}`}
-                                        >
-                                          {/* Avatar for AI patient (left side) */}
-                                          {message.sender_type !== 'student' && (
-                                            <div className="flex-shrink-0">
-                                              <UserAvatar
-                                                name="Pamela"
-                                                imageUrl={undefined}
-                                                size="small"
-                                              />
-                                            </div>
-                                          )}
+                                {/* ── PDF-captured wrapper: header + chat history only ── */}
+                                <div
+                                  ref={(el) => {
+                                    attemptPdfRefs.current[String(attempt.id)] = el;
+                                  }}
+                                  className="bg-white"
+                                >
+                                  {/* PDF Header */}
+                                  <div className="px-6 pt-6 pb-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                                    <h3 className="text-lg font-bold mb-1" style={{ color: UI_COLORS.text.heading }}>
+                                      {studentDetails?.name ?? 'Student'}
+                                    </h3>
+                                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                      Patient: {selectedPatientFilter || 'Unknown'}
+                                    </p>
+                                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                      Session: {attempt.date}
+                                    </p>
+                                  </div>
 
-                                          {/* Message bubble */}
+                                  {/* Chat History Section */}
+                                  <div className="p-6">
+                                    <h3
+                                      className="text-lg font-semibold mb-4"
+                                      style={{ color: UI_COLORS.text.heading }}
+                                    >
+                                      Chat History
+                                    </h3>
+                                    <div
+                                      className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto"
+                                      style={{
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white,
+                                      }}
+                                    >
+                                      {messages.length > 0 ? (
+                                        messages.map((message) => (
                                           <div
-                                            className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                                              message.sender_type === 'student' ? 'rounded-br-none' : 'rounded-bl-none'
+                                            key={message.message_id}
+                                            className={`flex gap-3 ${
+                                              message.sender_type === 'student'
+                                                ? 'justify-end'
+                                                : 'justify-start'
                                             }`}
-                                            style={{
-                                              backgroundColor: message.sender_type === 'student'
-                                                ? SIMULATION_GROUP_COLOR_PALETTE[2]
-                                                : UI_COLORS.background.hoverLight,
-                                              color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading,
-                                            }}
                                           >
-                                            <p className="text-sm font-semibold mb-1">
-                                              {message.sender_type === 'student' ? 'Student (User)' : 'Pamela (LLM)'}:
-                                            </p>
-                                            <p className="text-sm">{message.message_content}</p>
-                                          </div>
-
-                                          {/* Avatar for student (right side) */}
-                                          {message.sender_type === 'student' && (
-                                            <div className="flex-shrink-0">
-                                              <UserAvatar
-                                                name="Student"
-                                                imageUrl={undefined}
-                                                size="small"
-                                              />
+                                            {message.sender_type !== 'student' && (
+                                              <div className="flex-shrink-0">
+                                                <UserAvatar
+                                                  name={selectedPatientFilter || 'Patient'}
+                                                  imageUrl={undefined}
+                                                  size="small"
+                                                />
+                                              </div>
+                                            )}
+                                            <div
+                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                                                message.sender_type === 'student'
+                                                  ? 'rounded-br-none'
+                                                  : 'rounded-bl-none'
+                                              }`}
+                                              style={{
+                                                backgroundColor:
+                                                  message.sender_type === 'student'
+                                                    ? SIMULATION_GROUP_COLOR_PALETTE[2]
+                                                    : UI_COLORS.background.hoverLight,
+                                                color:
+                                                  message.sender_type === 'student'
+                                                    ? UI_COLORS.button.text
+                                                    : UI_COLORS.text.heading,
+                                              }}
+                                            >
+                                              <p className="text-sm font-semibold mb-1">
+                                                {message.sender_type === 'student'
+                                                  ? `${studentDetails?.name || 'Student'} (User)`
+                                                  : `${selectedPatientFilter || 'Patient'} (LLM)`}
+                                                :
+                                              </p>
+                                              <p className="text-sm">{message.message_content}</p>
                                             </div>
-                                          )}
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                                        No chat history available.
-                                      </p>
-                                    )}
+                                            {message.sender_type === 'student' && (
+                                              <div className="flex-shrink-0">
+                                                <UserAvatar
+                                                  name={studentDetails?.name || 'Student'}
+                                                  imageUrl={undefined}
+                                                  size="small"
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p
+                                          className="text-sm italic"
+                                          style={{ color: UI_COLORS.text.muted }}
+                                        >
+                                          No chat history available.
+                                        </p>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
+                                {/* ── End of PDF-captured wrapper ── */}
 
-                                {/* Notes Section */}
+                                {/* Notes Section (on-screen only, excluded from PDF) */}
                                 <div className="px-6 pb-6">
-                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
+                                  <h3
+                                    className="text-lg font-semibold mb-4"
+                                    style={{ color: UI_COLORS.text.heading }}
+                                  >
                                     Notes
                                   </h3>
-                                  <div 
+                                  <div
                                     className="border rounded-lg p-4"
-                                    style={{ 
+                                    style={{
                                       borderColor: UI_COLORS.border.default,
-                                      backgroundColor: UI_COLORS.background.white
+                                      backgroundColor: UI_COLORS.background.white,
                                     }}
                                   >
-                                    <p className="text-sm" style={{ color: notes ? UI_COLORS.text.heading : UI_COLORS.text.muted }}>
+                                    <p
+                                      className="text-sm"
+                                      style={{
+                                        color: notes
+                                          ? UI_COLORS.text.heading
+                                          : UI_COLORS.text.muted,
+                                      }}
+                                    >
                                       {notes || 'No notes available.'}
                                     </p>
                                   </div>
@@ -3839,37 +3796,99 @@ Return valid JSON in exactly this structure:
                                 <div className="px-6 pb-6 flex gap-4">
                                   <Button
                                     className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.secondary,
+                                      color: UI_COLORS.button.text,
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
+                                    }
+                                    onClick={async () => {
+                                      const el = attemptPdfRefs.current[String(attempt.id)];
+                                      if (!el) return;
+                                      setIsGeneratingPdf(attempt.id);
+                                      const scrollEls = Array.from(
+                                        el.querySelectorAll<HTMLElement>('.overflow-y-auto')
+                                      );
+                                      const prev = scrollEls.map((node) => ({
+                                        node,
+                                        maxHeight: node.style.maxHeight,
+                                        overflowY: node.style.overflowY,
+                                      }));
+                                      scrollEls.forEach((node) => {
+                                        node.style.maxHeight = 'none';
+                                        node.style.overflowY = 'visible';
+                                      });
+                                      try {
+                                        await downloadChatPdf({
+                                          element: el,
+                                          filename: `chat-${attempt.id}.pdf`,
+                                          scale: 2,
+                                        });
+                                      } catch (error) {
+                                        console.error('Failed to download chat PDF:', error);
+                                      } finally {
+                                        prev.forEach(({ node, maxHeight, overflowY }) => {
+                                          node.style.maxHeight = maxHeight;
+                                          node.style.overflowY = overflowY;
+                                        });
+                                        setIsGeneratingPdf(null);
+                                      }
+                                    }}
                                   >
-                                    Download Chat PDF
+                                    {isGeneratingPdf === attempt.id ? 'Generating...' : 'Download Chat PDF'}
                                   </Button>
                                   <Button
                                     className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.secondary,
+                                      color: UI_COLORS.button.text,
                                     }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
+                                    }
+                                    onClick={() => handleDownloadNotesPDF(attempt.id)}
                                   >
                                     Download Notes PDF
                                   </Button>
-                                  <Button
-                                    className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                                  >
-                                    View AI Debrief
-                                  </Button>
+                                  {attempt.completionStatus === 'Debrief Reached' && (
+                                    <Button
+                                      className="px-6 py-3 text-base font-medium transition-colors"
+                                      style={{
+                                        backgroundColor: UI_COLORS.button.secondary,
+                                        color: UI_COLORS.button.text,
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          UI_COLORS.button.secondaryHover)
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          UI_COLORS.button.secondary)
+                                      }
+                                      onClick={() => handleViewAIDebrief(attempt.id)}
+                                      disabled={!!isFetchingDebrief}
+                                    >
+                                      {isFetchingDebrief === attempt.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          Loading...
+                                        </span>
+                                      ) : (
+                                        'View AI Debrief'
+                                      )}
+                                    </Button>
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -3884,7 +3903,15 @@ Return valid JSON in exactly this structure:
           )}
         </main>
       </div>
-      
+
+      {/* AI Debrief Dialog */}
+      <AIDebriefDialog
+        isOpen={isAIDebriefOpen}
+        onClose={() => setIsAIDebriefOpen(false)}
+        data={selectedDebriefData}
+        simulationGroupId={groupId}
+      />
+
       {/* Add Question Dialog */}
       <AddQuestionDialog
         open={isAddQuestionDialogOpen}
@@ -3893,7 +3920,7 @@ Return valid JSON in exactly this structure:
         existingTags={allExistingTags}
         onSave={handleSaveQuestion}
       />
-      
+
       {/* Add Patient-Specific Question Dialog */}
       <AddPatientSpecificQuestionDialog
         open={isAddPatientQuestionDialogOpen}
@@ -3936,4 +3963,3 @@ Return valid JSON in exactly this structure:
 }
 
 export default InstructorSimulationGroupPage;
-

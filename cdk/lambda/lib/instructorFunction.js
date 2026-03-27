@@ -1148,7 +1148,7 @@ exports.handler = async (event, context) => {
             // Step 3: Iterate through the patients and get chats for each patient
             for (const patient of studentPatients) {
               const chats = await sqlConnection`
-                        SELECT c.chat_id, c.chat_name, c.notes
+                        SELECT c.chat_id, c.chat_name, c.notes, c.status
                         FROM "chats" c
                         WHERE c.student_interaction_id IN (
                             SELECT student_interaction_id 
@@ -1173,8 +1173,10 @@ exports.handler = async (event, context) => {
                         `;
 
                 result[patient.persona_name].push({
+                  chatId: chat.chat_id,
                   chatName: chat.chat_name,
                   notes: chat.notes || "No notes available.",
+                  status: chat.status || "active",
                   messages: messages.map((msg) => ({
                     sender_type: msg.sender_type,
                     message_content: msg.message_content,
@@ -1802,6 +1804,97 @@ exports.handler = async (event, context) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "GET /instructor/get_debrief":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.session_id &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const sessionId = event.queryStringParameters.session_id;
+          const simulationGroupId = event.queryStringParameters.simulation_group_id;
+
+          try {
+            // 1) Authorize via source-of-truth join:
+            // chats -> student_interactions -> personas (personas carries simulation_group_id)
+            const accessCheck = await sqlConnection`
+              SELECT c.chat_id
+              FROM "chats" c
+              JOIN "student_interactions" si
+                ON c.student_interaction_id = si.student_interaction_id
+              JOIN "personas" p
+                ON si.persona_id = p.persona_id
+              WHERE c.chat_id = ${sessionId}
+                AND p.simulation_group_id = ${simulationGroupId}
+              LIMIT 1;
+            `;
+
+            if (accessCheck.length === 0) {
+              // Using 404 to align with "not found" semantics and avoid leaking info
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Chat not found in this simulation group.",
+              });
+              break;
+            }
+
+            // 2) Fetch debrief with retry/backoff (mirrors student endpoint robustness)
+            const maxRetries = 6;
+            const baseDelayMs = 300;
+            let debriefData = [];
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              debriefData = await sqlConnection`
+                SELECT generated_text
+                FROM "debriefs"
+                WHERE chat_id = ${sessionId}
+                ORDER BY created_at DESC
+                LIMIT 1;
+              `;
+
+              if (debriefData.length > 0) break;
+
+              const delay = baseDelayMs * Math.pow(2, attempt);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
+
+            if (debriefData.length > 0) {
+              let parsedDebrief = debriefData[0].generated_text;
+
+              // Keep existing parsing behavior
+              if (typeof parsedDebrief === "string") {
+                try {
+                  parsedDebrief = JSON.parse(parsedDebrief);
+                } catch (parseErr) {
+                  logger.error("Failed to parse debrief JSON from DB", {
+                    error: parseErr.message,
+                    raw: parsedDebrief.substring(0, 200),
+                  });
+                }
+              }
+
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                generated_text: parsedDebrief,
+                status: "complete",
+              });
+            } else {
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Debrief not available for this chat.",
+              });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "session_id and simulation_group_id are required",
           });
         }
         break;

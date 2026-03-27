@@ -67,10 +67,21 @@ export async function getAllInstructors(): Promise<AdminInstructor[]> {
 }
 
 /**
- * Get all simulation groups
+ * Get all simulation groups, optionally filtered by organization
  */
-export async function getAllSimulationGroups(): Promise<AdminSimulationGroup[]> {
-  return apiClient.request<AdminSimulationGroup[]>('admin/simulation_groups');
+export async function getAllSimulationGroups(organizationId?: string): Promise<AdminSimulationGroup[]> {
+  const query = organizationId
+    ? `admin/simulation_groups?organization_id=${encodeURIComponent(organizationId)}`
+    : 'admin/simulation_groups';
+  return apiClient.request<AdminSimulationGroup[]>(query);
+}
+
+/**
+ * Get a specific simulation group by ID
+ */
+export async function getSimulationGroup(simulationGroupId: string): Promise<AdminSimulationGroup | undefined> {
+  const groups = await getAllSimulationGroups();
+  return groups.find(g => g.simulation_group_id === simulationGroupId);
 }
 
 /**
@@ -200,6 +211,7 @@ export async function createSimulationGroup(params: {
   group_description: string;
   group_student_access: boolean;
   system_prompt: string;
+  organization_id?: string;
   // admin_voice_enabled?: boolean;      // uncomment after migration 005 runs
   // instructor_voice_enabled?: boolean;  // uncomment after migration 005 runs
 }): Promise<AdminSimulationGroup> {
@@ -212,6 +224,7 @@ export async function createSimulationGroup(params: {
         group_description: params.group_description,
         group_student_access: params.group_student_access,
         system_prompt: params.system_prompt,
+        ...(params.organization_id && { organization_id: params.organization_id }),
         // ...(params.admin_voice_enabled !== undefined && { admin_voice_enabled: params.admin_voice_enabled }),
         // ...(params.instructor_voice_enabled !== undefined && { instructor_voice_enabled: params.instructor_voice_enabled }),
       },

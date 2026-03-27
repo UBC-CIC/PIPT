@@ -598,13 +598,36 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
 
     if (!Array.isArray(data) || data.length === 0) return [];
 
+    // Sort by last_accessed descending so the most recent chat appears first
+    data.sort((a, b) => {
+      const dateA = a.last_accessed ? new Date(a.last_accessed).getTime() : 0;
+      const dateB = b.last_accessed ? new Date(b.last_accessed).getTime() : 0;
+      return dateB - dateA;
+    });
+
     return data.map((chat, index) => {
       const dateStr = chat.last_accessed
         ? new Date(chat.last_accessed).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
         : '';
+
+      let displayName = chat.chat_name;
+      if (displayName) {
+        // Check if the name contains a large number (epoch timestamp)
+        const timestampMatch = displayName.match(/(\d{10,13})/);
+        if (timestampMatch) {
+          const ts = Number(timestampMatch[1]);
+          const parsed = new Date(ts < 1e12 ? ts * 1000 : ts); // handle seconds vs ms
+          if (!isNaN(parsed.getTime())) {
+            const formatted = parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+            + ' ' + parsed.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+            displayName = displayName.replace(timestampMatch[1], formatted);
+          }
+        }
+      }
+
       return {
         id: chat.chat_id,
-        name: chat.chat_name || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
+        name: displayName || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
         completionStatus: chat.status === 'concluded' ? 'Complete' : 'In Progress',
         score: null,
       };
@@ -661,7 +684,7 @@ async function fetchMessages(sessionId: string): Promise<StudentChatMessage[]> {
  * Recursively unwrap a value that may be a JSON string (possibly multi-encoded)
  * or an object. Returns a plain object or null.
  */
-function deepParseJson(value: unknown): Record<string, any> | null {
+export function deepParseJson(value: unknown): Record<string, any> | null {
   const MAX_DEPTH = 5;
   let current: unknown = value;
   for (let i = 0; i < MAX_DEPTH; i++) {
@@ -712,7 +735,7 @@ function deepParseJson(value: unknown): Record<string, any> | null {
  * Tries direct parse first, then progressively repairs truncated JSON
  * by closing open brackets/braces.
  */
-function extractDebriefFromRawJson(raw: string): Record<string, any> | null {
+export function extractDebriefFromRawJson(raw: string): Record<string, any> | null {
   try {
     const obj = JSON.parse(raw);
     if (obj && typeof obj === 'object' && obj.summary) return obj;

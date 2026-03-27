@@ -20,7 +20,7 @@ export class DBFlowStack extends Stack {
         // Create the node-pg-migrate layer from the ZIP file
         const nodePgMigrateLayer = new lambda.LayerVersion(this, `${id}-node-pg-migrate-layer`, {
             code: lambda.Code.fromAsset("layers/node-pg-migrate.zip"),
-            compatibleRuntimes: [lambda.Runtime.NODEJS_18_X],
+            compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
             description: "Node.js pg-migrate dependencies layer"
         });
 
@@ -84,7 +84,7 @@ export class DBFlowStack extends Stack {
             // Force a new deployment by adding a timestamp
             description: `Database initializer and migration runner - ${new Date().toISOString()}`,
             functionName: `${id}-initializerFunction`,
-            runtime: lambda.Runtime.NODEJS_18_X,
+            runtime: lambda.Runtime.NODEJS_22_X,
             handler: "index.handler",
             timeout: Duration.seconds(300),
             memorySize: 512,

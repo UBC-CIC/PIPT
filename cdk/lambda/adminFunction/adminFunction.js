@@ -62,7 +62,9 @@ exports.handler = async (event, context) => {
         break;
       case "GET /admin/simulation_groups":
         try {
-          // Query all simulation groups with student, instructor, and persona counts
+          const orgId = event.queryStringParameters?.organization_id || null;
+          // Query simulation groups with student, instructor, and persona counts
+          // Optionally filtered by organization_id
           const simulationGroups = await sqlConnectionTableCreator`
                     SELECT sg.*,
                       COALESCE(pc.persona_count, 0)::int AS persona_count,
@@ -85,7 +87,8 @@ exports.handler = async (event, context) => {
                       FROM "enrollments"
                       WHERE enrollment_type = 'instructor'
                       GROUP BY simulation_group_id
-                    ) ic ON ic.simulation_group_id = sg.simulation_group_id;
+                    ) ic ON ic.simulation_group_id = sg.simulation_group_id
+                    WHERE (${orgId}::uuid IS NULL OR sg.organization_id = ${orgId}::uuid);
                 `;
 
           logger.info("Fetched simulation groups", { count: simulationGroups.length });
@@ -188,6 +191,7 @@ exports.handler = async (event, context) => {
               group_description,
               group_student_access,
               system_prompt,
+              organization_id,
               // admin_voice_enabled,      // uncomment after migration 005 runs
               // instructor_voice_enabled,  // uncomment after migration 005 runs
             } = body;
@@ -212,6 +216,7 @@ exports.handler = async (event, context) => {
             const newSimulationGroup = await sqlConnectionTableCreator`
                   INSERT INTO "simulation_groups" (
                       simulation_group_id,
+                      organization_id,
                       group_name,
                       group_description,
                       group_access_code,
@@ -220,6 +225,7 @@ exports.handler = async (event, context) => {
                   )
                   VALUES (
                       uuid_generate_v4(),
+                      ${organization_id || null},
                       ${group_name},
                       ${group_description},
                       ${group_access_code},
