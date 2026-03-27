@@ -14,6 +14,7 @@ import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecifi
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useAuth } from '@/App';
+import { downloadChatPdf } from "@/lib/download-chat-pdf";
 import AIDebriefDialog from '../../components/AIDebriefDialog';
 
 /**
@@ -49,6 +50,7 @@ function InstructorSimulationGroupPage() {
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const attemptPdfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   
   // Global Rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() => 
@@ -946,41 +948,6 @@ function InstructorSimulationGroupPage() {
     }
   };
 
-  /**
-   * Handle downloading the Chat PDF
-   */
-  const handleDownloadChatPDF = (attemptId: string) => {
-    setIsGeneratingPdf(attemptId);
-    try {
-      const messages = studentPatientData?.messages[attemptId] || [];
-      const studentName = studentDetails?.name || 'Student';
-      const patientName = selectedPatientFilter || 'Patient';
-      let chatText = `Chat History\n`;
-      chatText += `Student: ${studentName}\n`;
-      chatText += `Patient: ${patientName}\n`;
-      chatText += `${'='.repeat(60)}\n\n`;
-      chatText += messages
-        .map((message) => {
-          const speaker =
-            message.sender_type === 'student'
-              ? `${studentName} (User)`
-              : `${patientName} (LLM)`;
-          return `${speaker}: ${message.message_content}`;
-        })
-        .join('\n\n');
-      const blob = new Blob([chatText], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `Chat_History_${attemptId}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Failed to download chat:', error);
-    } finally {
-      setIsGeneratingPdf(null);
-    }
-  };
 
   /**
    * Handle downloading the Notes PDF
@@ -3747,185 +3714,281 @@ Return valid JSON in exactly this structure:
 
                     {/* Chat Attempts */}
                     <div className="space-y-4">
-                      {(studentPatientData?.attempts[selectedPatientFilter] || []).map((attempt) => {
-                        const isExpanded = expandedAttemptId === attempt.id;
-                        const messages = studentPatientData?.messages[attempt.id] || [];
-                        const notes = studentPatientData?.notes[attempt.id] || '';
-
-                        return (
-                          <div 
-                            key={attempt.id}
-                            className="border rounded-lg overflow-hidden"
-                            style={{ borderColor: UI_COLORS.border.default }}
-                          >
-                            {/* Attempt Header Row */}
-                            <div 
-                              className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 items-center cursor-pointer transition-colors hover:bg-gray-50"
-                              style={{ backgroundColor: isExpanded ? UI_COLORS.background.tableHeader : UI_COLORS.background.white }}
-                              onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
-                            >
-                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                                {attempt.date}
-                              </div>
-                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
-                                {attempt.completionStatus}
-                              </div>
-                
-                              <div className="flex justify-end">
-                                <button
-                                  className="p-2 rounded transition-transform"
-                                  style={{ 
-                                    border: 'none',
-                                    cursor: 'pointer',
-                                    backgroundColor: 'transparent',
-                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)'
-                                  }}
-                                >
-                                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Expanded Content */}
-                            {isExpanded && (
-                              <div className="border-t" style={{ borderColor: UI_COLORS.border.default }}>
-                                {/* Chat History Section */}
-                                <div className="p-6">
-                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                                    Chat History
-                                  </h3>
-                                  <div 
-                                    className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto"
-                                    style={{ 
-                                      borderColor: UI_COLORS.border.default,
-                                      backgroundColor: UI_COLORS.background.white
-                                    }}
-                                  >
-                                    {messages.length > 0 ? (
-                                      messages.map((message) => (
-                                        <div
-                                          key={message.message_id}
-                                          className={`flex gap-3 ${message.sender_type === 'student' ? 'justify-end' : 'justify-start'}`}
-                                        >
-                                          {/* Avatar for AI patient (left side) */}
-                                          {message.sender_type !== 'student' && (
-                                            <div className="flex-shrink-0">
-                                              <UserAvatar
-                                                name={selectedPatientFilter || 'Patient'}
-                                                imageUrl={undefined}
-                                                size="small"
-                                              />
-                                            </div>
-                                          )}
-
-                                          {/* Message bubble */}
-                                          <div
-                                            className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                                              message.sender_type === 'student' ? 'rounded-br-none' : 'rounded-bl-none'
-                                            }`}
-                                            style={{
-                                              backgroundColor: message.sender_type === 'student'
-                                                ? SIMULATION_GROUP_COLOR_PALETTE[2]
-                                                : UI_COLORS.background.hoverLight,
-                                              color: message.sender_type === 'student' ? UI_COLORS.button.text : UI_COLORS.text.heading,
-                                            }}
-                                          >
-                                            <p className="text-sm font-semibold mb-1">
-                                              {message.sender_type === 'student' ? `${studentDetails?.name || 'Student'} (User)` : `${selectedPatientFilter || 'Patient'} (LLM)`}:
-                                            </p>
-                                            <p className="text-sm">{message.message_content}</p>
-                                          </div>
-
-                                          {/* Avatar for student (right side) */}
-                                          {message.sender_type === 'student' && (
-                                            <div className="flex-shrink-0">
-                                              <UserAvatar
-                                                name={studentDetails?.name || 'Student'}
-                                                imageUrl={undefined}
-                                                size="small"
-                                              />
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                                        No chat history available.
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Notes Section */}
-                                <div className="px-6 pb-6">
-                                  <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                                    Notes
-                                  </h3>
-                                  <div 
-                                    className="border rounded-lg p-4"
-                                    style={{ 
-                                      borderColor: UI_COLORS.border.default,
-                                      backgroundColor: UI_COLORS.background.white
-                                    }}
-                                  >
-                                    <p className="text-sm" style={{ color: notes ? UI_COLORS.text.heading : UI_COLORS.text.muted }}>
-                                      {notes || 'No notes available.'}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div className="px-6 pb-6 flex gap-4">
-                                  <Button
-                                    className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                                    onClick={() => handleDownloadChatPDF(attempt.id)}
-                                  >
-                                    {isGeneratingPdf === attempt.id ? 'Generating...' : 'Download Chat PDF'}
-                                  </Button>
-                                  <Button
-                                    className="px-6 py-3 text-base font-medium transition-colors"
-                                    style={{ 
-                                      backgroundColor: UI_COLORS.button.secondary, 
-                                      color: UI_COLORS.button.text 
-                                    }}
-                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                                    onClick={() => handleDownloadNotesPDF(attempt.id)}
-                                  >
-                                    Download Notes PDF
-                                  </Button>
-                                  {attempt.completionStatus === 'Debrief Reached' && (
-                                    <Button
-                                      className="px-6 py-3 text-base font-medium transition-colors"
-                                      style={{ 
-                                        backgroundColor: UI_COLORS.button.secondary, 
-                                        color: UI_COLORS.button.text 
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                                      onClick={() => handleViewAIDebrief(attempt.id)}
-                                      disabled={!!isFetchingDebrief}
-                                    >
-                                      {isFetchingDebrief === attempt.id ? (
-                                        <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</span>
-                                      ) : 'View AI Debrief'}
-                                    </Button>
-                                  )}
-                                </div>
-
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                     {(studentPatientData?.attempts[selectedPatientFilter] || []).map((attempt) => {
+                        const isExpanded = expandedAttemptId === attempt.id;
+                        const messages = studentPatientData?.messages[attempt.id] || [];
+                        const notes = studentPatientData?.notes[attempt.id] || '';
+                        return (
+                          <div
+                            key={attempt.id}
+                            className="border rounded-lg overflow-hidden"
+                            style={{ borderColor: UI_COLORS.border.default }}
+                          >
+                            {/* Attempt Header Row */}
+                            <div
+                              className="grid grid-cols-[2fr_2fr_2fr_1fr] gap-4 px-6 py-4 items-center cursor-pointer transition-colors hover:bg-gray-50"
+                              style={{
+                                backgroundColor: isExpanded
+                                  ? UI_COLORS.background.tableHeader
+                                  : UI_COLORS.background.white,
+                              }}
+                              onClick={() => setExpandedAttemptId(isExpanded ? null : attempt.id)}
+                            >
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                                {attempt.date}
+                              </div>
+                              <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+                                {attempt.completionStatus}
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  className="p-2 rounded transition-transform"
+                                  style={{
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    backgroundColor: 'transparent',
+                                    transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                                  }}
+                                >
+                                  <svg
+                                    width="16"
+                                    height="16"
+                                    viewBox="0 0 16 16"
+                                    fill="none"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path
+                                      d="M4 6L8 10L12 6"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                            {/* Expanded Content */}
+                            {isExpanded && (
+                              <div className="border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                                {/* PDF wrapper */}
+                                <div
+                                  ref={(el) => {
+                                    attemptPdfRefs.current[String(attempt.id)] = el;
+                                  }}
+                                  className="bg-white"
+                                >
+                                  {/* Chat History Section */}
+                                  <div className="p-6">
+                                    <h3
+                                      className="text-lg font-semibold mb-4"
+                                      style={{ color: UI_COLORS.text.heading }}
+                                    >
+                                      Chat History
+                                    </h3>
+                                    <div
+                                      className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto"
+                                      style={{
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white,
+                                      }}
+                                    >
+                                      {messages.length > 0 ? (
+                                        messages.map((message) => (
+                                          <div
+                                            key={message.message_id}
+                                            className={`flex gap-3 ${
+                                              message.sender_type === 'student'
+                                                ? 'justify-end'
+                                                : 'justify-start'
+                                            }`}
+                                          >
+                                            {message.sender_type !== 'student' && (
+                                              <div className="flex-shrink-0">
+                                                <UserAvatar
+                                                  name={selectedPatientFilter || 'Patient'}
+                                                  imageUrl={undefined}
+                                                  size="small"
+                                                />
+                                              </div>
+                                            )}
+                                            <div
+                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${
+                                                message.sender_type === 'student'
+                                                  ? 'rounded-br-none'
+                                                  : 'rounded-bl-none'
+                                              }`}
+                                              style={{
+                                                backgroundColor:
+                                                  message.sender_type === 'student'
+                                                    ? SIMULATION_GROUP_COLOR_PALETTE[2]
+                                                    : UI_COLORS.background.hoverLight,
+                                                color:
+                                                  message.sender_type === 'student'
+                                                    ? UI_COLORS.button.text
+                                                    : UI_COLORS.text.heading,
+                                              }}
+                                            >
+                                              <p className="text-sm font-semibold mb-1">
+                                                {message.sender_type === 'student'
+                                                  ? `${studentDetails?.name || 'Student'} (User)`
+                                                  : `${selectedPatientFilter || 'Patient'} (LLM)`}
+                                                :
+                                              </p>
+                                              <p className="text-sm">{message.message_content}</p>
+                                            </div>
+                                            {message.sender_type === 'student' && (
+                                              <div className="flex-shrink-0">
+                                                <UserAvatar
+                                                  name={studentDetails?.name || 'Student'}
+                                                  imageUrl={undefined}
+                                                  size="small"
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        ))
+                                      ) : (
+                                        <p
+                                          className="text-sm italic"
+                                          style={{ color: UI_COLORS.text.muted }}
+                                        >
+                                          No chat history available.
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* Notes Section */}
+                                  <div className="px-6 pb-6">
+                                    <h3
+                                      className="text-lg font-semibold mb-4"
+                                      style={{ color: UI_COLORS.text.heading }}
+                                    >
+                                      Notes
+                                    </h3>
+                                    <div
+                                      className="border rounded-lg p-4"
+                                      style={{
+                                        borderColor: UI_COLORS.border.default,
+                                        backgroundColor: UI_COLORS.background.white,
+                                      }}
+                                    >
+                                      <p
+                                        className="text-sm"
+                                        style={{
+                                          color: notes
+                                            ? UI_COLORS.text.heading
+                                            : UI_COLORS.text.muted,
+                                        }}
+                                      >
+                                        {notes || 'No notes available.'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                                {/* Action Buttons */}
+                                <div className="px-6 pb-6 flex gap-4">
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.secondary,
+                                      color: UI_COLORS.button.text,
+                                    }}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
+                                    }
+                                    onClick={async () => {
+                                      const el = attemptPdfRefs.current[String(attempt.id)];
+                                      if (!el) return;
+                                      setIsGeneratingPdf(attempt.id);
+                                      const scrollEls = Array.from(
+                                        el.querySelectorAll<HTMLElement>('.overflow-y-auto')
+                                      );
+                                      const prev = scrollEls.map((node) => ({
+                                        node,
+                                        maxHeight: node.style.maxHeight,
+                                        overflowY: node.style.overflowY,
+                                      }));
+                                      scrollEls.forEach((node) => {
+                                        node.style.maxHeight = 'none';
+                                        node.style.overflowY = 'visible';
+                                      });
+                                      try {
+                                        await downloadChatPdf({
+                                          element: el,
+                                          filename: `chat-${attempt.id}.pdf`,
+                                          scale: 2,
+                                        });
+                                      } catch (error) {
+                                        console.error('Failed to download chat PDF:', error);
+                                      } finally {
+                                        prev.forEach(({ node, maxHeight, overflowY }) => {
+                                          node.style.maxHeight = maxHeight;
+                                          node.style.overflowY = overflowY;
+                                        });
+                                        setIsGeneratingPdf(null);
+                                      }
+                                    }}
+                                  >
+                                    {isGeneratingPdf === attempt.id ? 'Generating...' : 'Download Chat PDF'}
+                                  </Button>
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.secondary,
+                                      color: UI_COLORS.button.text,
+                                    }}
+                                    onMouseEnter={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
+                                    }
+                                    onMouseLeave={(e) =>
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
+                                    }
+                                    onClick={() => handleDownloadNotesPDF(attempt.id)}
+                                  >
+                                    Download Notes PDF
+                                  </Button>
+                                  {attempt.completionStatus === 'Debrief Reached' && (
+                                    <Button
+                                      className="px-6 py-3 text-base font-medium transition-colors"
+                                      style={{
+                                        backgroundColor: UI_COLORS.button.secondary,
+                                        color: UI_COLORS.button.text,
+                                      }}
+                                      onMouseEnter={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          UI_COLORS.button.secondaryHover)
+                                      }
+                                      onMouseLeave={(e) =>
+                                        (e.currentTarget.style.backgroundColor =
+                                          UI_COLORS.button.secondary)
+                                      }
+                                      onClick={() => handleViewAIDebrief(attempt.id)}
+                                      disabled={!!isFetchingDebrief}
+                                    >
+                                      {isFetchingDebrief === attempt.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          Loading...
+                                        </span>
+                                      ) : (
+                                        'View AI Debrief'
+                                      )}
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}  
                     </div>
                   </div>
                 </div>
