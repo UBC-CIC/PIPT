@@ -1817,48 +1817,64 @@ exports.handler = async (event, context) => {
           const simulationGroupId = event.queryStringParameters.simulation_group_id;
 
           try {
-            // Verify the chat belongs to a student in this instructor's simulation group
+            // 1) Authorize via source-of-truth join:
+            // chats -> student_interactions -> personas (personas carries simulation_group_id)
             const accessCheck = await sqlConnection`
               SELECT c.chat_id
               FROM "chats" c
               JOIN "student_interactions" si
                 ON c.student_interaction_id = si.student_interaction_id
-              JOIN "enrollments" e
-                ON si.enrollment_id = e.enrollment_id
+              JOIN "personas" p
+                ON si.persona_id = p.persona_id
               WHERE c.chat_id = ${sessionId}
-                AND e.simulation_group_id = ${simulationGroupId}
+                AND p.simulation_group_id = ${simulationGroupId}
               LIMIT 1;
             `;
 
             if (accessCheck.length === 0) {
-              response.statusCode = 403;
+              // Using 404 to align with "not found" semantics and avoid leaking info
+              response.statusCode = 404;
               response.body = JSON.stringify({
-                error: "Forbidden: chat not found in this simulation group.",
+                error: "Chat not found in this simulation group.",
               });
               break;
             }
 
-            // Single query — instructor flow views past chats, no async generation in progress
-            const debriefData = await sqlConnection`
-              SELECT generated_text
-              FROM "debriefs"
-              WHERE chat_id = ${sessionId}
-              ORDER BY created_at DESC
-              LIMIT 1;
-            `;
+            // 2) Fetch debrief with retry/backoff (mirrors student endpoint robustness)
+            const maxRetries = 6;
+            const baseDelayMs = 300;
+            let debriefData = [];
+
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+              debriefData = await sqlConnection`
+                SELECT generated_text
+                FROM "debriefs"
+                WHERE chat_id = ${sessionId}
+                ORDER BY created_at DESC
+                LIMIT 1;
+              `;
+
+              if (debriefData.length > 0) break;
+
+              const delay = baseDelayMs * Math.pow(2, attempt);
+              await new Promise((resolve) => setTimeout(resolve, delay));
+            }
 
             if (debriefData.length > 0) {
               let parsedDebrief = debriefData[0].generated_text;
-              if (typeof parsedDebrief === 'string') {
+
+              // Keep existing parsing behavior
+              if (typeof parsedDebrief === "string") {
                 try {
                   parsedDebrief = JSON.parse(parsedDebrief);
                 } catch (parseErr) {
                   logger.error("Failed to parse debrief JSON from DB", {
                     error: parseErr.message,
-                    raw: parsedDebrief.substring(0, 200)
+                    raw: parsedDebrief.substring(0, 200),
                   });
                 }
               }
+
               response.statusCode = 200;
               response.body = JSON.stringify({
                 generated_text: parsedDebrief,

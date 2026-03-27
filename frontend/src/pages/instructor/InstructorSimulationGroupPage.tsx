@@ -955,12 +955,19 @@ function InstructorSimulationGroupPage() {
       const messages = studentPatientData?.messages[attemptId] || [];
       const studentName = studentDetails?.name || 'Student';
       const patientName = selectedPatientFilter || 'Patient';
-
-      let chatText = `Chat History\nStudent: ${studentName}\nPatient: ${patientName}\n${'='.repeat(60)}\n\n`;
-      chatText += messages.map(m => 
-        `[${m.sent_at}] ${m.sender_type === 'student' ? studentName : patientName}: ${m.message_content}`
-      ).join('\n\n');
-      
+      let chatText = `Chat History\n`;
+      chatText += `Student: ${studentName}\n`;
+      chatText += `Patient: ${patientName}\n`;
+      chatText += `${'='.repeat(60)}\n\n`;
+      chatText += messages
+        .map((message) => {
+          const speaker =
+            message.sender_type === 'student'
+              ? `${studentName} (User)`
+              : `${patientName} (LLM)`;
+          return `${speaker}: ${message.message_content}`;
+        })
+        .join('\n\n');
       const blob = new Blob([chatText], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
