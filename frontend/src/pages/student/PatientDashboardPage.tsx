@@ -8,6 +8,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/App';
 import { studentService, type ChatHistoryEntry, type PatientDetail } from '@/services/studentService';
+import type { KeyQuestionsCoverageData } from '@/services/studentService';
 import ConfirmDeleteSessionDialog from '@/components/ConfirmDeleteSessionDialog';
 
 /**
@@ -58,8 +59,15 @@ function PatientDashboardPage() {
     return () => { cancelled = true; };
   }, [groupId, patientId]);
 
-  // Load key questions coverage data from mock data service
-  const allKeyQuestionsCoverageData = studentService.getKeyQuestionsCoverageData();
+  // Load key questions coverage data from real chat history scores
+  const allKeyQuestionsCoverageData: KeyQuestionsCoverageData[] = chatHistory
+    .filter((c) => c.completionStatus === 'Complete' && c.score != null)
+    .reverse() // oldest first (chatHistory is newest-first)
+    .map((c, i) => ({
+      attempt: `Attempt ${i + 1}`,
+      attemptNumber: i + 1,
+      coverage: parseInt(c.score!.replace('%', ''), 10),
+    }));
 
   // Check if there are any chats
   const hasChats = chatHistory.length > 0;

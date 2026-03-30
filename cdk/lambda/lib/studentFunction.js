@@ -372,9 +372,11 @@ exports.handler = async (event, context) => {
                 `;
 
             // Step 4: Retrieve session data specific to the student's patient
+            // LEFT JOIN debriefs to include overall_score for concluded chats
             const data = await sqlConnection`
-                    SELECT "chats".*
+                    SELECT "chats".*, d.overall_score
                     FROM "chats"
+                    LEFT JOIN "debriefs" d ON d.chat_id = "chats".chat_id
                     WHERE student_interaction_id = ${studentPatientId}
                     ORDER BY "chats".last_accessed, "chats".chat_id;
                 `;
