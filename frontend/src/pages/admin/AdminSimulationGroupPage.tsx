@@ -140,7 +140,6 @@ function AdminSimulationGroupPage() {
   const [students, setStudents] = useState<Student[]>([]);
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
   const [loading, setLoading] = useState(true);
-  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
 
@@ -170,7 +169,7 @@ function AdminSimulationGroupPage() {
       
       try {
         // Load each data source independently so one failure doesn't block the rest
-        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData, coverageData] = await Promise.all([
+        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, coverageData] = await Promise.all([
           adminApi.getSimulationGroup(groupId).catch(err => { console.error('Failed to load group:', err); return undefined; }),
           instructorService.getPatientAnalytics(groupId).catch(err => { console.error('Failed to load analytics:', err); return [] as PatientAnalytics[]; }),
           instructorService.getStudents(groupId).catch(err => { console.error('Failed to load students:', err); return [] as Student[]; }),
@@ -179,7 +178,6 @@ function AdminSimulationGroupPage() {
             ? adminApi.getQuestionBankQuestions(organizationId).catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; })
             : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
-          instructorService.getKeyQuestionAnalytics(groupId).catch(err => { console.error('Failed to load key question analytics:', err); return [] as KeyQuestionAnalytics[]; }),
           instructorService.getKeyQuestionCoverage(groupId).catch(err => { console.error('Failed to load key question coverage:', err); return [] as KeyQuestionCoverage[]; }),
         ]);
 
@@ -227,7 +225,6 @@ function AdminSimulationGroupPage() {
           setPatientSpecificBankQuestions(bankPatient);
         }
 
-        setGlobalKeyQuestionAnalytics(keyQuestionData);
         setKeyQuestionCoverage(coverageData);
         
         // Set initial selected patient if analytics available
@@ -314,10 +311,18 @@ function AdminSimulationGroupPage() {
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
   
-  // Key question analytics (per patient) — uses pre-fetched data
-  const keyQuestionAnalytics = currentPatient
-    ? globalKeyQuestionAnalytics
-    : [];
+  // Key question analytics (per patient) - fetched from dedicated endpoint
+  const [keyQuestionAnalytics, setKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+
+  useEffect(() => {
+    if (currentPatient && groupId) {
+      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id)
+        .then(setKeyQuestionAnalytics)
+        .catch(() => setKeyQuestionAnalytics([]));
+    } else {
+      setKeyQuestionAnalytics([]);
+    }
+  }, [currentPatient?.patient_id, groupId]);
   
   // Score distribution for current patient
   const scoreDistribution = currentPatient 
@@ -1319,7 +1324,7 @@ function AdminSimulationGroupPage() {
                         Key Question Coverage by {aiPersonaLabel}
                       </h3>
                       <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-                        Average percentage of key questions covered by students who completed their interaction
+                        Average percentage of key questions covered by students who completed their interaction.
                       </p>
                       <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionCoverage.length * 50)}>
                         <BarChart data={keyQuestionCoverage} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
@@ -1379,7 +1384,7 @@ function AdminSimulationGroupPage() {
                   {keyQuestionAnalytics.length > 0 && (
                     <div className="mt-8">
                       <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>Key Questions — Students Answered</h4>
-                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>Number of students who answered each key question for {currentPatient.patient_name}</p>
+                      <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>Number of students who answered each key question for {currentPatient.patient_name}.</p>
                       <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
                         <BarChart data={keyQuestionAnalytics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />

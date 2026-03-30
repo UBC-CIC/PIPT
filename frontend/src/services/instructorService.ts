@@ -330,6 +330,7 @@ export interface InstructorDataService {
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
   getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
   getKeyQuestionCoverage: (simulationGroupId: string) => Promise<KeyQuestionCoverage[]>;
+  getPatientKeyQuestionAnalytics: (simulationGroupId: string, personaId: string) => Promise<KeyQuestionAnalytics[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -905,6 +906,28 @@ async function getKeyQuestionCoverage(simulationGroupId: string): Promise<KeyQue
     }));
   } catch (error) {
     console.error('Failed to fetch key question coverage:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-question student-asked counts for a specific patient.
+ * Uses COUNT(DISTINCT student_id) so multiple attempts by the same student count once.
+ */
+async function getPatientKeyQuestionAnalytics(simulationGroupId: string, personaId: string): Promise<KeyQuestionAnalytics[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/patient_key_question_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`,
+      { method: 'GET' }
+    );
+    return data.map((row: any) => ({
+      questionTitle: (row.question_title || '').length > 30
+        ? row.question_title.substring(0, 27) + '...'
+        : (row.question_title || ''),
+      studentsAnswered: Number(row.students_answered) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch patient key question analytics:', error);
     return [];
   }
 }
@@ -1855,6 +1878,7 @@ export const instructorService: InstructorDataService = {
   isQuestionInUse,
   getKeyQuestionAnalytics,
   getKeyQuestionCoverage,
+  getPatientKeyQuestionAnalytics,
   getQuestionPerformanceScores,
   getScoreDistribution,
   getSimulationGroupQuestions,

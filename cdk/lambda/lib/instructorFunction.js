@@ -1824,7 +1824,7 @@ exports.handler = async (event, context) => {
                     ELSE 0
                   END
                 ) AS avg_coverage,
-                COUNT(d.debrief_id) AS students_debriefed
+                COUNT(DISTINCT d.student_id) AS students_debriefed
               FROM "personas" p
               LEFT JOIN "debriefs" d
                 ON p.persona_id = d.persona_id
@@ -1844,6 +1844,45 @@ exports.handler = async (event, context) => {
           response.statusCode = 400;
           response.body = JSON.stringify({
             error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "GET /instructor/patient_key_question_analytics":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.persona_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          const persona_id = event.queryStringParameters.persona_id;
+          try {
+            const data = await sqlConnection`
+              SELECT
+                qb.question_id,
+                COALESCE(qb.title, qb.question_text) AS question_title,
+                COUNT(DISTINCT CASE WHEN qi.was_asked = true THEN qi.student_id ELSE NULL END) AS students_answered
+              FROM "simulation_group_questions" sgq
+              JOIN "question_bank" qb ON sgq.question_id = qb.question_id
+              LEFT JOIN "question_interactions" qi
+                ON qb.question_id = qi.question_id
+                AND qi.persona_id = ${persona_id}
+                AND qi.simulation_group_id = ${simulation_group_id}
+              WHERE sgq.simulation_group_id = ${simulation_group_id}
+                AND (sgq.persona_id = ${persona_id} OR sgq.persona_id IS NULL)
+              GROUP BY qb.question_id, qb.title, qb.question_text
+              ORDER BY students_answered DESC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and persona_id are required",
           });
         }
         break;

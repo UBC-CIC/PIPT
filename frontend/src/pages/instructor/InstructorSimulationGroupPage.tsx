@@ -146,7 +146,6 @@ function InstructorSimulationGroupPage() {
   const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
 
@@ -174,13 +173,12 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData, coverageData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, coverageData] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
-          instructorService.getKeyQuestionAnalytics(groupId),
           instructorService.getKeyQuestionCoverage(groupId),
         ]);
 
@@ -189,7 +187,6 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
-        setGlobalKeyQuestionAnalytics(keyQuestionData);
         setKeyQuestionCoverage(coverageData);
       } catch (error) {
         console.error('Error loading instructor data:', error);
@@ -261,10 +258,18 @@ function InstructorSimulationGroupPage() {
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
 
-  // Key question analytics (per patient) - uses pre-fetched data
-  const keyQuestionAnalytics = currentPatient
-    ? globalKeyQuestionAnalytics
-    : [];
+  // Key question analytics (per patient) - fetched from dedicated endpoint
+  const [keyQuestionAnalytics, setKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+
+  useEffect(() => {
+    if (currentPatient && groupId) {
+      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id)
+        .then(setKeyQuestionAnalytics)
+        .catch(() => setKeyQuestionAnalytics([]));
+    } else {
+      setKeyQuestionAnalytics([]);
+    }
+  }, [currentPatient?.patient_id, groupId]);
 
   // Score distribution for current patient
   const scoreDistribution = currentPatient
@@ -1279,7 +1284,7 @@ function InstructorSimulationGroupPage() {
                         Key Question Coverage by {aiPersonaLabel}
                       </h3>
                       <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-                        Average percentage of key questions covered by students who completed their interaction
+                        Average percentage of key questions covered by students who completed their interaction.
                       </p>
                       <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionCoverage.length * 50)}>
                         <BarChart
@@ -1373,14 +1378,14 @@ function InstructorSimulationGroupPage() {
                     </div>
                   </div>
 
-                  {/* Key Questions Answered - Horizontal Bar Graph (per persona) */}
+                  {/* Key Questions Asked - Horizontal Bar Graph (per persona) */}
                   {keyQuestionAnalytics.length > 0 && (
                     <div className="mt-8">
                       <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                        Key Questions &mdash; Students Answered
+                        Key Questions &mdash; Students Asked
                       </h4>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Number of students who answered each key question for {currentPatient.patient_name}
+                        Number of students who asked each key question for {currentPatient.patient_name}.
                       </p>
                       <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
                         <BarChart
@@ -1408,7 +1413,7 @@ function InstructorSimulationGroupPage() {
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
                             }}
-                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Asked']}
                           />
                           <Bar
                             dataKey="studentsAnswered"
