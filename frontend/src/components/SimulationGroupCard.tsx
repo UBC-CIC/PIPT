@@ -60,7 +60,7 @@ function SimulationGroupCard({
                 {countLabels.instructors} : {group.instructor_count || 0}
               </p>
               <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                {countLabels.patients} : {group.patient_count || 0}
+                {countLabels.patients} : {group.persona_count || 0}
               </p>
               {(group as any).access_code && (
                 <p className="text-sm" style={{ color: UI_COLORS.text.body }}>

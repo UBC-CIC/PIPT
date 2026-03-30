@@ -21,7 +21,7 @@ export interface SimulationGroup {
   icon_color?: string;      // Fallback color for avatar (hex format)
   student_count?: number;   // Optional count of students (admin view only)
   instructor_count?: number; // Optional count of instructors (admin view only)
-  patient_count?: number;   // Optional count of patients (admin view only)
+  persona_count?: number;   // Optional count of patients (admin view only)
 }
 
 /**
@@ -1010,7 +1010,7 @@ async function getSimulationGroups(): Promise<SimulationGroup[]> {
       access_code: g.group_access_code || '',
       student_count: g.student_count || 0,
       instructor_count: g.instructor_count || 0,
-      patient_count: g.persona_count || 0,
+      persona_count: g.persona_count || 0,
       organization_id: g.organization_id || '',
     }));
 

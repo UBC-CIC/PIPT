@@ -113,7 +113,7 @@ function InstructorDashboardPage() {
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         <SimulationGroupsSection
-          groups={groups}
+          groups={groups.map(g => ({ ...g, name: g.group_name }))}
           onJoinGroup={handleCreateGroup}
           onContinueTraining={handleViewAnalytics}
           joinButtonText="+ Create New Group"
