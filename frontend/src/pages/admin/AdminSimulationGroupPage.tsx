@@ -1283,26 +1283,33 @@ function AdminSimulationGroupPage() {
                     ))}
                   </div>
 
-                  {/* Global Key Questions Bar */}
+                  {/* Per-Patient Completion Percentage Bar */}
                   <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                     <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                      Global Key Questions — Students Answered
+                      {aiPersonaLabel} Completion Rate
                     </h3>
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-                      Number of students who answered each global key question across all personas
+                      Percentage of students who have reached the debrief with each {aiPersonaLabelLower}.
                     </p>
-                    {globalKeyQuestionAnalytics.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
-                          <BarChart data={globalKeyQuestionAnalytics} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                    {patientAnalytics.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={Math.max(250, patientAnalytics.length * 50)}>
+                          <BarChart
+                            data={patientAnalytics.map(p => ({
+                              patientName: p.patient_name,
+                              completionPercentage: Math.round(p.instructor_completion_percentage ?? 0),
+                            }))}
+                            layout="vertical"
+                            margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                          >
                             <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                            <XAxis type="number" tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} allowDecimals={false} />
-                            <YAxis type="category" dataKey="questionTitle" width={180} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} />
-                            <Tooltip contentStyle={{ backgroundColor: UI_COLORS.background.white, border: `1px solid ${UI_COLORS.border.default}`, borderRadius: '6px' }} formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']} />
-                            <Bar dataKey="studentsAnswered" fill={SIMULATION_GROUP_COLOR_PALETTE[2]} radius={[0, 4, 4, 0]} barSize={28} />
+                            <XAxis type="number" domain={[0, 100]} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} tickFormatter={(val: number) => `${val}%`} />
+                            <YAxis type="category" dataKey="patientName" width={180} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} />
+                            <Tooltip contentStyle={{ backgroundColor: UI_COLORS.background.white, border: `1px solid ${UI_COLORS.border.default}`, borderRadius: '6px' }} formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Completed']} />
+                            <Bar dataKey="completionPercentage" fill={SIMULATION_GROUP_COLOR_PALETTE[2]} radius={[0, 4, 4, 0]} barSize={28} />
                           </BarChart>
                         </ResponsiveContainer>
                       ) : (
-                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
+                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No {aiPersonaLabelLower}s configured.</p>
                       )}
                   </div>
 
