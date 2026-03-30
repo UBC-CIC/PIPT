@@ -273,8 +273,8 @@ function InstructorSimulationGroupPage() {
     : [];
 
   // Fallback values
-  const simulationGroupName = simulationGroup?.name || 'Simulation Group';
-  const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
+  const simulationGroupName = simulationGroup?.group_name || 'Simulation Group';
+  const accessCode = simulationGroup?.group_access_code || 'XXXX-XXXX-XXXX-XXXX';
 
   // Filter patients based on search query
   const filteredPatients = manageablePatients.filter(patient =>
@@ -389,7 +389,7 @@ function InstructorSimulationGroupPage() {
     setStudentPatientData(null);
     setStudentDetailsLoading(true);
     try {
-      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.name);
+      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.group_name);
       setStudentDetails(details || null);
 
       if (details?.email) {
@@ -1198,7 +1198,7 @@ function InstructorSimulationGroupPage() {
                       <div className="w-10 h-10 rounded-full mx-auto mb-2 flex items-center justify-center" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[2] + '1a' }}>
                         <Users className="w-5 h-5" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }} />
                       </div>
-                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.patient_count}</p>
+                      <p className="text-2xl font-bold" style={{ color: UI_COLORS.text.heading }}>{simulationGroup.persona_count}</p>
                       <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>{aiPersonaLabelPlural}</p>
                     </div>
                     {/* Students Card */}

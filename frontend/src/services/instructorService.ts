@@ -25,14 +25,14 @@ import { type AIDebriefData, deepParseJson, extractDebriefFromRawJson } from '@/
  */
 export interface InstructorSimulationGroup {
   simulation_group_id: string; // Unique identifier
-  name: string;            // Group name (e.g., "Pregnancy")
+  group_name: string;            // Group name (e.g., "Pregnancy")
   subtitle: string;        // Always "Medical Simulation Group"
   icon_url?: string;        // Optional icon image URL
   icon_color?: string;      // Fallback color for avatar (hex format)
-  access_code: string;      // Access code for students to join
+  group_access_code: string;      // Access code for students to join
   student_count: number;    // Number of students in the group
   instructor_count?: number; // Number of instructors in the group
-  patient_count: number;    // Number of patients in the group
+  persona_count: number;    // Number of patients in the group
   organization_id: string;  // Reference to parent organization
 }
 
@@ -335,35 +335,35 @@ export interface InstructorDataService {
 const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
   {
     simulation_group_id: '1',
-    name: 'Chronic Pain',
+    group_name: 'Chronic Pain',
     subtitle: 'Medical Simulation Group',
     icon_color: getSimulationGroupColor(0),
-    access_code: 'NB3W-PI3I-Q2EH-WPA3',
+    group_access_code: 'NB3W-PI3I-Q2EH-WPA3',
     student_count: 20,
     instructor_count: 5,
-    patient_count: 2,
+    persona_count: 2,
     organization_id: 'org-1'
   },
   {
     simulation_group_id: '2',
-    name: 'Acne',
+    group_name: 'Acne',
     subtitle: 'Medical Simulation Group',
     icon_color: getSimulationGroupColor(1),
-    access_code: 'XY7Z-AB2C-DE4F-GH8I',
+    group_access_code: 'XY7Z-AB2C-DE4F-GH8I',
     student_count: 18,
     instructor_count: 3,
-    patient_count: 3,
+    persona_count: 3,
     organization_id: 'org-1'
   },
   {
     simulation_group_id: '3',
-    name: 'Diabetes Management',
+    group_name: 'Diabetes Management',
     subtitle: 'Medical Simulation Group',
     icon_color: getSimulationGroupColor(2),
-    access_code: 'PQ9R-ST1U-VW3X-YZ5A',
+    group_access_code: 'PQ9R-ST1U-VW3X-YZ5A',
     student_count: 32,
     instructor_count: 4,
-    patient_count: 2,
+    persona_count: 2,
     organization_id: 'org-2'
   }
 ];
@@ -670,13 +670,13 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
 
     return data.map((group, index) => ({
       simulation_group_id: group.simulation_group_id,
-      name: group.group_name,
+      group_name: group.group_name,
       subtitle: 'Medical Simulation Group',
       icon_color: group.icon_color || getSimulationGroupColor(index),
-      access_code: group.group_access_code || '',
+      group_access_code: group.group_access_code || '',
       student_count: group.student_count || 0,
       instructor_count: group.instructor_count || 0,
-      patient_count: group.persona_count || 0,
+      persona_count: group.persona_count || 0,
       organization_id: group.organization_id || '',
     }));
   } catch (error) {
@@ -707,12 +707,12 @@ async function createSimulationGroup(data: { name: string; description: string; 
 
   return {
     simulation_group_id: result.simulation_group_id,
-    name: result.group_name,
+    group_name: result.group_name,
     subtitle: 'Medical Simulation Group',
     icon_color: getSimulationGroupColor(0),
-    access_code: result.group_access_code || '',
+    group_access_code: result.group_access_code || '',
     student_count: 0,
-    patient_count: 0,
+    persona_count: 0,
     organization_id: result.organization_id || '',
   };
 }
@@ -1287,7 +1287,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
   if (!groupName) {
     try {
       const group = await getSimulationGroup(simulationGroupId);
-      groupName = group?.name || '';
+      groupName = group?.group_name || '';
     } catch {
       groupName = '';
     }

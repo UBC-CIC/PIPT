@@ -185,23 +185,23 @@ function AdminSimulationGroupPage() {
         // Map admin API shape to InstructorSimulationGroup
         const groupData = adminGroupData ? {
           simulation_group_id: adminGroupData.simulation_group_id,
-          name: adminGroupData.group_name,
+          group_name: adminGroupData.group_name,
           subtitle: adminGroupData.group_description || 'Simulation Group',
-          access_code: adminGroupData.group_access_code || '',
+          group_access_code: adminGroupData.group_access_code || '',
           student_count: adminGroupData.student_count || 0,
           instructor_count: adminGroupData.instructor_count || 0,
-          patient_count: adminGroupData.persona_count || 0,
+          persona_count: adminGroupData.persona_count || 0,
           organization_id: adminGroupData.organization_id || '',
         } as InstructorSimulationGroup : undefined;
         
         setSimulationGroup(groupData ? {
           simulation_group_id: groupData.simulation_group_id,
-          name: groupData.group_name,
+          group_name: groupData.group_name,
           subtitle: 'Medical Simulation Group',
-          access_code: groupData.group_access_code || '',
+          group_access_code: groupData.group_access_code || '',
           student_count: groupData.student_count || 0,
           instructor_count: groupData.instructor_count || 0,
-          patient_count: groupData.persona_count || 0,
+          persona_count: groupData.persona_count || 0,
           organization_id: groupData.organization_id || '',
         } : undefined);
         setPatientAnalytics(analyticsData);
@@ -326,8 +326,8 @@ function AdminSimulationGroupPage() {
     : [];
   
   // Fallback values
-  const simulationGroupName = simulationGroup?.name || 'Simulation Group';
-  const accessCode = simulationGroup?.access_code || 'XXXX-XXXX-XXXX-XXXX';
+  const simulationGroupName = simulationGroup?.group_name || 'Simulation Group';
+  const accessCode = simulationGroup?.group_access_code || 'XXXX-XXXX-XXXX-XXXX';
   
   // Filter patients based on search query
   const filteredPatients = manageablePatients.filter(patient =>
@@ -363,11 +363,11 @@ function AdminSimulationGroupPage() {
     try {
       const result = await adminApi.regenerateAccessCode(groupId);
       // Update local state with the new access code
-      setSimulationGroup(prev => prev ? { ...prev, access_code: result.access_code } : prev);
+      setSimulationGroup(prev => prev ? { ...prev, group_access_code: result.access_code } : prev);
     } catch (err) {
       console.error('Failed to regenerate access code via API, using mock:', err);
       const newCode = await mockInstructorDataService.generateAccessCode(groupId);
-      setSimulationGroup(prev => prev ? { ...prev, access_code: newCode } : prev);
+      setSimulationGroup(prev => prev ? { ...prev, group_access_code: newCode } : prev);
     }
   };
 
@@ -439,7 +439,7 @@ function AdminSimulationGroupPage() {
     setStudentPatientData(null);
     setStudentDetailsLoading(true);
     try {
-      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.name);
+      const details = await instructorService.getStudentDetails(studentId, groupId || '', simulationGroup?.group_name);
       setStudentDetails(details || null);
 
       if (details?.email) {
@@ -808,7 +808,7 @@ function AdminSimulationGroupPage() {
 
     try {
       // 1. Create the question in the question_bank via real API
-      const created = await adminApi.createQuestionBankQuestion(organizationId, {
+      const created = await adminApi.createQuestionBankQuestion(organizationId!, {
         title: question.title,
         question_text: question.keyQuestion,
         evaluation_criteria: question.evaluationCriteria,
@@ -1269,7 +1269,7 @@ function AdminSimulationGroupPage() {
                 <div className="space-y-6">
                   <div className="grid grid-cols-3 gap-6">
                     {[
-                      { count: simulationGroup.patient_count, label: aiPersonaLabelPlural, colorIndex: 2, Icon: Users },
+                      { count: simulationGroup.persona_count, label: aiPersonaLabelPlural, colorIndex: 2, Icon: Users },
                       { count: simulationGroup.student_count, label: 'Students', colorIndex: 5, Icon: Users },
                       { count: simulationGroup.instructor_count ?? 0, label: 'Instructors', colorIndex: 4, Icon: UserCog },
                     ].map(({ count, label, colorIndex, Icon }) => (

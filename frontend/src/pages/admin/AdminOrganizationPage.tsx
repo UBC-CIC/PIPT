@@ -44,13 +44,13 @@ function AdminOrganizationPage() {
         // Map admin groups to the InstructorSimulationGroup shape used by the UI
         setGroups(groupsData.map((g, i) => ({
           simulation_group_id: g.simulation_group_id,
-          name: g.group_name,
+          group_name: g.group_name,
           subtitle: g.group_description || 'Simulation Group',
           icon_color: getSimulationGroupColor(i),
-          access_code: g.group_access_code || '',
+          group_access_code: g.group_access_code || '',
           student_count: g.student_count || 0,
           instructor_count: g.instructor_count || 0,
-          patient_count: g.persona_count || 0,
+          persona_count: g.persona_count || 0,
           organization_id: g.organization_id || '',
         })));
       } catch (error) {
@@ -122,13 +122,13 @@ function AdminOrganizationPage() {
 
       const newGroup: InstructorSimulationGroup = {
         simulation_group_id: created.simulation_group_id,
-        name: created.group_name,
+        group_name: created.group_name,
         subtitle: 'Medical Simulation Group',
         icon_color: getSimulationGroupColor(groups.length),
-        access_code: created.group_access_code || '',
+        group_access_code: created.group_access_code || '',
         student_count: 0,
         instructor_count: instructorEmails.length,
-        patient_count: 0,
+        persona_count: 0,
         organization_id: created.organization_id || '',
       };
       setGroups(prevGroups => [...prevGroups, newGroup]);
@@ -138,13 +138,13 @@ function AdminOrganizationPage() {
       const instructorEmails = data.instructors.split(',').map(i => i.trim()).filter(i => i);
       const fallbackGroup: InstructorSimulationGroup = {
         simulation_group_id: `group-${Date.now()}`,
-        name: data.name,
+        group_name: data.name,
         subtitle: 'Medical Simulation Group',
         icon_color: getSimulationGroupColor(groups.length),
-        access_code: Math.random().toString(36).substring(2, 10).toUpperCase(),
+        group_access_code: Math.random().toString(36).substring(2, 10).toUpperCase(),
         student_count: 0,
         instructor_count: instructorEmails.length,
-        patient_count: 0,
+        persona_count: 0,
         organization_id: '',
       };
       setGroups(prevGroups => [...prevGroups, fallbackGroup]);
@@ -163,7 +163,7 @@ function AdminOrganizationPage() {
 
   const handleDeleteGroup = async (groupId: string) => {
     const group = groups.find(g => g.simulation_group_id === groupId);
-    const groupName = group ? group.name : 'this simulation group';
+    const groupName = group ? group.group_name : 'this simulation group';
     
     const confirmed = window.confirm(`Are you sure you want to delete ${groupName}? This action cannot be undone.`);
     if (!confirmed) return;
@@ -226,7 +226,7 @@ function AdminOrganizationPage() {
         </div>
 
         <SimulationGroupsSection
-          groups={groups}
+          groups={groups.map(g => ({ ...g, name: g.group_name }))}
           onJoinGroup={handleCreateGroup}
           onContinueTraining={handleViewAnalytics}
           joinButtonText="+ Create New Group"

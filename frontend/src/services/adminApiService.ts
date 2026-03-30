@@ -77,14 +77,6 @@ export async function getAllSimulationGroups(organizationId?: string): Promise<A
 }
 
 /**
- * Get a specific simulation group by ID
- */
-export async function getSimulationGroup(simulationGroupId: string): Promise<AdminSimulationGroup | undefined> {
-  const groups = await getAllSimulationGroups();
-  return groups.find(g => g.simulation_group_id === simulationGroupId);
-}
-
-/**
  * Get a single simulation group by ID (fetches all and filters).
  */
 export async function getSimulationGroup(groupId: string): Promise<AdminSimulationGroup | undefined> {
