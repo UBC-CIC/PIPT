@@ -98,6 +98,15 @@ export interface QuestionPerformanceScore {
 }
 
 /**
+ * Represents per-patient key question coverage for debriefed students
+ */
+export interface KeyQuestionCoverage {
+  patientName: string;                  // Patient/persona name
+  avgCoverage: number;                  // Average % of key questions covered (0-100)
+  studentsDebriefed: number;            // Number of students who reached debrief
+}
+
+/**
  * Represents a bucket in a score distribution histogram
  */
 export interface ScoreDistributionBucket {
@@ -320,6 +329,7 @@ export interface InstructorDataService {
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
   getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
+  getKeyQuestionCoverage: (simulationGroupId: string) => Promise<KeyQuestionCoverage[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -873,6 +883,28 @@ async function getKeyQuestionAnalytics(simulationGroupId: string): Promise<KeyQu
     });
   } catch (error) {
     console.error('Failed to fetch key question analytics:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-patient key question coverage for students who reached debrief
+ */
+async function getKeyQuestionCoverage(simulationGroupId: string): Promise<KeyQuestionCoverage[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/key_question_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+      { method: 'GET' }
+    );
+    return data.map((row: any) => ({
+      patientName: (row.persona_name || '').length > 30
+        ? row.persona_name.substring(0, 27) + '...'
+        : (row.persona_name || ''),
+      avgCoverage: Math.round(Number(row.avg_coverage) || 0),
+      studentsDebriefed: Number(row.students_debriefed) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch key question coverage:', error);
     return [];
   }
 }
@@ -1822,6 +1854,7 @@ export const instructorService: InstructorDataService = {
   getPatientsUsingQuestion,
   isQuestionInUse,
   getKeyQuestionAnalytics,
+  getKeyQuestionCoverage,
   getQuestionPerformanceScores,
   getScoreDistribution,
   getSimulationGroupQuestions,

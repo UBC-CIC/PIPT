@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type KeyQuestionCoverage, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
 import { type AIDebriefData } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -30,7 +30,6 @@ function InstructorSimulationGroupPage() {
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
@@ -148,6 +147,7 @@ function InstructorSimulationGroupPage() {
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
 
   // new states for AI Debrief and loading states
@@ -174,13 +174,14 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData, coverageData] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
           instructorService.getKeyQuestionAnalytics(groupId),
+          instructorService.getKeyQuestionCoverage(groupId),
         ]);
 
         setUser(userData);
@@ -189,6 +190,7 @@ function InstructorSimulationGroupPage() {
         setStudents(studentsData);
         setManageablePatients(patientsData);
         setGlobalKeyQuestionAnalytics(keyQuestionData);
+        setKeyQuestionCoverage(coverageData);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -263,9 +265,6 @@ function InstructorSimulationGroupPage() {
   const keyQuestionAnalytics = currentPatient
     ? globalKeyQuestionAnalytics
     : [];
-
-  // Question performance scores
-  const questionPerformanceScores = instructorService.getQuestionPerformanceScores(groupId || '1');
 
   // Score distribution for current patient
   const scoreDistribution = currentPatient
@@ -1273,42 +1272,18 @@ function InstructorSimulationGroupPage() {
                     )}
                   </div>
 
-                  {/* Question Performance Scores - Horizontal Bar */}
-                  {questionPerformanceScores.length > 0 && (
+                  {/* Key Question Coverage per Patient - Horizontal Bar */}
+                  {keyQuestionCoverage.length > 0 && (
                     <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                      <div className="flex items-start justify-between mb-6">
-                        <div>
-                          <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                            Question Performance Scores
-                          </h3>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                            Average quality score per key question across all student responses
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
-                            Time Period:
-                          </label>
-                          <select
-                            value={questionPerformanceTimePeriod}
-                            onChange={(e) => setQuestionPerformanceTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                            className="px-3 py-2 rounded-lg border text-sm"
-                            style={{
-                              borderColor: UI_COLORS.border.default,
-                              backgroundColor: UI_COLORS.background.white,
-                              color: UI_COLORS.text.heading,
-                            }}
-                          >
-                            <option value="week">Last Week</option>
-                            <option value="month">Last Month</option>
-                            <option value="year">Last Year</option>
-                            <option value="all">All Time</option>
-                          </select>
-                        </div>
-                      </div>
-                      <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
+                      <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Key Question Coverage by {aiPersonaLabel}
+                      </h3>
+                      <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                        Average percentage of key questions covered by students who completed their interaction
+                      </p>
+                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionCoverage.length * 50)}>
                         <BarChart
-                          data={questionPerformanceScores}
+                          data={keyQuestionCoverage}
                           layout="vertical"
                           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
@@ -1322,7 +1297,7 @@ function InstructorSimulationGroupPage() {
                           />
                           <YAxis
                             type="category"
-                            dataKey="questionTitle"
+                            dataKey="patientName"
                             width={180}
                             tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                             axisLine={{ stroke: UI_COLORS.border.default }}
@@ -1333,22 +1308,22 @@ function InstructorSimulationGroupPage() {
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
                             }}
-                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { totalResponses?: number } }) => [
-                              `${value ?? 0}% avg (${props.payload?.totalResponses ?? 0} responses)`,
-                              'Score'
+                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
+                              `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                              'Coverage'
                             ]}
                           />
                           <Bar
-                            dataKey="averageScore"
+                            dataKey="avgCoverage"
                             radius={[0, 4, 4, 0]}
                             barSize={28}
                           >
-                            {questionPerformanceScores.map((entry, index) => (
+                            {keyQuestionCoverage.map((entry, index) => (
                               <Cell
-                                key={`perf-${index}`}
+                                key={`cov-${index}`}
                                 fill={
-                                  entry.averageScore >= 75 ? '#22c55e' :
-                                  entry.averageScore >= 55 ? '#eab308' :
+                                  entry.avgCoverage >= 75 ? '#22c55e' :
+                                  entry.avgCoverage >= 55 ? '#eab308' :
                                   '#ef4444'
                                 }
                               />

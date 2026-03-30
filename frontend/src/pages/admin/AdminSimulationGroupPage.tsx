@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
+import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial, type QuestionBankItem, instructorService, type InstructorSimulationGroup, type PatientAnalytics, type Student, type ManageablePatient, type KeyQuestionAnalytics, type KeyQuestionCoverage, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -42,7 +42,6 @@ function AdminSimulationGroupPage() {
   const [studentPatientData, setStudentPatientData] = useState<StudentPatientData | null>(null);
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
   const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('');
-  const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
   
   // Edit Patient state
@@ -142,6 +141,7 @@ function AdminSimulationGroupPage() {
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
 
   // Load data from instructor service (sync)
@@ -170,7 +170,7 @@ function AdminSimulationGroupPage() {
       
       try {
         // Load each data source independently so one failure doesn't block the rest
-        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData] = await Promise.all([
+        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, keyQuestionData, coverageData] = await Promise.all([
           adminApi.getSimulationGroup(groupId).catch(err => { console.error('Failed to load group:', err); return undefined; }),
           instructorService.getPatientAnalytics(groupId).catch(err => { console.error('Failed to load analytics:', err); return [] as PatientAnalytics[]; }),
           instructorService.getStudents(groupId).catch(err => { console.error('Failed to load students:', err); return [] as Student[]; }),
@@ -180,6 +180,7 @@ function AdminSimulationGroupPage() {
             : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
           instructorService.getKeyQuestionAnalytics(groupId).catch(err => { console.error('Failed to load key question analytics:', err); return [] as KeyQuestionAnalytics[]; }),
+          instructorService.getKeyQuestionCoverage(groupId).catch(err => { console.error('Failed to load key question coverage:', err); return [] as KeyQuestionCoverage[]; }),
         ]);
 
         // Map admin API shape to InstructorSimulationGroup
@@ -227,6 +228,7 @@ function AdminSimulationGroupPage() {
         }
 
         setGlobalKeyQuestionAnalytics(keyQuestionData);
+        setKeyQuestionCoverage(coverageData);
         
         // Set initial selected patient if analytics available
         if (analyticsData.length > 0) {
@@ -316,9 +318,6 @@ function AdminSimulationGroupPage() {
   const keyQuestionAnalytics = currentPatient
     ? globalKeyQuestionAnalytics
     : [];
-  
-  // Question performance scores
-  const questionPerformanceScores = mockInstructorDataService.getQuestionPerformanceScores(groupId || '1');
   
   // Score distribution for current patient
   const scoreDistribution = currentPatient 
@@ -1313,43 +1312,29 @@ function AdminSimulationGroupPage() {
                       )}
                   </div>
 
-                  {/* Question Performance Scores */}
-                  {questionPerformanceScores.length > 0 && (
+                  {/* Key Question Coverage per Patient */}
+                  {keyQuestionCoverage.length > 0 && (
                     <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                      <div className="flex items-start justify-between mb-6">
-                        <div>
-                          <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>Question Performance Scores</h3>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>Average quality score per key question across all student responses</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>Time Period:</label>
-                          <select
-                            value={questionPerformanceTimePeriod}
-                            onChange={(e) => setQuestionPerformanceTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                            className="px-3 py-2 rounded-lg border text-sm"
-                            style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }}
-                          >
-                            <option value="week">Last Week</option>
-                            <option value="month">Last Month</option>
-                            <option value="year">Last Year</option>
-                            <option value="all">All Time</option>
-                          </select>
-                        </div>
-                      </div>
-                      <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
-                        <BarChart data={questionPerformanceScores} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                      <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Key Question Coverage by {aiPersonaLabel}
+                      </h3>
+                      <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                        Average percentage of key questions covered by students who completed their interaction
+                      </p>
+                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionCoverage.length * 50)}>
+                        <BarChart data={keyQuestionCoverage} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                           <XAxis type="number" domain={[0, 100]} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} tickFormatter={(val: number) => `${val}%`} />
-                          <YAxis type="category" dataKey="questionTitle" width={180} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} />
+                          <YAxis type="category" dataKey="patientName" width={180} tick={{ fill: UI_COLORS.text.body, fontSize: 12 }} axisLine={{ stroke: UI_COLORS.border.default }} />
                           <Tooltip
                             contentStyle={{ backgroundColor: UI_COLORS.background.white, border: `1px solid ${UI_COLORS.border.default}`, borderRadius: '6px' }}
-                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { totalResponses?: number } }) => [
-                              `${value ?? 0}% avg (${props.payload?.totalResponses ?? 0} responses)`, 'Score'
+                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
+                              `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`, 'Coverage'
                             ]}
                           />
-                          <Bar dataKey="averageScore" radius={[0, 4, 4, 0]} barSize={28}>
-                            {questionPerformanceScores.map((entry, index) => (
-                              <Cell key={`perf-${index}`} fill={entry.averageScore >= 75 ? '#22c55e' : entry.averageScore >= 55 ? '#eab308' : '#ef4444'} />
+                          <Bar dataKey="avgCoverage" radius={[0, 4, 4, 0]} barSize={28}>
+                            {keyQuestionCoverage.map((entry, index) => (
+                              <Cell key={`cov-${index}`} fill={entry.avgCoverage >= 75 ? '#22c55e' : entry.avgCoverage >= 55 ? '#eab308' : '#ef4444'} />
                             ))}
                           </Bar>
                         </BarChart>

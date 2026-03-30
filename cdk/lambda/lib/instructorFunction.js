@@ -1807,6 +1807,46 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /instructor/key_question_coverage":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          try {
+            const data = await sqlConnection`
+              SELECT
+                p.persona_id,
+                p.persona_name,
+                AVG(
+                  CASE WHEN d.total_questions_assigned > 0
+                    THEN d.total_questions_asked * 100.0 / d.total_questions_assigned
+                    ELSE 0
+                  END
+                ) AS avg_coverage,
+                COUNT(d.debrief_id) AS students_debriefed
+              FROM "personas" p
+              LEFT JOIN "debriefs" d
+                ON p.persona_id = d.persona_id
+                AND d.simulation_group_id = ${simulation_group_id}
+              WHERE p.simulation_group_id = ${simulation_group_id}
+              GROUP BY p.persona_id, p.persona_name, p.persona_number
+              ORDER BY p.persona_number ASC, p.persona_name ASC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
       case "GET /instructor/get_debrief":
         if (
           event.queryStringParameters != null &&
