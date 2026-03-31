@@ -2111,8 +2111,8 @@ exports.handler = async (event, context) => {
                   AND si.persona_id = ${persona_id}
                 LEFT JOIN "chats" c
                   ON c.student_interaction_id = si.student_interaction_id
-                  AND c.created_at >= ${startDateStr}::timestamp
-                  AND c.created_at <= ${endDateStr}::timestamp
+                  AND c.started_at >= ${startDateStr}::timestamp
+                  AND c.started_at <= ${endDateStr}::timestamp
                 WHERE e.simulation_group_id = ${simulation_group_id}
                 AND e.enrollment_type = 'student'
                 GROUP BY u.user_id, u.first_name, u.last_name, si.is_completed, si.student_interaction_id
@@ -2133,7 +2133,7 @@ exports.handler = async (event, context) => {
                   AND si.persona_id = ${persona_id}
                 LEFT JOIN "chats" c
                   ON c.student_interaction_id = si.student_interaction_id
-                  AND c.created_at >= ${startDateStr}::timestamp
+                  AND c.started_at >= ${startDateStr}::timestamp
                 WHERE e.simulation_group_id = ${simulation_group_id}
                 AND e.enrollment_type = 'student'
                 GROUP BY u.user_id, u.first_name, u.last_name, si.is_completed, si.student_interaction_id
@@ -2154,7 +2154,7 @@ exports.handler = async (event, context) => {
                   AND si.persona_id = ${persona_id}
                 LEFT JOIN "chats" c
                   ON c.student_interaction_id = si.student_interaction_id
-                  AND c.created_at <= ${endDateStr}::timestamp
+                  AND c.started_at <= ${endDateStr}::timestamp
                 WHERE e.simulation_group_id = ${simulation_group_id}
                 AND e.enrollment_type = 'student'
                 GROUP BY u.user_id, u.first_name, u.last_name, si.is_completed, si.student_interaction_id
