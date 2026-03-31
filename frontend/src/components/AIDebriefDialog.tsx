@@ -2,7 +2,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { studentService, type AIDebriefData } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
@@ -23,6 +23,19 @@ interface AIDebriefDialogProps {
 function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isLoadingAnswerKey, setIsLoadingAnswerKey] = useState(false);
+  const [answerKeyAvailable, setAnswerKeyAvailable] = useState<boolean | null>(null);
+
+  // Check if an answer key file actually exists when the dialog opens
+  useEffect(() => {
+    if (isOpen && simulationGroupId && patientId) {
+      setAnswerKeyAvailable(null);
+      studentService.fetchAnswerKeyUrl(simulationGroupId, patientId).then((url) => {
+        setAnswerKeyAvailable(!!url);
+      }).catch(() => {
+        setAnswerKeyAvailable(false);
+      });
+    }
+  }, [isOpen, simulationGroupId, patientId]);
 
   // Use provided data or show empty state
   const debriefData = data || {
@@ -222,7 +235,7 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
               </p>
               <Button
                 onClick={handleViewAnswerKey}
-                disabled={!debriefData.answerKeyComparison?.answerKeyAvailable || isLoadingAnswerKey}
+                disabled={answerKeyAvailable !== true || isLoadingAnswerKey}
                 variant="outline"
                 className="px-6 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{
