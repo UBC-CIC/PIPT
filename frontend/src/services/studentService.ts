@@ -592,6 +592,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       last_accessed: string | null;
       notes: string | null;
       status: string | null;
+      overall_score: number | null;
     }>>(
       `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
     );
@@ -629,7 +630,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
         id: chat.chat_id,
         name: displayName || `Attempt ${index + 1}${dateStr ? ` - ${dateStr}` : ''}`,
         completionStatus: chat.status === 'concluded' ? 'Complete' : 'In Progress',
-        score: null,
+        score: chat.overall_score != null ? `${Math.round(chat.overall_score)}%` : null,
       };
     });
   } catch (error) {
