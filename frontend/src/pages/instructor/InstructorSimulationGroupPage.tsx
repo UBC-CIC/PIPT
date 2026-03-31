@@ -30,7 +30,7 @@ function InstructorSimulationGroupPage() {
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
+  const [] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
@@ -104,7 +104,7 @@ function InstructorSimulationGroupPage() {
         .filter(t => t !== 'patient_specific')
     )
   ).sort();
-  
+
   // Case-Specific Key Questions state
   const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() =>
     selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : []
@@ -147,6 +147,7 @@ function InstructorSimulationGroupPage() {
   const [user, setUser] = useState<UserData>({ name: 'Instructor', avatarUrl: undefined });
   const [simulationGroup, setSimulationGroup] = useState<any>(null);
   const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
+  const [analyticsDateRange, setAnalyticsDateRange] = useState({ start: '', end: '' });
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
@@ -201,6 +202,22 @@ function InstructorSimulationGroupPage() {
     loadData();
   }, [groupId]);
 
+  // Filter analytics data based on date range
+  useEffect(() => {
+    if (!groupId) return;
+    const fetchFilteredAnalytics = async () => {
+      try {
+        const analyticsData = await instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end);
+        setPatientAnalytics(analyticsData);
+      } catch (error) {
+        console.error('Error fetching filtered analytics:', error);
+      }
+    };
+    if (simulationGroup) {
+      fetchFilteredAnalytics();
+    }
+  }, [groupId, analyticsDateRange.start, analyticsDateRange.end, simulationGroup]);
+
   // Load question bank data when the questionBank section is activated
   useEffect(() => {
     if (activeSection === 'questionBank') {
@@ -254,9 +271,9 @@ function InstructorSimulationGroupPage() {
   const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
   const messageCountData = currentPatient
     ? [
-        { name: 'Student Messages', value: currentPatient.student_message_count },
-        { name: 'AI Messages', value: currentPatient.ai_message_count },
-      ]
+      { name: 'Student Messages', value: currentPatient.student_message_count },
+      { name: 'AI Messages', value: currentPatient.ai_message_count },
+    ]
     : [];
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
@@ -1168,10 +1185,46 @@ function InstructorSimulationGroupPage() {
         <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <div className="space-y-6">
-              {/* Simulation Group Title */}
-              <h2 className="text-3xl font-bold tracking-tight" style={{ color: UI_COLORS.text.heading }}>
-                {simulationGroupName}
-              </h2>
+              <div className="flex items-center justify-between">
+                {/* Simulation Group Title */}
+                <h2 className="text-3xl font-bold tracking-tight" style={{ color: UI_COLORS.text.heading }}>
+                  {simulationGroupName}
+                </h2>
+                {/* DATE FILTER RANGE */}
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-md border shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="startDate" className="text-sm font-medium text-gray-700">From:</label>
+                    <input
+                      type="date"
+                      id="startDate"
+                      className="border-none bg-transparent text-sm focus:ring-0 cursor-pointer outline-none"
+                      max={analyticsDateRange.end || undefined}
+                      value={analyticsDateRange.start}
+                      onChange={(e) => setAnalyticsDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    />
+                  </div>
+                  <div className="h-4 w-px bg-gray-300 mx-1 border-l"></div>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="endDate" className="text-sm font-medium text-gray-700">To:</label>
+                    <input
+                      type="date"
+                      id="endDate"
+                      className="border-none bg-transparent text-sm focus:ring-0 cursor-pointer outline-none"
+                      min={analyticsDateRange.start || undefined}
+                      value={analyticsDateRange.end}
+                      onChange={(e) => setAnalyticsDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    />
+                  </div>
+                  {(analyticsDateRange.start || analyticsDateRange.end) && (
+                    <button
+                      onClick={() => setAnalyticsDateRange({ start: '', end: '' })}
+                      className="ml-2 text-xs text-gray-500 hover:text-gray-800 focus:outline-none"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Tabs: Overview + Patient Tabs */}
               <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
@@ -1245,7 +1298,7 @@ function InstructorSimulationGroupPage() {
                     {patientAnalytics.length > 0 ? (
                       <ResponsiveContainer width="100%" height={Math.max(250, patientAnalytics.length * 50)}>
                         <BarChart
-                            data={patientAnalytics.map(p => ({
+                          data={patientAnalytics.map(p => ({
                             patientName: p.patient_name || p.persona_name,
                             completionPercentage: Math.round(p.instructor_completion_percentage ?? 0),
                           }))}
@@ -1339,8 +1392,8 @@ function InstructorSimulationGroupPage() {
                                 key={`cov-${index}`}
                                 fill={
                                   entry.avgCoverage >= 75 ? '#22c55e' :
-                                  entry.avgCoverage >= 55 ? '#eab308' :
-                                  '#ef4444'
+                                    entry.avgCoverage >= 55 ? '#eab308' :
+                                      '#ef4444'
                                 }
                               />
                             ))}
@@ -1491,122 +1544,103 @@ function InstructorSimulationGroupPage() {
                           Distribution of student progress status for {currentPatient.patient_name}.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
-                          Time Period:
-                        </label>
-                        <select
-                          value={scoreDistributionTimePeriod}
-                          onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                          className="px-3 py-2 rounded-lg border text-sm"
-                          style={{
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
-                            color: UI_COLORS.text.heading,
-                          }}
-                        >
-                          <option value="week">Last Week</option>
-                          <option value="month">Last Month</option>
-                          <option value="year">Last Year</option>
-                          <option value="all">All Time</option>
-                        </select>
-                      </div>
+
                     </div>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <BarChart
-                          data={studentProgress}
-                          margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
-                          barSize={50}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                          <XAxis
-                            dataKey="status"
-                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                            axisLine={{ stroke: UI_COLORS.border.default }}
-                            label={{ value: 'Progress Status', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
-                          />
-                          <YAxis
-                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                            axisLine={{ stroke: UI_COLORS.border.default }}
-                            allowDecimals={false}
-                            label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: UI_COLORS.background.white,
-                              border: `1px solid ${UI_COLORS.border.default}`,
-                              borderRadius: '6px',
-                              padding: 0,
-                            }}
-                            content={({ active, payload }) => {
-                              if (!active || !payload || !payload.length) return null;
-                              const entry = payload[0].payload as StudentProgressData;
-                              return (
-                                <div
-                                  style={{
-                                    backgroundColor: UI_COLORS.background.white,
-                                    border: `1px solid ${UI_COLORS.border.default}`,
-                                    borderRadius: '8px',
-                                    padding: '12px',
-                                    minWidth: '180px',
-                                    maxWidth: '240px',
-                                  }}
-                                >
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <div
-                                      style={{
-                                        width: 10,
-                                        height: 10,
-                                        borderRadius: '50%',
-                                        backgroundColor: entry.fill,
-                                        flexShrink: 0,
-                                      }}
-                                    />
-                                    <span className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
-                                      {entry.status}
-                                    </span>
-                                  </div>
-                                  <div className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
-                                    {entry.count} student{entry.count !== 1 ? 's' : ''}
-                                  </div>
-                                  {entry.students.length > 0 && (
-                                    <div
-                                      style={{
-                                        maxHeight: '150px',
-                                        overflowY: 'auto',
-                                        borderTop: `1px solid ${UI_COLORS.border.light}`,
-                                        paddingTop: '8px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        gap: '4px',
-                                      }}
-                                    >
-                                      {entry.students.map((student) => (
-                                        <div
-                                          key={student.id}
-                                          className="text-sm"
-                                          style={{ color: UI_COLORS.text.body }}
-                                        >
-                                          {student.name}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart
+                        data={studentProgress}
+                        margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                        barSize={50}
+                      >
+                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                        <XAxis
+                          dataKey="status"
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          label={{ value: 'Progress Status', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
+                        />
+                        <YAxis
+                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                          axisLine={{ stroke: UI_COLORS.border.default }}
+                          allowDecimals={false}
+                          label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: UI_COLORS.background.white,
+                            border: `1px solid ${UI_COLORS.border.default}`,
+                            borderRadius: '6px',
+                            padding: 0,
+                          }}
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const entry = payload[0].payload as StudentProgressData;
+                            return (
+                              <div
+                                style={{
+                                  backgroundColor: UI_COLORS.background.white,
+                                  border: `1px solid ${UI_COLORS.border.default}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  minWidth: '180px',
+                                  maxWidth: '240px',
+                                }}
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: '50%',
+                                      backgroundColor: entry.fill,
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                  <span className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
+                                    {entry.status}
+                                  </span>
                                 </div>
-                              );
-                            }}
-                          />
-                          <Bar dataKey="count" radius={[4, 4, 0, 0]} cursor="pointer">
-                            {studentProgress.map((_entry, index) => (
-                              <Cell
-                                key={`progress-${index}`}
-                                fill={_entry.fill}
-                                style={{ cursor: 'pointer' }}
-                              />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
+                                <div className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
+                                  {entry.count} student{entry.count !== 1 ? 's' : ''}
+                                </div>
+                                {entry.students.length > 0 && (
+                                  <div
+                                    style={{
+                                      maxHeight: '150px',
+                                      overflowY: 'auto',
+                                      borderTop: `1px solid ${UI_COLORS.border.light}`,
+                                      paddingTop: '8px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    {entry.students.map((student) => (
+                                      <div
+                                        key={student.id}
+                                        className="text-sm"
+                                        style={{ color: UI_COLORS.text.body }}
+                                      >
+                                        {student.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }}
+                        />
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]} cursor="pointer">
+                          {studentProgress.map((_entry, index) => (
+                            <Cell
+                              key={`progress-${index}`}
+                              fill={_entry.fill}
+                              style={{ cursor: 'pointer' }}
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
               )}
@@ -3744,11 +3778,10 @@ function InstructorSimulationGroupPage() {
                                         messages.map((message) => (
                                           <div
                                             key={message.message_id}
-                                            className={`flex gap-3 ${
-                                              message.sender_type === 'student'
-                                                ? 'justify-end'
-                                                : 'justify-start'
-                                            }`}
+                                            className={`flex gap-3 ${message.sender_type === 'student'
+                                              ? 'justify-end'
+                                              : 'justify-start'
+                                              }`}
                                           >
                                             {message.sender_type !== 'student' && (
                                               <div className="flex-shrink-0">
@@ -3760,11 +3793,10 @@ function InstructorSimulationGroupPage() {
                                               </div>
                                             )}
                                             <div
-                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                                                message.sender_type === 'student'
-                                                  ? 'rounded-br-none'
-                                                  : 'rounded-bl-none'
-                                              }`}
+                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${message.sender_type === 'student'
+                                                ? 'rounded-br-none'
+                                                : 'rounded-bl-none'
+                                                }`}
                                               style={{
                                                 backgroundColor:
                                                   message.sender_type === 'student'
@@ -3845,12 +3877,12 @@ function InstructorSimulationGroupPage() {
                                       color: UI_COLORS.button.text,
                                     }}
                                     onMouseEnter={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondaryHover)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondaryHover)
                                     }
                                     onMouseLeave={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondary)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondary)
                                     }
                                     onClick={async () => {
                                       const el = attemptPdfRefs.current[String(attempt.id)];
@@ -3894,12 +3926,12 @@ function InstructorSimulationGroupPage() {
                                       color: UI_COLORS.button.text,
                                     }}
                                     onMouseEnter={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondaryHover)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondaryHover)
                                     }
                                     onMouseLeave={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondary)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondary)
                                     }
                                     onClick={() => handleDownloadNotesPDF(attempt.id)}
                                   >
@@ -3913,12 +3945,12 @@ function InstructorSimulationGroupPage() {
                                         color: UI_COLORS.button.text,
                                       }}
                                       onMouseEnter={(e) =>
-                                        (e.currentTarget.style.backgroundColor =
-                                          UI_COLORS.button.secondaryHover)
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
                                       }
                                       onMouseLeave={(e) =>
-                                        (e.currentTarget.style.backgroundColor =
-                                          UI_COLORS.button.secondary)
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
                                       }
                                       onClick={() => handleViewAIDebrief(attempt.id)}
                                       disabled={!!isFetchingDebrief}

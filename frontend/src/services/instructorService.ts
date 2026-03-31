@@ -301,7 +301,7 @@ export interface InstructorDataService {
   getCurrentUser: () => Promise<UserData>;
   getSimulationGroup: (id: string) => Promise<InstructorSimulationGroup | undefined>;
   getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
-  getPatientAnalytics: (simulationGroupId: string) => Promise<PatientAnalytics[]>;
+  getPatientAnalytics: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<PatientAnalytics[]>;
   getMessageCountData: (patientId: string) => MessageCountData[];
   generateAccessCode: (simulationGroupId: string) => Promise<string>;
   getManageablePatients: (simulationGroupId: string) => Promise<ManageablePatient[]>;
@@ -836,13 +836,19 @@ function getOrganizationLabels(_simulationGroupId: string): OrganizationLabels {
 /**
  * Get patient analytics for a simulation group
  */
-async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAnalytics[]> {
+async function getPatientAnalytics(
+  simulationGroupId: string, 
+  startDate: string = '', 
+  endDate: string = ''
+): Promise<PatientAnalytics[]> {
   try {
-    const data = await apiClient.request<any[]>(
-      `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
-    );
+    let url = `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+    
+    const data = await apiClient.request<any[]>(url);
 
-    return data.map((patient) => ({
+    return data.map((patient: any) => ({
       patient_id: patient.persona_id,
       patient_name: patient.persona_name,
       instructor_completion_percentage: Number(patient.instructor_completion_percentage) || 0,

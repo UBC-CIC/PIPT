@@ -202,69 +202,105 @@ exports.handler = async (event, context) => {
         ) {
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
+          const startDateStr = event.queryStringParameters.start_date || null;
+          const endDateStr = event.queryStringParameters.end_date || null;
+
+          let dateFilterLogsStr = sqlConnection``;
+          if (startDateStr && !endDateStr) dateFilterLogsStr = sqlConnection`AND uel.timestamp >= ${startDateStr}::timestamp`;
+          if (!startDateStr && endDateStr) dateFilterLogsStr = sqlConnection`AND uel.timestamp <= ${endDateStr}::timestamp`;
+          if (startDateStr && endDateStr) dateFilterLogsStr = sqlConnection`AND uel.timestamp >= ${startDateStr}::timestamp AND uel.timestamp <= ${endDateStr}::timestamp`;
+
+          let dateFilterMessagesStr = sqlConnection``;
+          if (startDateStr && !endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent >= ${startDateStr}::timestamp`;
+          if (!startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent <= ${endDateStr}::timestamp`;
+          if (startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent >= ${startDateStr}::timestamp AND m.time_sent <= ${endDateStr}::timestamp`;
+
+          let dateFilterInteractionsStr = sqlConnection``;
+          if (startDateStr && !endDateStr) dateFilterInteractionsStr = sqlConnection`AND sp.last_accessed >= ${startDateStr}::timestamp`;
+          if (!startDateStr && endDateStr) dateFilterInteractionsStr = sqlConnection`AND sp.last_accessed <= ${endDateStr}::timestamp`;
+          if (startDateStr && endDateStr) dateFilterInteractionsStr = sqlConnection`AND sp.last_accessed >= ${startDateStr}::timestamp AND sp.last_accessed <= ${endDateStr}::timestamp`;
 
           try {
             // Query to get all patients and their message counts, separated by student and AI messages
             const messageCreations = await sqlConnection`
                     SELECT p.persona_id, p.persona_name, p.persona_number, 
-                        COUNT(CASE WHEN m.sender_type = 'student' THEN 1 ELSE NULL END) AS student_message_count,
-                        COUNT(CASE WHEN m.sender_type = 'ai' THEN 1 ELSE NULL END) AS ai_message_count
+                        COALESCE(sub.student_message_count, 0) AS student_message_count,
+                        COALESCE(sub.ai_message_count, 0) AS ai_message_count
                     FROM "personas" p
-                    LEFT JOIN "student_interactions" sp ON p.persona_id = sp.persona_id
-                    LEFT JOIN "chats" c ON sp.student_interaction_id = c.student_interaction_id
-                    LEFT JOIN "messages" m ON c.chat_id = m.chat_id
-                    LEFT JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
-                    LEFT JOIN "users" u ON e.user_id = u.user_id
+                    LEFT JOIN (
+                        SELECT sp.persona_id,
+                            COUNT(CASE WHEN m.sender_type = 'student' THEN 1 ELSE NULL END) AS student_message_count,
+                            COUNT(CASE WHEN m.sender_type = 'ai' THEN 1 ELSE NULL END) AS ai_message_count
+                        FROM "student_interactions" sp
+                        JOIN "chats" c ON sp.student_interaction_id = c.student_interaction_id
+                        JOIN "messages" m ON c.chat_id = m.chat_id
+                        JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
+                        JOIN "users" u ON e.user_id = u.user_id
+                        WHERE 'student' = ANY(u.roles)
+                        ${dateFilterMessagesStr}
+                        GROUP BY sp.persona_id
+                    ) sub ON sub.persona_id = p.persona_id
                     WHERE p.simulation_group_id = ${simulationGroupId}
-                    AND 'student' = ANY(u.roles)
-                    GROUP BY p.persona_id, p.persona_name, p.persona_number
                     ORDER BY p.persona_number ASC, p.persona_name ASC;
                 `;
 
             // Query to get the number of patient accesses using User_Engagement_Log, filtering by student role
             const patientAccesses = await sqlConnection`
-                    SELECT p.persona_id, COUNT(uel.log_id) AS access_count
+                    SELECT p.persona_id, COALESCE(sub.access_count, 0) AS access_count
                     FROM "personas" p
-                    LEFT JOIN "user_engagement_log" uel ON p.persona_id = uel.persona_id
-                    LEFT JOIN "enrollments" e ON uel.enrollment_id = e.enrollment_id
-                    LEFT JOIN "users" u ON e.user_id = u.user_id
-                    WHERE p.simulation_group_id = ${simulationGroupId}
-                    AND uel.engagement_type = 'patient access'
-                    AND 'student' = ANY(u.roles)
-                    GROUP BY p.persona_id;
+                    LEFT JOIN (
+                        SELECT uel.persona_id, COUNT(uel.log_id) AS access_count
+                        FROM "user_engagement_log" uel
+                        JOIN "enrollments" e ON uel.enrollment_id = e.enrollment_id
+                        JOIN "users" u ON e.user_id = u.user_id
+                        WHERE uel.engagement_type = 'patient access'
+                        AND 'student' = ANY(u.roles)
+                        ${dateFilterLogsStr}
+                        GROUP BY uel.persona_id
+                    ) sub ON sub.persona_id = p.persona_id
+                    WHERE p.simulation_group_id = ${simulationGroupId};
                 `;
 
             // Query to get the percentage of scores evaluated by the LLM for each patient, filtering by student role
             const aiScores = await sqlConnection`
                     SELECT p.persona_id, p.llm_completion,
-                        CASE 
-                            WHEN COUNT(sp.student_interaction_id) = 0 THEN 0 
-                            ELSE COUNT(CASE WHEN sp.persona_score = 100 THEN 1 END) * 100.0 / COUNT(sp.student_interaction_id)
-                        END AS ai_score_percentage
+                        COALESCE(sub.ai_score_percentage, 0) AS ai_score_percentage
                     FROM "personas" p
-                    LEFT JOIN "student_interactions" sp ON p.persona_id = sp.persona_id
-                    LEFT JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
-                    LEFT JOIN "users" u ON e.user_id = u.user_id
-                    WHERE p.simulation_group_id = ${simulationGroupId}
-                    AND 'student' = ANY(u.roles)
-                    GROUP BY p.persona_id;
+                    LEFT JOIN (
+                        SELECT sp.persona_id,
+                            CASE 
+                                WHEN COUNT(sp.student_interaction_id) = 0 THEN 0 
+                                ELSE COUNT(CASE WHEN sp.persona_score = 100 THEN 1 END) * 100.0 / COUNT(sp.student_interaction_id)
+                            END AS ai_score_percentage
+                        FROM "student_interactions" sp
+                        JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
+                        JOIN "users" u ON e.user_id = u.user_id
+                        WHERE 'student' = ANY(u.roles)
+                        ${dateFilterInteractionsStr}
+                        GROUP BY sp.persona_id
+                    ) sub ON sub.persona_id = p.persona_id
+                    WHERE p.simulation_group_id = ${simulationGroupId};
                 `;
 
             // Query to calculate the percentage of completed interactions for each patient, filtering by student role
             const instructorCompletionPercentages = await sqlConnection`
-                    SELECT 
-                        p.persona_id, 
-                        CASE 
-                            WHEN COUNT(sp.student_interaction_id) = 0 THEN 0 
-                            ELSE COUNT(CASE WHEN sp.is_completed THEN 1 END) * 100.0 / COUNT(sp.student_interaction_id)
-                        END AS instructor_completion_percentage
+                    SELECT p.persona_id, 
+                        COALESCE(sub.instructor_completion_percentage, 0) AS instructor_completion_percentage
                     FROM "personas" p
-                    LEFT JOIN "student_interactions" sp ON p.persona_id = sp.persona_id
-                    LEFT JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
-                    LEFT JOIN "users" u ON e.user_id = u.user_id
-                    WHERE p.simulation_group_id = ${simulationGroupId}
-                    AND 'student' = ANY(u.roles)
-                    GROUP BY p.persona_id;
+                    LEFT JOIN (
+                        SELECT sp.persona_id,
+                            CASE 
+                                WHEN COUNT(sp.student_interaction_id) = 0 THEN 0 
+                                ELSE COUNT(CASE WHEN sp.is_completed THEN 1 END) * 100.0 / COUNT(sp.student_interaction_id)
+                            END AS instructor_completion_percentage
+                        FROM "student_interactions" sp
+                        JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
+                        JOIN "users" u ON e.user_id = u.user_id
+                        WHERE 'student' = ANY(u.roles)
+                        ${dateFilterInteractionsStr}
+                        GROUP BY sp.persona_id
+                    ) sub ON sub.persona_id = p.persona_id
+                    WHERE p.simulation_group_id = ${simulationGroupId};
                 `;
 
             // Combine all data into a single response, ensuring all patients are included
