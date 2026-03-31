@@ -1860,15 +1860,23 @@ exports.handler = async (event, context) => {
               SELECT
                 qb.question_id,
                 COALESCE(qb.title, qb.question_text) AS question_title,
-                COUNT(DISTINCT CASE WHEN qi.was_asked = true THEN qi.student_id ELSE NULL END) AS students_answered
+                COUNT(DISTINCT d.student_id) AS students_answered
               FROM "simulation_group_questions" sgq
               JOIN "question_bank" qb ON sgq.question_id = qb.question_id
-              LEFT JOIN "question_interactions" qi
-                ON qb.question_id = qi.question_id
-                AND qi.persona_id = ${persona_id}
-                AND qi.simulation_group_id = ${simulation_group_id}
+              LEFT JOIN "debriefs" d
+                ON d.simulation_group_id = ${simulation_group_id}
+                AND d.persona_id = ${persona_id}
+                AND d.generated_text IS NOT NULL
+                AND jsonb_typeof(d.generated_text::jsonb -> 'questions_addressed') = 'array'
+                AND EXISTS (
+                  SELECT 1
+                  FROM jsonb_array_elements(
+                    d.generated_text::jsonb -> 'questions_addressed'
+                  ) AS score_element
+                  WHERE (score_element->>'question_id')::uuid = qb.question_id
+                )
               WHERE sgq.simulation_group_id = ${simulation_group_id}
-                AND (sgq.persona_id = ${persona_id} OR sgq.persona_id IS NULL)
+                AND COALESCE(sgq.persona_id, ${persona_id}) = ${persona_id}
               GROUP BY qb.question_id, qb.title, qb.question_text
               ORDER BY students_answered DESC;
             `;
