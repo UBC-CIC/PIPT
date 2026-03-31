@@ -177,13 +177,12 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData, coverageData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
-          instructorService.getKeyQuestionCoverage(groupId),
         ]);
 
         setUser(userData);
@@ -191,7 +190,6 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
-        setKeyQuestionCoverage(coverageData);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -207,8 +205,12 @@ function InstructorSimulationGroupPage() {
     if (!groupId) return;
     const fetchFilteredAnalytics = async () => {
       try {
-        const analyticsData = await instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end);
+        const [analyticsData, coverageData] = await Promise.all([
+          instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end),
+          instructorService.getKeyQuestionCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
+        ]);
         setPatientAnalytics(analyticsData);
+        setKeyQuestionCoverage(coverageData);
       } catch (error) {
         console.error('Error fetching filtered analytics:', error);
       }
@@ -283,24 +285,24 @@ function InstructorSimulationGroupPage() {
 
   useEffect(() => {
     if (currentPatient && groupId) {
-      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id)
+      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end)
         .then(setKeyQuestionAnalytics)
         .catch(() => setKeyQuestionAnalytics([]));
     } else {
       setKeyQuestionAnalytics([]);
     }
-  }, [currentPatient?.patient_id, groupId]);
+  }, [currentPatient?.patient_id, groupId, analyticsDateRange.start, analyticsDateRange.end]);
 
   // useEffect to watch for patient selection changes
   useEffect(() => {
     if (groupId && selectedPatientId && selectedPatientId !== 'overview') {
-      instructorService.getStudentProgress(groupId, selectedPatientId)
+      instructorService.getStudentProgress(groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end)
         .then(data => setStudentProgress(data))
         .catch(err => console.error(err));
     } else {
       setStudentProgress([]);
     }
-  }, [groupId, selectedPatientId]);
+  }, [groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end]);
 
   // Score distribution for current patient
 

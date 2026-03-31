@@ -342,8 +342,8 @@ export interface InstructorDataService {
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
   getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
-  getKeyQuestionCoverage: (simulationGroupId: string) => Promise<KeyQuestionCoverage[]>;
-  getPatientKeyQuestionAnalytics: (simulationGroupId: string, personaId: string) => Promise<KeyQuestionAnalytics[]>;
+  getKeyQuestionCoverage: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionCoverage[]>;
+  getPatientKeyQuestionAnalytics: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionAnalytics[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -351,7 +351,7 @@ export interface InstructorDataService {
   unassignQuestion: (groupQuestionId: string) => Promise<any>;
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
   fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
-  getStudentProgress: (simulationGroupId: string, personaId: string) => Promise<StudentProgressData[]>;
+  getStudentProgress: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<StudentProgressData[]>;
 }
 
 /**
@@ -837,15 +837,15 @@ function getOrganizationLabels(_simulationGroupId: string): OrganizationLabels {
  * Get patient analytics for a simulation group
  */
 async function getPatientAnalytics(
-  simulationGroupId: string, 
-  startDate: string = '', 
+  simulationGroupId: string,
+  startDate: string = '',
   endDate: string = ''
 ): Promise<PatientAnalytics[]> {
   try {
     let url = `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
     if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
     if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
-    
+
     const data = await apiClient.request<any[]>(url);
 
     return data.map((patient: any) => ({
@@ -911,12 +911,13 @@ async function getKeyQuestionAnalytics(simulationGroupId: string): Promise<KeyQu
 /**
  * Get per-patient key question coverage for students who reached debrief
  */
-async function getKeyQuestionCoverage(simulationGroupId: string): Promise<KeyQuestionCoverage[]> {
+async function getKeyQuestionCoverage(simulationGroupId: string, startDate: string = '', endDate: string = ''): Promise<KeyQuestionCoverage[]> {
   try {
-    const data = await apiClient.request<any[]>(
-      `instructor/key_question_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
-      { method: 'GET' }
-    );
+    let url = `instructor/key_question_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
     return data.map((row: any) => ({
       patientName: (row.persona_name || '').length > 30
         ? row.persona_name.substring(0, 27) + '...'
@@ -934,12 +935,13 @@ async function getKeyQuestionCoverage(simulationGroupId: string): Promise<KeyQue
  * Get per-question student-asked counts for a specific patient.
  * Uses COUNT(DISTINCT student_id) so multiple attempts by the same student count once.
  */
-async function getPatientKeyQuestionAnalytics(simulationGroupId: string, personaId: string): Promise<KeyQuestionAnalytics[]> {
+async function getPatientKeyQuestionAnalytics(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<KeyQuestionAnalytics[]> {
   try {
-    const data = await apiClient.request<any[]>(
-      `instructor/patient_key_question_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`,
-      { method: 'GET' }
-    );
+    let url = `instructor/patient_key_question_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
     return data.map((row: any) => ({
       questionTitle: (row.question_title || '').length > 30
         ? row.question_title.substring(0, 27) + '...'
@@ -1851,11 +1853,13 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
  * Get student progress buckets for a specific persona
  * Not Started / In Progress / Debrief Reached
  */
-async function getStudentProgress(simulationGroupId: string, personaId: string): Promise<StudentProgressData[]> {
+async function getStudentProgress(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<StudentProgressData[]> {
   try {
-    const data = await apiClient.request<StudentProgressData[]>(
-      `instructor/student_progress?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`
-    );
+    let url = `instructor/student_progress?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<StudentProgressData[]>(url);
     return data;
   } catch (error) {
     console.error('Failed to fetch student progress:', error);

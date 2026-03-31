@@ -179,7 +179,6 @@ function AdminSimulationGroupPage() {
             ? adminApi.getQuestionBankQuestions(organizationId).catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; })
             : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
-          instructorService.getKeyQuestionCoverage(groupId).catch(err => { console.error('Failed to load key question coverage:', err); return [] as KeyQuestionCoverage[]; }),
         ]);
 
         // Map admin API shape to InstructorSimulationGroup
@@ -226,8 +225,6 @@ function AdminSimulationGroupPage() {
           setPatientSpecificBankQuestions(bankPatient);
         }
 
-        setKeyQuestionCoverage(coverageData);
-
         // Set initial selected patient if analytics available
         if (analyticsData.length > 0) {
           setSelectedPatientId(analyticsData[0].patient_id);
@@ -259,8 +256,12 @@ function AdminSimulationGroupPage() {
     if (!groupId) return;
     const fetchFilteredAnalytics = async () => {
       try {
-        const analyticsData = await instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end);
+        const [analyticsData, coverageData] = await Promise.all([
+          instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end),
+          instructorService.getKeyQuestionCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
+        ]);
         setPatientAnalytics(analyticsData);
+        setKeyQuestionCoverage(coverageData);
       } catch (error) {
         console.error('Error fetching filtered analytics:', error);
       }
@@ -333,26 +334,26 @@ function AdminSimulationGroupPage() {
 
   useEffect(() => {
     if (currentPatient && groupId) {
-      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id)
+      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end)
         .then(setKeyQuestionAnalytics)
         .catch(() => setKeyQuestionAnalytics([]));
     } else {
       setKeyQuestionAnalytics([]);
     }
-  }, [currentPatient?.patient_id, groupId]);
+  }, [currentPatient?.patient_id, groupId, analyticsDateRange.start, analyticsDateRange.end]);
 
   // Student progress data for current patient
   const [studentProgress, setStudentProgress] = useState<StudentProgressData[]>([]);
 
   useEffect(() => {
     if (groupId && selectedPatientId && selectedPatientId !== 'overview') {
-      instructorService.getStudentProgress(groupId, selectedPatientId)
+      instructorService.getStudentProgress(groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end)
         .then(data => setStudentProgress(data))
         .catch(err => console.error(err));
     } else {
       setStudentProgress([]);
     }
-  }, [groupId, selectedPatientId]);
+  }, [groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end]);
 
   // Fallback values
   const simulationGroupName = simulationGroup?.group_name || 'Simulation Group';
