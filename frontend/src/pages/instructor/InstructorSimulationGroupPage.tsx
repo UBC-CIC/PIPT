@@ -1512,100 +1512,101 @@ function InstructorSimulationGroupPage() {
                         </select>
                       </div>
                     </div>
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart
-                        data={studentProgress}
-                        margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
-                        barSize={50}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                        <XAxis
-                          dataKey="status"
-                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                          axisLine={{ stroke: UI_COLORS.border.default }}
-                          label={{ value: 'Progress Status', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
-                        />
-                        <YAxis
-                          tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                          axisLine={{ stroke: UI_COLORS.border.default }}
-                          allowDecimals={false}
-                          label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
-                        />
-                        <Tooltip
-                          contentStyle={{
-                            backgroundColor: UI_COLORS.background.white,
-                            border: `1px solid ${UI_COLORS.border.default}`,
-                            borderRadius: '6px',
-                            padding: 0,
-                          }}
-                          content={({ active, payload }) => {
-                            if (!active || !payload || !payload.length) return null;
-                            const entry = payload[0].payload as StudentProgressData;
-                            return (
-                              <div
-                                style={{
-                                  backgroundColor: UI_COLORS.background.white,
-                                  border: `1px solid ${UI_COLORS.border.default}`,
-                                  borderRadius: '8px',
-                                  padding: '12px',
-                                  minWidth: '180px',
-                                  maxWidth: '240px',
-                                }}
-                              >
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div
-                                    style={{
-                                      width: 10,
-                                      height: 10,
-                                      borderRadius: '50%',
-                                      backgroundColor: entry.fill,
-                                      flexShrink: 0,
-                                    }}
-                                  />
-                                  <span className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
-                                    {entry.status}
-                                  </span>
-                                </div>
-                                <div className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
-                                  {entry.count} student{entry.count !== 1 ? 's' : ''}
-                                </div>
-                                {entry.students.length > 0 && (
-                                  <div
-                                    style={{
-                                      maxHeight: '150px',
-                                      overflowY: 'auto',
-                                      borderTop: `1px solid ${UI_COLORS.border.light}`,
-                                      paddingTop: '8px',
-                                      display: 'flex',
-                                      flexDirection: 'column',
-                                      gap: '4px',
-                                    }}
-                                  >
-                                    {entry.students.map((student) => (
-                                      <div
-                                        key={student.id}
-                                        className="text-sm"
-                                        style={{ color: UI_COLORS.text.body }}
-                                      >
-                                        {student.name}
-                                      </div>
-                                    ))}
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart
+                          data={studentProgress}
+                          margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
+                          barSize={50}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis
+                            dataKey="status"
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            label={{ value: 'Progress Status', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
+                          />
+                          <YAxis
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            allowDecimals={false}
+                            label={{ value: 'Students', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.muted, fontSize: 12 }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px',
+                              padding: 0,
+                            }}
+                            content={({ active, payload }) => {
+                              if (!active || !payload || !payload.length) return null;
+                              const entry = payload[0].payload as StudentProgressData;
+                              return (
+                                <div
+                                  style={{
+                                    backgroundColor: UI_COLORS.background.white,
+                                    border: `1px solid ${UI_COLORS.border.default}`,
+                                    borderRadius: '8px',
+                                    padding: '12px',
+                                    minWidth: '180px',
+                                    maxWidth: '240px',
+                                  }}
+                                >
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <div
+                                      style={{
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: '50%',
+                                        backgroundColor: entry.fill,
+                                        flexShrink: 0,
+                                      }}
+                                    />
+                                    <span className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
+                                      {entry.status}
+                                    </span>
                                   </div>
-                                )}
-                              </div>
-                            );
-                          }}
-                        />
-                        <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                          {studentProgress.map((_entry, index) => (
-                            <Cell
-                              key={`progress-${index}`}
-                              fill={_entry.fill}
-                            />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                                  <div className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
+                                    {entry.count} student{entry.count !== 1 ? 's' : ''}
+                                  </div>
+                                  {entry.students.length > 0 && (
+                                    <div
+                                      style={{
+                                        maxHeight: '150px',
+                                        overflowY: 'auto',
+                                        borderTop: `1px solid ${UI_COLORS.border.light}`,
+                                        paddingTop: '8px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '4px',
+                                      }}
+                                    >
+                                      {entry.students.map((student) => (
+                                        <div
+                                          key={student.id}
+                                          className="text-sm"
+                                          style={{ color: UI_COLORS.text.body }}
+                                        >
+                                          {student.name}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }}
+                          />
+                          <Bar dataKey="count" radius={[4, 4, 0, 0]} cursor="pointer">
+                            {studentProgress.map((_entry, index) => (
+                              <Cell
+                                key={`progress-${index}`}
+                                fill={_entry.fill}
+                                style={{ cursor: 'pointer' }}
+                              />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
                   </div>
                 </div>
               )}
