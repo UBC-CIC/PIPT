@@ -211,9 +211,9 @@ exports.handler = async (event, context) => {
           if (startDateStr && endDateStr) dateFilterLogsStr = sqlConnection`AND uel.timestamp >= ${startDateStr}::timestamp AND uel.timestamp <= ${endDateStr}::timestamp`;
 
           let dateFilterMessagesStr = sqlConnection``;
-          if (startDateStr && !endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent >= ${startDateStr}::timestamp`;
-          if (!startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent <= ${endDateStr}::timestamp`;
-          if (startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.time_sent >= ${startDateStr}::timestamp AND m.time_sent <= ${endDateStr}::timestamp`;
+          if (startDateStr && !endDateStr) dateFilterMessagesStr = sqlConnection`AND m.sent_at >= ${startDateStr}::timestamp`;
+          if (!startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.sent_at <= ${endDateStr}::timestamp`;
+          if (startDateStr && endDateStr) dateFilterMessagesStr = sqlConnection`AND m.sent_at >= ${startDateStr}::timestamp AND m.sent_at <= ${endDateStr}::timestamp`;
 
           let dateFilterInteractionsStr = sqlConnection``;
           if (startDateStr && !endDateStr) dateFilterInteractionsStr = sqlConnection`AND sp.last_accessed >= ${startDateStr}::timestamp`;
