@@ -166,25 +166,41 @@ async def run_session(audio_in, audio_out, region, pc_id):
     """
     logger.info(f"Starting Nova Sonic session for {pc_id}")
 
-    # --- Connect to Bedrock ---
-    client = BedrockRuntimeClient(
-        Config(
-            endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
-            region=region,
-            aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
-            http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
-            http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()},
+    try:
+        # --- Connect to Bedrock ---
+        logger.info(f"Connecting to Bedrock in {region}...")
+        client = BedrockRuntimeClient(
+            Config(
+                endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
+                region=region,
+                aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
+                http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
+                http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()},
+            )
         )
-    )
-    stream = await client.invoke_model_with_bidirectional_stream(
-        InvokeModelWithBidirectionalStreamOperationInput(model_id=MODEL_ID)
-    )
+        logger.info("Bedrock client created, opening bidirectional stream...")
+        stream = await client.invoke_model_with_bidirectional_stream(
+            InvokeModelWithBidirectionalStreamOperationInput(model_id=MODEL_ID)
+        )
+        logger.info("Bidirectional stream opened successfully")
+    except Exception as e:
+        logger.error(f"Failed to connect to Bedrock: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return
 
     # --- Configure session ---
-    prompt_name = str(uuid.uuid4())
-    audio_content_name = str(uuid.uuid4())
-    await _setup_session(stream, prompt_name)
-    await _start_audio_input(stream, prompt_name, audio_content_name)
+    try:
+        prompt_name = str(uuid.uuid4())
+        audio_content_name = str(uuid.uuid4())
+        await _setup_session(stream, prompt_name)
+        await _start_audio_input(stream, prompt_name, audio_content_name)
+        logger.info("Nova Sonic session configured successfully")
+    except Exception as e:
+        logger.error(f"Failed to configure Nova Sonic session: {type(e).__name__}: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+        return
 
     # --- Receive responses (runs concurrently with audio sending) ---
     # The ready event gates audio sending until Nova Sonic acknowledges the session.
