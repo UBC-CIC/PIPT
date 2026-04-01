@@ -189,6 +189,7 @@ async def run_session(audio_in, audio_out, region, pc_id):
                 aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
                 auth_scheme_resolver=HTTPAuthSchemeResolver(),
                 auth_schemes={"aws.auth#sigv4": SigV4AuthScheme(service="bedrock")},
+                http_client=AIOHTTPClient(),
             )
         )
         logger.info("Bedrock client created, opening bidirectional stream...")
