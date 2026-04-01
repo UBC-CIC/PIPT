@@ -8,6 +8,30 @@ const path = require("path");
 const { verifyToken, getStsCredentials } = require("./auth");
 const { MediaBridge } = require("./media-bridge");
 
+// ─── Voice Agent Adapter ──────────────────────────────────────────────────────
+// When VOICE_AGENT_ENDPOINT is set, WebRTC signaling is proxied to the
+// agentcore-voice-agent container via REST instead of using the local
+// MediaBridge + nova_sonic.py child process.
+const VOICE_AGENT_ENDPOINT = process.env.VOICE_AGENT_ENDPOINT || "";
+
+/**
+ * Forward a signaling action to the voice agent's /invocations endpoint.
+ * @param {string} action — one of: ice_config, offer, ice_candidate, disconnect
+ * @param {object} data   — action-specific payload
+ * @returns {Promise<object>} parsed JSON response
+ */
+async function callVoiceAgent(action, data = {}) {
+  const resp = await fetch(`${VOICE_AGENT_ENDPOINT}/invocations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, data }),
+  });
+  if (!resp.ok) {
+    throw new Error(`Voice agent returned ${resp.status}: ${await resp.text()}`);
+  }
+  return resp.json();
+}
+
 const app = express();
 const server = createServer(app);
 const io = new Server(server, {
@@ -294,15 +318,35 @@ io.on("connection", (socket) => {
   });
 
   // ─── Start Voice Session (WebRTC) ─────────────────────────────────────────
-  // Audio routing: MediaBridge owns Nova stdout — "audio" messages go through
-  // the Opus→RTP outbound pipeline (not Socket.IO "audio-chunk"). Non-audio
-  // messages (text, diagnosis_complete, diagnosis_verdict) are forwarded via
-  // the onNovaMessage callback to Socket.IO, matching the start-nova-sonic path.
-  // Both WebRTC and Socket.IO audio transports can coexist: each socket spawns
-  // its own Nova process, so different clients can use different transports
-  // concurrently without conflict (Req 10.4).
+  // When VOICE_AGENT_ENDPOINT is set, signaling is proxied to the agentcore
+  // voice agent container. Otherwise, falls back to the local MediaBridge +
+  // nova_sonic.py child process path.
   socket.on("start-voice-session", async (config = {}) => {
     console.log("🚀 Starting WebRTC voice session for client:", socket.id);
+
+    // ── Agent-proxied path ────────────────────────────────────────────────
+    if (VOICE_AGENT_ENDPOINT) {
+      console.log("🔀 Using voice agent adapter:", VOICE_AGENT_ENDPOINT);
+
+      // Clean up any previous agent session
+      if (socket.agentPcId) {
+        try { await callVoiceAgent("disconnect", { pc_id: socket.agentPcId }); } catch {}
+        socket.agentPcId = null;
+      }
+
+      try {
+        // Fetch ICE servers from the agent (KVS TURN credentials)
+        const iceConfig = await callVoiceAgent("ice_config");
+        socket.emit("ice-servers", { iceServers: iceConfig.iceServers });
+        console.log("🧊 Sent agent ICE servers to client:", socket.id);
+      } catch (error) {
+        console.error("❌ Voice agent ice_config failed:", error.message);
+        socket.emit("nova-error", { error: "Failed to get ICE configuration from voice agent" });
+      }
+      return;
+    }
+
+    // ── Legacy MediaBridge path (unchanged) ───────────────────────────────
 
     // Kill any previous nova process
     if (novaProcess) {
@@ -440,6 +484,24 @@ io.on("connection", (socket) => {
   socket.on("webrtc-offer", async ({ sdp } = {}) => {
     console.log("📨 Received WebRTC offer from client:", socket.id);
 
+    // ── Agent-proxied path ────────────────────────────────────────────────
+    if (VOICE_AGENT_ENDPOINT) {
+      try {
+        const result = await callVoiceAgent("offer", {
+          sdp: sdp.sdp || sdp,
+          type: sdp.type || "offer",
+        });
+        socket.agentPcId = result.pc_id;
+        socket.emit("webrtc-answer", { sdp: { sdp: result.sdp, type: result.type } });
+        console.log("📤 Sent agent WebRTC answer to client:", socket.id);
+      } catch (error) {
+        console.error("❌ Voice agent offer failed:", error.message);
+        socket.emit("nova-error", { error: error.message });
+      }
+      return;
+    }
+
+    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (!socket.mediaBridge) {
       socket.emit("nova-error", { error: "No active voice session" });
       return;
@@ -463,6 +525,20 @@ io.on("connection", (socket) => {
 
   // ─── WebRTC ICE Candidate ─────────────────────────────────────────────────
   socket.on("webrtc-ice-candidate", ({ candidate } = {}) => {
+    // ── Agent-proxied path ────────────────────────────────────────────────
+    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
+      callVoiceAgent("ice_candidate", {
+        pc_id: socket.agentPcId,
+        candidates: [{
+          candidate: candidate.candidate,
+          sdp_mid: candidate.sdpMid,
+          sdp_mline_index: candidate.sdpMLineIndex,
+        }],
+      }).catch((err) => console.error("❌ Voice agent ICE candidate failed:", err.message));
+      return;
+    }
+
+    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (!socket.mediaBridge) return;
 
     try {
@@ -481,6 +557,15 @@ io.on("connection", (socket) => {
   socket.on("end-voice-session", () => {
     console.log("🛑 Ending voice session for client:", socket.id);
 
+    // ── Agent-proxied path ────────────────────────────────────────────────
+    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
+      callVoiceAgent("disconnect", { pc_id: socket.agentPcId })
+        .catch((err) => console.error("❌ Voice agent disconnect failed:", err.message));
+      socket.agentPcId = null;
+      return;
+    }
+
+    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (socket.mediaBridge) {
       socket.mediaBridge.close();
       socket.mediaBridge = null;
@@ -602,6 +687,13 @@ io.on("connection", (socket) => {
   // connection is no longer usable after disconnect.
   socket.on("disconnect", () => {
     console.log("🔌 CLIENT DISCONNECTED:", socket.id, "- Nova still running");
+
+    // Clean up agent-proxied session if present
+    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
+      callVoiceAgent("disconnect", { pc_id: socket.agentPcId })
+        .catch((err) => console.error("❌ Voice agent disconnect on socket close:", err.message));
+      socket.agentPcId = null;
+    }
 
     // Clean up WebRTC MediaBridge resources if present
     if (socket.mediaBridge) {

@@ -8,6 +8,7 @@ import { DBFlowStack } from "../lib/dbFlow-stack";
 import { VpcStack } from "../lib/vpc-stack";
 import { EcsSocketStack } from "../lib/ecs-socket-stack";
 import { TurnServerStack } from "../lib/turn-server-stack";
+import { VoiceAgentStack } from "../lib/voice-agent-stack";
 import { CICDStack } from "../lib/cicd-stack";
 
 const app = new cdk.App();
@@ -41,6 +42,11 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
       functionName: `${StackPrefix}-EcsSocket-SocketServer`,
       sourceDir: "cdk/socket-server",
     },
+    {
+      name: "voiceAgent",
+      functionName: `${StackPrefix}-VoiceAgent-VoiceAgentService`,
+      sourceDir: "agentcore-voice-agent/agent",
+    },
   ],
 });
 
@@ -66,6 +72,14 @@ const turnServerStack = new TurnServerStack(
   vpcStack,
   { env }
 );
+const voiceAgentStack = new VoiceAgentStack(
+  app,
+  `${StackPrefix}-VoiceAgent`,
+  vpcStack,
+  cicdStack.ecrRepositories["voiceAgent"],
+  { env }
+);
+
 const ecsSocketStack = new EcsSocketStack(
   app,
   `${StackPrefix}-EcsSocket`,
@@ -74,6 +88,7 @@ const ecsSocketStack = new EcsSocketStack(
   apiStack,
   cicdStack.ecrRepositories["socketServer"],
   turnServerStack,
+  voiceAgentStack.agentEndpoint,
   { env }
 );
 const dbFlowStack = new DBFlowStack(

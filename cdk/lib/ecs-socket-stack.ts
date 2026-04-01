@@ -24,6 +24,7 @@ export class EcsSocketStack extends Stack {
     apiServiceStack: any,
     socketServerRepo: ecr.IRepository,
     turnServerStack: TurnServerStack,
+    voiceAgentEndpoint?: string,
     props?: StackProps
   ) {
     super(scope, id, props);
@@ -152,6 +153,7 @@ export class EcsSocketStack extends Stack {
         SOCKET_EXECUTION_ROLE_ARN: taskRole.roleArn,
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
+        ...(voiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: voiceAgentEndpoint } : {}),
       },
       secrets: {
         TURN_SHARED_SECRET: ecs.Secret.fromSecretsManager(turnServerStack.turnSecret),
