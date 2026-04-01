@@ -19,13 +19,14 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from aws_sdk_bedrock_runtime.client import BedrockRuntimeClient
-from aws_sdk_bedrock_runtime.config import Config, HTTPAuthSchemeResolver, SigV4AuthScheme
+from aws_sdk_bedrock_runtime.config import Config
 from aws_sdk_bedrock_runtime.models import (
     BidirectionalInputPayloadPart,
     InvokeModelWithBidirectionalStreamInputChunk,
     InvokeModelWithBidirectionalStreamOperationInput,
 )
-from smithy_aws_core.identity import EnvironmentCredentialsResolver
+from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
+from smithy_aws_core.identity.chain import create_default_chain
 from smithy_http.aio.aiohttp import AIOHTTPClient
 import boto3
 
@@ -175,7 +176,7 @@ async def run_session(audio_in, audio_out, region, pc_id):
         logger.info(f"Connecting to Bedrock in {region}...")
 
         # Fetch credentials via boto3 (reads ECS task role from container metadata)
-        # and inject into env vars so EnvironmentCredentialsResolver can find them.
+        # and inject into env vars so create_default_chain can find them.
         session = boto3.Session(region_name=region)
         creds = session.get_credentials().get_frozen_credentials()
         os.environ["AWS_ACCESS_KEY_ID"] = creds.access_key
@@ -187,10 +188,8 @@ async def run_session(audio_in, audio_out, region, pc_id):
             Config(
                 endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
                 region=region,
-                aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
-                auth_scheme_resolver=HTTPAuthSchemeResolver(),
+                aws_credentials_identity_resolver=create_default_chain(AIOHTTPClient()),
                 auth_schemes={"aws.auth#sigv4": SigV4AuthScheme(service="bedrock")},
-                http_client=AIOHTTPClient(),
             )
         )
         logger.info("Bedrock client created, opening bidirectional stream...")
