@@ -26,6 +26,7 @@ from aws_sdk_bedrock_runtime.models import (
     InvokeModelWithBidirectionalStreamOperationInput,
 )
 from smithy_aws_core.identity import EnvironmentCredentialsResolver
+from smithy_http.aio.aiohttp import AIOHTTPClient
 import boto3
 
 from audio import convert_to_16khz, INPUT_SAMPLE_RATE, OUTPUT_SAMPLE_RATE
