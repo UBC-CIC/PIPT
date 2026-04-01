@@ -7,5 +7,4 @@ av
 aws-sdk-bedrock-runtime
 smithy-aws-core
 smithy-core
-smithy-http
 aiohttp

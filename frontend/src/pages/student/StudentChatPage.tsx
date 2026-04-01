@@ -13,6 +13,7 @@ import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
+import { authService } from '@/lib/auth';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 
 /**
@@ -210,9 +211,24 @@ function StudentChatPage() {
     // Create Socket.IO connection (or reuse existing)
     if (!socketRef.current || !socketRef.current.connected) {
       const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
-      socketRef.current = io(socketUrl, { transports: ['websocket'] });
+      authService.getIdToken().then((token) => {
+        socketRef.current = io(socketUrl, {
+          transports: ['websocket'],
+          auth: { token: token || '' },
+        });
+        startWebRTCClient();
+      }).catch(() => {
+        setVoiceError('Failed to get authentication token.');
+        setVoiceSessionState('error');
+      });
+      return;
     }
 
+    startWebRTCClient();
+
+    startWebRTCClient();
+
+    function startWebRTCClient() {
     const client = new WebRTCClient({
       socket: socketRef.current,
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
@@ -251,6 +267,7 @@ function StudentChatPage() {
       }
       setVoiceSessionState('error');
     });
+    } // end startWebRTCClient
   }, []);
 
   /**

@@ -18,15 +18,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 from aws_sdk_bedrock_runtime.client import BedrockRuntimeClient
-from aws_sdk_bedrock_runtime.config import Config
+from aws_sdk_bedrock_runtime.config import Config, HTTPAuthSchemeResolver, SigV4AuthScheme
 from aws_sdk_bedrock_runtime.models import (
     BidirectionalInputPayloadPart,
     InvokeModelWithBidirectionalStreamInputChunk,
     InvokeModelWithBidirectionalStreamOperationInput,
 )
-from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
-from smithy_aws_core.identity.chain import create_default_chain
-from smithy_http.aio.aiohttp import AIOHTTPClient
+from smithy_aws_core.credentials_resolvers.environment import EnvironmentCredentialsResolver
 
 from audio import convert_to_16khz, INPUT_SAMPLE_RATE, OUTPUT_SAMPLE_RATE
 
@@ -173,8 +171,9 @@ async def run_session(audio_in, audio_out, region, pc_id):
         Config(
             endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
             region=region,
-            aws_credentials_identity_resolver=create_default_chain(AIOHTTPClient()),
-            auth_schemes={"aws.auth#sigv4": SigV4AuthScheme(service="bedrock")},
+            aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
+            http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
+            http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()},
         )
     )
     stream = await client.invoke_model_with_bidirectional_stream(
