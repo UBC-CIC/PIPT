@@ -25,7 +25,6 @@ from aws_sdk_bedrock_runtime.models import (
     InvokeModelWithBidirectionalStreamInputChunk,
     InvokeModelWithBidirectionalStreamOperationInput,
 )
-from smithy_aws_core.credentials_resolvers.environment import EnvironmentCredentialsResolver
 import boto3
 
 from audio import convert_to_16khz, INPUT_SAMPLE_RATE, OUTPUT_SAMPLE_RATE
@@ -33,7 +32,8 @@ from audio import convert_to_16khz, INPUT_SAMPLE_RATE, OUTPUT_SAMPLE_RATE
 MODEL_ID = "amazon.nova-2-sonic-v1:0"
 VOICE_ID = "matthew"
 SYSTEM_PROMPT = (
-    "You are a helpful AI assistant. Keep responses brief and conversational."
+    "You are a helpful AI assistant. Keep responses brief and conversational. "
+    "Start the conversation by greeting the user and asking how you can help them today."
 )
 
 # Shared audio format used in both input and output config
@@ -185,7 +185,6 @@ async def run_session(audio_in, audio_out, region, pc_id):
             Config(
                 endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
                 region=region,
-                aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
             )
         )
         logger.info("Bedrock client created, opening bidirectional stream...")
