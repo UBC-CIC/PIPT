@@ -340,8 +340,14 @@ function InstructorSimulationGroupPage() {
   const handleStudentView = async () => {
     // If we're on a sim group page, auto-enroll as student and go directly to that group
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
-      await studentService.joinGroup(accessCode);
-      navigate(`/patients/${groupId}`);
+      const result = await studentService.joinGroup(accessCode);
+      if (result?.success) {
+        navigate(`/patients/${groupId}`);
+      } else {
+        // Enrollment failed; notify the user and send them to the general student view
+        window.alert('Unable to join this simulation group as a student. Redirecting to your student dashboard.');
+        navigate('/student');
+      }
     } else {
       navigate('/student');
     }
