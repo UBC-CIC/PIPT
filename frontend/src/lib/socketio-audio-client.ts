@@ -1,0 +1,277 @@
+/**
+ * Socket.IO Audio Client
+ *
+ * Captures microphone audio via Web Audio API, resamples to 16kHz mono PCM,
+ * base64-encodes it, and sends it over Socket.IO as `audio-input` events.
+ * Receives `audio-chunk` events (base64 24kHz PCM) and plays them back.
+ *
+ * This replaces WebRTCClient for the AgentCore WebSocket voice path.
+ */
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface SocketLike {
+  emit(event: string, ...args: unknown[]): void;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+  off(event: string, listener?: (...args: unknown[]) => void): void;
+}
+
+export type VoiceSessionState = 'idle' | 'connecting' | 'active' | 'disconnected' | 'error';
+
+export interface SocketIOAudioClientConfig {
+  socket: SocketLike;
+  onStateChange: (state: VoiceSessionState) => void;
+  onError: (error: Error) => void;
+}
+
+// ---------------------------------------------------------------------------
+// Implementation
+// ---------------------------------------------------------------------------
+
+export class SocketIOAudioClient {
+  private config: SocketIOAudioClientConfig;
+  private state: VoiceSessionState = 'idle';
+  private audioContext: AudioContext | null = null;
+  private mediaStream: MediaStream | null = null;
+  private workletNode: AudioWorkletNode | null = null;
+  private playbackContext: AudioContext | null = null;
+  private muted = false;
+
+  // Bound listeners for cleanup
+  private boundOnAudioChunk: ((...args: unknown[]) => void) | null = null;
+  private boundOnNovaStarted: ((...args: unknown[]) => void) | null = null;
+  private boundOnNovaError: ((...args: unknown[]) => void) | null = null;
+
+  constructor(config: SocketIOAudioClientConfig) {
+    this.config = config;
+  }
+
+  // -----------------------------------------------------------------------
+  // Public API
+  // -----------------------------------------------------------------------
+
+  /**
+   * Start a voice session:
+   * 1. Capture mic audio
+   * 2. Emit `start-nova-sonic` with session config
+   * 3. Wait for `nova-started` from server
+   * 4. Begin streaming audio frames
+   */
+  async connect(sessionConfig: Record<string, unknown> = {}): Promise<void> {
+    if (this.state !== 'idle') {
+      throw new Error(`Cannot connect: current state is "${this.state}"`);
+    }
+
+    this.setState('connecting');
+
+    try {
+      // 1. Capture mono mic audio
+      this.mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: 16000 },
+      });
+
+      // 2. Set up playback context for incoming audio
+      this.playbackContext = new AudioContext({ sampleRate: 24000 });
+
+      // 3. Wire up Socket.IO listeners
+      this.boundOnNovaStarted = () => {
+        this.setState('active');
+      };
+      this.boundOnAudioChunk = (data: unknown) => {
+        const msg = data as { data: string };
+        this.playAudioChunk(msg.data);
+      };
+      this.boundOnNovaError = (data: unknown) => {
+        const msg = data as { error: string };
+        this.config.onError(new Error(msg.error));
+        this.setState('error');
+      };
+
+      this.config.socket.on('nova-started', this.boundOnNovaStarted);
+      this.config.socket.on('audio-chunk', this.boundOnAudioChunk);
+      this.config.socket.on('nova-error', this.boundOnNovaError);
+
+      // 4. Tell the server to start the session
+      this.config.socket.emit('start-nova-sonic', sessionConfig);
+
+      // 5. Set up audio capture pipeline (16kHz mono PCM → base64)
+      await this.startCapture();
+
+    } catch (err) {
+      this.cleanup();
+      this.setState('error');
+      throw err;
+    }
+  }
+
+  disconnect(): void {
+    this.config.socket.emit('stop-nova-sonic', {});
+    this.cleanup();
+    this.setState('disconnected');
+  }
+
+  toggleMute(): boolean {
+    this.muted = !this.muted;
+    if (this.mediaStream) {
+      this.mediaStream.getAudioTracks().forEach((t) => {
+        t.enabled = !this.muted;
+      });
+    }
+    return this.muted;
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+
+  getState(): VoiceSessionState {
+    return this.state;
+  }
+
+  // -----------------------------------------------------------------------
+  // Audio capture — mic → 16kHz PCM → base64 → Socket.IO
+  // -----------------------------------------------------------------------
+
+  private async startCapture(): Promise<void> {
+    if (!this.mediaStream) return;
+
+    this.audioContext = new AudioContext({ sampleRate: 16000 });
+
+    // Register the audio worklet processor inline via a Blob URL
+    const processorCode = `
+      class PCMProcessor extends AudioWorkletProcessor {
+        process(inputs) {
+          const input = inputs[0];
+          if (input && input[0] && input[0].length > 0) {
+            // Convert Float32 to Int16
+            const float32 = input[0];
+            const int16 = new Int16Array(float32.length);
+            for (let i = 0; i < float32.length; i++) {
+              const s = Math.max(-1, Math.min(1, float32[i]));
+              int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            this.port.postMessage(int16.buffer, [int16.buffer]);
+          }
+          return true;
+        }
+      }
+      registerProcessor('pcm-processor', PCMProcessor);
+    `;
+    const blob = new Blob([processorCode], { type: 'application/javascript' });
+    const url = URL.createObjectURL(blob);
+
+    await this.audioContext.audioWorklet.addModule(url);
+    URL.revokeObjectURL(url);
+
+    const source = this.audioContext.createMediaStreamSource(this.mediaStream);
+    this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-processor');
+
+    // Send start_audio once, then stream chunks
+    let started = false;
+    this.workletNode.port.onmessage = (event: MessageEvent) => {
+      if (this.muted) return;
+
+      if (!started) {
+        this.config.socket.emit('audio-input', { data: '', type: 'start' });
+        started = true;
+      }
+
+      // Base64-encode the Int16 PCM buffer
+      const buffer = event.data as ArrayBuffer;
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      const b64 = btoa(binary);
+
+      this.config.socket.emit('audio-input', { data: b64 });
+    };
+
+    source.connect(this.workletNode);
+    // Don't connect to destination — we don't want to hear our own mic
+    this.workletNode.connect(this.audioContext.destination);
+  }
+
+  // -----------------------------------------------------------------------
+  // Audio playback — base64 24kHz PCM → AudioContext
+  // -----------------------------------------------------------------------
+
+  private playAudioChunk(b64Data: string): void {
+    if (!this.playbackContext) return;
+
+    try {
+      const binaryStr = atob(b64Data);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) {
+        bytes[i] = binaryStr.charCodeAt(i);
+      }
+
+      // Convert Int16 PCM to Float32
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      // Create an AudioBuffer and play it
+      const audioBuffer = this.playbackContext.createBuffer(1, float32.length, 24000);
+      audioBuffer.getChannelData(0).set(float32);
+
+      const source = this.playbackContext.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.playbackContext.destination);
+      source.start();
+    } catch (err) {
+      console.warn('Failed to play audio chunk:', err);
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // Cleanup
+  // -----------------------------------------------------------------------
+
+  private cleanup(): void {
+    // Stop audio capture
+    if (this.workletNode) {
+      this.workletNode.disconnect();
+      this.workletNode = null;
+    }
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
+    if (this.mediaStream) {
+      this.mediaStream.getTracks().forEach((t) => t.stop());
+      this.mediaStream = null;
+    }
+    if (this.playbackContext) {
+      this.playbackContext.close().catch(() => {});
+      this.playbackContext = null;
+    }
+
+    // Remove Socket.IO listeners
+    if (this.boundOnAudioChunk) {
+      this.config.socket.off('audio-chunk', this.boundOnAudioChunk);
+      this.boundOnAudioChunk = null;
+    }
+    if (this.boundOnNovaStarted) {
+      this.config.socket.off('nova-started', this.boundOnNovaStarted);
+      this.boundOnNovaStarted = null;
+    }
+    if (this.boundOnNovaError) {
+      this.config.socket.off('nova-error', this.boundOnNovaError);
+      this.boundOnNovaError = null;
+    }
+
+    this.muted = false;
+  }
+
+  private setState(next: VoiceSessionState): void {
+    if (this.state === next) return;
+    this.state = next;
+    this.config.onStateChange(next);
+  }
+}

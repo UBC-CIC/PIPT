@@ -1,17 +1,13 @@
-"""Nova Sonic 2.0 bidirectional streaming session (WebSocket/stdin-stdout transport).
+"""Nova Sonic 2.0 bidirectional streaming session (AgentCore WebSocket transport).
 
 Manages the full lifecycle of a Nova Sonic conversation:
 1. Connect to Bedrock and open a bidirectional stream
 2. Configure the session (model params, voice, system prompt)
-3. Stream audio in via stdin, send responses out via stdout
+3. Stream audio in/out over an AgentCore WebSocket connection
 4. Persist messages to DynamoDB + PostgreSQL
-
-This replaces the previous aiortc/WebRTC-based agent with a simple
-stdin/stdout JSON protocol that the Node.js socket server drives.
 """
 
 import os
-import sys
 import asyncio
 import base64
 import json
@@ -104,10 +100,18 @@ def get_pg_connection():
 
 
 class NovaSonic:
-    """Manages a single Nova Sonic 2.0 bidirectional streaming session."""
+    """Manages a single Nova Sonic 2.0 bidirectional streaming session.
 
-    def __init__(self, voice_id=None, session_id=None, region=None):
-        self.user_id = os.getenv("USER_ID")
+    The `websocket` parameter is the AgentCore WebSocket connection.
+    All output (audio, text, events) is sent back over this WebSocket
+    instead of stdout.
+    """
+
+    def __init__(self, websocket, voice_id=None, session_id=None, region=None,
+                 patient_name="", patient_prompt="", patient_id="",
+                 llm_completion=False, extra_system_prompt="", user_id=None):
+        self.ws = websocket
+        self.user_id = user_id or os.getenv("USER_ID")
         self.model_id = MODEL_ID
         self.region = "us-east-1"  # Nova Sonic endpoint region
         self.deployment_region = region or os.getenv("AWS_REGION", "us-east-1")
@@ -125,18 +129,29 @@ class NovaSonic:
         self.display_assistant_text = False
 
         self.voice_id = voice_id
-        self.session_id = session_id or os.getenv("SESSION_ID", "default")
-        self.patient_name = os.getenv("PATIENT_NAME", "")
-        self.patient_prompt = os.getenv("PATIENT_PROMPT", "")
-        self.llm_completion = os.getenv("LLM_COMPLETION", "false").lower() == "true"
-        self.extra_system_prompt = os.getenv("EXTRA_SYSTEM_PROMPT", "")
-        self.patient_id = os.getenv("PATIENT_ID", "")
+        self.session_id = session_id or "default"
+        self.patient_name = patient_name
+        self.patient_prompt = patient_prompt
+        self.llm_completion = llm_completion
+        self.extra_system_prompt = extra_system_prompt
+        self.patient_id = patient_id
 
         # Caches
         self._cached_system_prompt = None
         self._bedrock_client = None
         self._chat_context = None
         self._current_user_input = ""
+
+    # ------------------------------------------------------------------
+    # WebSocket output helper
+    # ------------------------------------------------------------------
+
+    async def _emit(self, obj: dict):
+        """Send a JSON message back to the client over the WebSocket."""
+        try:
+            await self.ws.send_json(obj)
+        except Exception as e:
+            logger.error("WebSocket send failed: %s", e)
 
     # ------------------------------------------------------------------
     # Bedrock client
@@ -340,7 +355,7 @@ class NovaSonic:
         self.response = asyncio.create_task(self._process_responses())
 
         logger.info("Nova Sonic session started (prompt=%s)", self.prompt_name)
-        _emit({"type": "text", "text": "Nova Sonic ready"})
+        await self._emit({"type": "text", "text": "Nova Sonic ready"})
 
     # ------------------------------------------------------------------
     # Audio input
@@ -403,9 +418,13 @@ class NovaSonic:
             self._current_user_input = ""
 
     async def end_session(self):
-        await self.send_event({"event": {"promptEnd": {"promptName": self.prompt_name}}})
-        await self.send_event({"event": {"sessionEnd": {}}})
-        await self.stream.input_stream.close()
+        self.is_active = False
+        try:
+            await self.send_event({"event": {"promptEnd": {"promptName": self.prompt_name}}})
+            await self.send_event({"event": {"sessionEnd": {}}})
+            await self.stream.input_stream.close()
+        except Exception as e:
+            logger.error("Error ending session: %s", e)
 
     # ------------------------------------------------------------------
     # Response processing
@@ -466,12 +485,12 @@ class NovaSonic:
                 text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
 
             if self.role == "ASSISTANT":
-                _emit({"type": "text", "text": text})
+                await self._emit({"type": "text", "text": text})
                 if diagnosis_achieved and self.llm_completion:
-                    _emit({"type": "diagnosis_complete", "text": "Session completed successfully"})
+                    await self._emit({"type": "diagnosis_complete", "text": "Session completed successfully"})
 
             elif self.role == "USER":
-                _emit({"type": "text", "text": text})
+                await self._emit({"type": "text", "text": text})
                 self._current_user_input += text
 
             # Mirror to PostgreSQL + DynamoDB
@@ -486,9 +505,7 @@ class NovaSonic:
         # ── audioOutput ───────────────────────────────────────────────
         elif "audioOutput" in evt:
             b64 = evt["audioOutput"]["content"]
-            audio_bytes = base64.b64decode(b64)
-            await self.audio_queue.put(audio_bytes)
-            _emit({"type": "audio", "data": b64, "size": len(audio_bytes)})
+            await self._emit({"type": "audio", "data": b64})
 
     # ------------------------------------------------------------------
     # Database helpers
@@ -526,105 +543,54 @@ class NovaSonic:
             except Exception:
                 pass
 
+    # ------------------------------------------------------------------
+    # WebSocket message handler (replaces stdin handler)
+    # ------------------------------------------------------------------
 
-# ═══════════════════════════════════════════════════════════════════════════
-# stdout helper — the Node.js socket server reads these JSON lines
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-def _emit(obj: dict):
-    """Write a JSON line to stdout for the socket server to relay."""
-    print(json.dumps(obj), flush=True)
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# stdin handler — receives JSON commands from the Node.js socket server
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-async def handle_stdin(nova_client: NovaSonic):
-    reader = asyncio.StreamReader()
-    loop = asyncio.get_event_loop()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-
-    while True:
-        line = await reader.readline()
-        if not line:
-            break
+    async def handle_websocket(self):
+        """Main loop: read JSON messages from the WebSocket, dispatch to Nova Sonic."""
+        audio_started = False
 
         try:
-            msg = json.loads(line.decode("utf-8"))
-            msg_type = msg.get("type")
+            while True:
+                msg = await self.ws.receive_json()
+                msg_type = msg.get("type")
 
-            if msg_type == "audio":
-                audio_bytes = base64.b64decode(msg["data"])
-                await nova_client.send_audio_chunk(audio_bytes)
+                if msg_type == "audio":
+                    audio_bytes = base64.b64decode(msg["data"])
+                    await self.send_audio_chunk(audio_bytes)
 
-            elif msg_type == "start_audio":
-                await nova_client.start_audio_input()
-                logger.info("Started audio input")
+                elif msg_type == "start_audio":
+                    await self.start_audio_input()
+                    audio_started = True
+                    logger.info("Started audio input")
 
-            elif msg_type == "end_audio":
-                await nova_client.end_audio_input()
+                elif msg_type == "end_audio":
+                    await self.end_audio_input()
+                    audio_started = False
 
-            elif msg_type == "interrupt":
-                nova_client.is_active = False
-                if nova_client.stream:
-                    try:
-                        await nova_client.stream.input_stream.close()
-                    except Exception:
-                        pass
+                elif msg_type == "interrupt":
+                    self.is_active = False
+                    if self.stream:
+                        try:
+                            await self.stream.input_stream.close()
+                        except Exception:
+                            pass
 
-            elif msg_type == "set_voice":
-                voice_id = msg.get("voice_id")
-                logger.info("Voice change request: %s", voice_id)
-                nova_client.voice_id = voice_id
-                if nova_client.is_active:
-                    await nova_client.end_session()
-                    await nova_client.start_session()
+                elif msg_type == "set_voice":
+                    voice_id = msg.get("voice_id")
+                    logger.info("Voice change request: %s", voice_id)
+                    self.voice_id = voice_id
+                    if self.is_active:
+                        await self.end_session()
+                        await self.start_session()
+
+                elif msg_type == "end_session":
+                    logger.info("Client requested session end")
+                    break
 
         except Exception as e:
-            logger.error("Failed to process stdin: %s", e)
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# Entry point
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-async def main():
-    voice = os.getenv("VOICE_ID")
-    session_id = os.getenv("SESSION_ID", "default")
-    deployment_region = os.getenv("AWS_REGION")
-
-    nova_client = NovaSonic(
-        voice_id=voice, session_id=session_id, region=deployment_region
-    )
-
-    # Wait briefly for initial config (e.g. set_voice) from the socket server
-    reader = asyncio.StreamReader()
-    loop = asyncio.get_event_loop()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-
-    try:
-        line = await asyncio.wait_for(reader.readline(), 2.0)
-        if line:
-            msg = json.loads(line.decode("utf-8"))
-            if msg.get("type") == "set_voice":
-                nova_client.voice_id = msg.get("voice_id")
-                logger.info("Initial voice set to %s", nova_client.voice_id)
-    except asyncio.TimeoutError:
-        logger.info("No initial config received, using defaults")
-
-    await nova_client.start_session()
-    logger.info("Session started — listening for stdin")
-
-    await handle_stdin(nova_client)
-    await nova_client.end_session()
-    logger.info("Session ended")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+            # WebSocket disconnect or other error
+            logger.info("WebSocket handler ended: %s", e)
+        finally:
+            await self.end_session()

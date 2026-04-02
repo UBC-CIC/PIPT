@@ -7,5 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# stdin/stdout transport — no HTTP port needed
+# AgentCore expects /ping, /invocations, and /ws on port 8080
+EXPOSE 8080
+
 CMD ["python", "bot.py"]

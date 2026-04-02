@@ -5,31 +5,43 @@ const { Server } = require("socket.io");
 const { spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const WebSocket = require("ws");
 const { verifyToken, getStsCredentials } = require("./auth");
 const { MediaBridge } = require("./media-bridge");
 
 // ─── Voice Agent Adapter ──────────────────────────────────────────────────────
-// When VOICE_AGENT_ENDPOINT is set, WebRTC signaling is proxied to the
-// agentcore-voice-agent container via REST instead of using the local
-// MediaBridge + nova_sonic.py child process.
+// When VOICE_AGENT_ENDPOINT is set, audio is streamed to the agentcore
+// voice agent container via WebSocket instead of using the local
+// nova_sonic.py child process.
 const VOICE_AGENT_ENDPOINT = process.env.VOICE_AGENT_ENDPOINT || "";
 
 /**
- * Forward a signaling action to the voice agent's /invocations endpoint.
- * @param {string} action — one of: ice_config, offer, ice_candidate, disconnect
- * @param {object} data   — action-specific payload
- * @returns {Promise<object>} parsed JSON response
+ * Open a WebSocket connection to the voice agent's /ws endpoint.
+ * Returns the WebSocket instance. The caller is responsible for
+ * wiring up message handlers and closing the connection.
+ * @param {object} initConfig — init message payload (session_id, patient_name, etc.)
+ * @returns {Promise<WebSocket>}
  */
-async function callVoiceAgent(action, data = {}) {
-  const resp = await fetch(`${VOICE_AGENT_ENDPOINT}/invocations`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, data }),
+function connectToVoiceAgent(initConfig) {
+  return new Promise((resolve, reject) => {
+    // Convert HTTP endpoint to WebSocket URL
+    const wsUrl = VOICE_AGENT_ENDPOINT.replace(/^http/, "ws") + "/ws";
+    console.log("🔌 Connecting to voice agent WebSocket:", wsUrl);
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.on("open", () => {
+      console.log("✅ Voice agent WebSocket connected");
+      // Send init message with session config
+      ws.send(JSON.stringify({ type: "init", ...initConfig }));
+      resolve(ws);
+    });
+
+    ws.on("error", (err) => {
+      console.error("❌ Voice agent WebSocket error:", err.message);
+      reject(err);
+    });
   });
-  if (!resp.ok) {
-    throw new Error(`Voice agent returned ${resp.status}: ${await resp.text()}`);
-  }
-  return resp.json();
 }
 
 const app = express();
@@ -128,20 +140,90 @@ io.on("connection", (socket) => {
   });
 
   // ─── Start Nova Sonic (Socket.IO audio transport) ───────────────────────
-  // This handler uses Socket.IO for audio: Nova stdout "audio" messages are
-  // emitted as "audio-chunk" events. This path coexists with the WebRTC
-  // start-voice-session handler — each socket uses one transport per session.
+  // When VOICE_AGENT_ENDPOINT is set, audio is streamed to the agentcore
+  // voice agent via WebSocket. Otherwise, falls back to the local
+  // nova_sonic.py child process.
   socket.on("start-nova-sonic", async (config = {}) => {
     console.log("🚀 Starting Nova Sonic session for client:", socket.id);
 
     audioStarted = false;
 
-    // Kill any previous process
+    // Clean up any previous session
+    if (socket.agentWs) {
+      try { socket.agentWs.close(); } catch {}
+      socket.agentWs = null;
+    }
     if (novaProcess) {
       novaProcess.kill();
       novaProcess = null;
     }
     novaReady = false;
+
+    // ── AgentCore WebSocket path ──────────────────────────────────────────
+    if (VOICE_AGENT_ENDPOINT) {
+      console.log("🔀 Using voice agent WebSocket:", VOICE_AGENT_ENDPOINT);
+
+      try {
+        const agentWs = await connectToVoiceAgent({
+          session_id: config.session_id || "default",
+          voice_id: config.voice_id || "",
+          user_id: socket.userId || "anonymous",
+          patient_name: config.patient_name || "",
+          patient_prompt: config.patient_prompt || "",
+          patient_id: config.patient_id || "",
+          llm_completion: config.llm_completion || false,
+          system_prompt: config.system_prompt || "",
+        });
+
+        socket.agentWs = agentWs;
+
+        // Relay messages from agent back to the frontend
+        agentWs.on("message", (data) => {
+          try {
+            const msg = JSON.parse(data.toString());
+
+            if (msg.type === "audio") {
+              socket.emit("audio-chunk", { data: msg.data });
+            } else if (msg.type === "text") {
+              console.log("💬 AGENT TEXT:", msg.text);
+              socket.emit("text-message", { text: msg.text });
+              if (msg.text && msg.text.includes("Nova Sonic ready")) {
+                novaReady = true;
+                socket.emit("nova-started", { status: "Nova Sonic session started" });
+              }
+            } else if (msg.type === "diagnosis_complete") {
+              console.log("🎯 DIAGNOSIS COMPLETE:", msg.text);
+              socket.emit("diagnosis-complete", { message: msg.text });
+            } else if (msg.type === "diagnosis_verdict") {
+              console.log("🩺 DIAGNOSIS VERDICT:", msg.verdict);
+              if (msg.verdict) {
+                socket.emit("diagnosis-complete", { message: "Session completed successfully" });
+              }
+            }
+          } catch (err) {
+            console.warn("⚠️ Failed to parse agent message:", err.message);
+          }
+        });
+
+        agentWs.on("close", () => {
+          console.log("🔚 Voice agent WebSocket closed");
+          socket.agentWs = null;
+          novaReady = false;
+        });
+
+        agentWs.on("error", (err) => {
+          console.error("❌ Voice agent WebSocket error:", err.message);
+          socket.emit("nova-error", { error: err.message });
+        });
+
+      } catch (error) {
+        console.error("❌ Failed to connect to voice agent:", error.message);
+        socket.emit("nova-error", { error: "Failed to connect to voice agent" });
+      }
+      return;
+    }
+
+    // ── Local child process path (fallback) ───────────────────────────────
 
     // Get Cognito Identity Pool credentials for user-specific access
     console.log(
@@ -582,10 +664,17 @@ io.on("connection", (socket) => {
   // ─── Audio‑input from client ──────────────────────────────────────────────
   let audioStarted = false;
   socket.on("audio-input", (msg) => {
-    console.log(
-      "🎤 Received audio-input, size:",
-      msg.data ? msg.data.length : "no data",
-    );
+    // ── AgentCore WebSocket path ──────────────────────────────────────────
+    if (socket.agentWs && socket.agentWs.readyState === WebSocket.OPEN) {
+      if (!audioStarted) {
+        socket.agentWs.send(JSON.stringify({ type: "start_audio" }));
+        audioStarted = true;
+      }
+      socket.agentWs.send(JSON.stringify({ type: "audio", data: msg.data }));
+      return;
+    }
+
+    // ── Local child process path ──────────────────────────────────────────
     if (novaProcess && novaProcess.stdin.writable && novaReady) {
       if (!audioStarted) {
         novaProcess.stdin.write(JSON.stringify({ type: "start_audio" }) + "\n");
@@ -595,9 +684,8 @@ io.on("connection", (socket) => {
       novaProcess.stdin.write(
         JSON.stringify({ type: "audio", data: msg.data }) + "\n",
       );
-      console.log("📤 Sent audio to Nova process");
     } else {
-      console.log("❌ Cannot send audio - not ready or stdin closed");
+      console.log("❌ Cannot send audio - not ready");
     }
   });
 
@@ -664,6 +752,14 @@ io.on("connection", (socket) => {
 
   // ─── End‑audio event ─────────────────────────────────────────────────────
   socket.on("end-audio", () => {
+    // ── AgentCore WebSocket path ──────────────────────────────────────────
+    if (socket.agentWs && socket.agentWs.readyState === WebSocket.OPEN) {
+      socket.agentWs.send(JSON.stringify({ type: "end_audio" }));
+      audioStarted = false;
+      return;
+    }
+
+    // ── Local child process path ──────────────────────────────────────────
     if (novaProcess && novaProcess.stdin.writable && novaReady) {
       novaProcess.stdin.write(JSON.stringify({ type: "end_audio" }) + "\n");
       audioStarted = false;
@@ -674,6 +770,18 @@ io.on("connection", (socket) => {
   // ─── Optional Stop event ────────────────────────────────────────────────
   socket.on("stop-nova-sonic", () => {
     console.log("🛑 Stop requested by client");
+    // ── AgentCore WebSocket path ──────────────────────────────────────────
+    if (socket.agentWs) {
+      try {
+        socket.agentWs.send(JSON.stringify({ type: "end_session" }));
+        socket.agentWs.close();
+      } catch {}
+      socket.agentWs = null;
+      novaReady = false;
+      return;
+    }
+
+    // ── Local child process path ──────────────────────────────────────────
     if (novaProcess) {
       novaProcess.kill();
       novaProcess = null;
@@ -682,16 +790,20 @@ io.on("connection", (socket) => {
   });
 
   // ─── Disconnect cleanup ──────────────────────────────────────────────────
-  // Socket.IO audio sessions: Nova process is intentionally kept alive across
-  // brief disconnects. WebRTC sessions: clean up MediaBridge since the peer
-  // connection is no longer usable after disconnect.
   socket.on("disconnect", () => {
-    console.log("🔌 CLIENT DISCONNECTED:", socket.id, "- Nova still running");
+    console.log("🔌 CLIENT DISCONNECTED:", socket.id);
 
-    // Clean up agent-proxied session if present
+    // Clean up AgentCore WebSocket session if present
+    if (socket.agentWs) {
+      try {
+        socket.agentWs.send(JSON.stringify({ type: "end_session" }));
+        socket.agentWs.close();
+      } catch {}
+      socket.agentWs = null;
+    }
+
+    // Clean up agent-proxied session if present (legacy)
     if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
-      callVoiceAgent("disconnect", { pc_id: socket.agentPcId })
-        .catch((err) => console.error("❌ Voice agent disconnect on socket close:", err.message));
       socket.agentPcId = null;
     }
 

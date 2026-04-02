@@ -7,7 +7,7 @@ import { ArrowLeft, Mic, MicOff, Send, FileText, User, CheckCircle, X, Menu, Ste
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { WebRTCClient, isWebRTCSupported, playRemoteAudioTrack, type VoiceSessionState } from '@/lib/webrtc-client';
+import { SocketIOAudioClient, type VoiceSessionState } from '@/lib/socketio-audio-client';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
@@ -168,21 +168,16 @@ function StudentChatPage() {
   const [voiceSessionState, setVoiceSessionState] = useState<VoiceSessionState>('idle');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const webrtcClientRef = useRef<WebRTCClient | null>(null);
+  const audioClientRef = useRef<SocketIOAudioClient | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const audioCleanupRef = useRef<(() => void) | null>(null);
 
   /**
-   * Clean up WebRTC session and Socket.IO connection.
+   * Clean up voice session and Socket.IO connection.
    */
   const cleanupVoiceSession = useCallback(() => {
-    if (webrtcClientRef.current) {
-      webrtcClientRef.current.disconnect();
-      webrtcClientRef.current = null;
-    }
-    if (audioCleanupRef.current) {
-      audioCleanupRef.current();
-      audioCleanupRef.current = null;
+    if (audioClientRef.current) {
+      audioClientRef.current.disconnect();
+      audioClientRef.current = null;
     }
     if (socketRef.current) {
       socketRef.current.disconnect();
@@ -194,16 +189,9 @@ function StudentChatPage() {
   }, []);
 
   /**
-   * Start a WebRTC voice session when the mic button is clicked.
+   * Start a voice session when the mic button is clicked.
    */
   const handleStartVoiceMode = useCallback(() => {
-    if (!isWebRTCSupported()) {
-      setVoiceError('Your browser does not support WebRTC voice chat.');
-      setIsVoiceModeActive(true);
-      setVoiceSessionState('error');
-      return;
-    }
-
     setIsVoiceModeActive(true);
     setVoiceError(null);
     setVoiceSessionState('connecting');
@@ -216,7 +204,7 @@ function StudentChatPage() {
           transports: ['websocket'],
           auth: { token: token || '' },
         });
-        startWebRTCClient();
+        startAudioClient();
       }).catch(() => {
         setVoiceError('Failed to get authentication token.');
         setVoiceSessionState('error');
@@ -224,29 +212,21 @@ function StudentChatPage() {
       return;
     }
 
-    startWebRTCClient();
+    startAudioClient();
 
-    function startWebRTCClient() {
+    function startAudioClient() {
     if (!socketRef.current) {
       setVoiceError('Socket connection not available.');
       setVoiceSessionState('error');
       return;
     }
-    const client = new WebRTCClient({
+    const client = new SocketIOAudioClient({
       socket: socketRef.current,
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
       onStateChange: (state) => {
         setVoiceSessionState(state);
         if (state === 'disconnected' || state === 'error') {
           setIsVoiceModeActive(false);
         }
-      },
-      onRemoteTrack: (track) => {
-        // Clean up previous audio playback if any
-        if (audioCleanupRef.current) {
-          audioCleanupRef.current();
-        }
-        audioCleanupRef.current = playRemoteAudioTrack(track);
       },
       onError: (error) => {
         const msg = error.message || '';
@@ -259,7 +239,7 @@ function StudentChatPage() {
       },
     });
 
-    webrtcClientRef.current = client;
+    audioClientRef.current = client;
     client.connect().catch((err) => {
       console.error('[VoiceMode] Failed to connect:', err);
       const msg = err instanceof Error ? err.message : 'Failed to start voice session';
@@ -270,7 +250,7 @@ function StudentChatPage() {
       }
       setVoiceSessionState('error');
     });
-    } // end startWebRTCClient
+    } // end startAudioClient
   }, []);
 
   /**
@@ -284,8 +264,8 @@ function StudentChatPage() {
   // Clean up WebRTC on unmount or navigation away
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (webrtcClientRef.current) {
-        webrtcClientRef.current.disconnect();
+      if (audioClientRef.current) {
+        audioClientRef.current.disconnect();
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -1019,12 +999,12 @@ function StudentChatPage() {
                 {voiceSessionState === 'active' && (
                   <button
                     onClick={() => {
-                      if (!webrtcClientRef.current) return;
+                      if (!audioClientRef.current) return;
                       if (isMuted) {
-                        webrtcClientRef.current.unmute();
+                        audioClientRef.current.toggleMute();
                         setIsMuted(false);
                       } else {
-                        webrtcClientRef.current.mute();
+                        audioClientRef.current.toggleMute();
                         setIsMuted(true);
                       }
                     }}
