@@ -19,7 +19,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import * as adminApi from '@/services/adminApiService';
 import { downloadChatPdf } from '@/lib/download-chat-pdf';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
-import { type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData, studentService } from '@/services/studentService';
 
 /**
  * AdminSimulationGroupPage Component
@@ -423,9 +423,46 @@ function AdminSimulationGroupPage() {
     navigate(`/admin/organization/${organizationId}`);
   };
 
-  const handleStudentView = () => {
+  const handleStudentView = async () => {
     const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
-    navigate(`/student?from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`);
+    const returnParam = `from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`;
+    // If we're on a sim group page, auto-enroll as student and go directly to that group
+    if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
+      try {
+        const result = await studentService.joinGroup(accessCode);
+        if (result?.success) {
+          navigate(`/patients/${groupId}?${returnParam}`);
+        } else {
+          console.error('Failed to enroll as student in group:', { groupId, accessCode });
+          window.alert('Unable to enroll in this simulation group. Taking you to the student dashboard instead.');
+          navigate(`/student?${returnParam}`);
+        }
+      } catch (error) {
+        console.error('Unexpected error while enrolling as student:', error);
+        window.alert('An unexpected error occurred while enrolling in this simulation group. Taking you to the student dashboard instead.');
+        navigate(`/student?${returnParam}`);
+      }
+    } else {
+      navigate(`/student?${returnParam}`);
+    }
+  };
+
+  const handleInstructorView = async () => {
+    const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
+    const returnParam = `from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`;
+    if (groupId) {
+      try {
+        const user = await import('@/lib/auth').then(m => m.authService.getCurrentUser());
+        if (user?.email) {
+          await adminApi.enrollInstructorInGroup(groupId, user.email);
+        }
+      } catch (err) {
+        console.error('Failed to enroll as instructor:', err);
+      }
+      navigate(`/instructor/group/${groupId}?${returnParam}`);
+    } else {
+      navigate(`/instructor?${returnParam}`);
+    }
   };
 
   const handleGenerateAccessCode = async () => {
@@ -1241,10 +1278,7 @@ function AdminSimulationGroupPage() {
         <div className="flex items-center gap-4">
           <Button
             variant="default"
-            onClick={() => {
-              const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
-              navigate(`/instructor/group/${groupId}?from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`);
-            }}
+            onClick={handleInstructorView}
             className="px-6 transition-colors"
             style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
