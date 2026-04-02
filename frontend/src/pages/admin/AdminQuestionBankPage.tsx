@@ -222,7 +222,7 @@ function AdminQuestionBankPage() {
         userName={user.name}
         userAvatarUrl={user.avatarUrl}
         onSignOut={handleSignOut}
-        showStudentViewButton={true}
+        showStudentViewButton={false}
         onStudentView={() => navigate('/student')}
       />
       
