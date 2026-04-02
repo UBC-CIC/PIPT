@@ -424,32 +424,28 @@ function AdminSimulationGroupPage() {
   };
 
   const handleStudentView = async () => {
-    const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
-    const returnParam = `from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`;
     // If we're on a sim group page, auto-enroll as student and go directly to that group
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
       try {
         const result = await studentService.joinGroup(accessCode);
         if (result?.success) {
-          navigate(`/patients/${groupId}?${returnParam}`);
+          navigate(`/patients/${groupId}`);
         } else {
           console.error('Failed to enroll as student in group:', { groupId, accessCode });
           window.alert('Unable to enroll in this simulation group. Taking you to the student dashboard instead.');
-          navigate(`/student?${returnParam}`);
+          navigate('/student');
         }
       } catch (error) {
         console.error('Unexpected error while enrolling as student:', error);
         window.alert('An unexpected error occurred while enrolling in this simulation group. Taking you to the student dashboard instead.');
-        navigate(`/student?${returnParam}`);
+        navigate('/student');
       }
     } else {
-      navigate(`/student?${returnParam}`);
+      navigate('/student');
     }
   };
 
   const handleInstructorView = async () => {
-    const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
-    const returnParam = `from=admin&returnUrl=${encodeURIComponent(adminReturnUrl)}`;
     if (groupId) {
       try {
         const user = await import('@/lib/auth').then(m => m.authService.getCurrentUser());
@@ -459,9 +455,9 @@ function AdminSimulationGroupPage() {
       } catch (err) {
         console.error('Failed to enroll as instructor:', err);
       }
-      navigate(`/instructor/group/${groupId}?${returnParam}`);
+      navigate(`/instructor/group/${groupId}`);
     } else {
-      navigate(`/instructor?${returnParam}`);
+      navigate('/instructor');
     }
   };
 
@@ -1295,6 +1291,16 @@ function AdminSimulationGroupPage() {
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
             Student View
+          </Button>
+          <Button
+            variant="default"
+            onClick={handleInstructorView}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+          >
+            Instructor View
           </Button>
           <Button
             variant="default"

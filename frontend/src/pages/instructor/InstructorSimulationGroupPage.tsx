@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type KeyQuestionCoverage, type StudentDetails, type StudentPatientData, type StudentProgressData } from '@/services/instructorService';
-import { type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData, studentService } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -25,7 +25,7 @@ import AIDebriefDialog from '../../components/AIDebriefDialog';
  */
 function InstructorSimulationGroupPage() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user: authUser } = useAuth();
   const { groupId } = useParams();
   const [searchParams] = useSearchParams();
   const adminReturnUrl = searchParams.get('returnUrl');
@@ -345,8 +345,31 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle student view navigation
    */
-  const handleStudentView = () => {
-    navigate('/student');
+  const handleStudentView = async () => {
+    // If we're on a sim group page, auto-enroll as student and go directly to that group
+    if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
+      const result = await studentService.joinGroup(accessCode);
+      if (result?.success) {
+        navigate(`/patients/${groupId}`);
+      } else {
+        // Enrollment failed; notify the user and send them to the general student view
+        window.alert('Unable to join this simulation group as a student. Redirecting to your student dashboard.');
+        navigate('/student');
+      }
+    } else {
+      navigate('/student');
+    }
+  };
+
+  const hasAdminRole = authUser?.groups.includes('admin') || false;
+
+  const handleAdminView = () => {
+    const orgId = simulationGroup?.organization_id;
+    if (orgId && groupId) {
+      navigate(`/admin/organization/${orgId}/group/${groupId}`);
+    } else {
+      navigate('/admin');
+    }
   };
 
   /**
@@ -1035,6 +1058,22 @@ function InstructorSimulationGroupPage() {
           >
             Student View
           </Button>
+
+          {hasAdminRole && (
+            <Button
+              variant="default"
+              onClick={handleAdminView}
+              className="px-6 transition-colors"
+              style={{
+                backgroundColor: UI_COLORS.button.primary,
+                color: UI_COLORS.button.text
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+            >
+              Admin View
+            </Button>
+          )}
 
           <Button
             variant="default"
