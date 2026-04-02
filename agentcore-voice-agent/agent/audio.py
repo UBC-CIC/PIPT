@@ -40,9 +40,15 @@ class OutputTrack(MediaStreamTrack):
     Audio bytes are queued via add_audio() into an av.AudioFifo, which
     handles chunking into exact frame sizes. recv() reads fixed-size
     frames paced to real-time, returning silence when the buffer is empty.
+
+    A small jitter buffer (100ms) absorbs network timing variations to
+    reduce crackling from gaps between audio chunk arrivals.
     """
 
     kind = "audio"
+
+    # Buffer 100ms of audio (5 frames at 20ms each) before starting playback
+    JITTER_BUFFER_FRAMES = 5
 
     def __init__(self):
         super().__init__()
@@ -50,6 +56,8 @@ class OutputTrack(MediaStreamTrack):
         self._start_time = None
         self._timestamp = 0
         self._muted = False
+        self._buffering = True  # Start in buffering mode
+        self._total_samples_written = 0
 
     async def recv(self):
         """Return the next 20ms audio frame, paced to real-time."""
@@ -67,9 +75,18 @@ class OutputTrack(MediaStreamTrack):
         if delay > 0:
             await asyncio.sleep(delay)
 
-        # Return silence if muted (barge-in) or buffer empty
+        # Return silence if muted (barge-in) or still buffering
         if self._muted:
             frame = _SILENCE
+        elif self._buffering:
+            # Wait until we have enough buffered audio before starting playback
+            if self._total_samples_written >= SAMPLES_PER_FRAME * self.JITTER_BUFFER_FRAMES:
+                self._buffering = False
+                frame = self._fifo.read(SAMPLES_PER_FRAME, partial=False)
+                if frame is None:
+                    frame = _SILENCE
+            else:
+                frame = _SILENCE
         else:
             frame = self._fifo.read(SAMPLES_PER_FRAME, partial=False)
             if frame is None:
@@ -84,14 +101,16 @@ class OutputTrack(MediaStreamTrack):
     def clear(self):
         """Stop playback and discard all buffered audio (barge-in)."""
         self._muted = True
+        self._buffering = True
+        self._total_samples_written = 0
         self._fifo = av.AudioFifo()
 
     def add_audio(self, audio_bytes):
         """Buffer PCM bytes from Nova Sonic. AudioFifo handles chunking."""
         self._muted = False
-        frame = AudioFrame(
-            format="s16", layout="mono", samples=len(audio_bytes) // BYTES_PER_SAMPLE
-        )
+        num_samples = len(audio_bytes) // BYTES_PER_SAMPLE
+        frame = AudioFrame(format="s16", layout="mono", samples=num_samples)
         frame.planes[0].update(audio_bytes)
         frame.sample_rate = OUTPUT_SAMPLE_RATE
         self._fifo.write(frame)
+        self._total_samples_written += num_samples
