@@ -1218,6 +1218,65 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
+      case "GET /instructor/get_prompt_history":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.type
+        ) {
+          try {
+            const { simulation_group_id, type } = event.queryStringParameters;
+            let history;
+
+            if (type === 'debrief') {
+              // Fetch from debrief_prompt_history table
+              history = await sqlConnection`
+                SELECT
+                  dph.history_id as id,
+                  dph.prompt_content as text,
+                  dph.created_at as saved_at,
+                  u.user_email as modified_by_email,
+                  u.first_name as modified_by_first_name,
+                  u.last_name as modified_by_last_name
+                FROM "debrief_prompt_history" dph
+                LEFT JOIN "users" u ON dph.modified_by = u.user_id
+                WHERE dph.simulation_group_id = ${simulation_group_id}
+                ORDER BY dph.created_at DESC
+                LIMIT 50;
+              `;
+            } else {
+              // For system prompt, use user_engagement_log as history source
+              history = await sqlConnection`
+                SELECT
+                  uel.log_id as id,
+                  uel.engagement_details as text,
+                  uel.timestamp as saved_at,
+                  u.user_email as modified_by_email,
+                  u.first_name as modified_by_first_name,
+                  u.last_name as modified_by_last_name
+                FROM "user_engagement_log" uel
+                LEFT JOIN "users" u ON uel.user_id = u.user_id
+                WHERE uel.simulation_group_id = ${simulation_group_id}
+                  AND uel.engagement_type = 'instructor_updated_prompt'
+                ORDER BY uel.timestamp DESC
+                LIMIT 50;
+              `;
+            }
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(history);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and type are required",
+          });
+        }
+        break;
       case "GET /instructor/view_student_messages":
         if (
           event.queryStringParameters != null &&

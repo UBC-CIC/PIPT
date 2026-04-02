@@ -40,7 +40,7 @@ function AdminSimulationGroupPage() {
   const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
   const [evaluationPromptText, setEvaluationPromptText] = useState('');
   const [isPromptUnsaved, setIsPromptUnsaved] = useState(false);
-  const [promptHistory] = useState(() => mockAdminDataService.getPromptHistory());
+  const [promptHistory, setPromptHistory] = useState<Array<{id: string; text: string; saved_at: string; modified_by_email: string | null; modified_by_first_name: string | null; modified_by_last_name: string | null}>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
@@ -278,6 +278,17 @@ function AdminSimulationGroupPage() {
     };
     loadPrompts();
   }, [groupId]);
+
+  // Fetch prompt history when prompt type or groupId changes
+  useEffect(() => {
+    if (!groupId) return;
+    const loadHistory = async () => {
+      const type = selectedPromptType === 'system' ? 'system' : 'debrief';
+      const history = await instructorService.getPromptHistory(groupId, type);
+      setPromptHistory(history);
+    };
+    loadHistory();
+  }, [groupId, selectedPromptType]);
 
   // Filter analytics data based on date range
   useEffect(() => {
@@ -607,12 +618,17 @@ function AdminSimulationGroupPage() {
   const handleSavePrompt = async () => {
     if (!groupId) return;
     try {
+      const email = authUser?.email || '';
       if (selectedPromptType === 'evaluation') {
-        const email = authUser?.email || '';
         await instructorService.updateDebriefPrompt(groupId, email, evaluationPromptText);
+      } else {
+        await instructorService.updateSystemPrompt(groupId, email, systemPromptText);
       }
-      // System prompt save uses existing pattern (no dedicated update function yet)
       setIsPromptUnsaved(false);
+      // Refresh prompt history after save
+      const type = selectedPromptType === 'system' ? 'system' : 'debrief';
+      const history = await instructorService.getPromptHistory(groupId, type);
+      setPromptHistory(history);
       alert('Prompt saved successfully!');
     } catch (error) {
       console.error('Failed to save prompt:', error);
@@ -2135,6 +2151,9 @@ function AdminSimulationGroupPage() {
                       {selectedPromptType === 'system' ? 'System' : 'Debrief'} Prompt History
                     </h3>
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>Browse earlier versions. Restore any version you want to use.</p>
+                    {promptHistory.length === 0 && (
+                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No history yet. Save a prompt to start tracking changes.</p>
+                    )}
                     {promptHistory.map((version, index) => (
                       <div key={version.id} className="border rounded-lg p-6 mb-4" style={{ borderColor: UI_COLORS.border.default }}>
                         <textarea
@@ -2147,10 +2166,19 @@ function AdminSimulationGroupPage() {
                         />
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <button className="text-sm" style={{ color: UI_COLORS.text.muted, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
-                              ← Version {index + 1} of {promptHistory.length} →
-                            </button>
-                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>Saved: {version.savedAt}</span>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Version {index + 1} of {promptHistory.length}
+                            </span>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Saved: {new Date(version.saved_at).toLocaleString()}
+                            </span>
+                            {version.modified_by_email && (
+                              <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                                by {version.modified_by_first_name && version.modified_by_last_name
+                                  ? `${version.modified_by_first_name} ${version.modified_by_last_name}`
+                                  : version.modified_by_email}
+                              </span>
+                            )}
                           </div>
                           <Button onClick={() => handleRestorePromptVersion(version.text)} variant="outline" className="px-6 transition-colors" style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading, backgroundColor: UI_COLORS.background.white }}>
                             Restore This Version
