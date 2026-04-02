@@ -30,7 +30,7 @@ from smithy_aws_core.identity.chain import create_default_chain
 from smithy_http.aio.aiohttp import AIOHTTPClient
 import boto3
 
-from audio import convert_to_16khz, INPUT_SAMPLE_RATE, OUTPUT_SAMPLE_RATE
+from audio import InputResampler, OUTPUT_SAMPLE_RATE, INPUT_SAMPLE_RATE
 
 MODEL_ID = "amazon.nova-2-sonic-v1:0"
 VOICE_ID = "matthew"
@@ -302,11 +302,14 @@ async def run_session(audio_in, audio_out, region, pc_id):
         logger.warning("Nova Sonic ready timeout — starting audio anyway")
     logger.info("Session ready, streaming audio")
 
+    # --- Create per-session resampler (stateful — must not be shared) ---
+    resampler = InputResampler()
+
     # --- Stream microphone audio to Nova Sonic ---
     try:
         frame_count = 0
         while not stream_dead.is_set():
-            pcm = convert_to_16khz(await audio_in.recv())
+            pcm = resampler.convert(await audio_in.recv())
             if not pcm:
                 continue
 
@@ -331,20 +334,29 @@ async def run_session(audio_in, audio_out, region, pc_id):
     except Exception as e:
         logger.error(f"Audio send error: {e}")
     finally:
-        recv_task.cancel()
-        # --- Gracefully close all resources ---
+        # --- Gracefully close resources in correct order ---
+        # 1. Close the stream input first (stops sending)
         try:
-            if hasattr(stream, 'input_stream'):
+            if stream and hasattr(stream, 'input_stream'):
                 await stream.input_stream.close()
         except Exception:
             pass
+        # 2. Close the stream (stops receiving — prevents CRT InvalidStateError)
         try:
-            if hasattr(stream, 'close'):
+            if stream and hasattr(stream, 'close'):
                 await stream.close()
         except Exception:
             pass
+        # 3. NOW cancel the receive task (stream is already closed)
+        recv_task.cancel()
         try:
-            await client.close()
+            await recv_task
+        except asyncio.CancelledError:
+            pass
+        # 4. Close SDK clients
+        try:
+            if client:
+                await client.close()
         except Exception:
             pass
         try:
