@@ -235,13 +235,16 @@ async def run_session(audio_in, audio_out, region, pc_id):
 
     async def receive_responses():
         try:
+            logger.info("Receive loop started, waiting for Nova Sonic events...")
             while True:
                 output = await stream.await_output()
                 result = await output[1].receive()
                 if not (result.value and result.value.bytes_):
                     continue
 
-                event = json.loads(result.value.bytes_.decode("utf-8")).get("event", {})
+                raw = result.value.bytes_.decode("utf-8")
+                event = json.loads(raw).get("event", {})
+                logger.info(f"Received event: {list(event.keys())}")
 
                 if not ready.is_set():
                     ready.set()
