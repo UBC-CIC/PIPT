@@ -8,6 +8,85 @@ const {
 
 let sqlConnection = global.sqlConnection;
 
+const DEFAULT_DEBRIEF_PROMPT = `
+You are an expert clinical education evaluator. You will be given:
+1. The full chat transcript between a pharmacy student and an AI patient
+2. The student's recommendation/diagnosis submitted at the end
+3. A list of key questions the student was expected to ask during the interaction
+
+Your job is to produce a structured debrief evaluation in valid JSON with these exact keys:
+
+{
+  "summary": "A 3-5 sentence overall summary of the student's performance.",
+  "questions_addressed": [
+    {
+      "question_id": "the question_id value from the key questions list",
+      "question_text": "the question text",
+      "matched_messages": [
+        {
+          "message_content": "the student's message that addressed this question",
+          "similarity_score": 0.85,
+          "confidence_tier": "high"
+        }
+      ],
+      "quality_assessment": "Assessment of how well the student addressed this question."
+    }
+  ],
+  "questions_missed": [
+    {
+      "question_id": "the question_id value",
+      "question_text": "the question text",
+      "is_mandatory": true,
+      "weight": 1.5
+    }
+  ],
+  "recommendation_feedback": {
+    "strengths": ["list of strengths in the student's recommendation"],
+    "areas_for_improvement": ["list of areas for improvement"]
+  },
+  "reasoning_gaps": "A paragraph describing gaps in clinical reasoning.",
+  "overall_score": <float between 0.0 and 100.0>,
+  "suggested_rewrites": [
+    {
+      "original_message": "The student's original message",
+      "matched_question_id": "uuid of the matched question",
+      "similarity_score": 0.68,
+      "suggested_rewrite": "An improved version of the student's message"
+    }
+  ],
+  "answer_key_comparison": {
+    "answer_key_available": true or false,
+    "correct_elements": ["elements from the answer key that the student correctly identified"],
+    "missing_elements": ["elements from the answer key that the student failed to mention"],
+    "incorrect_elements": ["elements the student stated that contradict the answer key"],
+    "overall_alignment": "Strong, Partial, or Weak"
+  }
+}
+
+CRITICAL JSON OUTPUT RULES:
+- Your ENTIRE response must be a single valid JSON object. Nothing else.
+- Do NOT wrap the JSON in markdown code fences (no \\\`\\\`\\\`json or \\\`\\\`\\\`).
+- Do NOT include any text, explanation, or commentary before or after the JSON.
+- The very first character of your response MUST be '{' and the very last character MUST be '}'.
+- Ensure all strings are properly escaped (double quotes inside strings must be \\\\", newlines must be \\\\n).
+- Ensure all arrays and objects are properly closed with matching brackets/braces.
+- Do NOT use trailing commas in arrays or objects.
+- Do NOT truncate the output. If the response is long, you MUST still complete the entire JSON object with all closing braces and brackets.
+- Double-check that every opened { has a matching } and every opened [ has a matching ] before finishing your response.
+- The overall_score MUST be a number (float), not a string.
+- All list fields (questions_addressed, questions_missed, strengths, areas_for_improvement, suggested_rewrites) MUST be arrays, even if empty (use []).
+
+EVALUATION RULES:
+- For questions_addressed and questions_missed, use the question_id values provided in the Key Questions list.
+- Use SEMANTIC matching: if the student asked about the same topic as a key question, even using different wording, count it as addressed. For example, "do you have any chest pain?" addresses a key question about "cardiovascular symptoms" or "chest pain". Asking "what is your name?" addresses a key question about "patient name" or "identifying information".
+- Be generous in matching — the student may phrase questions conversationally rather than using clinical terminology.
+- Be fair but thorough. Evaluate based on clinical relevance and completeness.
+- The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
+- For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.55-0.79). Do NOT include rewrites for high-confidence matches.
+- If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
+- For answer_key_comparison: if an answer key is provided in the prompt, set answer_key_available to true and populate correct_elements, missing_elements, incorrect_elements, and overall_alignment by comparing the student's recommendation against the answer key. If no answer key is provided, set answer_key_available to false and omit the other sub-fields.
+`.trim();
+
 exports.handler = async (event, context) => {
   logger.init(event, context);
   logger.info("Instructor handler invoked", { queryStringParameters: event.queryStringParameters });
@@ -988,6 +1067,216 @@ exports.handler = async (event, context) => {
           response.body = "simulation_group_id is missing";
         }
         break;
+      case "GET /instructor/get_debrief_prompt":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          try {
+            const { simulation_group_id } = event.queryStringParameters;
+
+            // Retrieve the debrief prompt from the simulation_groups table
+            const groupPrompt = await sqlConnection`
+              SELECT debrief_prompt
+              FROM "simulation_groups"
+              WHERE simulation_group_id = ${simulation_group_id};
+            `;
+
+            if (groupPrompt.length > 0) {
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                debrief_prompt: groupPrompt[0].debrief_prompt || "",
+              });
+            } else {
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Simulation group not found",
+              });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is missing",
+          });
+        }
+        break;
+      case "PUT /instructor/debrief_prompt":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.instructor_email &&
+          event.body
+        ) {
+          try {
+            const { simulation_group_id, instructor_email } =
+              event.queryStringParameters;
+            const { prompt } = JSON.parse(event.body);
+
+            // Retrieve the current debrief prompt
+            const currentDebriefPromptResult = await sqlConnection`
+              SELECT debrief_prompt
+              FROM "simulation_groups"
+              WHERE simulation_group_id = ${simulation_group_id};
+            `;
+
+            if (currentDebriefPromptResult.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Simulation Group not found",
+              });
+              break;
+            }
+
+            const oldDebriefPrompt = currentDebriefPromptResult[0].debrief_prompt;
+
+            // Look up the user_id for the instructor
+            const userResult = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${instructor_email};
+            `;
+
+            const userId = userResult.length > 0 ? userResult[0].user_id : null;
+
+            // Update the debrief prompt for the simulation group
+            const updatedGroup = await sqlConnection`
+              UPDATE "simulation_groups"
+              SET debrief_prompt = ${prompt}
+              WHERE simulation_group_id = ${simulation_group_id}
+              RETURNING *;
+            `;
+
+            // Insert into debrief_prompt_history
+            await sqlConnection`
+              INSERT INTO "debrief_prompt_history" (
+                history_id,
+                modified_by,
+                simulation_group_id,
+                prompt_content,
+                created_at
+              )
+              VALUES (
+                uuid_generate_v4(),
+                ${userId},
+                ${simulation_group_id},
+                ${prompt},
+                CURRENT_TIMESTAMP
+              );
+            `;
+
+            // Log the change in the User Engagement Log with the old debrief prompt
+            await sqlConnection`
+              INSERT INTO "user_engagement_log" (
+                log_id,
+                user_id,
+                simulation_group_id,
+                persona_id,
+                enrollment_id,
+                timestamp,
+                engagement_type,
+                engagement_details
+              )
+              VALUES (
+                uuid_generate_v4(),
+                ${userId},
+                ${simulation_group_id},
+                null,
+                null,
+                CURRENT_TIMESTAMP,
+                'instructor_updated_debrief_prompt',
+                ${oldDebriefPrompt}
+              );
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(updatedGroup[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error:
+              "simulation_group_id, instructor_email, or request body is missing",
+          });
+        }
+        break;
+      case "GET /instructor/get_default_debrief_prompt":
+        try {
+          response.statusCode = 200;
+          response.body = JSON.stringify({
+            default_debrief_prompt: DEFAULT_DEBRIEF_PROMPT,
+          });
+        } catch (err) {
+          response.statusCode = 500;
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
+          response.body = JSON.stringify({ error: "Internal server error" });
+        }
+        break;
+      case "GET /instructor/get_prompt_history":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.type
+        ) {
+          try {
+            const { simulation_group_id, type } = event.queryStringParameters;
+            let history;
+
+            if (type === 'debrief') {
+              // Fetch from debrief_prompt_history table
+              history = await sqlConnection`
+                SELECT
+                  dph.history_id as id,
+                  dph.prompt_content as text,
+                  dph.created_at as saved_at,
+                  u.user_email as modified_by_email,
+                  u.first_name as modified_by_first_name,
+                  u.last_name as modified_by_last_name
+                FROM "debrief_prompt_history" dph
+                LEFT JOIN "users" u ON dph.modified_by = u.user_id
+                WHERE dph.simulation_group_id = ${simulation_group_id}
+                ORDER BY dph.created_at DESC
+                LIMIT 50;
+              `;
+            } else {
+              // For system prompt, use user_engagement_log as history source
+              history = await sqlConnection`
+                SELECT
+                  uel.log_id as id,
+                  uel.engagement_details as text,
+                  uel.timestamp as saved_at,
+                  u.user_email as modified_by_email,
+                  u.first_name as modified_by_first_name,
+                  u.last_name as modified_by_last_name
+                FROM "user_engagement_log" uel
+                LEFT JOIN "users" u ON uel.user_id = u.user_id
+                WHERE uel.simulation_group_id = ${simulation_group_id}
+                  AND uel.engagement_type = 'instructor_updated_prompt'
+                ORDER BY uel.timestamp DESC
+                LIMIT 50;
+              `;
+            }
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(history);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and type are required",
+          });
+        }
+        break;
       case "GET /instructor/view_student_messages":
         if (
           event.queryStringParameters != null &&
@@ -1494,7 +1783,8 @@ exports.handler = async (event, context) => {
                 group_access_code,
                 group_student_access,
                 created_by,
-                instructor_voice_enabled
+                instructor_voice_enabled,
+                debrief_prompt
               )
               VALUES (
                 uuid_generate_v4(),
@@ -1503,7 +1793,8 @@ exports.handler = async (event, context) => {
                 ${accessCode},
                 ${group_student_access !== undefined ? group_student_access : true},
                 ${userId},
-                ${instructor_voice_enabled !== undefined ? instructor_voice_enabled : true}
+                ${instructor_voice_enabled !== undefined ? instructor_voice_enabled : true},
+                ${DEFAULT_DEBRIEF_PROMPT}
               )
               RETURNING *;
             `;

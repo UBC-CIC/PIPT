@@ -2036,6 +2036,59 @@ def retrieve_answer_key_text(simulation_group_id: str, persona_id: str) -> str:
     return "".join(all_text)
 
 
+def fetch_debrief_prompt(simulation_group_id: str) -> str:
+    """Fetch the debrief prompt for a simulation group from the DB.
+
+    Raises ValueError if no prompt is configured (NULL or empty).
+    Raises RuntimeError on DB connection failure.
+    No fallback to DEBRIEF_SYSTEM_PROMPT — the system is fully DB-driven.
+    """
+    try:
+        secrets_client = boto3.client('secretsmanager')
+        db_secret_name = os.environ.get('SM_DB_CREDENTIALS')
+        rds_endpoint = os.environ.get('RDS_PROXY_ENDPOINT')
+
+        if not db_secret_name or not rds_endpoint:
+            raise RuntimeError(
+                f"Database credentials not available for fetching debrief prompt "
+                f"(SM_DB_CREDENTIALS={db_secret_name}, RDS_PROXY_ENDPOINT={rds_endpoint})"
+            )
+
+        secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
+        secret = json.loads(secret_response['SecretString'])
+
+        conn = psycopg2.connect(
+            host=rds_endpoint,
+            port=secret['port'],
+            database=secret['dbname'],
+            user=secret['username'],
+            password=secret['password']
+        )
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT debrief_prompt FROM simulation_groups WHERE simulation_group_id = %s',
+            (simulation_group_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if result and result[0] and result[0].strip():
+            return result[0]
+
+        raise ValueError(
+            f"No debrief prompt configured for simulation group {simulation_group_id}. "
+            "The debrief_prompt column is NULL or empty."
+        )
+    except (ValueError, RuntimeError):
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching debrief prompt: {e}")
+        raise RuntimeError(
+            f"Failed to fetch debrief prompt for group {simulation_group_id}: {e}"
+        )
+
+
 def generate_debrief(
     session_id: str,
     simulation_group_id: str,
@@ -2073,6 +2126,9 @@ def generate_debrief(
     # Retrieve answer key text from S3 (empty string if none found)
     answer_key_text = retrieve_answer_key_text(simulation_group_id, persona_id)
 
+    # Fetch the debrief prompt from the DB (no fallback to hardcoded constant)
+    debrief_prompt = fetch_debrief_prompt(simulation_group_id)
+
     # 2. Check for tagged messages and decide which prompt path to use
     tagged_messages = fetch_tagged_messages(session_id)
 
@@ -2101,7 +2157,7 @@ def generate_debrief(
         for attempt in range(1, max_retries + 2):
             try:
                 messages = [
-                    SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
+                    SystemMessage(content=debrief_prompt),
                     HumanMessage(content=prompt_text if attempt == 1 else prompt_text + f"\n\nRETRY: Previous response was not valid JSON. Error: {last_error}. Return ONLY valid JSON."),
                 ]
                 resp = llm.invoke(messages)
@@ -2227,7 +2283,7 @@ The following is the instructor's answer key for this simulation case. Compare t
             if extra_instruction:
                 prompt_content = user_prompt + f"\n\n{extra_instruction}"
             messages = [
-                SystemMessage(content=DEBRIEF_SYSTEM_PROMPT),
+                SystemMessage(content=debrief_prompt),
                 HumanMessage(content=prompt_content),
             ]
             resp = llm.invoke(messages)

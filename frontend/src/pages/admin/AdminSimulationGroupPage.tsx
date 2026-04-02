@@ -8,6 +8,7 @@ import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
+import { useAuth } from '@/App';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
@@ -29,6 +30,7 @@ import { type AIDebriefData, studentService } from '@/services/studentService';
 function AdminSimulationGroupPage() {
   const navigate = useNavigate();
   const { organizationId, groupId } = useParams();
+  const { user: authUser } = useAuth();
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -38,8 +40,9 @@ function AdminSimulationGroupPage() {
   const [maxMessagesInput, setMaxMessagesInput] = useState<string>('');
   const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
   const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
-  const [evaluationPromptText, setEvaluationPromptText] = useState('Evaluate the student\'s interview using the instructor-defined rubric and key questions.');
-  const [promptHistory] = useState(() => mockAdminDataService.getPromptHistory());
+  const [evaluationPromptText, setEvaluationPromptText] = useState('');
+  const [isPromptUnsaved, setIsPromptUnsaved] = useState(false);
+  const [promptHistory, setPromptHistory] = useState<Array<{id: string; text: string; saved_at: string; modified_by_email: string | null; modified_by_first_name: string | null; modified_by_last_name: string | null}>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
   const [studentDetails, setStudentDetails] = useState<StudentDetails | null>(null);
@@ -268,6 +271,35 @@ function AdminSimulationGroupPage() {
 
     loadData();
   }, [groupId, organizationId]);
+
+  // Load system prompt and debrief prompt in parallel on mount
+  useEffect(() => {
+    if (!groupId) return;
+    const loadPrompts = async () => {
+      try {
+        const [systemPrompt, debriefPrompt] = await Promise.all([
+          instructorService.getEvaluationPrompt(groupId).catch(err => { console.error('Failed to load system prompt:', err); return ''; }),
+          instructorService.getDebriefPrompt(groupId).catch(err => { console.error('Failed to load debrief prompt:', err); return ''; }),
+        ]);
+        setSystemPromptText(systemPrompt);
+        setEvaluationPromptText(debriefPrompt);
+      } catch (error) {
+        console.error('Error loading prompts:', error);
+      }
+    };
+    loadPrompts();
+  }, [groupId]);
+
+  // Fetch prompt history when prompt type or groupId changes
+  useEffect(() => {
+    if (!groupId) return;
+    const loadHistory = async () => {
+      const type = selectedPromptType === 'system' ? 'system' : 'debrief';
+      const history = await instructorService.getPromptHistory(groupId, type);
+      setPromptHistory(history);
+    };
+    loadHistory();
+  }, [groupId, selectedPromptType]);
 
   // Filter analytics data based on date range
   useEffect(() => {
@@ -618,16 +650,34 @@ function AdminSimulationGroupPage() {
 
   const handleLoadDefaultPrompt = async () => {
     if (selectedPromptType === 'system') {
-      setSystemPromptText('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient. Engage with the pharmacist by describing your symptoms to provide them hints on what condition(s) you have.');
-    } else {
       const prompt = await instructorService.getEvaluationPrompt(groupId || '1');
+      setSystemPromptText(prompt);
+    } else {
+      const prompt = await instructorService.getDefaultDebriefPrompt();
       setEvaluationPromptText(prompt);
     }
+    setIsPromptUnsaved(true);
   };
 
-  const handleSavePrompt = () => {
-    console.log('Saving prompt:', selectedPromptType, selectedPromptType === 'system' ? systemPromptText : evaluationPromptText);
-    alert('Prompt saved successfully!');
+  const handleSavePrompt = async () => {
+    if (!groupId) return;
+    try {
+      const email = authUser?.email || '';
+      if (selectedPromptType === 'evaluation') {
+        await instructorService.updateDebriefPrompt(groupId, email, evaluationPromptText);
+      } else {
+        await instructorService.updateSystemPrompt(groupId, email, systemPromptText);
+      }
+      setIsPromptUnsaved(false);
+      // Refresh prompt history after save
+      const type = selectedPromptType === 'system' ? 'system' : 'debrief';
+      const history = await instructorService.getPromptHistory(groupId, type);
+      setPromptHistory(history);
+      alert('Prompt saved successfully!');
+    } catch (error) {
+      console.error('Failed to save prompt:', error);
+      alert('Failed to save prompt. Please try again.');
+    }
   };
 
   const handleRestorePromptVersion = (versionText: string) => {
@@ -1233,6 +1283,16 @@ function AdminSimulationGroupPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          <Button
+            variant="default"
+            onClick={handleInstructorView}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+          >
+            Instructor View
+          </Button>
           <Button
             variant="default"
             onClick={handleStudentView}
@@ -2158,7 +2218,7 @@ function AdminSimulationGroupPage() {
                         className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium"
                         style={{ backgroundColor: selectedPromptType === type ? UI_COLORS.background.tableHeader : 'transparent', color: UI_COLORS.text.heading }}
                       >
-                        {type === 'system' ? 'System Prompt' : 'Evaluation Prompt'}
+                        {type === 'system' ? 'System Prompt' : 'Debrief Prompt'}
                       </Button>
                     ))}
                   </div>
@@ -2169,14 +2229,21 @@ function AdminSimulationGroupPage() {
                 <div className="max-w-4xl space-y-8">
                   <div>
                     <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
-                      {selectedPromptType === 'system' ? 'System Prompt' : 'Evaluation Prompt'}
+                      {selectedPromptType === 'system' ? 'System Prompt' : 'Debrief Prompt'}
                     </h2>
                     <div className="space-y-4">
                       <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>Edit Prompt</label>
                       <textarea
                         value={String(selectedPromptType === 'system' ? systemPromptText : evaluationPromptText)}
-                        onChange={(e) => selectedPromptType === 'system' ? setSystemPromptText(e.target.value) : setEvaluationPromptText(e.target.value)}
-                        placeholder="Prompt goes here..."
+                        onChange={(e) => {
+                          if (selectedPromptType === 'system') {
+                            setSystemPromptText(e.target.value);
+                          } else {
+                            setEvaluationPromptText(e.target.value);
+                          }
+                          setIsPromptUnsaved(true);
+                        }}
+                        placeholder={selectedPromptType === 'evaluation' ? 'No custom debrief prompt configured.' : 'Prompt goes here...'}
                         rows={6}
                         className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
                         style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }}
@@ -2200,9 +2267,12 @@ function AdminSimulationGroupPage() {
 
                   <div>
                     <h3 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-                      {selectedPromptType === 'system' ? 'System' : 'Evaluation'} Prompt History
+                      {selectedPromptType === 'system' ? 'System' : 'Debrief'} Prompt History
                     </h3>
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>Browse earlier versions. Restore any version you want to use.</p>
+                    {promptHistory.length === 0 && (
+                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No history yet. Save a prompt to start tracking changes.</p>
+                    )}
                     {promptHistory.map((version, index) => (
                       <div key={version.id} className="border rounded-lg p-6 mb-4" style={{ borderColor: UI_COLORS.border.default }}>
                         <textarea
@@ -2215,10 +2285,19 @@ function AdminSimulationGroupPage() {
                         />
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <button className="text-sm" style={{ color: UI_COLORS.text.muted, border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}>
-                              ← Version {index + 1} of {promptHistory.length} →
-                            </button>
-                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>Saved: {version.savedAt}</span>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Version {index + 1} of {promptHistory.length}
+                            </span>
+                            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                              Saved: {new Date(version.saved_at).toLocaleString()}
+                            </span>
+                            {version.modified_by_email && (
+                              <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                                by {version.modified_by_first_name && version.modified_by_last_name
+                                  ? `${version.modified_by_first_name} ${version.modified_by_last_name}`
+                                  : version.modified_by_email}
+                              </span>
+                            )}
                           </div>
                           <Button onClick={() => handleRestorePromptVersion(version.text)} variant="outline" className="px-6 transition-colors" style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading, backgroundColor: UI_COLORS.background.white }}>
                             Restore This Version

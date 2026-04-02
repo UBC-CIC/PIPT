@@ -325,6 +325,11 @@ export interface InstructorDataService {
   updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
   deleteCaseMaterial: (patientId: string, materialId: string) => void;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
+  getDebriefPrompt: (simulationGroupId: string) => Promise<string>;
+  updateSystemPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
+  updateDebriefPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
+  getDefaultDebriefPrompt: () => Promise<string>;
+  getPromptHistory: (simulationGroupId: string, type: 'system' | 'debrief') => Promise<PromptHistoryEntry[]>;
   getStudents: (simulationGroupId: string) => Promise<Student[]>;
   getStudentDetails: (studentId: string, simulationGroupId: string, groupName?: string) => Promise<StudentDetails | undefined>;
   getStudentPatientData: (studentEmail: string, simulationGroupId: string) => Promise<StudentPatientData>;
@@ -1314,6 +1319,91 @@ async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
 }
 
 /**
+ * Get debrief prompt for a simulation group
+ */
+async function getDebriefPrompt(simulationGroupId: string): Promise<string> {
+  try {
+    const data = await apiClient.request<{ debrief_prompt: string }>(
+      `instructor/get_debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+    return data.debrief_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch debrief prompt:', error);
+    return '';
+  }
+}
+
+/**
+ * Update system prompt for a simulation group
+ */
+async function updateSystemPrompt(
+  simulationGroupId: string,
+  instructorEmail: string,
+  prompt: string
+): Promise<void> {
+  await apiClient.request(
+    `instructor/prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    { method: 'PUT', body: { prompt } }
+  );
+}
+
+/**
+ * Update debrief prompt for a simulation group
+ */
+async function updateDebriefPrompt(
+  simulationGroupId: string,
+  instructorEmail: string,
+  prompt: string
+): Promise<void> {
+  await apiClient.request(
+    `instructor/debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    { method: 'PUT', body: { prompt } }
+  );
+}
+
+/**
+ * Get the default debrief prompt
+ */
+async function getDefaultDebriefPrompt(): Promise<string> {
+  try {
+    const data = await apiClient.request<{ default_debrief_prompt: string }>(
+      'instructor/get_default_debrief_prompt'
+    );
+    return data.default_debrief_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch default debrief prompt:', error);
+    return '';
+  }
+}
+
+/**
+ * Prompt history entry from the backend
+ */
+export interface PromptHistoryEntry {
+  id: string;
+  text: string;
+  saved_at: string;
+  modified_by_email: string | null;
+  modified_by_first_name: string | null;
+  modified_by_last_name: string | null;
+}
+
+/**
+ * Get prompt history for a simulation group
+ */
+async function getPromptHistory(simulationGroupId: string, type: 'system' | 'debrief'): Promise<PromptHistoryEntry[]> {
+  try {
+    const data = await apiClient.request<PromptHistoryEntry[]>(
+      `instructor/get_prompt_history?simulation_group_id=${encodeURIComponent(simulationGroupId)}&type=${type}`
+    );
+    return data || [];
+  } catch (error) {
+    console.error(`Failed to fetch ${type} prompt history:`, error);
+    return [];
+  }
+}
+
+/**
  * Get students for a simulation group
  */
 async function getStudents(simulationGroupId: string): Promise<Student[]> {
@@ -1904,6 +1994,11 @@ export const instructorService: InstructorDataService = {
   updateCaseMaterial,
   deleteCaseMaterial,
   getEvaluationPrompt,
+  getDebriefPrompt,
+  updateSystemPrompt,
+  updateDebriefPrompt,
+  getDefaultDebriefPrompt,
+  getPromptHistory,
   getStudents,
   getStudentDetails,
   getStudentPatientData,

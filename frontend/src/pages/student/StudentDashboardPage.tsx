@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
@@ -16,6 +16,8 @@ import { useAuth } from '@/App';
 function StudentDashboardPage() {
   const navigate = useNavigate();
   const { signOut, user: authUser } = useAuth();
+  const [searchParams] = useSearchParams();
+  const adminReturnUrl = searchParams.get('returnUrl');
   const [isJoinDialogOpen, setIsJoinDialogOpen] = useState(false);
   const [groups, setGroups] = useState<SimulationGroup[]>([]);
   const [user, setUser] = useState<UserData>({ name: 'Loading...' });
@@ -111,6 +113,8 @@ function StudentDashboardPage() {
         onSignOut={handleSignOut}
         onInstructorView={handleInstructorView}
         showInstructorViewButton={hasInstructorRole}
+        onAdminView={adminReturnUrl ? () => navigate(adminReturnUrl) : undefined}
+        showAdminViewButton={!!adminReturnUrl}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         <SimulationGroupsSection

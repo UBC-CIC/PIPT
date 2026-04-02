@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
@@ -27,6 +27,8 @@ function InstructorSimulationGroupPage() {
   const navigate = useNavigate();
   const { signOut, user: authUser } = useAuth();
   const { groupId } = useParams();
+  const [searchParams] = useSearchParams();
+  const adminReturnUrl = searchParams.get('returnUrl');
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
@@ -152,6 +154,8 @@ function InstructorSimulationGroupPage() {
   const [loading, setLoading] = useState(true);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
+  const [evaluationPromptText, setEvaluationPromptText] = useState('');
+  const [debriefPromptText, setDebriefPromptText] = useState('');
 
   // new states for AI Debrief and loading states
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
@@ -177,12 +181,14 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, evalPrompt, debriefPrompt] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
+          instructorService.getEvaluationPrompt(groupId),
+          instructorService.getDebriefPrompt(groupId),
         ]);
 
         setUser(userData);
@@ -190,6 +196,8 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
+        setEvaluationPromptText(evalPrompt);
+        setDebriefPromptText(debriefPrompt);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -1025,6 +1033,18 @@ function InstructorSimulationGroupPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          {adminReturnUrl && (
+            <Button
+              variant="default"
+              onClick={() => navigate(adminReturnUrl)}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+            >
+              Back to Admin View
+            </Button>
+          )}
           <Button
             variant="default"
             onClick={handleStudentView}
@@ -1179,7 +1199,7 @@ function InstructorSimulationGroupPage() {
               }}
             >
               <Eye className="w-5 h-5" />
-              View Evaluation Prompt
+              View Debrief Prompt
             </Button>
           </nav>
 
@@ -2608,7 +2628,7 @@ function InstructorSimulationGroupPage() {
           {activeSection === 'prompt' && (
             <div className="space-y-4">
               <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                Evaluation Prompt
+                View Debrief Prompt
               </h2>
 
               <div>
@@ -2622,7 +2642,7 @@ function InstructorSimulationGroupPage() {
                     backgroundColor: UI_COLORS.background.tableHeader,
                     minHeight: '500px',
                   }}
-                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.\nUse only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.\n\nAssess:\n- which key questions were addressed, partially addressed, or missed\n- how well the student's questions align with the rubric\n- overall clinical reasoning and question quality\n\nGenerate an AI debrief with:\n- Interview Summary (3-5 sentences)\n- Key Questions Successfully Addressed\n- Key Questions Missed or Incomplete\n- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)\n- Overall Assessment (rubric alignment score + summary)\n\nOUTPUT FORMAT\nReturn valid JSON in exactly this structure:\n\n{\n  "interview_summary": "string",\n  "key_questions_successfully_addressed": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "feedback": "string"\n    }\n  ],\n  "key_questions_missed_or_incomplete": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "status": "missed | partially_addressed",\n      "feedback": "string",\n      "clinical_importance": "string"\n    }\n  ],\n  "rubric_based_feedback": {\n    "strengths": ["string", "string"],\n    "areas_for_improvement": ["string", "string"],\n    "recommended_focus_next_time": ["string", "string"]\n  },\n  "overall_assessment": {\n    "rubric_alignment_score": 0,\n    "summary": "string"\n  }\n}`}
+                  defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'}
                 />
               </div>
             </div>
