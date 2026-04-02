@@ -78,7 +78,7 @@ class OutputTrack(MediaStreamTrack):
     """
 
     kind = "audio"
-    JITTER_BUFFER_FRAMES = 5  # 100ms at 20ms per frame
+    JITTER_BUFFER_FRAMES = 2  # 40ms at 20ms per frame
 
     def __init__(self):
         super().__init__()
@@ -134,6 +134,9 @@ class OutputTrack(MediaStreamTrack):
     def add_audio(self, audio_bytes):
         """Buffer PCM bytes from Nova Sonic. AudioFifo handles chunking."""
         self._muted = False
+        # Once we start receiving audio for a turn, stop buffering immediately
+        # so subsequent chunks play without delay
+        self._buffering = False
         num_samples = len(audio_bytes) // BYTES_PER_SAMPLE
         frame = AudioFrame(format="s16", layout="mono", samples=num_samples)
         frame.planes[0].update(audio_bytes)
