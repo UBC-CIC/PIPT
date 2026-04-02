@@ -1186,6 +1186,50 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "question_id is required" });
         }
         break;
+      // ── Message Limit ────────────────────────────────────────────────
+      case "POST /admin/update_group_message_limit":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.body
+        ) {
+          try {
+            const { simulation_group_id } = event.queryStringParameters;
+            const { max_messages_per_chat } = JSON.parse(event.body);
+
+            // null means unlimited; otherwise must be a positive integer
+            if (max_messages_per_chat !== null && (!Number.isInteger(max_messages_per_chat) || max_messages_per_chat < 1)) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "max_messages_per_chat must be a positive integer or null" });
+              break;
+            }
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "simulation_groups"
+              SET max_messages_per_chat = ${max_messages_per_chat}
+              WHERE simulation_group_id = ${simulation_group_id}
+              RETURNING simulation_group_id, max_messages_per_chat;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Simulation group not found" });
+            } else {
+              response.body = JSON.stringify({
+                message: "Message limit updated successfully",
+                max_messages_per_chat: updated[0].max_messages_per_chat,
+              });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "simulation_group_id and request body are required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

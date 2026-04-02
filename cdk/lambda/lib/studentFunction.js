@@ -674,6 +674,29 @@ exports.handler = async (event, context) => {
           const patientId = event.queryStringParameters.patient_id;
 
           try {
+            // Check message limit for this simulation group
+            const groupSettings = await sqlConnection`
+              SELECT max_messages_per_chat FROM "simulation_groups"
+              WHERE simulation_group_id = ${simulationGroupId};
+            `;
+            const maxMessages = groupSettings[0]?.max_messages_per_chat;
+
+            if (maxMessages != null) {
+              const messageCount = await sqlConnection`
+                SELECT COUNT(*)::int AS count FROM "messages"
+                WHERE chat_id = ${sessionId} AND sender_type = 'student';
+              `;
+              if (messageCount[0].count >= maxMessages) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({
+                  error: "Message limit reached",
+                  message: `You have reached the maximum of ${maxMessages} messages for this conversation.`,
+                  max_messages: maxMessages,
+                });
+                break;
+              }
+            }
+
             // Insert the new message into the Messages table with a generated UUID for message_id
             const messageData = await sqlConnection`
                       INSERT INTO "messages" (message_id, chat_id, user_id, sender_type, message_content, sent_at)

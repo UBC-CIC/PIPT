@@ -34,6 +34,8 @@ function AdminSimulationGroupPage() {
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
   const [instructorSearchQuery, setInstructorSearchQuery] = useState('');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
+  const [maxMessagesPerChat, setMaxMessagesPerChat] = useState<number | null>(null);
+  const [maxMessagesInput, setMaxMessagesInput] = useState<string>('');
   const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
   const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
   const [evaluationPromptText, setEvaluationPromptText] = useState('Evaluate the student\'s interview using the instructor-defined rubric and key questions.');
@@ -210,6 +212,15 @@ function AdminSimulationGroupPage() {
           persona_count: groupData.persona_count || 0,
           organization_id: groupData.organization_id || '',
         } : undefined);
+
+        // Initialize message limit from loaded group data
+        if (adminGroupData?.max_messages_per_chat != null) {
+          setMaxMessagesPerChat(adminGroupData.max_messages_per_chat);
+          setMaxMessagesInput(String(adminGroupData.max_messages_per_chat));
+        } else {
+          setMaxMessagesPerChat(null);
+          setMaxMessagesInput('');
+        }
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
@@ -1773,6 +1784,74 @@ function AdminSimulationGroupPage() {
                   <span className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform" style={{ transform: enableVoiceForAll ? 'translateX(22px)' : 'translateX(2px)' }} />
                 </button>
                 <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>Enable voice conversations for all patients</span>
+              </div>
+
+              {/* Message Limit Setting */}
+              <div className="border rounded-xl p-5 space-y-3" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+                <label className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                  Max messages per conversation
+                </label>
+                <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                  Limit the number of messages a student can send in a single conversation. Leave empty for unlimited.
+                </p>
+                <div className="flex items-center gap-3">
+                  <Input
+                    type="number"
+                    min="1"
+                    placeholder="Unlimited"
+                    value={maxMessagesInput}
+                    onChange={(e) => setMaxMessagesInput(e.target.value)}
+                    className="w-32 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                    style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}
+                  />
+                  <Button
+                    onClick={async () => {
+                      if (!groupId) return;
+                      const parsed = maxMessagesInput.trim() === '' ? null : parseInt(maxMessagesInput, 10);
+                      if (parsed !== null && (isNaN(parsed) || parsed < 1)) return;
+                      try {
+                        await adminApi.updateGroupMessageLimit(groupId, parsed);
+                        setMaxMessagesPerChat(parsed);
+                      } catch (err) {
+                        console.error('Failed to update message limit:', err);
+                      }
+                    }}
+                    disabled={(() => {
+                      const parsed = maxMessagesInput.trim() === '' ? null : parseInt(maxMessagesInput, 10);
+                      if (parsed !== null && (isNaN(parsed) || parsed < 1)) return true;
+                      return parsed === maxMessagesPerChat;
+                    })()}
+                    className="px-4 py-2 text-sm font-medium transition-colors"
+                    style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                  >
+                    Save
+                  </Button>
+                  {maxMessagesPerChat != null && (
+                    <Button
+                      variant="outline"
+                      onClick={async () => {
+                        if (!groupId) return;
+                        try {
+                          await adminApi.updateGroupMessageLimit(groupId, null);
+                          setMaxMessagesPerChat(null);
+                          setMaxMessagesInput('');
+                        } catch (err) {
+                          console.error('Failed to remove message limit:', err);
+                        }
+                      }}
+                      className="px-4 py-2 text-sm font-medium"
+                    >
+                      Remove limit
+                    </Button>
+                  )}
+                </div>
+                {maxMessagesPerChat != null && (
+                  <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                    Current limit: {maxMessagesPerChat} messages per conversation
+                  </p>
+                )}
               </div>
             </div>
           )}
