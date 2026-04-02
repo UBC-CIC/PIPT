@@ -171,6 +171,11 @@ async def run_session(audio_in, audio_out, region, pc_id):
     """
     logger.info(f"Starting Nova Sonic session for {pc_id}")
 
+    # --- Create clients explicitly so we can close them later ---
+    http_client = AIOHTTPClient()
+    client = None
+    stream = None
+
     try:
         # --- Connect to Bedrock ---
         logger.info(f"Connecting to Bedrock in {region}...")
@@ -188,7 +193,7 @@ async def run_session(audio_in, audio_out, region, pc_id):
             Config(
                 endpoint_uri=f"https://bedrock-runtime.{region}.amazonaws.com",
                 region=region,
-                aws_credentials_identity_resolver=create_default_chain(AIOHTTPClient()),
+                aws_credentials_identity_resolver=create_default_chain(http_client),
                 auth_schemes={"aws.auth#sigv4": SigV4AuthScheme(service="bedrock")},
             )
         )
@@ -201,6 +206,10 @@ async def run_session(audio_in, audio_out, region, pc_id):
         logger.error(f"Failed to connect to Bedrock: {type(e).__name__}: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        try:
+            await http_client.close()
+        except Exception:
+            pass
         return
 
     # --- Configure session ---
@@ -214,11 +223,13 @@ async def run_session(audio_in, audio_out, region, pc_id):
         logger.error(f"Failed to configure Nova Sonic session: {type(e).__name__}: {e}")
         import traceback
         logger.error(traceback.format_exc())
+        try:
+            await http_client.close()
+        except Exception:
+            pass
         return
 
     # --- Receive responses (runs concurrently with audio sending) ---
-    # The ready event gates audio sending until Nova Sonic acknowledges the session.
-    # The 0.5s timeout is a fallback in case the first event is delayed.
     ready = asyncio.Event()
     content_roles = {}  # contentId -> role
 
@@ -247,7 +258,6 @@ async def run_session(audio_in, audio_out, region, pc_id):
                     to = event["textOutput"]
                     content = to["content"]
                     role = content_roles.get(to.get("contentId"), "ASSISTANT")
-                    # Barge-in: Nova Sonic sends this before contentEnd INTERRUPTED
                     if "interrupted" in content and "true" in content:
                         logger.info("Barge-in detected, clearing audio queue")
                         audio_out.clear()
@@ -298,7 +308,22 @@ async def run_session(audio_in, audio_out, region, pc_id):
         logger.error(f"Audio send error: {e}")
     finally:
         recv_task.cancel()
+        # --- Gracefully close all resources ---
         try:
-            await stream.close()
+            if hasattr(stream, 'input_stream'):
+                await stream.input_stream.close()
+        except Exception:
+            pass
+        try:
+            if hasattr(stream, 'close'):
+                await stream.close()
+        except Exception:
+            pass
+        try:
+            await client.close()
+        except Exception:
+            pass
+        try:
+            await http_client.close()
         except Exception:
             pass
