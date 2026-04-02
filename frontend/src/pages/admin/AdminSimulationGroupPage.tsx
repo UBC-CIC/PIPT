@@ -7,7 +7,7 @@ import { mockInstructorDataService, type GlobalRubricQuestion, type CaseMaterial
 import { mockAdminDataService, mockGroupInstructors, mockOrganizations } from '@/services/adminService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, UserPlus, FileCode, CheckCircle, Loader2, XCircle, HelpCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
@@ -16,6 +16,9 @@ import { AddInstructorDialog } from '@/components/AddInstructorDialog';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import * as adminApi from '@/services/adminApiService';
+import { downloadChatPdf } from '@/lib/download-chat-pdf';
+import AIDebriefDialog from '@/components/AIDebriefDialog';
+import { type AIDebriefData } from '@/services/studentService';
 
 /**
  * AdminSimulationGroupPage Component
@@ -43,8 +46,12 @@ function AdminSimulationGroupPage() {
   const [expandedAttemptId, setExpandedAttemptId] = useState<string | null>(null);
   const [selectedPatientFilter, setSelectedPatientFilter] = useState<string>('');
 
-
-  // Edit Patient state
+  // AI Debrief and PDF generation state
+  const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
+  const [selectedDebriefData, setSelectedDebriefData] = useState<AIDebriefData | null>(null);
+  const [isFetchingDebrief, setIsFetchingDebrief] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState<string | null>(null);
+  const attemptPdfRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
   const [editPatientTab, setEditPatientTab] = useState<'info' | 'questions' | 'materials'>('info');
   const [editPatientName, setEditPatientName] = useState('');
@@ -491,6 +498,39 @@ function AdminSimulationGroupPage() {
     setStudentDetails(null);
     setStudentPatientData(null);
     setActiveSection('students');
+  };
+
+  const handleViewAIDebrief = async (attemptId: string) => {
+    setIsFetchingDebrief(attemptId);
+    try {
+      const data = await instructorService.fetchDebrief(attemptId, groupId || '');
+      if (data) {
+        setSelectedDebriefData(data);
+        setIsAIDebriefOpen(true);
+      } else {
+        alert('Debrief is still generating or not available for this session.');
+      }
+    } catch (error) {
+      console.error('Failed to fetch AI debrief:', error);
+      alert('Failed to load AI Debrief. Please try again.');
+    } finally {
+      setIsFetchingDebrief(null);
+    }
+  };
+
+  const handleDownloadNotesPDF = (attemptId: string) => {
+    try {
+      const notes = studentPatientData?.notes[attemptId] || '';
+      const blob = new Blob([notes || 'No notes available.'], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Notes_${attemptId}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Failed to download notes:', error);
+    }
   };
 
   const handleAddNewInstructor = () => {
@@ -2568,6 +2608,12 @@ function AdminSimulationGroupPage() {
 
                             {isExpanded && (
                               <div className="border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                                <div
+                                  ref={(el) => {
+                                    attemptPdfRefs.current[String(attempt.id)] = el;
+                                  }}
+                                  className="bg-white"
+                                >
                                 <div className="p-6">
                                   <h3 className="text-lg font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>Chat History</h3>
                                   <div className="border rounded-lg p-4 space-y-4 max-h-96 overflow-y-auto" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
@@ -2595,19 +2641,59 @@ function AdminSimulationGroupPage() {
                                     <p className="text-sm" style={{ color: notes ? UI_COLORS.text.heading : UI_COLORS.text.muted }}>{notes || 'No notes available.'}</p>
                                   </div>
                                 </div>
+                                </div>
 
                                 <div className="px-6 pb-6 flex gap-4">
-                                  {['Download Chat PDF', 'Download Notes PDF', 'View AI Debrief'].map((label) => (
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onClick={async () => {
+                                      const el = attemptPdfRefs.current[String(attempt.id)];
+                                      if (!el) return;
+                                      setIsGeneratingPdf(attempt.id);
+                                      const scrollEls = Array.from(el.querySelectorAll<HTMLElement>('.overflow-y-auto'));
+                                      const prev = scrollEls.map((node) => ({ node, maxHeight: node.style.maxHeight, overflowY: node.style.overflowY }));
+                                      scrollEls.forEach((node) => { node.style.maxHeight = 'none'; node.style.overflowY = 'visible'; });
+                                      try {
+                                        await downloadChatPdf({ element: el, filename: `chat-${attempt.id}.pdf`, scale: 2 });
+                                      } catch (error) {
+                                        console.error('Failed to download chat PDF:', error);
+                                      } finally {
+                                        prev.forEach(({ node, maxHeight, overflowY }) => { node.style.maxHeight = maxHeight; node.style.overflowY = overflowY; });
+                                        setIsGeneratingPdf(null);
+                                      }
+                                    }}
+                                  >
+                                    {isGeneratingPdf === attempt.id ? 'Generating...' : 'Download Chat PDF'}
+                                  </Button>
+                                  <Button
+                                    className="px-6 py-3 text-base font-medium transition-colors"
+                                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                    onClick={() => handleDownloadNotesPDF(attempt.id)}
+                                  >
+                                    Download Notes PDF
+                                  </Button>
+                                  {attempt.completionStatus === 'Debrief Reached' && (
                                     <Button
-                                      key={label}
                                       className="px-6 py-3 text-base font-medium transition-colors"
                                       style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                                      onClick={() => handleViewAIDebrief(attempt.id)}
+                                      disabled={!!isFetchingDebrief}
                                     >
-                                      {label}
+                                      {isFetchingDebrief === attempt.id ? (
+                                        <span className="flex items-center gap-2">
+                                          <Loader2 className="w-4 h-4 animate-spin" />
+                                          Loading...
+                                        </span>
+                                      ) : 'View AI Debrief'}
                                     </Button>
-                                  ))}
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -2673,6 +2759,13 @@ function AdminSimulationGroupPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AIDebriefDialog
+        isOpen={isAIDebriefOpen}
+        onClose={() => setIsAIDebriefOpen(false)}
+        data={selectedDebriefData}
+        simulationGroupId={groupId}
+      />
     </PageContainer>
   );
 }
