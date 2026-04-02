@@ -38,6 +38,7 @@ export interface AdminSimulationGroup {
   group_access_code: string;
   group_student_access: boolean;
   system_prompt: string;
+  max_messages_per_chat: number | null;
   // admin_voice_enabled: boolean;      // uncomment after migration 005 runs
   // instructor_voice_enabled: boolean;  // uncomment after migration 005 runs
   organization_id?: string;
@@ -263,6 +264,23 @@ export async function regenerateAccessCode(simulationGroupId: string): Promise<{
   return apiClient.request<{ access_code: string }>(
     `admin/regenerate_access_code?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
     { method: 'POST' }
+  );
+}
+
+/**
+ * Update the message limit for a simulation group.
+ * Pass null for unlimited messages.
+ */
+export async function updateGroupMessageLimit(
+  simulationGroupId: string,
+  maxMessagesPerChat: number | null
+): Promise<{ message: string; max_messages_per_chat: number | null }> {
+  return apiClient.request<{ message: string; max_messages_per_chat: number | null }>(
+    `admin/update_group_message_limit?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ max_messages_per_chat: maxMessagesPerChat }),
+    }
   );
 }
 

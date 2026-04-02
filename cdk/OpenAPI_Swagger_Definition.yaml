@@ -5408,6 +5408,48 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /admin/update_group_message_limit:
+    <<: *commonOptions
+    post:
+      tags:
+        - Admin
+      summary: Update the message limit for a simulation group
+      operationId: admin_update_group_message_limit_POST
+      parameters:
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                max_messages_per_chat:
+                  type: integer
+                  nullable: true
+                  description: Maximum number of student messages per chat. Null for unlimited.
+      responses:
+        "200":
+          description: Message limit updated successfully
+        "400":
+          description: Bad Request
+        "404":
+          description: Simulation group not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /admin/delete_instructor_enrolments:
     options:
       summary: CORS support
