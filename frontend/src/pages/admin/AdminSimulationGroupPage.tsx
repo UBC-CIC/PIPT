@@ -41,7 +41,7 @@ function AdminSimulationGroupPage() {
   const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
   const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
   const [evaluationPromptText, setEvaluationPromptText] = useState('');
-  const [isPromptUnsaved, setIsPromptUnsaved] = useState(false);
+  const [, setIsPromptUnsaved] = useState(false);
   const [promptHistory, setPromptHistory] = useState<Array<{id: string; text: string; saved_at: string; modified_by_email: string | null; modified_by_first_name: string | null; modified_by_last_name: string | null}>>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');

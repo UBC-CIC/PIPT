@@ -154,7 +154,7 @@ function InstructorSimulationGroupPage() {
   const [loading, setLoading] = useState(true);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
-  const [evaluationPromptText, setEvaluationPromptText] = useState('');
+  const [, setEvaluationPromptText] = useState('');
   const [debriefPromptText, setDebriefPromptText] = useState('');
 
   // new states for AI Debrief and loading states
