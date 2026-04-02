@@ -10,7 +10,6 @@ import asyncio
 import base64
 import json
 import logging
-import os
 import uuid
 
 # Set up basic logging (matches existing GenRx pattern)
@@ -28,7 +27,6 @@ from aws_sdk_bedrock_runtime.models import (
 from smithy_aws_core.auth.sigv4 import SigV4AuthScheme
 from smithy_aws_core.identity.chain import create_default_chain
 from smithy_http.aio.aiohttp import AIOHTTPClient
-import boto3
 
 from audio import InputResampler, OUTPUT_SAMPLE_RATE, INPUT_SAMPLE_RATE
 
@@ -183,14 +181,10 @@ async def run_session(audio_in, audio_out, region, pc_id):
         # --- Connect to Bedrock ---
         logger.info(f"Connecting to Bedrock in {region}...")
 
-        # Fetch credentials via boto3 (reads ECS task role from container metadata)
-        # and inject into env vars so create_default_chain can find them.
-        session = boto3.Session(region_name=region)
-        creds = session.get_credentials().get_frozen_credentials()
-        os.environ["AWS_ACCESS_KEY_ID"] = creds.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = creds.secret_key
-        if creds.token:
-            os.environ["AWS_SESSION_TOKEN"] = creds.token
+        # create_default_chain reads ECS task role credentials directly from
+        # the container metadata endpoint — always fresh, no caching issues.
+        # Do NOT set AWS_ACCESS_KEY_ID/etc in env vars — that overrides the
+        # metadata endpoint and causes ExpiredTokenException.
 
         client = BedrockRuntimeClient(
             Config(
