@@ -124,7 +124,7 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                     color: debriefData.overallScore >= 70 ? '#166534' : debriefData.overallScore >= 50 ? '#854d0e' : '#991b1b',
                   }}
                 >
-                  {debriefData.overallScore}%
+                  {Math.round(debriefData.overallScore)}%
                 </span>
               </div>
             )}

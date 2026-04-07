@@ -1327,16 +1327,6 @@ function AdminSimulationGroupPage() {
           </Button>
           <Button
             variant="default"
-            onClick={handleInstructorView}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-          >
-            Instructor View
-          </Button>
-          <Button
-            variant="default"
             onClick={handleSignOut}
             className="px-6 transition-colors"
             style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}

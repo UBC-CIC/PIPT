@@ -1236,8 +1236,8 @@ def compute_overall_score(
     if has_missed_mandatory:
         score = min(score, mandatory_cap)
 
-    # Clamp to [0.0, 100.0]
-    return max(0.0, min(score, 100.0))
+    # Clamp to [0.0, 100.0] and round to whole number
+    return round(max(0.0, min(score, 100.0)))
 
 
 def build_summary_feedback_prompt(
@@ -1707,6 +1707,9 @@ def validate_debrief_output(data: dict, answer_key_provided: bool = False) -> di
         logger.warning(f"Debrief validation: 'overall_score' is not numeric, resetting to 0.0")
         data["overall_score"] = 0.0
         repaired = True
+    else:
+        # Round to whole number to avoid hyper-detailed scores like 28.15764232
+        data["overall_score"] = round(data["overall_score"])
 
     # --- Validate recommendation_feedback structure ---
     rec = data["recommendation_feedback"]
@@ -2340,7 +2343,26 @@ The following is the instructor's answer key for this simulation case. Compare t
     total_assigned = len(key_questions)
     total_asked = len(questions_addressed)
     total_missed = len(questions_missed)
-    overall_score = debrief_data.get("overall_score", 0.0)
+
+    # Recompute score deterministically when key_questions are available,
+    # regardless of which path produced the debrief.  This prevents the LLM
+    # from returning 0% when questions were clearly addressed, and ensures
+    # the score is always consistent with the question lists.
+    if key_questions and questions_addressed:
+        # Normalize question IDs for score computation
+        _addr_ids_for_score: set[str] = set()
+        for item in questions_addressed:
+            if isinstance(item, dict):
+                qid = item.get("question_id", "")
+                if qid:
+                    _addr_ids_for_score.add(qid)
+        if _addr_ids_for_score:
+            overall_score = compute_overall_score(key_questions, _addr_ids_for_score)
+            debrief_data["overall_score"] = overall_score
+        else:
+            overall_score = debrief_data.get("overall_score", 0.0)
+    else:
+        overall_score = debrief_data.get("overall_score", 0.0)
 
     # Normalize question IDs for analytics — the enhanced prompt returns
     # dicts with question_id keys while the fallback may return bare strings.
