@@ -1608,6 +1608,31 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /student/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.persona_id
+        ) {
+          try {
+            const { persona_id } = event.queryStringParameters;
+            const data = await sqlConnection`
+              SELECT media_id, persona_id, media_type, url, title, description, created_at
+              FROM "persona_media"
+              WHERE persona_id = ${persona_id}
+              ORDER BY created_at ASC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "persona_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

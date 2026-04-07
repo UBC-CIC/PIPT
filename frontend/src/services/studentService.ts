@@ -570,6 +570,38 @@ async function fetchCaseMaterials(simulationGroupId: string, patientId: string):
 }
 
 /**
+ * Represents a physical assessment material from the persona_media table
+ */
+export interface PersonaMedia {
+  media_id: string;
+  title: string;
+  description: string;
+  media_type: string;
+  url: string;
+}
+
+/**
+ * Fetch physical assessment materials (persona_media) for a patient from the API.
+ */
+async function fetchPersonaMedia(patientId: string): Promise<PersonaMedia[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `student/persona_media?persona_id=${encodeURIComponent(patientId)}`
+    );
+    return data.map((row) => ({
+      media_id: row.media_id,
+      title: row.title || '',
+      description: row.description || '',
+      media_type: row.media_type || 'other',
+      url: row.url || '',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch persona media:', error);
+    return [];
+  }
+}
+
+/**
  * Get chat history entries for patient dashboard (mock fallback)
  */
 function getChatHistory(): ChatHistoryEntry[] {
@@ -1269,7 +1301,8 @@ export const studentService = {
   fetchChatHistory,
   fetchMessages,
   fetchAnswerKeyUrl,
-  fetchDebrief
+  fetchDebrief,
+  fetchPersonaMedia
 };
 
 /**

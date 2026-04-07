@@ -320,10 +320,10 @@ export interface InstructorDataService {
   addCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   updateCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   deleteCaseSpecificQuestion: (patientId: string, questionId: string) => void;
-  getCaseMaterials: (patientId: string) => CaseMaterial[];
-  addCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  deleteCaseMaterial: (patientId: string, materialId: string) => void;
+  getCaseMaterials: (patientId: string) => Promise<CaseMaterial[]>;
+  addCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  updateCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  deleteCaseMaterial: (patientId: string, materialId: string) => Promise<void>;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
   getDebriefPrompt: (simulationGroupId: string) => Promise<string>;
   updateSystemPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
@@ -1692,29 +1692,85 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
 /**
  * Get case materials for a patient
  */
-function getCaseMaterials(_patientId: string): CaseMaterial[] {
-  return [];
+async function getCaseMaterials(patientId: string): Promise<CaseMaterial[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`
+    );
+    return data.map((row) => ({
+      id: row.media_id,
+      title: row.title || '',
+      description: row.description || '',
+      materialType: row.media_type || 'other',
+      contentUrl: '',
+      embedLink: row.url || '',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch case materials:', error);
+    return [];
+  }
 }
 
 /**
  * Add a new case material
  */
-function addCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function addCaseMaterial(patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`,
+    {
+      method: 'POST',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: data.media_type || 'other',
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Update a case material
  */
-function updateCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function updateCaseMaterial(_patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?media_id=${encodeURIComponent(material.id)}`,
+    {
+      method: 'PUT',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: data.media_type || 'other',
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Delete a case material
  */
-function deleteCaseMaterial(_patientId: string, _materialId: string): void {
-  // TODO: implement API call
+async function deleteCaseMaterial(_patientId: string, materialId: string): Promise<void> {
+  await apiClient.request(
+    `instructor/persona_media?media_id=${encodeURIComponent(materialId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 /**

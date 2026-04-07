@@ -2,12 +2,13 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData } from '@/services/studentService';
+import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData, type PersonaMedia } from '@/services/studentService';
 import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
+import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
@@ -134,6 +135,22 @@ function StudentChatPage() {
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
+  const [personaMedia, setPersonaMedia] = useState<PersonaMedia[]>([]);
+  const [personaMediaLoading, setPersonaMediaLoading] = useState(false);
+
+  // Fetch persona media when physical assessment sidebar opens
+  useEffect(() => {
+    if (contentSidebarType !== 'physical-assessment' || !patientId) return;
+    let cancelled = false;
+    setPersonaMediaLoading(true);
+    studentService.fetchPersonaMedia(patientId).then((data) => {
+      if (!cancelled) {
+        setPersonaMedia(data);
+        setPersonaMediaLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [contentSidebarType, patientId]);
 
   // State for patient information sidebar
   const [isPatientInfoSidebarOpen, setIsPatientInfoSidebarOpen] = useState(false);
@@ -1110,11 +1127,7 @@ function StudentChatPage() {
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4">
             {contentSidebarType === 'physical-assessment' && (
-              <div className="space-y-6">
-                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                  Physical assessment content will be displayed here.
-                </p>
-              </div>
+              <PhysicalAssessmentContent materials={personaMedia} loading={personaMediaLoading} />
             )}
           </div>
         </aside>

@@ -120,14 +120,22 @@ function InstructorSimulationGroupPage() {
   );
 
   // Case Materials state
-  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>(() =>
-    selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : []
-  );
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string>(() => {
-    const materials = selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : [];
-    return materials[0]?.id || '';
-  });
+  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>([]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
+
+  // Load case materials from API when patient changes
+  useEffect(() => {
+    if (!selectedPatientForEdit) return;
+    let cancelled = false;
+    instructorService.getCaseMaterials(selectedPatientForEdit).then((data) => {
+      if (!cancelled) {
+        setCaseMaterials(data);
+        setSelectedMaterialId(data[0]?.id || '');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedPatientForEdit]);
 
   // Get selected material
   const selectedMaterial = caseMaterials.find(m => m.id === selectedMaterialId);
@@ -649,7 +657,7 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle add new case material
    */
-  const handleAddNewCaseMaterial = () => {
+  const handleAddNewCaseMaterial = async () => {
     if (!selectedPatientForEdit) return;
     const newMaterial: CaseMaterial = {
       id: `material-${Date.now()}`,
@@ -659,18 +667,26 @@ function InstructorSimulationGroupPage() {
       contentUrl: '',
       embedLink: '',
     };
-    instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-    setCaseMaterials(instructorService.getCaseMaterials(selectedPatientForEdit));
-    setSelectedMaterialId(newMaterial.id);
+    try {
+      const created = await instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
+      setCaseMaterials(prev => [...prev, created]);
+      setSelectedMaterialId(created.id);
+    } catch (error) {
+      console.error('Failed to add case material:', error);
+    }
   };
 
   /**
    * Handle save case material changes
    */
-  const handleSaveCaseMaterial = () => {
+  const handleSaveCaseMaterial = async () => {
     if (!selectedMaterial || !selectedPatientForEdit) return;
-    instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
-    console.log('Saving case material:', selectedMaterial);
+    try {
+      const updated = await instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
+      setCaseMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+    } catch (error) {
+      console.error('Failed to save case material:', error);
+    }
   };
 
   /**
@@ -3572,10 +3588,14 @@ function InstructorSimulationGroupPage() {
                                       Save
                                     </Button>
                                     <Button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (selectedPatientForEdit) {
-                                          instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id);
-                                          setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                          try {
+                                            await instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id);
+                                            setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                          } catch (error) {
+                                            console.error('Failed to delete material:', error);
+                                          }
                                         }
                                       }}
                                       variant="outline"

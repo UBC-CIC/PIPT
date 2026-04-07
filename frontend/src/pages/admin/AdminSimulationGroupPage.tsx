@@ -130,6 +130,19 @@ function AdminSimulationGroupPage() {
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
 
+  // Load case materials from API when patient changes
+  useEffect(() => {
+    if (!selectedPatientForEdit) return;
+    let cancelled = false;
+    instructorService.getCaseMaterials(selectedPatientForEdit).then((data) => {
+      if (!cancelled) {
+        setCaseMaterials(data);
+        setSelectedMaterialId(data[0]?.id || '');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedPatientForEdit]);
+
   // Get selected material
   const selectedMaterial = caseMaterials.find(m => m.id === selectedMaterialId);
 
@@ -844,7 +857,7 @@ function AdminSimulationGroupPage() {
     ));
   };
 
-  const handleAddNewCaseMaterial = () => {
+  const handleAddNewCaseMaterial = async () => {
     if (!selectedPatientForEdit) return;
     const newMaterial: CaseMaterial = {
       id: `material-${Date.now()}`,
@@ -854,16 +867,24 @@ function AdminSimulationGroupPage() {
       contentUrl: '',
       embedLink: '',
     };
-    instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-    setCaseMaterials(instructorService.getCaseMaterials(selectedPatientForEdit));
-    setSelectedMaterialId(newMaterial.id);
+    try {
+      const created = await instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
+      setCaseMaterials(prev => [...prev, created]);
+      setSelectedMaterialId(created.id);
+    } catch (error) {
+      console.error('Failed to add case material:', error);
+    }
   };
 
 
-  const handleSaveCaseMaterial = () => {
+  const handleSaveCaseMaterial = async () => {
     if (!selectedMaterial || !selectedPatientForEdit) return;
-    instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
-    console.log('Saving case material:', selectedMaterial);
+    try {
+      const updated = await instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
+      setCaseMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+    } catch (error) {
+      console.error('Failed to save case material:', error);
+    }
   };
 
   const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2689,7 +2710,7 @@ function AdminSimulationGroupPage() {
                                       Save
                                     </Button>
                                     <Button
-                                      onClick={() => { if (selectedPatientForEdit) { mockInstructorDataService.deleteCaseMaterial(selectedPatientForEdit, material.id); setCaseMaterials(caseMaterials.filter(m => m.id !== material.id)); } }}
+                                      onClick={async () => { if (selectedPatientForEdit) { try { await instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id); setCaseMaterials(caseMaterials.filter(m => m.id !== material.id)); } catch (error) { console.error('Failed to delete material:', error); } } }}
                                       variant="outline"
                                       className="px-8 py-3 text-base font-medium transition-colors text-white"
                                       style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }}
