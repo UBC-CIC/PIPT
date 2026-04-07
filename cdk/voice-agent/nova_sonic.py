@@ -58,31 +58,6 @@ CHANNELS = 1
 # ---------------------------------------------------------------------------
 MODEL_ID = "amazon.nova-2-sonic-v1:0"
 
-
-# ---------------------------------------------------------------------------
-# Boto3-based credentials resolver for Smithy client
-# ---------------------------------------------------------------------------
-class Boto3CredentialsResolver(EnvironmentCredentialsResolver):
-    """Resolves AWS credentials using boto3's default credential chain.
-
-    Injects boto3-resolved credentials into environment variables so the
-    parent EnvironmentCredentialsResolver can pick them up. This supports
-    IAM roles, container credentials, and instance profiles — unlike the
-    base class which only checks pre-existing env vars.
-    """
-
-    async def get_identity(self, *, properties=None):
-        session = boto3.Session()
-        creds = session.get_credentials()
-        if creds is None:
-            raise Exception("No AWS credentials found via boto3")
-        frozen = creds.get_frozen_credentials()
-        os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
-        os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
-        if frozen.token:
-            os.environ["AWS_SESSION_TOKEN"] = frozen.token
-        return await super().get_identity(properties=properties)
-
 # ---------------------------------------------------------------------------
 # Database connection pool
 # ---------------------------------------------------------------------------
@@ -183,10 +158,26 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     def _init_client(self):
+        # Fetch credentials via boto3 and inject into env before
+        # EnvironmentCredentialsResolver initializes
+        session = boto3.Session()
+        creds = session.get_credentials()
+        if creds:
+            frozen = creds.get_frozen_credentials()
+            if frozen.access_key:
+                os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+            if frozen.secret_key:
+                os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+            if frozen.token:
+                os.environ["AWS_SESSION_TOKEN"] = frozen.token
+            logger.info("Injected boto3 credentials into environment")
+        else:
+            logger.error("No AWS credentials found via boto3")
+
         config = Config(
             endpoint_uri=f"https://bedrock-runtime.{self.region}.amazonaws.com",
             region=self.region,
-            aws_credentials_identity_resolver=Boto3CredentialsResolver(),
+            aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
             http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
             http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()},
         )
