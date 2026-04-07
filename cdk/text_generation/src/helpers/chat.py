@@ -2024,6 +2024,7 @@ def retrieve_answer_key_text(simulation_group_id: str, persona_id: str) -> str:
         # Extract extension from the object key
         ext = key.rsplit(".", 1)[-1].lower() if "." in key else ""
         if ext not in SUPPORTED_ANSWER_KEY_EXTENSIONS:
+            logger.warning(f"Skipping answer key file with unsupported extension: s3://{bucket_name}/{key} (ext={ext})")
             continue
 
         try:
@@ -2032,6 +2033,8 @@ def retrieve_answer_key_text(simulation_group_id: str, persona_id: str) -> str:
             text = extract_text_from_file(file_bytes, ext)
             if text:
                 all_text.append(text)
+            else:
+                logger.warning(f"Answer key file returned empty text after extraction: s3://{bucket_name}/{key} (ext={ext}, size={len(file_bytes)} bytes)")
         except Exception as e:
             logger.error(f"Error processing answer key file s3://{bucket_name}/{key}: {e}")
             continue
