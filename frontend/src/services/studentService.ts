@@ -1025,6 +1025,37 @@ function getSavedNote(): string {
 }
 
 /**
+ * Fetch notes for a session from the API
+ */
+async function fetchNotes(sessionId: string): Promise<string> {
+  try {
+    const data = await apiClient.request<{ notes: string | null }>(
+      `student/get_notes?session_id=${encodeURIComponent(sessionId)}`
+    );
+    return data.notes || '';
+  } catch (error) {
+    console.error('Failed to fetch notes:', error);
+    return '';
+  }
+}
+
+/**
+ * Update (save) notes for a session
+ */
+async function updateNotes(sessionId: string, notes: string): Promise<boolean> {
+  try {
+    await apiClient.request(
+      `student/update_notes?session_id=${encodeURIComponent(sessionId)}`,
+      { method: 'PUT', body: { notes } }
+    );
+    return true;
+  } catch (error) {
+    console.error('Failed to save notes:', error);
+    return false;
+  }
+}
+
+/**
  * Get simulation groups — calls API, falls back to mock
  */
 async function getSimulationGroups(): Promise<SimulationGroup[]> {
@@ -1302,7 +1333,9 @@ export const studentService = {
   fetchMessages,
   fetchAnswerKeyUrl,
   fetchDebrief,
-  fetchPersonaMedia
+  fetchPersonaMedia,
+  fetchNotes,
+  updateNotes
 };
 
 /**

@@ -88,8 +88,18 @@ function ChatHistoryPage() {
     handleMouseDown: onPhysicalAssessmentDrag,
   } = useResizablePanel({ defaultWidth: 384, minWidth: 250, maxWidth: 700, direction: 'right' });
 
-  // Notes placeholder (to be implemented later)
-  const savedNote = '';
+  // Notes loaded from API
+  const [savedNote, setSavedNote] = useState('');
+
+  // Load notes from API
+  useEffect(() => {
+    if (!chatId) return;
+    let cancelled = false;
+    studentService.fetchNotes(chatId).then((notes) => {
+      if (!cancelled) setSavedNote(notes);
+    });
+    return () => { cancelled = true; };
+  }, [chatId]);
 
   // Load chat messages and debrief from API
   const [messages, setMessages] = useState<Message[]>([]);

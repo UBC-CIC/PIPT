@@ -158,18 +158,7 @@ function StudentChatPage() {
 
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
-
-  // Auto-save note with debounce
-  useEffect(() => {
-    if (noteText === '') return; // Don't save empty initial state
-    
-    const timeoutId = setTimeout(() => {
-      // Future: API call to save note
-      console.log('Auto-saved note');
-    }, 1000); // Save 1 second after user stops typing
-
-    return () => clearTimeout(timeoutId);
-  }, [noteText]);
+  const noteLoadedRef = useRef(false);
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNoteText(e.target.value);
@@ -237,6 +226,33 @@ function StudentChatPage() {
 
     return () => { cancelled = true; };
   }, [groupId, patientId, routeChatId]);
+
+  // Load notes from API when session is available
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    noteLoadedRef.current = false;
+
+    studentService.fetchNotes(sessionId).then((notes) => {
+      if (!cancelled) {
+        setNoteText(notes);
+        noteLoadedRef.current = true;
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  // Auto-save note with debounce
+  useEffect(() => {
+    if (!noteLoadedRef.current || !sessionId) return;
+    
+    const timeoutId = setTimeout(() => {
+      studentService.updateNotes(sessionId, noteText);
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [noteText, sessionId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
