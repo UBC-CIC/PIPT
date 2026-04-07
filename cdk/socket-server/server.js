@@ -400,35 +400,11 @@ io.on("connection", (socket) => {
   });
 
   // ─── Start Voice Session (WebRTC) ─────────────────────────────────────────
-  // When VOICE_AGENT_ENDPOINT is set, signaling is proxied to the agentcore
-  // voice agent container. Otherwise, falls back to the local MediaBridge +
+  // AgentCore uses WebSockets (via start-nova-sonic), not WebRTC SDP
+  // signaling. This handler only supports the local MediaBridge +
   // nova_sonic.py child process path.
   socket.on("start-voice-session", async (config = {}) => {
     console.log("🚀 Starting WebRTC voice session for client:", socket.id);
-
-    // ── Agent-proxied path ────────────────────────────────────────────────
-    if (VOICE_AGENT_ENDPOINT) {
-      console.log("🔀 Using voice agent adapter:", VOICE_AGENT_ENDPOINT);
-
-      // Clean up any previous agent session
-      if (socket.agentPcId) {
-        try { await callVoiceAgent("disconnect", { pc_id: socket.agentPcId }); } catch {}
-        socket.agentPcId = null;
-      }
-
-      try {
-        // Fetch ICE servers from the agent (KVS TURN credentials)
-        const iceConfig = await callVoiceAgent("ice_config");
-        socket.emit("ice-servers", { iceServers: iceConfig.iceServers });
-        console.log("🧊 Sent agent ICE servers to client:", socket.id);
-      } catch (error) {
-        console.error("❌ Voice agent ice_config failed:", error.message);
-        socket.emit("nova-error", { error: "Failed to get ICE configuration from voice agent" });
-      }
-      return;
-    }
-
-    // ── Legacy MediaBridge path (unchanged) ───────────────────────────────
 
     // Kill any previous nova process
     if (novaProcess) {
@@ -566,24 +542,6 @@ io.on("connection", (socket) => {
   socket.on("webrtc-offer", async ({ sdp } = {}) => {
     console.log("📨 Received WebRTC offer from client:", socket.id);
 
-    // ── Agent-proxied path ────────────────────────────────────────────────
-    if (VOICE_AGENT_ENDPOINT) {
-      try {
-        const result = await callVoiceAgent("offer", {
-          sdp: sdp.sdp || sdp,
-          type: sdp.type || "offer",
-        });
-        socket.agentPcId = result.pc_id;
-        socket.emit("webrtc-answer", { sdp: { sdp: result.sdp, type: result.type } });
-        console.log("📤 Sent agent WebRTC answer to client:", socket.id);
-      } catch (error) {
-        console.error("❌ Voice agent offer failed:", error.message);
-        socket.emit("nova-error", { error: error.message });
-      }
-      return;
-    }
-
-    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (!socket.mediaBridge) {
       socket.emit("nova-error", { error: "No active voice session" });
       return;
@@ -607,20 +565,6 @@ io.on("connection", (socket) => {
 
   // ─── WebRTC ICE Candidate ─────────────────────────────────────────────────
   socket.on("webrtc-ice-candidate", ({ candidate } = {}) => {
-    // ── Agent-proxied path ────────────────────────────────────────────────
-    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
-      callVoiceAgent("ice_candidate", {
-        pc_id: socket.agentPcId,
-        candidates: [{
-          candidate: candidate.candidate,
-          sdp_mid: candidate.sdpMid,
-          sdp_mline_index: candidate.sdpMLineIndex,
-        }],
-      }).catch((err) => console.error("❌ Voice agent ICE candidate failed:", err.message));
-      return;
-    }
-
-    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (!socket.mediaBridge) return;
 
     try {
@@ -639,15 +583,6 @@ io.on("connection", (socket) => {
   socket.on("end-voice-session", () => {
     console.log("🛑 Ending voice session for client:", socket.id);
 
-    // ── Agent-proxied path ────────────────────────────────────────────────
-    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
-      callVoiceAgent("disconnect", { pc_id: socket.agentPcId })
-        .catch((err) => console.error("❌ Voice agent disconnect failed:", err.message));
-      socket.agentPcId = null;
-      return;
-    }
-
-    // ── Legacy MediaBridge path ───────────────────────────────────────────
     if (socket.mediaBridge) {
       socket.mediaBridge.close();
       socket.mediaBridge = null;
@@ -691,6 +626,14 @@ io.on("connection", (socket) => {
 
   // ─── Text‑input from client ───────────────────────────────────────────────
   socket.on("text-input", (msg) => {
+    // ── AgentCore WebSocket path ──────────────────────────────────────────
+    if (socket.agentWs && socket.agentWs.readyState === WebSocket.OPEN) {
+      socket.agentWs.send(JSON.stringify({ type: "text", text: msg.text }));
+      console.log("📝 Sent text to AgentCore WS");
+      return;
+    }
+
+    // ── Local child process path ──────────────────────────────────────────
     if (novaProcess && novaProcess.stdin.writable && novaReady) {
       novaProcess.stdin.write(
         JSON.stringify({ type: "text", data: msg.text }) + "\n",
@@ -800,11 +743,6 @@ io.on("connection", (socket) => {
         socket.agentWs.close();
       } catch {}
       socket.agentWs = null;
-    }
-
-    // Clean up agent-proxied session if present (legacy)
-    if (VOICE_AGENT_ENDPOINT && socket.agentPcId) {
-      socket.agentPcId = null;
     }
 
     // Clean up WebRTC MediaBridge resources if present

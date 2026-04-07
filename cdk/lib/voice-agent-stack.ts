@@ -8,6 +8,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import { VpcStack } from "./vpc-stack";
+import { DatabaseStack } from "./database-stack";
 
 /**
  * Deploys the agentcore-voice-agent container into the GenRx VPC with
@@ -24,6 +25,7 @@ export class VoiceAgentStack extends Stack {
     scope: Construct,
     id: string,
     vpcStack: VpcStack,
+    db: DatabaseStack,
     voiceAgentRepo: ecr.IRepository,
     props?: StackProps
   ) {
@@ -80,12 +82,43 @@ export class VoiceAgentStack extends Stack {
       },
     });
 
+    // dynamodb permissions
+    taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "dynamodb:GetItem",
+          "dynamodb:Query",
+          "dynamodb:Scan",
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+        ],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/DynamoDB-Conversation-Table`,
+        ],
+      })
+    );
+
+    // secrets manager permissions
+    taskRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [db.secretPathUser.secretArn],
+      })
+    );
+
+
     // 4) Fargate task definition
     const taskDef = new ecs.FargateTaskDefinition(this, "VoiceAgentTaskDef", {
       cpu: 512,
       memoryLimitMiB: 1024,
       taskRole,
       executionRole: taskRole,
+      runtimePlatform: {
+        cpuArchitecture: ecs.CpuArchitecture.ARM64,
+        operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
+      },
     });
 
     // 5) Container — listens on port 8080 (matches Dockerfile CMD)
@@ -101,6 +134,8 @@ export class VoiceAgentStack extends Stack {
         AWS_DEFAULT_REGION: this.region,
         BEDROCK_REGION: "us-east-1",
         KVS_CHANNEL_NAME: "genrx-voice-agent",
+        SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+        RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
       },
     });
 

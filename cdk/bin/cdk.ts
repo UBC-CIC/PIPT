@@ -76,6 +76,7 @@ const voiceAgentStack = new VoiceAgentStack(
   app,
   `${StackPrefix}-VoiceAgent`,
   vpcStack,
+  dbStack,
   cicdStack.ecrRepositories["voiceAgent"],
   { env }
 );

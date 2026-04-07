@@ -786,12 +786,7 @@ class NovaSonic:
 
 
 
-async def handle_stdin(nova_client):
-    reader = asyncio.StreamReader()
-    loop = asyncio.get_event_loop()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-
+async def handle_stdin(nova_client, reader):
     while True:
         line = await reader.readline()
         if not line:
@@ -845,30 +840,17 @@ async def main():
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     
-    # Wait for initial configuration for a short time
-    try:
-        # Set a timeout for initial configuration
-        line = await asyncio.wait_for(reader.readline(), 2.0)
-        if line:
-            try:
-                msg = json.loads(line.decode("utf-8"))
-                if msg["type"] == "set_voice":
-                    print(f"🎭 Setting initial voice: {msg.get('voice_id')}", flush=True)
-                    nova_client.voice_id = msg.get("voice_id")
-            except Exception as e:
-                print(f"❌ Failed to process initial config: {e}", flush=True)
-    except asyncio.TimeoutError:
-        print("No initial configuration received, using default voice", flush=True)
-    
-    # Start the session with the configured voice
+    # Start the session immediately (no 2 second delay)
     await nova_client.start_session()
-    print("Nova session started. Listening for stdin input...")
+    print("Nova session started. Listening for stdin input...", flush=True)
     
-    stdin_task = asyncio.create_task(handle_stdin(nova_client))
+    # Pass the reader to prevent double-pipe crashes
+    stdin_task = asyncio.create_task(handle_stdin(nova_client, reader))
     await stdin_task
 
     await nova_client.end_session()
-    print("Session ended")
+    print("Session ended", flush=True)
+
 
     
 if __name__ == "__main__":

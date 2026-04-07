@@ -400,6 +400,50 @@ class NovaSonic:
             }
         )
 
+    async def send_text_input(self, text: str):
+        self.content_name = str(uuid.uuid4())
+        self._current_user_input = text
+        # Start text block
+        await self.send_event(
+            {
+                "event": {
+                    "contentStart": {
+                        "promptName": self.prompt_name,
+                        "contentName": self.content_name,
+                        "type": "TEXT",
+                        "interactive": True,
+                        "role": "USER",
+                        "textInputConfiguration": {
+                            "mediaType": "text/plain",
+                        },
+                    }
+                }
+            }
+        )
+        # Send the text
+        await self.send_event(
+            {
+                "event": {
+                    "textInput": {
+                        "promptName": self.prompt_name,
+                        "contentName": self.content_name,
+                        "content": text,
+                    }
+                }
+            }
+        )
+        # End text block
+        await self.send_event(
+            {
+                "event": {
+                    "contentEnd": {
+                        "promptName": self.prompt_name,
+                        "contentName": self.content_name,
+                    }
+                }
+            }
+        )
+
     async def end_audio_input(self):
         await self.send_event(
             {
@@ -568,6 +612,14 @@ class NovaSonic:
                 elif msg_type == "end_audio":
                     await self.end_audio_input()
                     audio_started = False
+
+                elif msg_type == "text":
+                    user_text = msg.get("text", "")
+                    if user_text:
+                        logger.info("Received text input from client")
+                        await self.send_text_input(user_text)
+                        asyncio.create_task(self._save_user_message_async(user_text))
+                        self._current_user_input = ""
 
                 elif msg_type == "interrupt":
                     self.is_active = False

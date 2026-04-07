@@ -175,7 +175,9 @@ export class CICDStack extends cdk.Stack {
           projectName: `${id}-${lambdaConfig.name}Builder`,
           role: codeBuildRole,
           environment: {
-            buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
+            buildImage: lambdaConfig.name === "voiceAgent" 
+                ? codebuild.LinuxArmBuildImage.AMAZON_LINUX_2023_STANDARD_3_0
+                : codebuild.LinuxBuildImage.STANDARD_7_0,
             privileged: true,
           },
           environmentVariables: {
