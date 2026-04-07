@@ -8,37 +8,85 @@ const path = require("path");
 const WebSocket = require("ws");
 const { verifyToken, getStsCredentials } = require("./auth");
 const { MediaBridge } = require("./media-bridge");
+const { SignatureV4 } = require("@smithy/signature-v4");
+const { HttpRequest } = require("@smithy/protocol-http");
+const { defaultProvider } = require("@aws-sdk/credential-provider-node");
 
 // ─── Voice Agent Adapter ──────────────────────────────────────────────────────
-// When VOICE_AGENT_ENDPOINT is set, audio is streamed to the agentcore
-// voice agent container via WebSocket instead of using the local
+// When VOICE_AGENT_ARN is set, audio is streamed to the AgentCore
+// voice agent via SigV4-authenticated WebSocket instead of using the local
 // nova_sonic.py child process.
-const VOICE_AGENT_ENDPOINT = process.env.VOICE_AGENT_ENDPOINT || "";
+const VOICE_AGENT_ARN = process.env.VOICE_AGENT_ENDPOINT || "";
+const AGENTCORE_REGION = process.env.AWS_REGION || "ca-central-1";
+
+// SHA-256 helper for SigV4
+class Sha256 {
+  constructor(secret) {
+    this._hmac = secret
+      ? crypto.createHmac("sha256", secret)
+      : crypto.createHash("sha256");
+  }
+  update(data) {
+    this._hmac.update(typeof data === "string" ? data : Buffer.from(data));
+  }
+  async digest() {
+    return new Uint8Array(this._hmac.digest());
+  }
+}
 
 /**
- * Open a WebSocket connection to the voice agent's /ws endpoint.
- * Returns the WebSocket instance. The caller is responsible for
- * wiring up message handlers and closing the connection.
+ * Open a SigV4-authenticated WebSocket connection to AgentCore's /ws endpoint.
  * @param {object} initConfig — init message payload (session_id, patient_name, etc.)
  * @returns {Promise<WebSocket>}
  */
-function connectToVoiceAgent(initConfig) {
-  return new Promise((resolve, reject) => {
-    // Convert HTTP endpoint to WebSocket URL
-    const wsUrl = VOICE_AGENT_ENDPOINT.replace(/^http/, "ws") + "/ws";
-    console.log("🔌 Connecting to voice agent WebSocket:", wsUrl);
+async function connectToVoiceAgent(initConfig) {
+  const sessionId = initConfig.session_id || `session-${Date.now()}-${crypto.randomUUID()}`;
 
-    const ws = new WebSocket(wsUrl);
+  // Build the AgentCore WebSocket URL
+  const host = `bedrock-agentcore.${AGENTCORE_REGION}.amazonaws.com`;
+  const wsPath = `/runtimes/${VOICE_AGENT_ARN}/ws`;
+  const queryParams = `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id=${encodeURIComponent(sessionId)}`;
+
+  // Create an HTTP request to sign
+  const request = new HttpRequest({
+    method: "GET",
+    protocol: "wss:",
+    hostname: host,
+    path: wsPath,
+    query: Object.fromEntries(new URLSearchParams(queryParams)),
+    headers: {
+      host: host,
+    },
+  });
+
+  // Sign the request with SigV4
+  const signer = new SignatureV4({
+    credentials: defaultProvider(),
+    region: AGENTCORE_REGION,
+    service: "bedrock-agentcore",
+    sha256: Sha256,
+  });
+
+  const signed = await signer.sign(request);
+
+  // Build the final WebSocket URL with signed headers
+  const wsUrl = `wss://${host}${wsPath}?${queryParams}`;
+  console.log("🔌 Connecting to AgentCore WebSocket:", wsUrl);
+
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl, {
+      headers: signed.headers,
+    });
 
     ws.on("open", () => {
-      console.log("✅ Voice agent WebSocket connected");
+      console.log("✅ AgentCore WebSocket connected (session:", sessionId, ")");
       // Send init message with session config
       ws.send(JSON.stringify({ type: "init", ...initConfig }));
       resolve(ws);
     });
 
     ws.on("error", (err) => {
-      console.error("❌ Voice agent WebSocket error:", err.message);
+      console.error("❌ AgentCore WebSocket error:", err.message);
       reject(err);
     });
   });
@@ -140,7 +188,7 @@ io.on("connection", (socket) => {
   });
 
   // ─── Start Nova Sonic (Socket.IO audio transport) ───────────────────────
-  // When VOICE_AGENT_ENDPOINT is set, audio is streamed to the agentcore
+  // When VOICE_AGENT_ARN is set, audio is streamed to the AgentCore
   // voice agent via WebSocket. Otherwise, falls back to the local
   // nova_sonic.py child process.
   socket.on("start-nova-sonic", async (config = {}) => {
@@ -160,8 +208,8 @@ io.on("connection", (socket) => {
     novaReady = false;
 
     // ── AgentCore WebSocket path ──────────────────────────────────────────
-    if (VOICE_AGENT_ENDPOINT) {
-      console.log("🔀 Using voice agent WebSocket:", VOICE_AGENT_ENDPOINT);
+    if (VOICE_AGENT_ARN) {
+      console.log("🔀 Using AgentCore WebSocket for ARN:", VOICE_AGENT_ARN);
 
       try {
         const agentWs = await connectToVoiceAgent({

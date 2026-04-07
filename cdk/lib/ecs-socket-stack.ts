@@ -58,6 +58,14 @@ export class EcsSocketStack extends Stack {
             }),
             new iam.PolicyStatement({
               effect: iam.Effect.ALLOW,
+              actions: [
+                "bedrock-agentcore:InvokeAgentRuntime",
+                "bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream",
+              ],
+              resources: ["*"],
+            }),
+            new iam.PolicyStatement({
+              effect: iam.Effect.ALLOW,
               actions: ["sts:AssumeRole", "sts:GetCallerIdentity"],
               resources: ["*"],
             }),

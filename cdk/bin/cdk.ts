@@ -8,7 +8,6 @@ import { DBFlowStack } from "../lib/dbFlow-stack";
 import { VpcStack } from "../lib/vpc-stack";
 import { EcsSocketStack } from "../lib/ecs-socket-stack";
 import { TurnServerStack } from "../lib/turn-server-stack";
-import { VoiceAgentStack } from "../lib/voice-agent-stack";
 import { CICDStack } from "../lib/cicd-stack";
 
 const app = new cdk.App();
@@ -72,14 +71,11 @@ const turnServerStack = new TurnServerStack(
   vpcStack,
   { env }
 );
-const voiceAgentStack = new VoiceAgentStack(
-  app,
-  `${StackPrefix}-VoiceAgent`,
-  vpcStack,
-  dbStack,
-  cicdStack.ecrRepositories["voiceAgent"],
-  { env }
-);
+
+// Voice agent is hosted on Bedrock AgentCore — pass the runtime ARN
+// to the socket-server so it can connect via SigV4-signed WebSocket.
+// Set via: cdk deploy -c voiceAgentArn="arn:aws:bedrock-agentcore:..."
+const voiceAgentArn = app.node.tryGetContext("voiceAgentArn") || "";
 
 const ecsSocketStack = new EcsSocketStack(
   app,
@@ -89,7 +85,7 @@ const ecsSocketStack = new EcsSocketStack(
   apiStack,
   cicdStack.ecrRepositories["socketServer"],
   turnServerStack,
-  voiceAgentStack.agentEndpoint,
+  voiceAgentArn,
   { env }
 );
 const dbFlowStack = new DBFlowStack(
