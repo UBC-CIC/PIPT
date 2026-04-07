@@ -165,6 +165,7 @@ function AdminSimulationGroupPage() {
   const [analyticsDateRange, setAnalyticsDateRange] = useState({ start: '', end: '' });
   const [students, setStudents] = useState<Student[]>([]);
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
+  const [profilePictures, setProfilePictures] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
@@ -195,7 +196,7 @@ function AdminSimulationGroupPage() {
 
       try {
         // Load each data source independently so one failure doesn't block the rest
-        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient] = await Promise.all([
+        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, profilePics] = await Promise.all([
           adminApi.getSimulationGroup(groupId).catch(err => { console.error('Failed to load group:', err); return undefined; }),
           instructorService.getPatientAnalytics(groupId).catch(err => { console.error('Failed to load analytics:', err); return [] as PatientAnalytics[]; }),
           instructorService.getStudents(groupId).catch(err => { console.error('Failed to load students:', err); return [] as Student[]; }),
@@ -204,6 +205,7 @@ function AdminSimulationGroupPage() {
             ? adminApi.getQuestionBankQuestions(organizationId).catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; })
             : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
+          instructorService.fetchProfilePictures(groupId).catch(err => { console.error('Failed to load profile pictures:', err); return {} as Record<string, string>; }),
         ]);
 
         // Map admin API shape to InstructorSimulationGroup
@@ -240,6 +242,7 @@ function AdminSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
+        setProfilePictures(profilePics);
 
         // Split questions by tags: patient_specific vs global
         if (organizationId) {
@@ -776,10 +779,24 @@ function AdminSimulationGroupPage() {
         if (!savedId) return;
         patientId = savedId;
       }
-      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
-        const manageablePatients = await instructorService.getManageablePatients(groupId);
-        setManageablePatients(manageablePatients);
-      });
+      await instructorService.uploadPatientPhoto(groupId, patientId, file);
+      const [patients, pics] = await Promise.all([
+        instructorService.getManageablePatients(groupId),
+        instructorService.fetchProfilePictures(groupId),
+      ]);
+      setManageablePatients(patients);
+      setProfilePictures(pics);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
+    if (!confirm('Are you sure you want to remove this photo?')) return;
+    try {
+      await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
+      setProfilePictures(await instructorService.fetchProfilePictures(groupId));
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
     }
   };
 
@@ -806,11 +823,6 @@ function AdminSimulationGroupPage() {
     }
     e.target.value = '';
   };
-
-  // Get the patient being edited
-  const patientBeingEdited = selectedPatientForEdit
-    ? instructorService.getPatient(selectedPatientForEdit)
-    : null;
 
   const handleCreateNewPatient = () => {
     setSelectedPatientForEdit('new');
@@ -2469,13 +2481,23 @@ function AdminSimulationGroupPage() {
                       </h3>
 
                       <div className="flex items-center gap-4">
-                        <UserAvatar name={editPatientName || 'P'} imageUrl={patientBeingEdited?.photo_url} size="large" />
+                        <UserAvatar name={editPatientName || 'P'} imageUrl={selectedPatientForEdit && selectedPatientForEdit !== 'new' ? profilePictures[selectedPatientForEdit] : undefined} size="large" />
                         <label className="cursor-pointer">
                           <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                           <div className="p-3 rounded-full transition-colors" style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}>
                             <Camera className="w-6 h-6" />
                           </div>
                         </label>
+                        {selectedPatientForEdit && selectedPatientForEdit !== 'new' && profilePictures[selectedPatientForEdit] && (
+                          <button
+                            onClick={handlePhotoDelete}
+                            className="p-3 rounded-full transition-colors"
+                            style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
+                            title="Remove photo"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        )}
                       </div>
 
                       {[

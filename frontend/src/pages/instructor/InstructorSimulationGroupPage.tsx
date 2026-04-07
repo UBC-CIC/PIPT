@@ -182,6 +182,7 @@ function InstructorSimulationGroupPage() {
 
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState<any[]>([]);
+  const [profilePictures, setProfilePictures] = useState<Record<string, string>>({});
 
   // Load initial data
   useEffect(() => {
@@ -189,7 +190,7 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData, evalPrompt, debriefPrompt] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, evalPrompt, debriefPrompt, profilePics] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
@@ -197,6 +198,7 @@ function InstructorSimulationGroupPage() {
           instructorService.getManageablePatients(groupId),
           instructorService.getEvaluationPrompt(groupId),
           instructorService.getDebriefPrompt(groupId),
+          instructorService.fetchProfilePictures(groupId),
         ]);
 
         setUser(userData);
@@ -206,6 +208,7 @@ function InstructorSimulationGroupPage() {
         setManageablePatients(patientsData);
         setEvaluationPromptText(evalPrompt);
         setDebriefPromptText(debriefPrompt);
+        setProfilePictures(profilePics);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -565,9 +568,27 @@ function InstructorSimulationGroupPage() {
         if (!savedId) return;
         patientId = savedId;
       }
-      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
-        setManageablePatients(await instructorService.getManageablePatients(groupId));
-      });
+      await instructorService.uploadPatientPhoto(groupId, patientId, file);
+      const [patients, pics] = await Promise.all([
+        instructorService.getManageablePatients(groupId),
+        instructorService.fetchProfilePictures(groupId),
+      ]);
+      setManageablePatients(patients);
+      setProfilePictures(pics);
+    }
+  };
+
+  /**
+   * Handle photo delete
+   */
+  const handlePhotoDelete = async () => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
+    if (!confirm('Are you sure you want to remove this photo?')) return;
+    try {
+      await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
+      setProfilePictures(await instructorService.fetchProfilePictures(groupId));
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
     }
   };
 
@@ -598,11 +619,6 @@ function InstructorSimulationGroupPage() {
     }
     e.target.value = '';
   };
-
-  // Get the patient being edited
-  const patientBeingEdited = selectedPatientForEdit
-    ? instructorService.getPatient(selectedPatientForEdit)
-    : null;
 
   /**
    * Handle create new patient
@@ -2731,7 +2747,7 @@ function InstructorSimulationGroupPage() {
                       <div className="flex items-center gap-4">
                         <UserAvatar
                           name={editPatientName || 'P'}
-                          imageUrl={patientBeingEdited?.photo_url}
+                          imageUrl={selectedPatientForEdit && selectedPatientForEdit !== 'new' ? profilePictures[selectedPatientForEdit] : undefined}
                           size="large"
                         />
                         <label className="cursor-pointer">
@@ -2751,6 +2767,16 @@ function InstructorSimulationGroupPage() {
                             <Camera className="w-6 h-6" />
                           </div>
                         </label>
+                        {selectedPatientForEdit && selectedPatientForEdit !== 'new' && profilePictures[selectedPatientForEdit] && (
+                          <button
+                            onClick={handlePhotoDelete}
+                            className="p-3 rounded-full transition-colors"
+                            style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
+                            title="Remove photo"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Patient Name */}

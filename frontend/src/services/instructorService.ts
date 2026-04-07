@@ -309,6 +309,8 @@ export interface InstructorDataService {
   createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<string>;
   updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => Promise<void>;
   uploadPatientPhoto: (simulationGroupId: string, patientId: string, photoFile: File) => Promise<string>;
+  deletePatientPhoto: (simulationGroupId: string, patientId: string) => Promise<void>;
+  fetchProfilePictures: (simulationGroupId: string) => Promise<Record<string, string>>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
   deletePatient: (patientId: string) => Promise<void>;
@@ -1187,11 +1189,48 @@ async function uploadPatientFile(
 }
 
 /**
- * Upload patient photo
+ * Upload patient photo — normalizes filename to {patientId}_profile_pic.png
+ * so retrieval via getProfilePictures Lambda works consistently.
  */
 async function uploadPatientPhoto(simulationGroupId: string, patientId: string, photoFile: File): Promise<string> {
-  await uploadFileToS3(simulationGroupId, patientId, photoFile, 'profile_picture');
+  // Normalize to a consistent filename so upload and retrieval keys match
+  const normalizedFile = new File([photoFile], `${patientId}_profile_pic.png`, { type: photoFile.type });
+  await uploadFileToS3(simulationGroupId, patientId, normalizedFile, 'profile_picture');
   return '';
+}
+
+/**
+ * Delete patient photo from S3
+ */
+async function deletePatientPhoto(simulationGroupId: string, patientId: string): Promise<void> {
+  const queryParams = new URLSearchParams({
+    simulation_group_id: simulationGroupId,
+    persona_id: patientId,
+    patient_name: patientId,
+    file_name: `${patientId}_profile_pic`,
+    file_type: 'png',
+    folder_type: 'profile_picture',
+  });
+
+  await apiClient.request(
+    `instructor/delete_file?${queryParams.toString()}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * Fetch profile picture URLs for all patients in a simulation group
+ */
+async function fetchProfilePictures(simulationGroupId: string): Promise<Record<string, string>> {
+  try {
+    const data = await apiClient.request<Record<string, string>>(
+      `instructor/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch profile pictures:', error);
+    return {};
+  }
 }
 
 /**
@@ -2034,6 +2073,8 @@ export const instructorService: InstructorDataService = {
   createPatient,
   updatePatient,
   uploadPatientPhoto,
+  deletePatientPhoto,
+  fetchProfilePictures,
   uploadPatientFile,
   updatePatientLLMEvaluation,
   deletePatient,
