@@ -2241,6 +2241,7 @@ def generate_debrief(
             "overall_score": overall_score,
             "suggested_rewrites": suggested_rewrites,
             "answer_key_comparison": answer_key_comparison,
+            "recommendation": recommendation,
         }
 
     else:
@@ -2337,6 +2338,11 @@ The following is the instructor's answer key for this simulation case. Compare t
 
     # 4b. Validate and repair the debrief output schema
     debrief_data = validate_debrief_output(debrief_data, answer_key_provided=bool(answer_key_text))
+
+    # Include the student's recommendation in the debrief so the frontend
+    # can display it alongside the answer key comparison.
+    if "recommendation" not in debrief_data:
+        debrief_data["recommendation"] = recommendation
 
     questions_addressed = debrief_data.get("questions_addressed", [])
     questions_missed = debrief_data.get("questions_missed", [])
