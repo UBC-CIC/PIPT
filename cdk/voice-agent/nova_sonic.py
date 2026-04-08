@@ -337,10 +337,15 @@ class NovaSonic:
         if not self._chat_context:
             self._chat_context = chat_history.format_chat_history(self.session_id)
 
-        system_prompt = f"""
-{self.get_system_prompt()}
-{self._chat_context}
-"""
+        prompt_parts = [self.get_system_prompt()]
+        if self.patient_prompt:
+            prompt_parts.append(f"\nPatient context:\n{self.patient_prompt}")
+        if self.extra_system_prompt:
+            prompt_parts.append(f"\n{self.extra_system_prompt}")
+        if self._chat_context:
+            prompt_parts.append(f"\nPrevious conversation:\n{self._chat_context}")
+
+        system_prompt = "\n".join(prompt_parts)
 
         # 4) textInput
         await self.send_event(

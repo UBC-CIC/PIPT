@@ -240,7 +240,12 @@ function StudentChatPage() {
     });
 
     audioClientRef.current = client;
-    client.connect().catch((err) => {
+    client.connect({
+      session_id: routeChatId || crypto.randomUUID(),
+      patient_name: patient?.name || '',
+      patient_id: patientId || '',
+      simulation_group_id: groupId || '',
+    }).catch((err) => {
       console.error('[VoiceMode] Failed to connect:', err);
       const msg = err instanceof Error ? err.message : 'Failed to start voice session';
       if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {
@@ -251,7 +256,7 @@ function StudentChatPage() {
       setVoiceSessionState('error');
     });
     } // end startAudioClient
-  }, []);
+  }, [patient, routeChatId, patientId, groupId]);
 
   /**
    * Stop the voice session when the X button is clicked.

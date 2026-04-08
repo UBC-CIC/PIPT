@@ -211,16 +211,36 @@ io.on("connection", (socket) => {
     if (VOICE_AGENT_ARN) {
       console.log("🔀 Using AgentCore WebSocket for ARN:", VOICE_AGENT_ARN);
 
+      // Fetch full patient context from the API if we have IDs
+      let patientContext = {};
+      if (config.patient_id && config.simulation_group_id && process.env.TEXT_GENERATION_ENDPOINT) {
+        try {
+          const ctxUrl = `${process.env.TEXT_GENERATION_ENDPOINT}/student/patient_context?simulation_group_id=${encodeURIComponent(config.simulation_group_id)}&patient_id=${encodeURIComponent(config.patient_id)}`;
+          console.log("📋 Fetching patient context:", ctxUrl);
+          const ctxResp = await fetch(ctxUrl, {
+            headers: { Authorization: socket.handshake.auth.token || "" },
+          });
+          if (ctxResp.ok) {
+            patientContext = await ctxResp.json();
+            console.log("📋 Patient context loaded:", patientContext.patient_name);
+          } else {
+            console.warn("⚠️ Patient context fetch failed:", ctxResp.status);
+          }
+        } catch (err) {
+          console.warn("⚠️ Patient context fetch error:", err.message);
+        }
+      }
+
       try {
         const agentWs = await connectToVoiceAgent({
           session_id: config.session_id || "default",
           voice_id: config.voice_id || "",
           user_id: socket.userId || "anonymous",
-          patient_name: config.patient_name || "",
-          patient_prompt: config.patient_prompt || "",
+          patient_name: patientContext.patient_name || config.patient_name || "",
+          patient_prompt: patientContext.patient_prompt || config.patient_prompt || "",
           patient_id: config.patient_id || "",
-          llm_completion: config.llm_completion || false,
-          system_prompt: config.system_prompt || "",
+          llm_completion: patientContext.llm_completion || config.llm_completion || false,
+          system_prompt: patientContext.system_prompt || config.system_prompt || "",
         });
 
         socket.agentWs = agentWs;
