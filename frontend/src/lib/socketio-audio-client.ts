@@ -74,6 +74,7 @@ export class SocketIOAudioClient {
 
       // 2. Set up playback context for incoming audio
       this.playbackContext = new AudioContext({ sampleRate: 24000 });
+      this.nextPlayTime = 0;
 
       // 3. Wire up Socket.IO listeners
       this.boundOnNovaStarted = () => {
@@ -199,6 +200,8 @@ export class SocketIOAudioClient {
   // Audio playback — base64 24kHz PCM → AudioContext
   // -----------------------------------------------------------------------
 
+  private nextPlayTime = 0;
+
   private playAudioChunk(b64Data: string): void {
     if (!this.playbackContext) return;
 
@@ -216,14 +219,18 @@ export class SocketIOAudioClient {
         float32[i] = int16[i] / 32768;
       }
 
-      // Create an AudioBuffer and play it
+      // Create an AudioBuffer and schedule it after the previous chunk
       const audioBuffer = this.playbackContext.createBuffer(1, float32.length, 24000);
       audioBuffer.getChannelData(0).set(float32);
 
       const source = this.playbackContext.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(this.playbackContext.destination);
-      source.start();
+
+      const now = this.playbackContext.currentTime;
+      const startTime = Math.max(now, this.nextPlayTime);
+      source.start(startTime);
+      this.nextPlayTime = startTime + audioBuffer.duration;
     } catch (err) {
       console.warn('Failed to play audio chunk:', err);
     }

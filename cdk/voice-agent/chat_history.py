@@ -88,10 +88,11 @@ def insert_message_to_postgres(session_id: str, role: str, content: str):
     try:
         conn = connect_to_db()
         cursor = conn.cursor()
+        sender = "student" if role == "user" else "ai"
         cursor.execute(
-            """INSERT INTO messages (message_id, chat_id, student_sent, message_content, time_sent)
+            """INSERT INTO messages (message_id, chat_id, sender_type, message_content, sent_at)
                VALUES (%s, %s, %s, %s, %s)""",
-            (str(uuid.uuid4()), session_id, role == "user", content, datetime.utcnow()),
+            (str(uuid.uuid4()), session_id, sender, content, datetime.utcnow()),
         )
         conn.commit()
         cursor.close()

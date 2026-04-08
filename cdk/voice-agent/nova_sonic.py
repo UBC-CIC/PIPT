@@ -588,9 +588,10 @@ class NovaSonic:
         try:
             conn = get_pg_connection()
             cursor = conn.cursor()
+            sender = "student" if student_sent else "ai"
             cursor.execute(
-                'INSERT INTO "messages" (chat_id, student_sent, message_content, time_sent) VALUES (%s, %s, %s, NOW())',
-                (session_id, student_sent, message_content),
+                'INSERT INTO "messages" (message_id, chat_id, sender_type, message_content, sent_at) VALUES (%s, %s, %s, %s, NOW())',
+                (str(uuid.uuid4()), session_id, sender, message_content),
             )
             conn.commit()
             cursor.close()
