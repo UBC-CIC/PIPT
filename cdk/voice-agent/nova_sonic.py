@@ -20,7 +20,7 @@ import psycopg2
 from psycopg2 import pool
 from threading import Lock
 from langchain_aws import BedrockEmbeddings
-from langchain_community.vectorstores import PGVector
+from langchain_postgres import PGVector
 
 from aws_sdk_bedrock_runtime.client import (
     BedrockRuntimeClient,
@@ -212,13 +212,14 @@ class NovaSonic:
             )
 
             connection_string = (
-                f"postgresql://{secret['username']}:{secret['password']}"
+                f"postgresql+psycopg://{secret['username']}:{secret['password']}"
                 f"@{rds_endpoint}:{secret['port']}/{secret['dbname']}"
             )
             vectorstore = PGVector(
-                embedding_function=embeddings,
+                embeddings=embeddings,
                 collection_name=self.patient_id,
-                connection_string=connection_string,
+                connection=connection_string,
+                use_jsonb=True,
             )
 
             query = f"Patient {self.patient_name} medical history symptoms diagnosis"

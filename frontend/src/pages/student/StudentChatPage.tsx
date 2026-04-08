@@ -171,6 +171,9 @@ function StudentChatPage() {
   const audioClientRef = useRef<SocketIOAudioClient | null>(null);
   const socketRef = useRef<Socket | null>(null);
 
+  // Session ID — set by createSession (new chat) or from route (existing chat)
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
   /**
    * Clean up voice session and Socket.IO connection.
    */
@@ -241,7 +244,7 @@ function StudentChatPage() {
 
     audioClientRef.current = client;
     client.connect({
-      session_id: routeChatId || crypto.randomUUID(),
+      session_id: sessionId || routeChatId || '',
       patient_name: patient?.name || '',
       patient_id: patientId || '',
       simulation_group_id: groupId || '',
@@ -256,7 +259,7 @@ function StudentChatPage() {
       setVoiceSessionState('error');
     });
     } // end startAudioClient
-  }, [patient, routeChatId, patientId, groupId]);
+  }, [patient, routeChatId, patientId, groupId, sessionId]);
 
   /**
    * Stop the voice session when the X button is clicked.
@@ -299,7 +302,6 @@ function StudentChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiResponding, setIsAiResponding] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
@@ -1170,11 +1172,13 @@ function StudentChatPage() {
               <div className="flex items-center gap-3">
                 <button
                   onClick={handleStartVoiceMode}
-                  className="p-3 rounded-full transition-colors"
+                  disabled={!sessionId || !patient?.name || patient.name === 'Loading...'}
+                  className="p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                   style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                  onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
+                  onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
                   aria-label="Voice input"
+                  title={!sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : 'Start voice mode'}
                 >
                   <Mic className="w-5 h-5" />
                 </button>
