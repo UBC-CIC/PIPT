@@ -70,7 +70,7 @@ langchain-community==0.4.1
     # via
     #   -r requirements.in
     #   langchain-experimental
-langchain-core==1.2.17
+langchain-core==1.2.28
     # via
     #   -r requirements.in
     #   langchain
@@ -164,8 +164,6 @@ pydantic-settings==2.13.1
     # via langchain-community
 pymupdf==1.24.10
     # via -r requirements.in
-pymupdfb==1.24.10
-    # via pymupdf
 python-dateutil==2.9.0.post0
     # via botocore
 python-dotenv==1.2.2
@@ -201,10 +199,7 @@ tenacity==9.1.4
     #   langchain-core
 typing-extensions==4.15.0
     # via
-    #   aiosignal
-    #   anyio
     #   langchain-core
-    #   psycopg
     #   psycopg-pool
     #   pydantic
     #   pydantic-core
