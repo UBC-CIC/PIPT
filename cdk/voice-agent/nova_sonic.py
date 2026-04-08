@@ -208,7 +208,7 @@ class NovaSonic:
 
             bedrock_client = self._get_bedrock_client()
             embeddings = BedrockEmbeddings(
-                model_id="amazon.titan-embed-text-v1", client=bedrock_client
+                model_id="amazon.titan-embed-text-v2:0", client=bedrock_client
             )
 
             connection_string = (
