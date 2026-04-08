@@ -33,7 +33,7 @@ from aws_sdk_bedrock_runtime.config import (
     HTTPAuthSchemeResolver,
     SigV4AuthScheme,
 )
-from smithy_aws_core.credentials_resolvers.environment import (
+from smithy_aws_core.identity import (
     EnvironmentCredentialsResolver,
 )
 
@@ -178,8 +178,8 @@ class NovaSonic:
             endpoint_uri=f"https://bedrock-runtime.{self.region}.amazonaws.com",
             region=self.region,
             aws_credentials_identity_resolver=EnvironmentCredentialsResolver(),
-            http_auth_scheme_resolver=HTTPAuthSchemeResolver(),
-            http_auth_schemes={"aws.auth#sigv4": SigV4AuthScheme()},
+            auth_scheme_resolver=HTTPAuthSchemeResolver(),
+            auth_schemes={"aws.auth#sigv4": SigV4AuthScheme(service="bedrock")},
         )
         self.client = BedrockRuntimeClient(config=config)
         logger.info("Initialized Bedrock client for %s in %s", self.model_id, self.region)
