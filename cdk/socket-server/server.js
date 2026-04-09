@@ -255,6 +255,8 @@ io.on("connection", (socket) => {
 
             if (msg.type === "audio") {
               socket.emit("audio-chunk", { data: msg.data });
+            } else if (msg.type === "user-turn-start") {
+              socket.emit("turn-start", { role: "user" });
             } else if (msg.type === "turn-start") {
               socket.emit("turn-start", { role: msg.role });
             } else if (msg.type === "user-text") {
@@ -372,6 +374,9 @@ io.on("connection", (socket) => {
               socket.emit("audio-chunk", { data: parsed.data });
             }
             // ─ Turn start signals ─────────────────────────────────────────
+            else if (parsed.type === "user-turn-start") {
+              socket.emit("turn-start", { role: "user" });
+            }
             else if (parsed.type === "turn-start") {
               socket.emit("turn-start", { role: parsed.role });
             }
@@ -415,10 +420,12 @@ io.on("connection", (socket) => {
                 status: "Nova Sonic session started",
               });
             }
-            // Forward voice transcriptions to text chat
-            // NOTE: JSON-parsed text-message events already handle this above.
-            // This fallback is only for non-JSON debug lines — do NOT re-emit as text-message
-            // to avoid duplicates.
+            // Forward voice transcriptions with correct role
+            if (line.startsWith("User:")) {
+              socket.emit("text-message", { text: line.replace("User:", "").trim(), role: "user" });
+            } else if (line.startsWith("Assistant:")) {
+              socket.emit("text-message", { text: line.replace("Assistant:", "").trim(), role: "assistant" });
+            }
             // Handle diagnosis completion in plain text fallback
             if (line.includes("SESSION COMPLETED")) {
               socket.emit("diagnosis-complete", {

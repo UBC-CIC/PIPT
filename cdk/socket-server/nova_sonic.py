@@ -526,7 +526,10 @@ class NovaSonic:
                 self.display_assistant_text = (fields.get("generationStage") == "SPECULATIVE")
             # Signal a new turn to the frontend so it creates a new chat bubble
             if self.role:
-                print(json.dumps({"type": "turn-start", "role": self.role.lower()}), flush=True)
+                if self.role.upper() == "USER":
+                    print(json.dumps({"type": "user-turn-start"}), flush=True)
+                else:
+                    print(json.dumps({"type": "turn-start", "role": self.role.lower()}), flush=True)
 
         # textOutput
         elif "textOutput" in evt:
