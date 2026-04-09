@@ -1193,8 +1193,10 @@ async function uploadPatientFile(
  * so retrieval via getProfilePictures Lambda works consistently.
  */
 async function uploadPatientPhoto(simulationGroupId: string, patientId: string, photoFile: File): Promise<string> {
-  // Normalize to a consistent filename so upload and retrieval keys match
-  const normalizedFile = new File([photoFile], `${patientId}_profile_pic.png`, { type: photoFile.type });
+  // Normalize to a consistent filename so upload and retrieval keys match.
+  // The presigned URL lambda hardcodes ContentType: image/png for profile_picture,
+  // so the MIME type here must match to avoid a signature mismatch on upload.
+  const normalizedFile = new File([photoFile], `${patientId}_profile_pic.png`, { type: 'image/png' });
   await uploadFileToS3(simulationGroupId, patientId, normalizedFile, 'profile_picture');
   return '';
 }
