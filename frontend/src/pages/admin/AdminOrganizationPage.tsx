@@ -205,7 +205,7 @@ function AdminOrganizationPage() {
         userName={user.name}
         userAvatarUrl={user.avatarUrl}
         onSignOut={handleSignOut}
-        showStudentViewButton={true}
+        showStudentViewButton={false}
         onStudentView={() => navigate('/student')}
         showManageQuestionBankButton={true}
         onManageQuestionBank={handleManageQuestionBank}

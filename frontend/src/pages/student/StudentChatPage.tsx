@@ -2,19 +2,21 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData } from '@/services/studentService';
-import { ArrowLeft, Mic, MicOff, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon, RotateCcw } from 'lucide-react';
+import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData, type PersonaMedia } from '@/services/studentService';
+import { ArrowLeft, Mic, MicOff, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon, RotateCcw} from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { SocketIOAudioClient, type VoiceSessionState } from '@/lib/socketio-audio-client';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
+import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
 import { authService } from '@/lib/auth';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
+import ResizeHandle from '@/components/ResizeHandle';
 
 /**
  * Attempts to extract structured debrief data from a raw JSON string.
@@ -137,6 +139,22 @@ function StudentChatPage() {
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
+  const [personaMedia, setPersonaMedia] = useState<PersonaMedia[]>([]);
+  const [personaMediaLoading, setPersonaMediaLoading] = useState(false);
+
+  // Fetch persona media when physical assessment sidebar opens
+  useEffect(() => {
+    if (contentSidebarType !== 'physical-assessment' || !patientId) return;
+    let cancelled = false;
+    setPersonaMediaLoading(true);
+    studentService.fetchPersonaMedia(patientId).then((data) => {
+      if (!cancelled) {
+        setPersonaMedia(data);
+        setPersonaMediaLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [contentSidebarType, patientId]);
 
   // State for patient information sidebar
   const [isPatientInfoSidebarOpen, setIsPatientInfoSidebarOpen] = useState(false);
@@ -144,18 +162,7 @@ function StudentChatPage() {
 
   // State for note (single note per chat, auto-saves)
   const [noteText, setNoteText] = useState('');
-
-  // Auto-save note with debounce
-  useEffect(() => {
-    if (noteText === '') return; // Don't save empty initial state
-    
-    const timeoutId = setTimeout(() => {
-      // Future: API call to save note
-      console.log('Auto-saved note');
-    }, 1000); // Save 1 second after user stops typing
-
-    return () => clearTimeout(timeoutId);
-  }, [noteText]);
+  const noteLoadedRef = useRef(false);
 
   const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setNoteText(e.target.value);
@@ -374,6 +381,33 @@ function StudentChatPage() {
     return () => { cancelled = true; };
   }, [groupId, patientId, routeChatId]);
 
+  // Load notes from API when session is available
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    noteLoadedRef.current = false;
+
+    studentService.fetchNotes(sessionId).then((notes) => {
+      if (!cancelled) {
+        setNoteText(notes);
+        noteLoadedRef.current = true;
+      }
+    });
+
+    return () => { cancelled = true; };
+  }, [sessionId]);
+
+  // Auto-save note with debounce
+  useEffect(() => {
+    if (!noteLoadedRef.current || !sessionId) return;
+    
+    const timeoutId = setTimeout(() => {
+      studentService.updateNotes(sessionId, noteText);
+    }, 1000);
+
+    return () => clearTimeout(timeoutId);
+  }, [noteText, sessionId]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -528,6 +562,7 @@ function StudentChatPage() {
               missedQuestions: missedQuestions,
               missedQuestionsGuidance: parsed.reasoning_gaps || '',
               overallScore: typeof parsed.overall_score === 'number' ? parsed.overall_score : undefined,
+              recommendation: typeof parsed.recommendation === 'string' ? parsed.recommendation : undefined,
               recommendationFeedback: {
                 strengths: parsed.recommendation_feedback?.strengths || [],
                 areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
@@ -705,7 +740,30 @@ function StudentChatPage() {
         data={debriefData}
         simulationGroupId={groupId}
         patientId={patientId}
+        showAnswerKey={false}
       />
+
+      {/* Full-screen generating debrief overlay */}
+      {sessionStatus === 'generating_debrief' && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+          }}
+        >
+          <Loader2 className="w-12 h-12 animate-spin" style={{ color: '#fff' }} />
+          <p className="text-lg font-medium" style={{ color: '#fff' }}>
+            Generating Debrief...
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
@@ -884,20 +942,7 @@ function StudentChatPage() {
         >
           {/* Drag handle for resizing */}
           {isPatientInfoSidebarOpen && (
-            <div
-              onMouseDown={onPatientInfoDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPatientInfoDrag} direction="left" />
           )}
           {/* Header with close button */}
           {isPatientInfoSidebarOpen && (
@@ -1237,20 +1282,7 @@ function StudentChatPage() {
         >
           {/* Drag handle for resizing */}
           {contentSidebarType && (
-            <div
-              onMouseDown={onPhysicalAssessmentDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPhysicalAssessmentDrag} direction="right" />
           )}
           {/* Header with close button */}
           {contentSidebarType && (
@@ -1274,11 +1306,7 @@ function StudentChatPage() {
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-4">
             {contentSidebarType === 'physical-assessment' && (
-              <div className="space-y-6">
-                <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                  Physical assessment content will be displayed here.
-                </p>
-              </div>
+              <PhysicalAssessmentContent materials={personaMedia} loading={personaMediaLoading} />
             )}
           </div>
         </aside>

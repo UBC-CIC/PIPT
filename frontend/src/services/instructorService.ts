@@ -98,6 +98,28 @@ export interface QuestionPerformanceScore {
 }
 
 /**
+ * Represents per-patient key question coverage for debriefed students
+ */
+export interface KeyQuestionCoverage {
+  patientName: string;                  // Patient/persona name
+  avgCoverage: number;                  // Average % of key questions covered (0-100)
+  studentsDebriefed: number;            // Number of students who reached debrief
+}
+
+// For Patient Specific Student Progress Status - how many students have not started vs. in progress vs. reached debrief.
+export interface StudentProgressStatus {
+  status: 'Not Started' | 'In Progress' | 'Debrief Reached';
+  students: Array<{ id: string; name: string }>;
+}
+
+export interface StudentProgressData {
+  status: string;
+  count: number;
+  students: Array<{ id: string; name: string }>;
+  fill: string;
+}
+
+/**
  * Represents a bucket in a score distribution histogram
  */
 export interface ScoreDistributionBucket {
@@ -147,9 +169,9 @@ export interface CaseMaterial {
   id: string;                           // Unique identifier (media_id in DB)
   title: string;                        // Material title
   description: string;                  // Material description
-  materialType: string;                 // Type: image, video, document, audio, other (media_type in DB)
+  materialType: 'kaltura' | 'panopto' | 'h5p'; // Embed provider type (media_type in DB)
   contentUrl?: string;                  // URL to uploaded content (url in DB)
-  embedLink?: string;                   // H5P embed link (can be stored in url field)
+  embedLink?: string;                   // Embed URL (stored in url field)
 }
 
 /**
@@ -279,7 +301,7 @@ export interface InstructorDataService {
   getCurrentUser: () => Promise<UserData>;
   getSimulationGroup: (id: string) => Promise<InstructorSimulationGroup | undefined>;
   getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
-  getPatientAnalytics: (simulationGroupId: string) => Promise<PatientAnalytics[]>;
+  getPatientAnalytics: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<PatientAnalytics[]>;
   getMessageCountData: (patientId: string) => MessageCountData[];
   generateAccessCode: (simulationGroupId: string) => Promise<string>;
   getManageablePatients: (simulationGroupId: string) => Promise<ManageablePatient[]>;
@@ -287,6 +309,8 @@ export interface InstructorDataService {
   createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<string>;
   updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => Promise<void>;
   uploadPatientPhoto: (simulationGroupId: string, patientId: string, photoFile: File) => Promise<string>;
+  deletePatientPhoto: (simulationGroupId: string, patientId: string) => Promise<void>;
+  fetchProfilePictures: (simulationGroupId: string) => Promise<Record<string, string>>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
   deletePatient: (patientId: string) => Promise<void>;
@@ -298,11 +322,16 @@ export interface InstructorDataService {
   addCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   updateCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   deleteCaseSpecificQuestion: (patientId: string, questionId: string) => void;
-  getCaseMaterials: (patientId: string) => CaseMaterial[];
-  addCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  deleteCaseMaterial: (patientId: string, materialId: string) => void;
+  getCaseMaterials: (patientId: string) => Promise<CaseMaterial[]>;
+  addCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  updateCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  deleteCaseMaterial: (patientId: string, materialId: string) => Promise<void>;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
+  getDebriefPrompt: (simulationGroupId: string) => Promise<string>;
+  updateSystemPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
+  updateDebriefPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
+  getDefaultDebriefPrompt: () => Promise<string>;
+  getPromptHistory: (simulationGroupId: string, type: 'system' | 'debrief') => Promise<PromptHistoryEntry[]>;
   getStudents: (simulationGroupId: string) => Promise<Student[]>;
   getStudentDetails: (studentId: string, simulationGroupId: string, groupName?: string) => Promise<StudentDetails | undefined>;
   getStudentPatientData: (studentEmail: string, simulationGroupId: string) => Promise<StudentPatientData>;
@@ -320,6 +349,8 @@ export interface InstructorDataService {
   getPatientsUsingQuestion: (questionId: string) => string[];
   isQuestionInUse: (questionId: string, questionType?: 'global' | 'patientSpecific') => boolean;
   getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
+  getKeyQuestionCoverage: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionCoverage[]>;
+  getPatientKeyQuestionAnalytics: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionAnalytics[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -327,6 +358,7 @@ export interface InstructorDataService {
   unassignQuestion: (groupQuestionId: string) => Promise<any>;
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
   fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
+  getStudentProgress: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<StudentProgressData[]>;
 }
 
 /**
@@ -811,13 +843,19 @@ function getOrganizationLabels(_simulationGroupId: string): OrganizationLabels {
 /**
  * Get patient analytics for a simulation group
  */
-async function getPatientAnalytics(simulationGroupId: string): Promise<PatientAnalytics[]> {
+async function getPatientAnalytics(
+  simulationGroupId: string,
+  startDate: string = '',
+  endDate: string = ''
+): Promise<PatientAnalytics[]> {
   try {
-    const data = await apiClient.request<any[]>(
-      `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
-    );
+    let url = `instructor/analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
 
-    return data.map((patient) => ({
+    const data = await apiClient.request<any[]>(url);
+
+    return data.map((patient: any) => ({
       patient_id: patient.persona_id,
       patient_name: patient.persona_name,
       instructor_completion_percentage: Number(patient.instructor_completion_percentage) || 0,
@@ -873,6 +911,52 @@ async function getKeyQuestionAnalytics(simulationGroupId: string): Promise<KeyQu
     });
   } catch (error) {
     console.error('Failed to fetch key question analytics:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-patient key question coverage for students who reached debrief
+ */
+async function getKeyQuestionCoverage(simulationGroupId: string, startDate: string = '', endDate: string = ''): Promise<KeyQuestionCoverage[]> {
+  try {
+    let url = `instructor/key_question_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      patientName: (row.persona_name || '').length > 30
+        ? row.persona_name.substring(0, 27) + '...'
+        : (row.persona_name || ''),
+      avgCoverage: Math.round(Number(row.avg_coverage) || 0),
+      studentsDebriefed: Number(row.students_debriefed) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch key question coverage:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-question student-asked counts for a specific patient.
+ * Uses COUNT(DISTINCT student_id) so multiple attempts by the same student count once.
+ */
+async function getPatientKeyQuestionAnalytics(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<KeyQuestionAnalytics[]> {
+  try {
+    let url = `instructor/patient_key_question_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      questionTitle: (row.question_title || '').length > 30
+        ? row.question_title.substring(0, 27) + '...'
+        : (row.question_title || ''),
+      studentsAnswered: Number(row.students_answered) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch patient key question analytics:', error);
     return [];
   }
 }
@@ -1105,11 +1189,50 @@ async function uploadPatientFile(
 }
 
 /**
- * Upload patient photo
+ * Upload patient photo — normalizes filename to {patientId}_profile_pic.png
+ * so retrieval via getProfilePictures Lambda works consistently.
  */
 async function uploadPatientPhoto(simulationGroupId: string, patientId: string, photoFile: File): Promise<string> {
-  await uploadFileToS3(simulationGroupId, patientId, photoFile, 'profile_picture');
+  // Normalize to a consistent filename so upload and retrieval keys match.
+  // The presigned URL lambda hardcodes ContentType: image/png for profile_picture,
+  // so the MIME type here must match to avoid a signature mismatch on upload.
+  const normalizedFile = new File([photoFile], `${patientId}_profile_pic.png`, { type: 'image/png' });
+  await uploadFileToS3(simulationGroupId, patientId, normalizedFile, 'profile_picture');
   return '';
+}
+
+/**
+ * Delete patient photo from S3
+ */
+async function deletePatientPhoto(simulationGroupId: string, patientId: string): Promise<void> {
+  const queryParams = new URLSearchParams({
+    simulation_group_id: simulationGroupId,
+    persona_id: patientId,
+    patient_name: patientId,
+    file_name: `${patientId}_profile_pic`,
+    file_type: 'png',
+    folder_type: 'profile_picture',
+  });
+
+  await apiClient.request(
+    `instructor/delete_file?${queryParams.toString()}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * Fetch profile picture URLs for all patients in a simulation group
+ */
+async function fetchProfilePictures(simulationGroupId: string): Promise<Record<string, string>> {
+  try {
+    const data = await apiClient.request<Record<string, string>>(
+      `instructor/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch profile pictures:', error);
+    return {};
+  }
 }
 
 /**
@@ -1233,6 +1356,91 @@ async function getEvaluationPrompt(simulationGroupId: string): Promise<string> {
     console.error('Failed to fetch evaluation prompt:', error);
     // FIX: Return empty string instead of [] as any
     return '';
+  }
+}
+
+/**
+ * Get debrief prompt for a simulation group
+ */
+async function getDebriefPrompt(simulationGroupId: string): Promise<string> {
+  try {
+    const data = await apiClient.request<{ debrief_prompt: string }>(
+      `instructor/get_debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+    return data.debrief_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch debrief prompt:', error);
+    return '';
+  }
+}
+
+/**
+ * Update system prompt for a simulation group
+ */
+async function updateSystemPrompt(
+  simulationGroupId: string,
+  instructorEmail: string,
+  prompt: string
+): Promise<void> {
+  await apiClient.request(
+    `instructor/prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    { method: 'PUT', body: { prompt } }
+  );
+}
+
+/**
+ * Update debrief prompt for a simulation group
+ */
+async function updateDebriefPrompt(
+  simulationGroupId: string,
+  instructorEmail: string,
+  prompt: string
+): Promise<void> {
+  await apiClient.request(
+    `instructor/debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    { method: 'PUT', body: { prompt } }
+  );
+}
+
+/**
+ * Get the default debrief prompt
+ */
+async function getDefaultDebriefPrompt(): Promise<string> {
+  try {
+    const data = await apiClient.request<{ default_debrief_prompt: string }>(
+      'instructor/get_default_debrief_prompt'
+    );
+    return data.default_debrief_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch default debrief prompt:', error);
+    return '';
+  }
+}
+
+/**
+ * Prompt history entry from the backend
+ */
+export interface PromptHistoryEntry {
+  id: string;
+  text: string;
+  saved_at: string;
+  modified_by_email: string | null;
+  modified_by_first_name: string | null;
+  modified_by_last_name: string | null;
+}
+
+/**
+ * Get prompt history for a simulation group
+ */
+async function getPromptHistory(simulationGroupId: string, type: 'system' | 'debrief'): Promise<PromptHistoryEntry[]> {
+  try {
+    const data = await apiClient.request<PromptHistoryEntry[]>(
+      `instructor/get_prompt_history?simulation_group_id=${encodeURIComponent(simulationGroupId)}&type=${type}`
+    );
+    return data || [];
+  } catch (error) {
+    console.error(`Failed to fetch ${type} prompt history:`, error);
+    return [];
   }
 }
 
@@ -1525,29 +1733,85 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
 /**
  * Get case materials for a patient
  */
-function getCaseMaterials(_patientId: string): CaseMaterial[] {
-  return [];
+async function getCaseMaterials(patientId: string): Promise<CaseMaterial[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`
+    );
+    return data.map((row) => ({
+      id: row.media_id,
+      title: row.title || '',
+      description: row.description || '',
+      materialType: (row.media_type || 'kaltura') as CaseMaterial['materialType'],
+      contentUrl: '',
+      embedLink: row.url || '',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch case materials:', error);
+    return [];
+  }
 }
 
 /**
  * Add a new case material
  */
-function addCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function addCaseMaterial(patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`,
+    {
+      method: 'POST',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: (data.media_type || 'kaltura') as CaseMaterial['materialType'],
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Update a case material
  */
-function updateCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function updateCaseMaterial(_patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?media_id=${encodeURIComponent(material.id)}`,
+    {
+      method: 'PUT',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: (data.media_type || 'kaltura') as CaseMaterial['materialType'],
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Delete a case material
  */
-function deleteCaseMaterial(_patientId: string, _materialId: string): void {
-  // TODO: implement API call
+async function deleteCaseMaterial(_patientId: string, materialId: string): Promise<void> {
+  await apiClient.request(
+    `instructor/persona_media?media_id=${encodeURIComponent(materialId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 /**
@@ -1747,6 +2011,7 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
       missedQuestions,
       missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
       overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+      recommendation: typeof debrief.recommendation === 'string' ? debrief.recommendation : undefined,
       recommendationFeedback: {
         strengths: debrief.recommendation_feedback?.strengths || [],
         areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
@@ -1773,6 +2038,28 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
 }
 
 /**
+ * Get student progress buckets for a specific persona
+ * Not Started / In Progress / Debrief Reached
+ */
+async function getStudentProgress(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<StudentProgressData[]> {
+  try {
+    let url = `instructor/student_progress?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<StudentProgressData[]>(url);
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch student progress:', error);
+    return [
+      { status: 'Not Started', count: 0, students: [], fill: '#94a3b8' },
+      { status: 'In Progress', count: 0, students: [], fill: '#f59e0b' },
+      { status: 'Debrief Reached', count: 0, students: [], fill: '#22c55e' },
+    ];
+  }
+}
+
+/**
  * Instructor data service object
  */
 export const instructorService: InstructorDataService = {
@@ -1789,6 +2076,8 @@ export const instructorService: InstructorDataService = {
   createPatient,
   updatePatient,
   uploadPatientPhoto,
+  deletePatientPhoto,
+  fetchProfilePictures,
   uploadPatientFile,
   updatePatientLLMEvaluation,
   deletePatient,
@@ -1805,6 +2094,11 @@ export const instructorService: InstructorDataService = {
   updateCaseMaterial,
   deleteCaseMaterial,
   getEvaluationPrompt,
+  getDebriefPrompt,
+  updateSystemPrompt,
+  updateDebriefPrompt,
+  getDefaultDebriefPrompt,
+  getPromptHistory,
   getStudents,
   getStudentDetails,
   getStudentPatientData,
@@ -1822,13 +2116,16 @@ export const instructorService: InstructorDataService = {
   getPatientsUsingQuestion,
   isQuestionInUse,
   getKeyQuestionAnalytics,
+  getKeyQuestionCoverage,
+  getPatientKeyQuestionAnalytics,
   getQuestionPerformanceScores,
   getScoreDistribution,
   getSimulationGroupQuestions,
   assignQuestionToGroup,
   unassignQuestion,
   updateQuestionAssignment,
-  fetchDebrief: fetchInstructorDebrief
+  fetchDebrief: fetchInstructorDebrief,
+  getStudentProgress: getStudentProgress
 };
 
 // Keep backward-compatible export

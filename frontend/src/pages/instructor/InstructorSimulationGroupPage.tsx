@@ -1,10 +1,10 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type StudentDetails, type StudentPatientData } from '@/services/instructorService';
-import { type AIDebriefData } from '@/services/studentService';
+import { instructorService, type GlobalRubricQuestion, type CaseMaterial, type UserData, type QuestionBankItem, type KeyQuestionAnalytics, type KeyQuestionCoverage, type StudentDetails, type StudentPatientData, type StudentProgressData } from '@/services/instructorService';
+import { type AIDebriefData, studentService } from '@/services/studentService';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Key, Copy, Search, Trash2, Edit, Plus, Menu, Camera, Upload, HelpCircle, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useEffect, useRef, useState } from 'react';
@@ -25,13 +25,14 @@ import AIDebriefDialog from '../../components/AIDebriefDialog';
  */
 function InstructorSimulationGroupPage() {
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, user: authUser } = useAuth();
   const { groupId } = useParams();
+  const [searchParams] = useSearchParams();
+  const adminReturnUrl = searchParams.get('returnUrl');
   const [activeSection, setActiveSection] = useState<'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent'>('analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [questionPerformanceTimePeriod, setQuestionPerformanceTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
-  const [scoreDistributionTimePeriod, setScoreDistributionTimePeriod] = useState<'week' | 'month' | 'year' | 'all'>('all');
+  const [] = useState<'week' | 'month' | 'year' | 'all'>('all');
   const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [, setStudentViewTab] = useState<'overview' | 'chatHistory'>('overview');
@@ -51,6 +52,9 @@ function InstructorSimulationGroupPage() {
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const attemptPdfRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Patient Specific Analytics
+  const [studentProgress, setStudentProgress] = useState<StudentProgressData[]>([]);
 
   // Global Rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() =>
@@ -102,7 +106,7 @@ function InstructorSimulationGroupPage() {
         .filter(t => t !== 'patient_specific')
     )
   ).sort();
-  
+
   // Case-Specific Key Questions state
   const [caseSpecificQuestions, setCaseSpecificQuestions] = useState<GlobalRubricQuestion[]>(() =>
     selectedPatientForEdit ? instructorService.getCaseSpecificQuestions(selectedPatientForEdit) : []
@@ -116,14 +120,22 @@ function InstructorSimulationGroupPage() {
   );
 
   // Case Materials state
-  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>(() =>
-    selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : []
-  );
-  const [selectedMaterialId, setSelectedMaterialId] = useState<string>(() => {
-    const materials = selectedPatientForEdit ? instructorService.getCaseMaterials(selectedPatientForEdit) : [];
-    return materials[0]?.id || '';
-  });
+  const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>([]);
+  const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
+
+  // Load case materials from API when patient changes
+  useEffect(() => {
+    if (!selectedPatientForEdit) return;
+    let cancelled = false;
+    instructorService.getCaseMaterials(selectedPatientForEdit).then((data) => {
+      if (!cancelled) {
+        setCaseMaterials(data);
+        setSelectedMaterialId(data[0]?.id || '');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedPatientForEdit]);
 
   // Get selected material
   const selectedMaterial = caseMaterials.find(m => m.id === selectedMaterialId);
@@ -145,10 +157,13 @@ function InstructorSimulationGroupPage() {
   const [user, setUser] = useState<UserData>({ name: 'Instructor', avatarUrl: undefined });
   const [simulationGroup, setSimulationGroup] = useState<any>(null);
   const [patientAnalytics, setPatientAnalytics] = useState<any[]>([]);
+  const [analyticsDateRange, setAnalyticsDateRange] = useState({ start: '', end: '' });
   const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [globalKeyQuestionAnalytics, setGlobalKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
+  const [, setEvaluationPromptText] = useState('');
+  const [debriefPromptText, setDebriefPromptText] = useState('');
 
   // new states for AI Debrief and loading states
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
@@ -167,6 +182,7 @@ function InstructorSimulationGroupPage() {
 
   // Use state for manageable patients so we can trigger re-renders
   const [manageablePatients, setManageablePatients] = useState<any[]>([]);
+  const [profilePictures, setProfilePictures] = useState<Record<string, string>>({});
 
   // Load initial data
   useEffect(() => {
@@ -174,13 +190,15 @@ function InstructorSimulationGroupPage() {
       if (!groupId) return;
 
       try {
-        const [userData, groupData, analyticsData, studentsData, patientsData, keyQuestionData] = await Promise.all([
+        const [userData, groupData, analyticsData, studentsData, patientsData, evalPrompt, debriefPrompt, profilePics] = await Promise.all([
           instructorService.getCurrentUser(),
           instructorService.getSimulationGroup(groupId),
           instructorService.getPatientAnalytics(groupId),
           instructorService.getStudents(groupId),
           instructorService.getManageablePatients(groupId),
-          instructorService.getKeyQuestionAnalytics(groupId),
+          instructorService.getEvaluationPrompt(groupId),
+          instructorService.getDebriefPrompt(groupId),
+          instructorService.fetchProfilePictures(groupId),
         ]);
 
         setUser(userData);
@@ -188,7 +206,9 @@ function InstructorSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
-        setGlobalKeyQuestionAnalytics(keyQuestionData);
+        setEvaluationPromptText(evalPrompt);
+        setDebriefPromptText(debriefPrompt);
+        setProfilePictures(profilePics);
       } catch (error) {
         console.error('Error loading instructor data:', error);
       } finally {
@@ -198,6 +218,26 @@ function InstructorSimulationGroupPage() {
 
     loadData();
   }, [groupId]);
+
+  // Filter analytics data based on date range
+  useEffect(() => {
+    if (!groupId) return;
+    const fetchFilteredAnalytics = async () => {
+      try {
+        const [analyticsData, coverageData] = await Promise.all([
+          instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end),
+          instructorService.getKeyQuestionCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
+        ]);
+        setPatientAnalytics(analyticsData);
+        setKeyQuestionCoverage(coverageData);
+      } catch (error) {
+        console.error('Error fetching filtered analytics:', error);
+      }
+    };
+    if (simulationGroup) {
+      fetchFilteredAnalytics();
+    }
+  }, [groupId, analyticsDateRange.start, analyticsDateRange.end, simulationGroup]);
 
   // Load question bank data when the questionBank section is activated
   useEffect(() => {
@@ -252,25 +292,38 @@ function InstructorSimulationGroupPage() {
   const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
   const messageCountData = currentPatient
     ? [
-        { name: 'Student Messages', value: currentPatient.student_message_count },
-        { name: 'AI Messages', value: currentPatient.ai_message_count },
-      ]
+      { name: 'Student Messages', value: currentPatient.student_message_count },
+      { name: 'AI Messages', value: currentPatient.ai_message_count },
+    ]
     : [];
   const donutColors = [SIMULATION_GROUP_COLOR_PALETTE[2], SIMULATION_GROUP_COLOR_PALETTE[5]];
   const totalMessages = currentPatient ? currentPatient.student_message_count + currentPatient.ai_message_count : 0;
 
-  // Key question analytics (per patient) - uses pre-fetched data
-  const keyQuestionAnalytics = currentPatient
-    ? globalKeyQuestionAnalytics
-    : [];
+  // Key question analytics (per patient) - fetched from dedicated endpoint
+  const [keyQuestionAnalytics, setKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
 
-  // Question performance scores
-  const questionPerformanceScores = instructorService.getQuestionPerformanceScores(groupId || '1');
+  useEffect(() => {
+    if (currentPatient && groupId) {
+      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end)
+        .then(setKeyQuestionAnalytics)
+        .catch(() => setKeyQuestionAnalytics([]));
+    } else {
+      setKeyQuestionAnalytics([]);
+    }
+  }, [currentPatient?.patient_id, groupId, analyticsDateRange.start, analyticsDateRange.end]);
+
+  // useEffect to watch for patient selection changes
+  useEffect(() => {
+    if (groupId && selectedPatientId && selectedPatientId !== 'overview') {
+      instructorService.getStudentProgress(groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end)
+        .then(data => setStudentProgress(data))
+        .catch(err => console.error(err));
+    } else {
+      setStudentProgress([]);
+    }
+  }, [groupId, selectedPatientId, analyticsDateRange.start, analyticsDateRange.end]);
 
   // Score distribution for current patient
-  const scoreDistribution = currentPatient
-    ? instructorService.getScoreDistribution(groupId || '1', currentPatient.patient_id)
-    : [];
 
   // Fallback values
   const simulationGroupName = simulationGroup?.group_name || 'Simulation Group';
@@ -303,8 +356,31 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle student view navigation
    */
-  const handleStudentView = () => {
-    navigate('/student');
+  const handleStudentView = async () => {
+    // If we're on a sim group page, auto-enroll as student and go directly to that group
+    if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
+      const result = await studentService.joinGroup(accessCode);
+      if (result?.success) {
+        navigate(`/patients/${groupId}`);
+      } else {
+        // Enrollment failed; notify the user and send them to the general student view
+        window.alert('Unable to join this simulation group as a student. Redirecting to your student dashboard.');
+        navigate('/student');
+      }
+    } else {
+      navigate('/student');
+    }
+  };
+
+  const hasAdminRole = authUser?.groups.includes('admin') || false;
+
+  const handleAdminView = () => {
+    const orgId = simulationGroup?.organization_id;
+    if (orgId && groupId) {
+      navigate(`/admin/organization/${orgId}/group/${groupId}`);
+    } else {
+      navigate('/admin');
+    }
   };
 
   /**
@@ -345,7 +421,7 @@ function InstructorSimulationGroupPage() {
   /**
    * Handle edit patient
    */
-  const handleEditPatient = (patientId: string) => {
+  const handleEditPatient = async (patientId: string) => {
     const patient = manageablePatients.find(p => p.id === patientId || p.patient_id === patientId);
     if (patient) {
       setSelectedPatientForEdit(patientId);
@@ -362,7 +438,7 @@ function InstructorSimulationGroupPage() {
       setIncludedQuestionIds(questionIds);
       setPendingQuestionIds(new Set(questionIds));
 
-      const materials = instructorService.getCaseMaterials(patientId);
+      const materials = await instructorService.getCaseMaterials(patientId);
       setCaseMaterials(materials);
       setSelectedMaterialId(materials[0]?.id || '');
 
@@ -492,9 +568,27 @@ function InstructorSimulationGroupPage() {
         if (!savedId) return;
         patientId = savedId;
       }
-      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
-        setManageablePatients(await instructorService.getManageablePatients(groupId));
-      });
+      await instructorService.uploadPatientPhoto(groupId, patientId, file);
+      const [patients, pics] = await Promise.all([
+        instructorService.getManageablePatients(groupId),
+        instructorService.fetchProfilePictures(groupId),
+      ]);
+      setManageablePatients(patients);
+      setProfilePictures(pics);
+    }
+  };
+
+  /**
+   * Handle photo delete
+   */
+  const handlePhotoDelete = async () => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
+    if (!confirm('Are you sure you want to remove this photo?')) return;
+    try {
+      await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
+      setProfilePictures(await instructorService.fetchProfilePictures(groupId));
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
     }
   };
 
@@ -525,11 +619,6 @@ function InstructorSimulationGroupPage() {
     }
     e.target.value = '';
   };
-
-  // Get the patient being edited
-  const patientBeingEdited = selectedPatientForEdit
-    ? instructorService.getPatient(selectedPatientForEdit)
-    : null;
 
   /**
    * Handle create new patient
@@ -572,50 +661,37 @@ function InstructorSimulationGroupPage() {
   };
 
   /**
-   * Handle update case material field
-   */
-  const handleUpdateMaterialField = (field: keyof CaseMaterial, value: string) => {
-    if (!selectedMaterialId) return;
-    setCaseMaterials(caseMaterials.map(m =>
-      m.id === selectedMaterialId ? { ...m, [field]: value } : m
-    ));
-  };
-
-  /**
    * Handle add new case material
    */
-  const handleAddNewCaseMaterial = () => {
+  const handleAddNewCaseMaterial = async () => {
     if (!selectedPatientForEdit) return;
     const newMaterial: CaseMaterial = {
       id: `material-${Date.now()}`,
       title: 'New Material',
       description: '',
-      materialType: 'document',
+      materialType: 'kaltura',
       contentUrl: '',
       embedLink: '',
     };
-    instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-    setCaseMaterials(instructorService.getCaseMaterials(selectedPatientForEdit));
-    setSelectedMaterialId(newMaterial.id);
+    try {
+      const created = await instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
+      setCaseMaterials(prev => [...prev, created]);
+      setSelectedMaterialId(created.id);
+    } catch (error) {
+      console.error('Failed to add case material:', error);
+    }
   };
 
   /**
    * Handle save case material changes
    */
-  const handleSaveCaseMaterial = () => {
+  const handleSaveCaseMaterial = async () => {
     if (!selectedMaterial || !selectedPatientForEdit) return;
-    instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
-    console.log('Saving case material:', selectedMaterial);
-  };
-
-  /**
-   * Handle material file upload
-   */
-  const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && selectedMaterialId) {
-      console.log('Uploading material file:', file.name);
-      handleUpdateMaterialField('contentUrl', URL.createObjectURL(file));
+    try {
+      const updated = await instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
+      setCaseMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+    } catch (error) {
+      console.error('Failed to save case material:', error);
     }
   };
 
@@ -968,6 +1044,18 @@ function InstructorSimulationGroupPage() {
         </div>
 
         <div className="flex items-center gap-4">
+          {adminReturnUrl && (
+            <Button
+              variant="default"
+              onClick={() => navigate(adminReturnUrl)}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+            >
+              Back to Admin View
+            </Button>
+          )}
           <Button
             variant="default"
             onClick={handleStudentView}
@@ -981,6 +1069,22 @@ function InstructorSimulationGroupPage() {
           >
             Student View
           </Button>
+
+          {hasAdminRole && (
+            <Button
+              variant="default"
+              onClick={handleAdminView}
+              className="px-6 transition-colors"
+              style={{
+                backgroundColor: UI_COLORS.button.primary,
+                color: UI_COLORS.button.text
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+            >
+              Admin View
+            </Button>
+          )}
 
           <Button
             variant="default"
@@ -1106,7 +1210,7 @@ function InstructorSimulationGroupPage() {
               }}
             >
               <Eye className="w-5 h-5" />
-              View Evaluation Prompt
+              View Debrief Prompt
             </Button>
           </nav>
 
@@ -1153,10 +1257,46 @@ function InstructorSimulationGroupPage() {
         <main className="flex-1 overflow-y-auto" style={{ padding: activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient' || activeSection === 'viewStudent' ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <div className="space-y-6">
-              {/* Simulation Group Title */}
-              <h2 className="text-3xl font-bold tracking-tight" style={{ color: UI_COLORS.text.heading }}>
-                {simulationGroupName}
-              </h2>
+              <div className="flex items-center justify-between">
+                {/* Simulation Group Title */}
+                <h2 className="text-3xl font-bold tracking-tight" style={{ color: UI_COLORS.text.heading }}>
+                  {simulationGroupName}
+                </h2>
+                {/* DATE FILTER RANGE */}
+                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-md border shadow-sm">
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="startDate" className="text-sm font-medium text-gray-700">From:</label>
+                    <input
+                      type="date"
+                      id="startDate"
+                      className="border-none bg-transparent text-sm focus:ring-0 cursor-pointer outline-none"
+                      max={analyticsDateRange.end || undefined}
+                      value={analyticsDateRange.start}
+                      onChange={(e) => setAnalyticsDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    />
+                  </div>
+                  <div className="h-4 w-px bg-gray-300 mx-1 border-l"></div>
+                  <div className="flex items-center gap-2">
+                    <label htmlFor="endDate" className="text-sm font-medium text-gray-700">To:</label>
+                    <input
+                      type="date"
+                      id="endDate"
+                      className="border-none bg-transparent text-sm focus:ring-0 cursor-pointer outline-none"
+                      min={analyticsDateRange.start || undefined}
+                      value={analyticsDateRange.end}
+                      onChange={(e) => setAnalyticsDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    />
+                  </div>
+                  {(analyticsDateRange.start || analyticsDateRange.end) && (
+                    <button
+                      onClick={() => setAnalyticsDateRange({ start: '', end: '' })}
+                      className="ml-2 text-xs text-gray-500 hover:text-gray-800 focus:outline-none"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
 
               {/* Tabs: Overview + Patient Tabs */}
               <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
@@ -1219,92 +1359,21 @@ function InstructorSimulationGroupPage() {
                     </div>
                   </div>
 
-                  {/* Global Key Questions Answered - Horizontal Bar Graph */}
+                  {/* Per-Patient Completion Percentage - Horizontal Bar Graph */}
                   <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
                     <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                      Global Key Questions &mdash; Students Answered
+                      {aiPersonaLabel} Completion Rate
                     </h3>
                     <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-                      Number of students who answered each global key question across all personas
+                      Percentage of students who have reached the debrief with each {aiPersonaLabelLower}.
                     </p>
-                    {globalKeyQuestionAnalytics.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={Math.max(250, globalKeyQuestionAnalytics.length * 50)}>
+                    {patientAnalytics.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={Math.max(250, patientAnalytics.length * 50)}>
                         <BarChart
-                          data={globalKeyQuestionAnalytics}
-                          layout="vertical"
-                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                          <XAxis
-                            type="number"
-                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                            axisLine={{ stroke: UI_COLORS.border.default }}
-                            allowDecimals={false}
-                          />
-                          <YAxis
-                            type="category"
-                            dataKey="questionTitle"
-                            width={180}
-                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                            axisLine={{ stroke: UI_COLORS.border.default }}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: UI_COLORS.background.white,
-                              border: `1px solid ${UI_COLORS.border.default}`,
-                              borderRadius: '6px'
-                            }}
-                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
-                          />
-                          <Bar
-                            dataKey="studentsAnswered"
-                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
-                            radius={[0, 4, 4, 0]}
-                            barSize={28}
-                          />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No key questions configured.</p>
-                    )}
-                  </div>
-
-                  {/* Question Performance Scores - Horizontal Bar */}
-                  {questionPerformanceScores.length > 0 && (
-                    <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
-                      <div className="flex items-start justify-between mb-6">
-                        <div>
-                          <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                            Question Performance Scores
-                          </h3>
-                          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                            Average quality score per key question across all student responses
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
-                            Time Period:
-                          </label>
-                          <select
-                            value={questionPerformanceTimePeriod}
-                            onChange={(e) => setQuestionPerformanceTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                            className="px-3 py-2 rounded-lg border text-sm"
-                            style={{
-                              borderColor: UI_COLORS.border.default,
-                              backgroundColor: UI_COLORS.background.white,
-                              color: UI_COLORS.text.heading,
-                            }}
-                          >
-                            <option value="week">Last Week</option>
-                            <option value="month">Last Month</option>
-                            <option value="year">Last Year</option>
-                            <option value="all">All Time</option>
-                          </select>
-                        </div>
-                      </div>
-                      <ResponsiveContainer width="100%" height={Math.max(250, questionPerformanceScores.length * 50)}>
-                        <BarChart
-                          data={questionPerformanceScores}
+                          data={patientAnalytics.map(p => ({
+                            patientName: p.patient_name || p.persona_name,
+                            completionPercentage: Math.round(p.instructor_completion_percentage ?? 0),
+                          }))}
                           layout="vertical"
                           margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
                         >
@@ -1318,7 +1387,7 @@ function InstructorSimulationGroupPage() {
                           />
                           <YAxis
                             type="category"
-                            dataKey="questionTitle"
+                            dataKey="patientName"
                             width={180}
                             tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                             axisLine={{ stroke: UI_COLORS.border.default }}
@@ -1329,23 +1398,74 @@ function InstructorSimulationGroupPage() {
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
                             }}
-                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { totalResponses?: number } }) => [
-                              `${value ?? 0}% avg (${props.payload?.totalResponses ?? 0} responses)`,
-                              'Score'
+                            formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Completed']}
+                          />
+                          <Bar
+                            dataKey="completionPercentage"
+                            fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
+                            radius={[0, 4, 4, 0]}
+                            barSize={28}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>No {aiPersonaLabelLower}s configured.</p>
+                    )}
+                  </div>
+
+                  {/* Key Question Coverage per Patient - Horizontal Bar */}
+                  {keyQuestionCoverage.length > 0 && (
+                    <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+                      <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        Key Question Coverage by {aiPersonaLabel}
+                      </h3>
+                      <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                        Average percentage of key questions covered by students who completed their interaction.
+                      </p>
+                      <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionCoverage.length * 50)}>
+                        <BarChart
+                          data={keyQuestionCoverage}
+                          layout="vertical"
+                          margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                          <XAxis
+                            type="number"
+                            domain={[0, 100]}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                            tickFormatter={(val: number) => `${val}%`}
+                          />
+                          <YAxis
+                            type="category"
+                            dataKey="patientName"
+                            width={180}
+                            tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                            axisLine={{ stroke: UI_COLORS.border.default }}
+                          />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: UI_COLORS.background.white,
+                              border: `1px solid ${UI_COLORS.border.default}`,
+                              borderRadius: '6px'
+                            }}
+                            formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
+                              `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                              'Coverage'
                             ]}
                           />
                           <Bar
-                            dataKey="averageScore"
+                            dataKey="avgCoverage"
                             radius={[0, 4, 4, 0]}
                             barSize={28}
                           >
-                            {questionPerformanceScores.map((entry, index) => (
+                            {keyQuestionCoverage.map((entry, index) => (
                               <Cell
-                                key={`perf-${index}`}
+                                key={`cov-${index}`}
                                 fill={
-                                  entry.averageScore >= 75 ? '#22c55e' :
-                                  entry.averageScore >= 55 ? '#eab308' :
-                                  '#ef4444'
+                                  entry.avgCoverage >= 75 ? '#22c55e' :
+                                    entry.avgCoverage >= 55 ? '#eab308' :
+                                      '#ef4444'
                                 }
                               />
                             ))}
@@ -1394,14 +1514,14 @@ function InstructorSimulationGroupPage() {
                     </div>
                   </div>
 
-                  {/* Key Questions Answered - Horizontal Bar Graph (per persona) */}
+                  {/* Key Questions Asked - Horizontal Bar Graph (per persona) */}
                   {keyQuestionAnalytics.length > 0 && (
                     <div className="mt-8">
                       <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                        Key Questions &mdash; Students Answered
+                        Key Questions &mdash; Students Asked
                       </h4>
                       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                        Number of students who answered each key question for {currentPatient.patient_name}
+                        Number of students who asked each key question for {currentPatient.patient_name}.
                       </p>
                       <ResponsiveContainer width="100%" height={Math.max(250, keyQuestionAnalytics.length * 50)}>
                         <BarChart
@@ -1429,7 +1549,7 @@ function InstructorSimulationGroupPage() {
                               border: `1px solid ${UI_COLORS.border.default}`,
                               borderRadius: '6px'
                             }}
-                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Answered']}
+                            formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Asked']}
                           />
                           <Bar
                             dataKey="studentsAnswered"
@@ -1490,45 +1610,26 @@ function InstructorSimulationGroupPage() {
                     <div className="flex items-start justify-between mb-4">
                       <div>
                         <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                          Score Distribution
+                          Student Progress Status
                         </h4>
                         <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                          Distribution of student scores for {currentPatient.patient_name}
+                          Distribution of student progress status for {currentPatient.patient_name}.
                         </p>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-sm font-medium whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>
-                          Time Period:
-                        </label>
-                        <select
-                          value={scoreDistributionTimePeriod}
-                          onChange={(e) => setScoreDistributionTimePeriod(e.target.value as 'week' | 'month' | 'year' | 'all')}
-                          className="px-3 py-2 rounded-lg border text-sm"
-                          style={{
-                            borderColor: UI_COLORS.border.default,
-                            backgroundColor: UI_COLORS.background.white,
-                            color: UI_COLORS.text.heading,
-                          }}
-                        >
-                          <option value="week">Last Week</option>
-                          <option value="month">Last Month</option>
-                          <option value="year">Last Year</option>
-                          <option value="all">All Time</option>
-                        </select>
-                      </div>
+
                     </div>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart
-                        data={scoreDistribution}
+                        data={studentProgress}
                         margin={{ top: 10, right: 30, left: 10, bottom: 20 }}
                         barSize={50}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
                         <XAxis
-                          dataKey="range"
+                          dataKey="status"
                           tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
                           axisLine={{ stroke: UI_COLORS.border.default }}
-                          label={{ value: 'Score Range (%)', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
+                          label={{ value: 'Progress Status', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.muted, fontSize: 12 }}
                         />
                         <YAxis
                           tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
@@ -1540,24 +1641,73 @@ function InstructorSimulationGroupPage() {
                           contentStyle={{
                             backgroundColor: UI_COLORS.background.white,
                             border: `1px solid ${UI_COLORS.border.default}`,
-                            borderRadius: '6px'
+                            borderRadius: '6px',
+                            padding: 0,
                           }}
-                          formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Count']}
+                          content={({ active, payload }) => {
+                            if (!active || !payload || !payload.length) return null;
+                            const entry = payload[0].payload as StudentProgressData;
+                            return (
+                              <div
+                                style={{
+                                  backgroundColor: UI_COLORS.background.white,
+                                  border: `1px solid ${UI_COLORS.border.default}`,
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  minWidth: '180px',
+                                  maxWidth: '240px',
+                                }}
+                              >
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div
+                                    style={{
+                                      width: 10,
+                                      height: 10,
+                                      borderRadius: '50%',
+                                      backgroundColor: entry.fill,
+                                      flexShrink: 0,
+                                    }}
+                                  />
+                                  <span className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
+                                    {entry.status}
+                                  </span>
+                                </div>
+                                <div className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
+                                  {entry.count} student{entry.count !== 1 ? 's' : ''}
+                                </div>
+                                {entry.students.length > 0 && (
+                                  <div
+                                    style={{
+                                      maxHeight: '150px',
+                                      overflowY: 'auto',
+                                      borderTop: `1px solid ${UI_COLORS.border.light}`,
+                                      paddingTop: '8px',
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: '4px',
+                                    }}
+                                  >
+                                    {entry.students.map((student) => (
+                                      <div
+                                        key={student.id}
+                                        className="text-sm"
+                                        style={{ color: UI_COLORS.text.body }}
+                                      >
+                                        {student.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }}
                         />
-                        <Bar
-                          dataKey="count"
-                          radius={[4, 4, 0, 0]}
-                        >
-                          {scoreDistribution.map((_entry, index) => (
+                        <Bar dataKey="count" radius={[4, 4, 0, 0]} cursor="pointer">
+                          {studentProgress.map((_entry, index) => (
                             <Cell
-                              key={`dist-${index}`}
-                              fill={[
-                                '#ef4444',
-                                '#f97316',
-                                '#eab308',
-                                '#22c55e',
-                                SIMULATION_GROUP_COLOR_PALETTE[2]
-                              ][index] || SIMULATION_GROUP_COLOR_PALETTE[2]}
+                              key={`progress-${index}`}
+                              fill={_entry.fill}
+                              style={{ cursor: 'pointer' }}
                             />
                           ))}
                         </Bar>
@@ -2489,7 +2639,7 @@ function InstructorSimulationGroupPage() {
           {activeSection === 'prompt' && (
             <div className="space-y-4">
               <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                Evaluation Prompt
+                View Debrief Prompt
               </h2>
 
               <div>
@@ -2503,7 +2653,7 @@ function InstructorSimulationGroupPage() {
                     backgroundColor: UI_COLORS.background.tableHeader,
                     minHeight: '500px',
                   }}
-                  defaultValue={`Evaluate the student's interview using the instructor-defined rubric and key questions.\nUse only the provided transcript, rubric, and student responses. Do not infer actions or facts that are not clearly supported.\n\nAssess:\n- which key questions were addressed, partially addressed, or missed\n- how well the student's questions align with the rubric\n- overall clinical reasoning and question quality\n\nGenerate an AI debrief with:\n- Interview Summary (3-5 sentences)\n- Key Questions Successfully Addressed\n- Key Questions Missed or Incomplete\n- Rubric-Based Feedback (strengths, areas for improvement, next-time focus)\n- Overall Assessment (rubric alignment score + summary)\n\nOUTPUT FORMAT\nReturn valid JSON in exactly this structure:\n\n{\n  "interview_summary": "string",\n  "key_questions_successfully_addressed": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "feedback": "string"\n    }\n  ],\n  "key_questions_missed_or_incomplete": [\n    {\n      "question_id": "string",\n      "question_content": "string",\n      "status": "missed | partially_addressed",\n      "feedback": "string",\n      "clinical_importance": "string"\n    }\n  ],\n  "rubric_based_feedback": {\n    "strengths": ["string", "string"],\n    "areas_for_improvement": ["string", "string"],\n    "recommended_focus_next_time": ["string", "string"]\n  },\n  "overall_assessment": {\n    "rubric_alignment_score": 0,\n    "summary": "string"\n  }\n}`}
+                  defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'}
                 />
               </div>
             </div>
@@ -2597,7 +2747,7 @@ function InstructorSimulationGroupPage() {
                       <div className="flex items-center gap-4">
                         <UserAvatar
                           name={editPatientName || 'P'}
-                          imageUrl={patientBeingEdited?.photo_url}
+                          imageUrl={selectedPatientForEdit && selectedPatientForEdit !== 'new' ? profilePictures[selectedPatientForEdit] : undefined}
                           size="large"
                         />
                         <label className="cursor-pointer">
@@ -2617,6 +2767,16 @@ function InstructorSimulationGroupPage() {
                             <Camera className="w-6 h-6" />
                           </div>
                         </label>
+                        {selectedPatientForEdit && selectedPatientForEdit !== 'new' && profilePictures[selectedPatientForEdit] && (
+                          <button
+                            onClick={handlePhotoDelete}
+                            className="p-3 rounded-full transition-colors"
+                            style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
+                            title="Remove photo"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Patient Name */}
@@ -3321,7 +3481,7 @@ function InstructorSimulationGroupPage() {
                                       value={material.materialType}
                                       onChange={(e) => {
                                         const updatedMaterials = caseMaterials.map(m =>
-                                          m.id === material.id ? { ...m, materialType: e.target.value } : m
+                                          m.id === material.id ? { ...m, materialType: e.target.value as CaseMaterial['materialType'] } : m
                                         );
                                         setCaseMaterials(updatedMaterials);
                                       }}
@@ -3334,46 +3494,16 @@ function InstructorSimulationGroupPage() {
                                         outlineColor: UI_COLORS.border.medium,
                                       }}
                                     >
-                                      <option value="image">Image</option>
-                                      <option value="video">Video</option>
-                                      <option value="document">Document</option>
-                                      <option value="audio">Audio</option>
-                                      <option value="other">Other</option>
+                                      <option value="kaltura">Kaltura</option>
+                                      <option value="panopto">Panopto</option>
+                                      <option value="h5p">H5P</option>
                                     </select>
                                   </div>
 
                                   {/* Content Upload/Embed */}
                                   <div>
                                     <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                      Content Upload/Embed
-                                    </label>
-                                    <label className="cursor-pointer">
-                                      <input
-                                        type="file"
-                                        onChange={(e) => {
-                                          setSelectedMaterialId(material.id);
-                                          handleMaterialFileUpload(e);
-                                        }}
-                                        className="hidden"
-                                      />
-                                      <div
-                                        className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium"
-                                        style={{
-                                          backgroundColor: UI_COLORS.button.primary,
-                                          color: UI_COLORS.button.text
-                                        }}
-                                      >
-                                        <Upload className="w-5 h-5" />
-                                        Upload File
-                                      </div>
-                                    </label>
-
-                                    <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>
-                                      OR
-                                    </p>
-
-                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                                      Enter H5P Embed Link
+                                      Embed Link
                                     </label>
                                     <Input
                                       value={material.embedLink || ''}
@@ -3383,7 +3513,7 @@ function InstructorSimulationGroupPage() {
                                         );
                                         setCaseMaterials(updatedMaterials);
                                       }}
-                                      placeholder="Value"
+                                      placeholder="https://..."
                                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
                                       style={{
                                         borderWidth: '1px',
@@ -3395,22 +3525,41 @@ function InstructorSimulationGroupPage() {
                                   </div>
 
                                   {/* Preview */}
-                                  <div
-                                    className="border rounded-lg p-8 flex flex-col items-center justify-center"
-                                    style={{
-                                      borderColor: UI_COLORS.border.default,
-                                      minHeight: '200px'
-                                    }}
-                                  >
+                                  <div>
                                     <div className="flex items-center gap-2 mb-2">
                                       <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
-                                      <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                                        Preview
-                                      </span>
+                                      <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>Preview</span>
                                     </div>
-                                    <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
-                                      Rendered preview here
-                                    </p>
+                                    {material.embedLink ? (
+                                      <div
+                                        className="rounded-lg overflow-hidden"
+                                        style={{
+                                          position: 'relative',
+                                          width: '100%',
+                                          paddingBottom: '56.25%',
+                                          height: 0,
+                                          borderWidth: '1px',
+                                          borderStyle: 'solid',
+                                          borderColor: UI_COLORS.border.default,
+                                        }}
+                                      >
+                                        <iframe
+                                          src={material.embedLink}
+                                          title={material.title || 'Preview'}
+                                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                                          allowFullScreen
+                                          allow="autoplay *; fullscreen *; encrypted-media *"
+                                          sandbox="allow-downloads allow-forms allow-same-origin allow-scripts allow-top-navigation allow-pointer-lock allow-popups allow-modals allow-orientation-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation-by-user-activation"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div
+                                        className="border rounded-lg p-8 flex items-center justify-center"
+                                        style={{ borderColor: UI_COLORS.border.default, minHeight: '120px' }}
+                                      >
+                                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Enter an embed link above to see a preview</p>
+                                      </div>
+                                    )}
                                   </div>
 
                                   {/* Action Buttons */}
@@ -3433,10 +3582,14 @@ function InstructorSimulationGroupPage() {
                                       Save
                                     </Button>
                                     <Button
-                                      onClick={() => {
+                                      onClick={async () => {
                                         if (selectedPatientForEdit) {
-                                          instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id);
-                                          setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                          try {
+                                            await instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id);
+                                            setCaseMaterials(caseMaterials.filter(m => m.id !== material.id));
+                                          } catch (error) {
+                                            console.error('Failed to delete material:', error);
+                                          }
                                         }
                                       }}
                                       variant="outline"
@@ -3700,11 +3853,10 @@ function InstructorSimulationGroupPage() {
                                         messages.map((message) => (
                                           <div
                                             key={message.message_id}
-                                            className={`flex gap-3 ${
-                                              message.sender_type === 'student'
-                                                ? 'justify-end'
-                                                : 'justify-start'
-                                            }`}
+                                            className={`flex gap-3 ${message.sender_type === 'student'
+                                              ? 'justify-end'
+                                              : 'justify-start'
+                                              }`}
                                           >
                                             {message.sender_type !== 'student' && (
                                               <div className="flex-shrink-0">
@@ -3716,11 +3868,10 @@ function InstructorSimulationGroupPage() {
                                               </div>
                                             )}
                                             <div
-                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                                                message.sender_type === 'student'
-                                                  ? 'rounded-br-none'
-                                                  : 'rounded-bl-none'
-                                              }`}
+                                              className={`max-w-[70%] rounded-lg px-4 py-3 ${message.sender_type === 'student'
+                                                ? 'rounded-br-none'
+                                                : 'rounded-bl-none'
+                                                }`}
                                               style={{
                                                 backgroundColor:
                                                   message.sender_type === 'student'
@@ -3801,12 +3952,12 @@ function InstructorSimulationGroupPage() {
                                       color: UI_COLORS.button.text,
                                     }}
                                     onMouseEnter={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondaryHover)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondaryHover)
                                     }
                                     onMouseLeave={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondary)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondary)
                                     }
                                     onClick={async () => {
                                       const el = attemptPdfRefs.current[String(attempt.id)];
@@ -3850,12 +4001,12 @@ function InstructorSimulationGroupPage() {
                                       color: UI_COLORS.button.text,
                                     }}
                                     onMouseEnter={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondaryHover)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondaryHover)
                                     }
                                     onMouseLeave={(e) =>
-                                      (e.currentTarget.style.backgroundColor =
-                                        UI_COLORS.button.secondary)
+                                    (e.currentTarget.style.backgroundColor =
+                                      UI_COLORS.button.secondary)
                                     }
                                     onClick={() => handleDownloadNotesPDF(attempt.id)}
                                   >
@@ -3869,12 +4020,12 @@ function InstructorSimulationGroupPage() {
                                         color: UI_COLORS.button.text,
                                       }}
                                       onMouseEnter={(e) =>
-                                        (e.currentTarget.style.backgroundColor =
-                                          UI_COLORS.button.secondaryHover)
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondaryHover)
                                       }
                                       onMouseLeave={(e) =>
-                                        (e.currentTarget.style.backgroundColor =
-                                          UI_COLORS.button.secondary)
+                                      (e.currentTarget.style.backgroundColor =
+                                        UI_COLORS.button.secondary)
                                       }
                                       onClick={() => handleViewAIDebrief(attempt.id)}
                                       disabled={!!isFetchingDebrief}

@@ -107,7 +107,7 @@ function AdminHomePage() {
         userName={user.name}
         userAvatarUrl={user.avatarUrl}
         onSignOut={handleSignOut}
-        showStudentViewButton={true}
+        showStudentViewButton={false}
         onStudentView={() => navigate('/student')}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">

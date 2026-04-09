@@ -674,6 +674,29 @@ exports.handler = async (event, context) => {
           const patientId = event.queryStringParameters.patient_id;
 
           try {
+            // Check message limit for this simulation group
+            const groupSettings = await sqlConnection`
+              SELECT max_messages_per_chat FROM "simulation_groups"
+              WHERE simulation_group_id = ${simulationGroupId};
+            `;
+            const maxMessages = groupSettings[0]?.max_messages_per_chat;
+
+            if (maxMessages != null) {
+              const messageCount = await sqlConnection`
+                SELECT COUNT(*)::int AS count FROM "messages"
+                WHERE chat_id = ${sessionId} AND sender_type = 'student';
+              `;
+              if (messageCount[0].count >= maxMessages) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({
+                  error: "Message limit reached",
+                  message: `You have reached the maximum of ${maxMessages} messages for this conversation.`,
+                  max_messages: maxMessages,
+                });
+                break;
+              }
+            }
+
             // Insert the new message into the Messages table with a generated UUID for message_id
             const messageData = await sqlConnection`
                       INSERT INTO "messages" (message_id, chat_id, user_id, sender_type, message_content, sent_at)
@@ -1583,6 +1606,31 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({
             error: "session_id, simulation_group_id, patient_id, and recommendation body are required",
           });
+        }
+        break;
+      case "GET /student/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.persona_id
+        ) {
+          try {
+            const { persona_id } = event.queryStringParameters;
+            const data = await sqlConnection`
+              SELECT media_id, persona_id, media_type, url, title, description, created_at
+              FROM "persona_media"
+              WHERE persona_id = ${persona_id}
+              ORDER BY created_at ASC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "persona_id is required" });
         }
         break;
       default:

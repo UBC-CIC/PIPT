@@ -15,6 +15,8 @@ interface DashboardHeaderProps {
   showInstructorViewButton?: boolean;
   onManageQuestionBank?: () => void;
   showManageQuestionBankButton?: boolean;
+  onAdminView?: () => void;
+  showAdminViewButton?: boolean;
 }
 
 function DashboardHeader({ 
@@ -28,7 +30,9 @@ function DashboardHeader({
   showStudentViewButton = false,
   showInstructorViewButton = false,
   onManageQuestionBank,
-  showManageQuestionBankButton = false
+  showManageQuestionBankButton = false,
+  onAdminView,
+  showAdminViewButton = false
 }: DashboardHeaderProps) {
   const [, setIsMobile] = useState(window.innerWidth < 768);
 
@@ -91,6 +95,18 @@ function DashboardHeader({
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
             Instructor View
+          </Button>
+        )}
+        {showAdminViewButton && onAdminView && (
+          <Button
+            variant="default"
+            onClick={onAdminView}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+          >
+            Back to Admin View
           </Button>
         )}
         <Button

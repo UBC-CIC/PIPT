@@ -172,6 +172,7 @@ export interface AIDebriefData {
   missedQuestions: string[];
   missedQuestionsGuidance: string;
   overallScore?: number;
+  recommendation?: string;
   recommendationFeedback: {
     strengths: string[];
     areasForImprovement: string[];
@@ -570,6 +571,38 @@ async function fetchCaseMaterials(simulationGroupId: string, patientId: string):
 }
 
 /**
+ * Represents a physical assessment material from the persona_media table
+ */
+export interface PersonaMedia {
+  media_id: string;
+  title: string;
+  description: string;
+  media_type: string;
+  url: string;
+}
+
+/**
+ * Fetch physical assessment materials (persona_media) for a patient from the API.
+ */
+async function fetchPersonaMedia(patientId: string): Promise<PersonaMedia[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `student/persona_media?persona_id=${encodeURIComponent(patientId)}`
+    );
+    return data.map((row) => ({
+      media_id: row.media_id,
+      title: row.title || '',
+      description: row.description || '',
+      media_type: row.media_type || 'other',
+      url: row.url || '',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch persona media:', error);
+    return [];
+  }
+}
+
+/**
  * Get chat history entries for patient dashboard (mock fallback)
  */
 function getChatHistory(): ChatHistoryEntry[] {
@@ -920,6 +953,7 @@ export async function fetchDebrief(sessionId: string): Promise<AIDebriefData | n
         missedQuestions: missedQuestions,
         missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
         overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+        recommendation: typeof debrief.recommendation === 'string' ? debrief.recommendation : undefined,
         recommendationFeedback: {
           strengths: debrief.recommendation_feedback?.strengths || [],
           areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
@@ -990,6 +1024,37 @@ function getChatHistoryMessages(chatId: string): StudentChatMessage[] {
  */
 function getSavedNote(): string {
   return mockSavedNote;
+}
+
+/**
+ * Fetch notes for a session from the API
+ */
+async function fetchNotes(sessionId: string): Promise<string> {
+  try {
+    const data = await apiClient.request<{ notes: string | null }>(
+      `student/get_notes?session_id=${encodeURIComponent(sessionId)}`
+    );
+    return data.notes || '';
+  } catch (error) {
+    console.error('Failed to fetch notes:', error);
+    return '';
+  }
+}
+
+/**
+ * Update (save) notes for a session
+ */
+async function updateNotes(sessionId: string, notes: string): Promise<boolean> {
+  try {
+    await apiClient.request(
+      `student/update_notes?session_id=${encodeURIComponent(sessionId)}`,
+      { method: 'PUT', body: { notes } }
+    );
+    return true;
+  } catch (error) {
+    console.error('Failed to save notes:', error);
+    return false;
+  }
 }
 
 /**
@@ -1269,7 +1334,10 @@ export const studentService = {
   fetchChatHistory,
   fetchMessages,
   fetchAnswerKeyUrl,
-  fetchDebrief
+  fetchDebrief,
+  fetchPersonaMedia,
+  fetchNotes,
+  updateNotes
 };
 
 /**

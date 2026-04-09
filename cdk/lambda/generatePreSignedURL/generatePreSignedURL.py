@@ -97,9 +97,9 @@ def lambda_handler(event, context):
     elif folder_type == "answer_key" and file_type in allowed_generic_types:
         key = f"{simulation_group_id}/{persona_id}/answer_key/{file_name}.{file_type}"
         content_type = allowed_generic_types[file_type]
-    elif folder_type == "profile_picture":
+    elif folder_type == "profile_picture" and file_type in allowed_profile_picture_types:
         key = f"{simulation_group_id}/{persona_id}/profile_picture/{file_name}.{file_type}"
-        content_type = 'image/png'
+        content_type = allowed_profile_picture_types[file_type]
     else:
         return {
             'statusCode': 400,
