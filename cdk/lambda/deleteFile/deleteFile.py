@@ -126,6 +126,8 @@ def lambda_handler(event, context):
             objects_to_delete.append({"Key": f"{simulation_group_id}/{persona_id}/info/{file_name}.{file_type}"})
         elif folder_type == "answer_key" and file_type in allowed_generic_types:
             objects_to_delete.append({"Key": f"{simulation_group_id}/{persona_id}/answer_key/{file_name}.{file_type}"})
+        elif folder_type == "profile_picture" and file_type in allowed_generic_types:
+            objects_to_delete.append({"Key": f"{simulation_group_id}/{persona_id}/profile_picture/{file_name}.{file_type}"})
         else:
             return {
                 'statusCode': 400,
@@ -150,22 +152,23 @@ def lambda_handler(event, context):
         logger.info(f"S3 Response: {response}")
         logger.info(f"File {file_name}.{file_type} and any associated files deleted successfully from S3.")
 
-        # Delete the file from the database
-        try:
-            delete_file_from_db(persona_id, file_name, file_type)
-            logger.info(f"File {file_name}.{file_type} deleted from the database.")
-        except Exception as e:
-            logger.error(f"Error deleting file {file_name}.{file_type} from the database: {e}")
-            return {
-                'statusCode': 500,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
-                'body': json.dumps(f"Error deleting file {file_name}.{file_type} from the database")
-            }
+        # Delete the file from the database (skip for profile pictures — no persona_data row)
+        if folder_type != "profile_picture":
+            try:
+                delete_file_from_db(persona_id, file_name, file_type)
+                logger.info(f"File {file_name}.{file_type} deleted from the database.")
+            except Exception as e:
+                logger.error(f"Error deleting file {file_name}.{file_type} from the database: {e}")
+                return {
+                    'statusCode': 500,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Headers": "*",
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "*",
+                    },
+                    'body': json.dumps(f"Error deleting file {file_name}.{file_type} from the database")
+                }
 
         return {
             'statusCode': 200,

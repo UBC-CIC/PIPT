@@ -124,7 +124,7 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                     color: debriefData.overallScore >= 70 ? '#166534' : debriefData.overallScore >= 50 ? '#854d0e' : '#991b1b',
                   }}
                 >
-                  {debriefData.overallScore}%
+                  {Math.round(debriefData.overallScore)}%
                 </span>
               </div>
             )}
@@ -259,7 +259,7 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
           </div>
 
           {/* Answer Key Comparison */}
-          {debriefData.answerKeyComparison && (
+          {(debriefData.answerKeyComparison || answerKeyAvailable) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
@@ -268,8 +268,29 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                 </h3>
               </div>
               <div className="pl-7">
-                {debriefData.answerKeyComparison.answerKeyAvailable ? (
+                {debriefData.answerKeyComparison?.answerKeyAvailable ? (
                   <div className="space-y-4">
+                    {/* Student's Recommendation */}
+                    {debriefData.recommendation && (
+                      <div>
+                        <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                          Your Recommendation:
+                        </h4>
+                        <p
+                          className="text-sm p-3 rounded-md leading-relaxed"
+                          style={{
+                            backgroundColor: '#f8fafc',
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
+                            borderColor: UI_COLORS.border.default,
+                            color: UI_COLORS.text.body,
+                          }}
+                        >
+                          {debriefData.recommendation}
+                        </p>
+                      </div>
+                    )}
+
                     {/* Overall Alignment */}
                     {debriefData.answerKeyComparison.overallAlignment && (
                       <div className="flex items-center gap-2">
@@ -351,7 +372,9 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                   </div>
                 ) : (
                   <p className="text-sm italic" style={{ color: UI_COLORS.text.body }}>
-                    No answer key was provided for this simulation case.
+                    {answerKeyAvailable
+                      ? 'The answer key comparison could not be generated automatically. Use the "View Answer Key" button above to review it manually.'
+                      : 'No answer key was provided for this simulation case.'}
                   </p>
                 )}
               </div>

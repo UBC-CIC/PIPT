@@ -2597,6 +2597,128 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /instructor/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.persona_id
+        ) {
+          try {
+            const { persona_id } = event.queryStringParameters;
+            const data = await sqlConnection`
+              SELECT media_id, persona_id, media_type, url, title, description, created_at
+              FROM "persona_media"
+              WHERE persona_id = ${persona_id}
+              ORDER BY created_at ASC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "persona_id is required" });
+        }
+        break;
+      case "POST /instructor/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.persona_id &&
+          event.body
+        ) {
+          try {
+            const { persona_id } = event.queryStringParameters;
+            const { title, description, media_type, url } = JSON.parse(event.body);
+
+            const inserted = await sqlConnection`
+              INSERT INTO "persona_media" (persona_id, title, description, media_type, url)
+              VALUES (${persona_id}, ${title || ''}, ${description || ''}, ${media_type || 'other'}, ${url || ''})
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(inserted[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "persona_id and body are required" });
+        }
+        break;
+      case "PUT /instructor/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.media_id &&
+          event.body
+        ) {
+          try {
+            const { media_id } = event.queryStringParameters;
+            const { title, description, media_type, url } = JSON.parse(event.body);
+
+            const updated = await sqlConnection`
+              UPDATE "persona_media"
+              SET
+                title = COALESCE(${title || null}, title),
+                description = COALESCE(${description || null}, description),
+                media_type = COALESCE(${media_type || null}, media_type),
+                url = COALESCE(${url || null}, url)
+              WHERE media_id = ${media_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Media not found" });
+            } else {
+              response.statusCode = 200;
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "media_id and body are required" });
+        }
+        break;
+      case "DELETE /instructor/persona_media":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.media_id
+        ) {
+          try {
+            const { media_id } = event.queryStringParameters;
+
+            const deleted = await sqlConnection`
+              DELETE FROM "persona_media"
+              WHERE media_id = ${media_id}
+              RETURNING media_id;
+            `;
+
+            if (deleted.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Media not found" });
+            } else {
+              response.statusCode = 200;
+              response.body = JSON.stringify({ message: "Deleted successfully" });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "media_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

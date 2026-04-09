@@ -169,9 +169,9 @@ export interface CaseMaterial {
   id: string;                           // Unique identifier (media_id in DB)
   title: string;                        // Material title
   description: string;                  // Material description
-  materialType: string;                 // Type: image, video, document, audio, other (media_type in DB)
+  materialType: 'kaltura' | 'panopto' | 'h5p'; // Embed provider type (media_type in DB)
   contentUrl?: string;                  // URL to uploaded content (url in DB)
-  embedLink?: string;                   // H5P embed link (can be stored in url field)
+  embedLink?: string;                   // Embed URL (stored in url field)
 }
 
 /**
@@ -309,6 +309,8 @@ export interface InstructorDataService {
   createPatient: (simulationGroupId: string, patientData: PatientCreateData) => Promise<string>;
   updatePatient: (simulationGroupId: string, patientData: PatientUpdateData) => Promise<void>;
   uploadPatientPhoto: (simulationGroupId: string, patientId: string, photoFile: File) => Promise<string>;
+  deletePatientPhoto: (simulationGroupId: string, patientId: string) => Promise<void>;
+  fetchProfilePictures: (simulationGroupId: string) => Promise<Record<string, string>>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
   deletePatient: (patientId: string) => Promise<void>;
@@ -320,10 +322,10 @@ export interface InstructorDataService {
   addCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   updateCaseSpecificQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   deleteCaseSpecificQuestion: (patientId: string, questionId: string) => void;
-  getCaseMaterials: (patientId: string) => CaseMaterial[];
-  addCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  updateCaseMaterial: (patientId: string, material: CaseMaterial) => void;
-  deleteCaseMaterial: (patientId: string, materialId: string) => void;
+  getCaseMaterials: (patientId: string) => Promise<CaseMaterial[]>;
+  addCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  updateCaseMaterial: (patientId: string, material: CaseMaterial) => Promise<CaseMaterial>;
+  deleteCaseMaterial: (patientId: string, materialId: string) => Promise<void>;
   getEvaluationPrompt: (simulationGroupId: string) => Promise<string>;
   getDebriefPrompt: (simulationGroupId: string) => Promise<string>;
   updateSystemPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
@@ -1187,11 +1189,50 @@ async function uploadPatientFile(
 }
 
 /**
- * Upload patient photo
+ * Upload patient photo — normalizes filename to {patientId}_profile_pic.png
+ * so retrieval via getProfilePictures Lambda works consistently.
  */
 async function uploadPatientPhoto(simulationGroupId: string, patientId: string, photoFile: File): Promise<string> {
-  await uploadFileToS3(simulationGroupId, patientId, photoFile, 'profile_picture');
+  // Normalize to a consistent filename so upload and retrieval keys match.
+  // The presigned URL lambda hardcodes ContentType: image/png for profile_picture,
+  // so the MIME type here must match to avoid a signature mismatch on upload.
+  const normalizedFile = new File([photoFile], `${patientId}_profile_pic.png`, { type: 'image/png' });
+  await uploadFileToS3(simulationGroupId, patientId, normalizedFile, 'profile_picture');
   return '';
+}
+
+/**
+ * Delete patient photo from S3
+ */
+async function deletePatientPhoto(simulationGroupId: string, patientId: string): Promise<void> {
+  const queryParams = new URLSearchParams({
+    simulation_group_id: simulationGroupId,
+    persona_id: patientId,
+    patient_name: patientId,
+    file_name: `${patientId}_profile_pic`,
+    file_type: 'png',
+    folder_type: 'profile_picture',
+  });
+
+  await apiClient.request(
+    `instructor/delete_file?${queryParams.toString()}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * Fetch profile picture URLs for all patients in a simulation group
+ */
+async function fetchProfilePictures(simulationGroupId: string): Promise<Record<string, string>> {
+  try {
+    const data = await apiClient.request<Record<string, string>>(
+      `instructor/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+    return data;
+  } catch (error) {
+    console.error('Failed to fetch profile pictures:', error);
+    return {};
+  }
 }
 
 /**
@@ -1692,29 +1733,85 @@ function deleteCaseSpecificQuestion(patientId: string, questionId: string): void
 /**
  * Get case materials for a patient
  */
-function getCaseMaterials(_patientId: string): CaseMaterial[] {
-  return [];
+async function getCaseMaterials(patientId: string): Promise<CaseMaterial[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`
+    );
+    return data.map((row) => ({
+      id: row.media_id,
+      title: row.title || '',
+      description: row.description || '',
+      materialType: (row.media_type || 'kaltura') as CaseMaterial['materialType'],
+      contentUrl: '',
+      embedLink: row.url || '',
+    }));
+  } catch (error) {
+    console.error('Failed to fetch case materials:', error);
+    return [];
+  }
 }
 
 /**
  * Add a new case material
  */
-function addCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function addCaseMaterial(patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?persona_id=${encodeURIComponent(patientId)}`,
+    {
+      method: 'POST',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: (data.media_type || 'kaltura') as CaseMaterial['materialType'],
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Update a case material
  */
-function updateCaseMaterial(_patientId: string, _material: CaseMaterial): void {
-  // TODO: implement API call
+async function updateCaseMaterial(_patientId: string, material: CaseMaterial): Promise<CaseMaterial> {
+  const data = await apiClient.request<any>(
+    `instructor/persona_media?media_id=${encodeURIComponent(material.id)}`,
+    {
+      method: 'PUT',
+      body: {
+        title: material.title,
+        description: material.description,
+        media_type: material.materialType,
+        url: material.embedLink || material.contentUrl || '',
+      },
+    }
+  );
+  return {
+    id: data.media_id,
+    title: data.title || '',
+    description: data.description || '',
+    materialType: (data.media_type || 'kaltura') as CaseMaterial['materialType'],
+    contentUrl: '',
+    embedLink: data.url || '',
+  };
 }
 
 /**
  * Delete a case material
  */
-function deleteCaseMaterial(_patientId: string, _materialId: string): void {
-  // TODO: implement API call
+async function deleteCaseMaterial(_patientId: string, materialId: string): Promise<void> {
+  await apiClient.request(
+    `instructor/persona_media?media_id=${encodeURIComponent(materialId)}`,
+    { method: 'DELETE' }
+  );
 }
 
 /**
@@ -1914,6 +2011,7 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
       missedQuestions,
       missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
       overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+      recommendation: typeof debrief.recommendation === 'string' ? debrief.recommendation : undefined,
       recommendationFeedback: {
         strengths: debrief.recommendation_feedback?.strengths || [],
         areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
@@ -1978,6 +2076,8 @@ export const instructorService: InstructorDataService = {
   createPatient,
   updatePatient,
   uploadPatientPhoto,
+  deletePatientPhoto,
+  fetchProfilePictures,
   uploadPatientFile,
   updatePatientLLMEvaluation,
   deletePatient,

@@ -130,6 +130,19 @@ function AdminSimulationGroupPage() {
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
 
+  // Load case materials from API when patient changes
+  useEffect(() => {
+    if (!selectedPatientForEdit) return;
+    let cancelled = false;
+    instructorService.getCaseMaterials(selectedPatientForEdit).then((data) => {
+      if (!cancelled) {
+        setCaseMaterials(data);
+        setSelectedMaterialId(data[0]?.id || '');
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedPatientForEdit]);
+
   // Get selected material
   const selectedMaterial = caseMaterials.find(m => m.id === selectedMaterialId);
 
@@ -152,6 +165,7 @@ function AdminSimulationGroupPage() {
   const [analyticsDateRange, setAnalyticsDateRange] = useState({ start: '', end: '' });
   const [students, setStudents] = useState<Student[]>([]);
   const [manageablePatients, setManageablePatients] = useState<ManageablePatient[]>([]);
+  const [profilePictures, setProfilePictures] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
@@ -182,7 +196,7 @@ function AdminSimulationGroupPage() {
 
       try {
         // Load each data source independently so one failure doesn't block the rest
-        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient] = await Promise.all([
+        const [adminGroupData, analyticsData, studentsData, patientsData, bankGlobal, bankPatient, profilePics] = await Promise.all([
           adminApi.getSimulationGroup(groupId).catch(err => { console.error('Failed to load group:', err); return undefined; }),
           instructorService.getPatientAnalytics(groupId).catch(err => { console.error('Failed to load analytics:', err); return [] as PatientAnalytics[]; }),
           instructorService.getStudents(groupId).catch(err => { console.error('Failed to load students:', err); return [] as Student[]; }),
@@ -191,6 +205,7 @@ function AdminSimulationGroupPage() {
             ? adminApi.getQuestionBankQuestions(organizationId).catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; })
             : instructorService.getGlobalQuestionBank().catch(err => { console.error('Failed to load global questions:', err); return [] as QuestionBankItem[]; }),
           Promise.resolve(instructorService.getPatientSpecificQuestionBank()),
+          instructorService.fetchProfilePictures(groupId).catch(err => { console.error('Failed to load profile pictures:', err); return {} as Record<string, string>; }),
         ]);
 
         // Map admin API shape to InstructorSimulationGroup
@@ -227,6 +242,7 @@ function AdminSimulationGroupPage() {
         setPatientAnalytics(analyticsData);
         setStudents(studentsData);
         setManageablePatients(patientsData);
+        setProfilePictures(profilePics);
 
         // Split questions by tags: patient_specific vs global
         if (organizationId) {
@@ -532,9 +548,13 @@ function AdminSimulationGroupPage() {
           });
       }
 
-      const materials = instructorService.getCaseMaterials(patientId);
-      setCaseMaterials(materials);
-      setSelectedMaterialId(materials[0]?.id || '');
+      instructorService.getCaseMaterials(patientId).then((materials) => {
+        setCaseMaterials(materials);
+        setSelectedMaterialId(materials[0]?.id || '');
+      }).catch(() => {
+        setCaseMaterials([]);
+        setSelectedMaterialId('');
+      });
 
       setActiveSection('editPatient');
     }
@@ -759,10 +779,24 @@ function AdminSimulationGroupPage() {
         if (!savedId) return;
         patientId = savedId;
       }
-      instructorService.uploadPatientPhoto(groupId, patientId, file).then(async () => {
-        const manageablePatients = await instructorService.getManageablePatients(groupId);
-        setManageablePatients(manageablePatients);
-      });
+      await instructorService.uploadPatientPhoto(groupId, patientId, file);
+      const [patients, pics] = await Promise.all([
+        instructorService.getManageablePatients(groupId),
+        instructorService.fetchProfilePictures(groupId),
+      ]);
+      setManageablePatients(patients);
+      setProfilePictures(pics);
+    }
+  };
+
+  const handlePhotoDelete = async () => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
+    if (!confirm('Are you sure you want to remove this photo?')) return;
+    try {
+      await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
+      setProfilePictures(await instructorService.fetchProfilePictures(groupId));
+    } catch (error) {
+      console.error('Failed to delete photo:', error);
     }
   };
 
@@ -789,11 +823,6 @@ function AdminSimulationGroupPage() {
     }
     e.target.value = '';
   };
-
-  // Get the patient being edited
-  const patientBeingEdited = selectedPatientForEdit
-    ? instructorService.getPatient(selectedPatientForEdit)
-    : null;
 
   const handleCreateNewPatient = () => {
     setSelectedPatientForEdit('new');
@@ -837,40 +866,33 @@ function AdminSimulationGroupPage() {
 
 
 
-  const handleUpdateMaterialField = (field: keyof CaseMaterial, value: string) => {
-    if (!selectedMaterialId) return;
-    setCaseMaterials(caseMaterials.map(m =>
-      m.id === selectedMaterialId ? { ...m, [field]: value } : m
-    ));
-  };
-
-  const handleAddNewCaseMaterial = () => {
+  const handleAddNewCaseMaterial = async () => {
     if (!selectedPatientForEdit) return;
     const newMaterial: CaseMaterial = {
       id: `material-${Date.now()}`,
       title: 'New Material',
       description: '',
-      materialType: 'document',
+      materialType: 'kaltura',
       contentUrl: '',
       embedLink: '',
     };
-    instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-    setCaseMaterials(instructorService.getCaseMaterials(selectedPatientForEdit));
-    setSelectedMaterialId(newMaterial.id);
+    try {
+      const created = await instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
+      setCaseMaterials(prev => [...prev, created]);
+      setSelectedMaterialId(created.id);
+    } catch (error) {
+      console.error('Failed to add case material:', error);
+    }
   };
 
 
-  const handleSaveCaseMaterial = () => {
+  const handleSaveCaseMaterial = async () => {
     if (!selectedMaterial || !selectedPatientForEdit) return;
-    instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
-    console.log('Saving case material:', selectedMaterial);
-  };
-
-  const handleMaterialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && selectedMaterialId) {
-      console.log('Uploading material file:', file.name);
-      handleUpdateMaterialField('contentUrl', URL.createObjectURL(file));
+    try {
+      const updated = await instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
+      setCaseMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+    } catch (error) {
+      console.error('Failed to save case material:', error);
     }
   };
 
@@ -1302,16 +1324,6 @@ function AdminSimulationGroupPage() {
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
             Student View
-          </Button>
-          <Button
-            variant="default"
-            onClick={handleInstructorView}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-          >
-            Instructor View
           </Button>
           <Button
             variant="default"
@@ -2459,13 +2471,23 @@ function AdminSimulationGroupPage() {
                       </h3>
 
                       <div className="flex items-center gap-4">
-                        <UserAvatar name={editPatientName || 'P'} imageUrl={patientBeingEdited?.photo_url} size="large" />
+                        <UserAvatar name={editPatientName || 'P'} imageUrl={selectedPatientForEdit && selectedPatientForEdit !== 'new' ? profilePictures[selectedPatientForEdit] : undefined} size="large" />
                         <label className="cursor-pointer">
                           <input type="file" accept="image/*" onChange={handlePhotoUpload} className="hidden" />
                           <div className="p-3 rounded-full transition-colors" style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}>
                             <Camera className="w-6 h-6" />
                           </div>
                         </label>
+                        {selectedPatientForEdit && selectedPatientForEdit !== 'new' && profilePictures[selectedPatientForEdit] && (
+                          <button
+                            onClick={handlePhotoDelete}
+                            className="p-3 rounded-full transition-colors"
+                            style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
+                            title="Remove photo"
+                          >
+                            <Trash2 className="w-6 h-6" />
+                          </button>
+                        )}
                       </div>
 
                       {[
@@ -2645,38 +2667,44 @@ function AdminSimulationGroupPage() {
                                     <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Material Type</label>
                                     <select
                                       value={material.materialType}
-                                      onChange={(e) => setCaseMaterials(caseMaterials.map(m => m.id === material.id ? { ...m, materialType: e.target.value } : m))}
+                                      onChange={(e) => setCaseMaterials(caseMaterials.map(m => m.id === material.id ? { ...m, materialType: e.target.value as CaseMaterial['materialType'] } : m))}
                                       className="w-full px-3 py-3 rounded-lg text-base focus:outline-none focus:ring-2"
                                       style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, outlineColor: UI_COLORS.border.medium }}
                                     >
-                                      {['image', 'video', 'document', 'audio', 'other'].map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                                      {['kaltura', 'panopto', 'h5p'].map(t => <option key={t} value={t}>{t === 'h5p' ? 'H5P' : t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
                                     </select>
                                   </div>
                                   <div>
-                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Content Upload/Embed</label>
-                                    <label className="cursor-pointer">
-                                      <input type="file" onChange={(e) => { setSelectedMaterialId(material.id); handleMaterialFileUpload(e); }} className="hidden" />
-                                      <div className="inline-flex items-center gap-2 px-6 py-3 rounded-lg transition-colors font-medium" style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}>
-                                        <Upload className="w-5 h-5" />
-                                        Upload File
-                                      </div>
-                                    </label>
-                                    <p className="text-sm font-medium my-3" style={{ color: UI_COLORS.text.body }}>OR</p>
-                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Enter H5P Embed Link</label>
+                                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>Embed Link</label>
                                     <Input
                                       value={material.embedLink || ''}
                                       onChange={(e) => setCaseMaterials(caseMaterials.map(m => m.id === material.id ? { ...m, embedLink: e.target.value } : m))}
-                                      placeholder="Value"
+                                      placeholder="https://..."
                                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
                                       style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
                                     />
                                   </div>
-                                  <div className="border rounded-lg p-8 flex flex-col items-center justify-center" style={{ borderColor: UI_COLORS.border.default, minHeight: '200px' }}>
+                                  <div>
                                     <div className="flex items-center gap-2 mb-2">
                                       <Eye className="w-5 h-5" style={{ color: UI_COLORS.text.body }} />
                                       <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>Preview</span>
                                     </div>
-                                    <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Rendered preview here</p>
+                                    {material.embedLink ? (
+                                      <div className="rounded-lg overflow-hidden" style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', height: 0, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
+                                        <iframe
+                                          src={material.embedLink}
+                                          title={material.title || 'Preview'}
+                                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                                          allowFullScreen
+                                          allow="autoplay *; fullscreen *; encrypted-media *"
+                                          sandbox="allow-downloads allow-forms allow-same-origin allow-scripts allow-top-navigation allow-pointer-lock allow-popups allow-modals allow-orientation-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation-by-user-activation"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="border rounded-lg p-8 flex items-center justify-center" style={{ borderColor: UI_COLORS.border.default, minHeight: '120px' }}>
+                                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Enter an embed link above to see a preview</p>
+                                      </div>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-4 pt-4">
                                     <Button
@@ -2689,7 +2717,7 @@ function AdminSimulationGroupPage() {
                                       Save
                                     </Button>
                                     <Button
-                                      onClick={() => { if (selectedPatientForEdit) { mockInstructorDataService.deleteCaseMaterial(selectedPatientForEdit, material.id); setCaseMaterials(caseMaterials.filter(m => m.id !== material.id)); } }}
+                                      onClick={async () => { if (selectedPatientForEdit) { try { await instructorService.deleteCaseMaterial(selectedPatientForEdit, material.id); setCaseMaterials(caseMaterials.filter(m => m.id !== material.id)); } catch (error) { console.error('Failed to delete material:', error); } } }}
                                       variant="outline"
                                       className="px-8 py-3 text-base font-medium transition-colors text-white"
                                       style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }}
