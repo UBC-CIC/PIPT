@@ -518,7 +518,8 @@ class NovaSonic:
                 self._user_audio_active = False
 
             self.role = new_role
-            self._emitted_texts_this_turn = set()
+            if new_role != prev_role:
+                self._emitted_texts_this_turn = set()
             # optional SPECULATIVE check
             if "additionalModelFields" in content_start:
                 fields = json.loads(content_start["additionalModelFields"])
@@ -571,7 +572,7 @@ class NovaSonic:
             elif effective_role == "USER":
                 print(f"🔍 DEBUG: Processing USER message - Text: {text}", flush=True)
                 print(f"User: {text}", flush=True)
-                print(json.dumps({"type": "text", "text": text, "role": "user"}), flush=True)
+                print(json.dumps({"type": "user-text", "text": text}), flush=True)
                 
                 # Accumulate user input for empathy evaluation
                 if not hasattr(self, '_current_user_input'):

@@ -641,7 +641,8 @@ class NovaSonic:
                 self._user_audio_active = False
 
             self.role = new_role
-            self._emitted_texts_this_turn = set()
+            if new_role != prev_role:
+                self._emitted_texts_this_turn = set()
             if "additionalModelFields" in cs:
                 fields = json.loads(cs["additionalModelFields"])
                 self.display_assistant_text = fields.get("generationStage") == "SPECULATIVE"
@@ -683,7 +684,7 @@ class NovaSonic:
                     await self._emit({"type": "diagnosis_complete", "text": "Session completed successfully"})
 
             elif effective_role == "USER":
-                await self._emit({"type": "text", "text": text, "role": "user"})
+                await self._emit({"type": "user-text", "text": text})
                 self._current_user_input += text
 
         # ── audioOutput ───────────────────────────────────────────────

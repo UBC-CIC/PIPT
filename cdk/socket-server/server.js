@@ -257,6 +257,9 @@ io.on("connection", (socket) => {
               socket.emit("audio-chunk", { data: msg.data });
             } else if (msg.type === "turn-start") {
               socket.emit("turn-start", { role: msg.role });
+            } else if (msg.type === "user-text") {
+              console.log("💬 AGENT USER TEXT:", msg.text);
+              socket.emit("text-message", { text: msg.text, role: "user" });
             } else if (msg.type === "text") {
               console.log("💬 AGENT TEXT:", msg.text);
               socket.emit("text-message", { text: msg.text, role: msg.role || "assistant" });
@@ -377,6 +380,10 @@ io.on("connection", (socket) => {
               console.log("🐞 NOVA DEBUG:", parsed.text);
             }
             // ─ Text messages ─────────────────────────────────────────────
+            else if (parsed.type === "user-text") {
+              console.log("💬 NOVA USER TEXT:", parsed.text);
+              socket.emit("text-message", { text: parsed.text, role: "user" });
+            }
             else if (parsed.type === "text") {
               console.log("💬 NOVA TEXT:", parsed.text);
               socket.emit("text-message", { text: parsed.text, role: parsed.role || "assistant" });
