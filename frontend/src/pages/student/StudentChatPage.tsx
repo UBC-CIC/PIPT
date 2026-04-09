@@ -246,17 +246,22 @@ function StudentChatPage() {
         setVoiceSessionState('error');
       },
       onTurnStart: (role) => {
-        // A new conversational turn is starting — reset the ref for this role
-        // so the next text chunk creates a fresh bubble
+        // ALWAYS reset refs at the start of a new turn
         if (role === 'assistant') {
           voiceAiMessageIdRef.current = null;
         } else {
           voiceUserMessageIdRef.current = null;
         }
+        console.log(`✅ Turn started for ${role}`);
       },
       onTextMessage: (text, role) => {
         // Filter out system/internal messages
         if (text.includes('Nova Sonic ready')) return;
+
+        // SAFETY: If we somehow get both roles in one message, split them
+        if (text.includes('Hello.') && text.length > 100) {
+          console.warn('⚠️ Detected potential message concatenation:', text.substring(0, 100));
+        }
 
         if (role === 'user') {
           // User voice transcript — append to current user bubble or create new one

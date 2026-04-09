@@ -440,6 +440,10 @@ class NovaSonic:
     async def start_audio_input(self):
         self.audio_content_name = str(uuid.uuid4())
         self._current_user_input = ""
+
+        # SEND TURN-START SIGNAL IMMEDIATELY for USER role
+        await self._emit({"type": "turn-start", "role": "user"})
+
         await self.send_event(
             {
                 "event": {
@@ -591,7 +595,8 @@ class NovaSonic:
                 fields = json.loads(cs["additionalModelFields"])
                 self.display_assistant_text = fields.get("generationStage") == "SPECULATIVE"
             # Signal a new turn to the frontend so it creates a new chat bubble
-            if self.role:
+            # USER turn-start is now sent earlier in start_audio_input()
+            if self.role and self.role.upper() != "USER":
                 await self._emit({"type": "turn-start", "role": self.role.lower()})
 
         # ── textOutput ────────────────────────────────────────────────
@@ -618,14 +623,20 @@ class NovaSonic:
                 self._current_user_input += text
 
             # Persist to DynamoDB + PostgreSQL
-            try:
-                if self.role and self.role.upper() == "ASSISTANT":
-                    chat_history.add_message(self.session_id, "ai", text)
-                    self._save_message_to_db(self.session_id, False, text, None)
-                # USER messages are persisted in _save_user_message_async (called from end_audio_input)
-                # to avoid fragment-by-fragment writes and duplicates
-            except Exception as e:
-                logger.error("Failed to persist message: %s", e)
+            # Track if this message has already been persisted to prevent duplicates
+            message_already_persisted = getattr(self, '_last_persisted_message', None) == text
+
+            if not message_already_persisted:
+                try:
+                    if self.role and self.role.upper() == "ASSISTANT":
+                        chat_history.add_message(self.session_id, "ai", text)
+                        self._save_message_to_db(self.session_id, False, text, None)
+                        self._last_persisted_message = text  # Track it
+                        logger.info("💬 [PERSIST] AI | %s | %s", self.session_id, text[:30])
+                    # USER messages are persisted in _save_user_message_async (called from end_audio_input)
+                    # to avoid fragment-by-fragment writes and duplicates
+                except Exception as e:
+                    logger.error("Failed to persist message: %s", e)
 
         # ── audioOutput ───────────────────────────────────────────────
         elif "audioOutput" in evt:
