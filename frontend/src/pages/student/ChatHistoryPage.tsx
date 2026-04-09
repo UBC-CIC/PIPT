@@ -11,6 +11,7 @@ import AIDebriefDialog from '@/components/AIDebriefDialog';
 import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 import { useAuth } from '@/App';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
+import ResizeHandle from '@/components/ResizeHandle';
 
 /**
  * ChatHistoryPage Component
@@ -175,6 +176,7 @@ function ChatHistoryPage() {
         data={debriefData}
         simulationGroupId={groupId}
         patientId={patientId}
+        showAnswerKey={false}
       />
 
       {/* Header */}
@@ -345,20 +347,7 @@ function ChatHistoryPage() {
         >
           {/* Drag handle for resizing */}
           {isPatientInfoSidebarOpen && (
-            <div
-              onMouseDown={onPatientInfoDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPatientInfoDrag} direction="left" />
           )}
           {/* Header with close button */}
           {isPatientInfoSidebarOpen && (
@@ -533,20 +522,7 @@ function ChatHistoryPage() {
         >
           {/* Drag handle for resizing */}
           {contentSidebarType && (
-            <div
-              onMouseDown={onPhysicalAssessmentDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPhysicalAssessmentDrag} direction="right" />
           )}
           {/* Header with close button */}
           {contentSidebarType && (

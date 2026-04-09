@@ -11,6 +11,7 @@ interface AIDebriefDialogProps {
   data?: AIDebriefData | null;
   simulationGroupId?: string;
   patientId?: string;
+  showAnswerKey?: boolean;
 }
 
 /**
@@ -20,7 +21,7 @@ interface AIDebriefDialogProps {
  * Includes interview summary, key questions addressed/missed, clinical reasoning feedback,
  * and suggested question rewrites.
  */
-function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }: AIDebriefDialogProps) {
+function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, showAnswerKey = true }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isLoadingAnswerKey, setIsLoadingAnswerKey] = useState(false);
   const [answerKeyAvailable, setAnswerKeyAvailable] = useState<boolean | null>(null);
@@ -138,14 +139,20 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                 Key Questions You Successfully Addressed
               </h3>
             </div>
-            <ul className="space-y-2 pl-7">
-              {debriefData.questionsAddressed.map((question, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
-                  <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
-                  <span>{question}</span>
-                </li>
-              ))}
-            </ul>
+            {debriefData.questionsAddressed.length > 0 ? (
+              <ul className="space-y-2 pl-7">
+                {debriefData.questionsAddressed.map((question, index) => (
+                  <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                    <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
+                    <span>{question}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                No key questions were identified as addressed.
+              </p>
+            )}
           </div>
 
           {/* Key Questions Missed */}
@@ -171,18 +178,24 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                 Suggested Question Rewrites
               </h3>
             </div>
-            <div className="pl-7 space-y-3">
-              {debriefData.suggestedRewrites.map((rewrite, index) => (
-                <div key={index} className="space-y-1">
-                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                    <span className="font-medium">Instead of:</span> "{rewrite.original}"
-                  </p>
-                  <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                    <span className="font-medium">Try:</span> "{rewrite.suggested}"
-                  </p>
-                </div>
-              ))}
-            </div>
+            {debriefData.suggestedRewrites.length > 0 ? (
+              <div className="pl-7 space-y-3">
+                {debriefData.suggestedRewrites.map((rewrite, index) => (
+                  <div key={index} className="space-y-1">
+                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                      <span className="font-medium">Instead of:</span> "{rewrite.original}"
+                    </p>
+                    <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                      <span className="font-medium">Try:</span> "{rewrite.suggested}"
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                No suggested question rewrites.
+              </p>
+            )}
           </div>
 
           {/* Recommendation Feedback */}
@@ -193,35 +206,46 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
                 Recommendations Feedback
               </h3>
             </div>
-            <div className="pl-7 space-y-4">
-              <div>
-                <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                  Strengths:
-                </h4>
-                <ul className="space-y-1 list-disc list-inside">
-                  {debriefData.recommendationFeedback.strengths.map((strength, index) => (
-                    <li key={index} className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      {strength}
-                    </li>
-                  ))}
-                </ul>
+            {debriefData.recommendationFeedback.strengths.length === 0 && debriefData.recommendationFeedback.areasForImprovement.length === 0 ? (
+              <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                No recommendations feedback available.
+              </p>
+            ) : (
+              <div className="pl-7 space-y-4">
+                {debriefData.recommendationFeedback.strengths.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Strengths:
+                    </h4>
+                    <ul className="space-y-1 list-disc list-inside">
+                      {debriefData.recommendationFeedback.strengths.map((strength, index) => (
+                        <li key={index} className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                          {strength}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {debriefData.recommendationFeedback.areasForImprovement.length > 0 && (
+                  <div>
+                    <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                      Areas for Improvement:
+                    </h4>
+                    <ul className="space-y-1 list-disc list-inside">
+                      {debriefData.recommendationFeedback.areasForImprovement.map((area, index) => (
+                        <li key={index} className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                          {area}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
-              <div>
-                <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                  Areas for Improvement:
-                </h4>
-                <ul className="space-y-1 list-disc list-inside">
-                  {debriefData.recommendationFeedback.areasForImprovement.map((area, index) => (
-                    <li key={index} className="text-sm" style={{ color: UI_COLORS.text.body }}>
-                      {area}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Answer Key */}
+          {showAnswerKey && (
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
@@ -257,9 +281,10 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId }
               </Button>
             </div>
           </div>
+          )}
 
           {/* Answer Key Comparison */}
-          {(debriefData.answerKeyComparison || answerKeyAvailable) && (
+          {showAnswerKey && (debriefData.answerKeyComparison || answerKeyAvailable) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />

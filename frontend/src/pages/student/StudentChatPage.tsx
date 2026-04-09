@@ -13,6 +13,7 @@ import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
+import ResizeHandle from '@/components/ResizeHandle';
 
 /**
  * Attempts to extract structured debrief data from a raw JSON string.
@@ -586,7 +587,30 @@ function StudentChatPage() {
         data={debriefData}
         simulationGroupId={groupId}
         patientId={patientId}
+        showAnswerKey={false}
       />
+
+      {/* Full-screen generating debrief overlay */}
+      {sessionStatus === 'generating_debrief' && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.45)',
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+          }}
+        >
+          <Loader2 className="w-12 h-12 animate-spin" style={{ color: '#fff' }} />
+          <p className="text-lg font-medium" style={{ color: '#fff' }}>
+            Generating Debrief...
+          </p>
+        </div>
+      )}
 
       {/* Header */}
       <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
@@ -765,20 +789,7 @@ function StudentChatPage() {
         >
           {/* Drag handle for resizing */}
           {isPatientInfoSidebarOpen && (
-            <div
-              onMouseDown={onPatientInfoDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPatientInfoDrag} direction="left" />
           )}
           {/* Header with close button */}
           {isPatientInfoSidebarOpen && (
@@ -1107,20 +1118,7 @@ function StudentChatPage() {
         >
           {/* Drag handle for resizing */}
           {contentSidebarType && (
-            <div
-              onMouseDown={onPhysicalAssessmentDrag}
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: -3,
-                bottom: 0,
-                width: 6,
-                cursor: 'col-resize',
-                zIndex: 10,
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(0,0,0,0.08)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-            />
+            <ResizeHandle onMouseDown={onPhysicalAssessmentDrag} direction="right" />
           )}
           {/* Header with close button */}
           {contentSidebarType && (
