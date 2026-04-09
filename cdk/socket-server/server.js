@@ -255,6 +255,8 @@ io.on("connection", (socket) => {
 
             if (msg.type === "audio") {
               socket.emit("audio-chunk", { data: msg.data });
+            } else if (msg.type === "turn-start") {
+              socket.emit("turn-start", { role: msg.role });
             } else if (msg.type === "text") {
               console.log("💬 AGENT TEXT:", msg.text);
               socket.emit("text-message", { text: msg.text, role: msg.role || "assistant" });
@@ -366,6 +368,10 @@ io.on("connection", (socket) => {
               // Skip debug file saving for better performance
               socket.emit("audio-chunk", { data: parsed.data });
             }
+            // ─ Turn start signals ─────────────────────────────────────────
+            else if (parsed.type === "turn-start") {
+              socket.emit("turn-start", { role: parsed.role });
+            }
             // ─ Debug messages ───────────────────────────────────────────
             else if (parsed.type === "debug") {
               console.log("🐞 NOVA DEBUG:", parsed.text);
@@ -403,9 +409,9 @@ io.on("connection", (socket) => {
               });
             }
             // Forward voice transcriptions to text chat
-            if (line.includes("User:") || line.includes("Assistant:")) {
-              socket.emit("text-message", { text: line });
-            }
+            // NOTE: JSON-parsed text-message events already handle this above.
+            // This fallback is only for non-JSON debug lines — do NOT re-emit as text-message
+            // to avoid duplicates.
             // Handle diagnosis completion in plain text fallback
             if (line.includes("SESSION COMPLETED")) {
               socket.emit("diagnosis-complete", {

@@ -173,6 +173,8 @@ function StudentChatPage() {
 
   // Ref to track the current AI voice message being streamed into the chat
   const voiceAiMessageIdRef = useRef<string | null>(null);
+  // Ref to track the current user voice message being streamed into the chat
+  const voiceUserMessageIdRef = useRef<string | null>(null);
 
   // Session ID — set by createSession (new chat) or from route (existing chat)
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -243,24 +245,43 @@ function StudentChatPage() {
         }
         setVoiceSessionState('error');
       },
+      onTurnStart: (role) => {
+        // A new conversational turn is starting — reset the ref for this role
+        // so the next text chunk creates a fresh bubble
+        if (role === 'assistant') {
+          voiceAiMessageIdRef.current = null;
+        } else {
+          voiceUserMessageIdRef.current = null;
+        }
+      },
       onTextMessage: (text, role) => {
         // Filter out system/internal messages
         if (text.includes('Nova Sonic ready')) return;
 
         if (role === 'user') {
-          // User voice transcript — add as a student message
-          const msgId = `voice-user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          setMessages((prev) => [...prev, {
-            message_id: msgId,
-            chat_id: chatId,
-            sender_type: 'student',
-            message_content: text,
-            sent_at: new Date().toISOString(),
-          }]);
-          // Reset AI message ref so the next AI chunk creates a new bubble
-          voiceAiMessageIdRef.current = null;
+          // User voice transcript — append to current user bubble or create new one
+          if (!voiceUserMessageIdRef.current) {
+            const msgId = `voice-user-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            voiceUserMessageIdRef.current = msgId;
+            setMessages((prev) => [...prev, {
+              message_id: msgId,
+              chat_id: chatId,
+              sender_type: 'student',
+              message_content: text,
+              sent_at: new Date().toISOString(),
+            }]);
+          } else {
+            const currentId = voiceUserMessageIdRef.current;
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === currentId
+                  ? { ...m, message_content: m.message_content + text }
+                  : m
+              )
+            );
+          }
         } else {
-          // AI voice transcript — progressively append to a single AI message
+          // AI voice transcript — append to current AI bubble or create new one
           if (!voiceAiMessageIdRef.current) {
             const msgId = `voice-ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
             voiceAiMessageIdRef.current = msgId;

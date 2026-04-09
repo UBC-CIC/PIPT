@@ -585,10 +585,14 @@ class NovaSonic:
         # ── contentStart ──────────────────────────────────────────────
         if "contentStart" in evt:
             cs = evt["contentStart"]
+            prev_role = self.role
             self.role = cs.get("role")
             if "additionalModelFields" in cs:
                 fields = json.loads(cs["additionalModelFields"])
                 self.display_assistant_text = fields.get("generationStage") == "SPECULATIVE"
+            # Signal a new turn to the frontend so it creates a new chat bubble
+            if self.role:
+                await self._emit({"type": "turn-start", "role": self.role.lower()})
 
         # ── textOutput ────────────────────────────────────────────────
         elif "textOutput" in evt:

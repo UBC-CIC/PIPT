@@ -25,6 +25,7 @@ export interface SocketIOAudioClientConfig {
   onStateChange: (state: VoiceSessionState) => void;
   onError: (error: Error) => void;
   onTextMessage?: (text: string, role: 'user' | 'assistant') => void;
+  onTurnStart?: (role: 'user' | 'assistant') => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +46,7 @@ export class SocketIOAudioClient {
   private boundOnNovaStarted: ((...args: unknown[]) => void) | null = null;
   private boundOnNovaError: ((...args: unknown[]) => void) | null = null;
   private boundOnTextMessage: ((...args: unknown[]) => void) | null = null;
+  private boundOnTurnStart: ((...args: unknown[]) => void) | null = null;
 
   constructor(config: SocketIOAudioClientConfig) {
     this.config = config;
@@ -106,6 +108,18 @@ export class SocketIOAudioClient {
           }
         };
         this.config.socket.on('text-message', this.boundOnTextMessage);
+      }
+
+      // Listen for turn-start signals to create new chat bubbles
+      if (this.config.onTurnStart) {
+        this.boundOnTurnStart = (data: unknown) => {
+          const msg = data as { role?: string };
+          if (this.config.onTurnStart) {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            this.config.onTurnStart(role);
+          }
+        };
+        this.config.socket.on('turn-start', this.boundOnTurnStart);
       }
 
       // 4. Tell the server to start the session
@@ -289,6 +303,10 @@ export class SocketIOAudioClient {
     if (this.boundOnTextMessage) {
       this.config.socket.off('text-message', this.boundOnTextMessage);
       this.boundOnTextMessage = null;
+    }
+    if (this.boundOnTurnStart) {
+      this.config.socket.off('turn-start', this.boundOnTurnStart);
+      this.boundOnTurnStart = null;
     }
 
     this.muted = false;
