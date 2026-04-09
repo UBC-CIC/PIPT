@@ -24,6 +24,7 @@ export interface SocketIOAudioClientConfig {
   socket: SocketLike;
   onStateChange: (state: VoiceSessionState) => void;
   onError: (error: Error) => void;
+  onTextMessage?: (text: string, role: 'user' | 'assistant') => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +44,7 @@ export class SocketIOAudioClient {
   private boundOnAudioChunk: ((...args: unknown[]) => void) | null = null;
   private boundOnNovaStarted: ((...args: unknown[]) => void) | null = null;
   private boundOnNovaError: ((...args: unknown[]) => void) | null = null;
+  private boundOnTextMessage: ((...args: unknown[]) => void) | null = null;
 
   constructor(config: SocketIOAudioClientConfig) {
     this.config = config;
@@ -93,6 +95,18 @@ export class SocketIOAudioClient {
       this.config.socket.on('nova-started', this.boundOnNovaStarted);
       this.config.socket.on('audio-chunk', this.boundOnAudioChunk);
       this.config.socket.on('nova-error', this.boundOnNovaError);
+
+      // Listen for voice transcription text messages
+      if (this.config.onTextMessage) {
+        this.boundOnTextMessage = (data: unknown) => {
+          const msg = data as { text: string; role?: string };
+          if (msg.text && this.config.onTextMessage) {
+            const role = msg.role === 'user' ? 'user' : 'assistant';
+            this.config.onTextMessage(msg.text, role);
+          }
+        };
+        this.config.socket.on('text-message', this.boundOnTextMessage);
+      }
 
       // 4. Tell the server to start the session
       this.config.socket.emit('start-nova-sonic', sessionConfig);
@@ -271,6 +285,10 @@ export class SocketIOAudioClient {
     if (this.boundOnNovaError) {
       this.config.socket.off('nova-error', this.boundOnNovaError);
       this.boundOnNovaError = null;
+    }
+    if (this.boundOnTextMessage) {
+      this.config.socket.off('text-message', this.boundOnTextMessage);
+      this.boundOnTextMessage = null;
     }
 
     this.muted = false;

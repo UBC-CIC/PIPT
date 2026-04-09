@@ -599,12 +599,12 @@ class NovaSonic:
                 text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
 
             if self.role == "ASSISTANT":
-                await self._emit({"type": "text", "text": text})
+                await self._emit({"type": "text", "text": text, "role": "assistant"})
                 if diagnosis_achieved and self.llm_completion:
                     await self._emit({"type": "diagnosis_complete", "text": "Session completed successfully"})
 
             elif self.role == "USER":
-                await self._emit({"type": "text", "text": text})
+                await self._emit({"type": "text", "text": text, "role": "user"})
                 self._current_user_input += text
 
             # Mirror to PostgreSQL + DynamoDB

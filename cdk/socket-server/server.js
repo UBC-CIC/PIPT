@@ -254,7 +254,7 @@ io.on("connection", (socket) => {
               socket.emit("audio-chunk", { data: msg.data });
             } else if (msg.type === "text") {
               console.log("💬 AGENT TEXT:", msg.text);
-              socket.emit("text-message", { text: msg.text });
+              socket.emit("text-message", { text: msg.text, role: msg.role || "assistant" });
               if (msg.text && msg.text.includes("Nova Sonic ready")) {
                 novaReady = true;
                 socket.emit("nova-started", { status: "Nova Sonic session started" });
@@ -370,7 +370,7 @@ io.on("connection", (socket) => {
             // ─ Text messages ─────────────────────────────────────────────
             else if (parsed.type === "text") {
               console.log("💬 NOVA TEXT:", parsed.text);
-              socket.emit("text-message", { text: parsed.text });
+              socket.emit("text-message", { text: parsed.text, role: parsed.role || "assistant" });
               if (parsed.text.includes("Nova Sonic ready")) {
                 novaReady = true;
                 socket.emit("nova-started", {

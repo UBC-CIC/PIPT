@@ -502,7 +502,7 @@ class NovaSonic:
             if self.role == "ASSISTANT":
                 print(f"🔍 DEBUG: Processing ASSISTANT message", flush=True)
                 print(f"Assistant: {text}", flush=True)
-                print(json.dumps({"type": "text", "text": text}), flush=True)
+                print(json.dumps({"type": "text", "text": text, "role": "assistant"}), flush=True)
                 
                 # If diagnosis achieved, signal completion
                 if diagnosis_achieved and self.llm_completion:
@@ -511,7 +511,7 @@ class NovaSonic:
             elif self.role == "USER":
                 print(f"🔍 DEBUG: Processing USER message - Text: {text}", flush=True)
                 print(f"User: {text}", flush=True)
-                print(json.dumps({"type": "text", "text": text}), flush=True)
+                print(json.dumps({"type": "text", "text": text, "role": "user"}), flush=True)
                 
                 # Accumulate user input for empathy evaluation
                 if not hasattr(self, '_current_user_input'):
