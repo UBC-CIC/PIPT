@@ -344,6 +344,7 @@ io.on("connection", (socket) => {
           PATIENT_NAME: config.patient_name || "",
           PATIENT_PROMPT: config.patient_prompt || "",
           PATIENT_ID: config.patient_id || "",
+          SIMULATION_GROUP_ID: config.simulation_group_id || "",
           LLM_COMPLETION: config.llm_completion ? "true" : "false",
           EXTRA_SYSTEM_PROMPT: config.system_prompt || "",
           APPSYNC_GRAPHQL_URL: process.env.APPSYNC_GRAPHQL_URL || "",

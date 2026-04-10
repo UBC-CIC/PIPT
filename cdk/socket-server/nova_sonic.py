@@ -492,6 +492,7 @@ class NovaSonic:
         # contentStart
         if "contentStart" in evt:
             content_start = evt["contentStart"]
+            prev_role = self.role
             new_role = content_start.get("role")
             print(f"🔍 DEBUG ROLE SET: {new_role}", flush=True)
 
@@ -657,9 +658,6 @@ class NovaSonic:
 
             print(f"🔍 DEBUG: Final role processing - Role: {self.role}, Text length: {len(text)}", flush=True)
             logger.info(f"💬 [add_message] {self.role.upper()} | {self.session_id} | {text[:30]}")
-                # to avoid fragment-by-fragment writes and duplicates
-            except Exception as e:
-                print(f"❌ Failed to persist message: {e}", flush=True)
 
         # audioOutput
         elif "audioOutput" in evt:

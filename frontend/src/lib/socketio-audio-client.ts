@@ -83,6 +83,12 @@ export class SocketIOAudioClient {
       // 3. Wire up Socket.IO listeners
       this.boundOnNovaStarted = () => {
         this.setState('active');
+        // Start audio capture only after Nova Sonic is ready
+        // to avoid dropping early frames
+        this.startCapture().catch((err) => {
+          this.config.onError(err instanceof Error ? err : new Error(String(err)));
+          this.setState('error');
+        });
       };
       this.boundOnAudioChunk = (data: unknown) => {
         const msg = data as { data: string };
@@ -124,9 +130,6 @@ export class SocketIOAudioClient {
 
       // 4. Tell the server to start the session
       this.config.socket.emit('start-nova-sonic', sessionConfig);
-
-      // 5. Set up audio capture pipeline (16kHz mono PCM → base64)
-      await this.startCapture();
 
     } catch (err) {
       this.cleanup();
