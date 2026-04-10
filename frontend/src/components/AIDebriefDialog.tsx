@@ -21,7 +21,7 @@ interface AIDebriefDialogProps {
  * Includes interview summary, key questions addressed/missed, clinical reasoning feedback,
  * and suggested question rewrites.
  */
-function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, showAnswerKey = true }: AIDebriefDialogProps) {
+function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, showAnswerKey = false }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [isLoadingAnswerKey, setIsLoadingAnswerKey] = useState(false);
   const [answerKeyAvailable, setAnswerKeyAvailable] = useState<boolean | null>(null);
