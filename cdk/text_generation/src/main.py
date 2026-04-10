@@ -294,7 +294,7 @@ def handler(event, context):
                     "body": json.dumps("Missing required fields: message_id, message_content"),
                 }
 
-            from helpers.chat import run_matching_async, cache_key_questions
+            from helpers.chat import run_matching_async
             # Ensure key questions are cached for this session
             try:
                 cache_key_questions(
