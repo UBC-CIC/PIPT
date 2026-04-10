@@ -6,8 +6,8 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-pip
 
 # Install Node.js dependencies
-COPY package.json ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 # Copy Python files and install requirements
 COPY *.py ./
@@ -17,6 +17,7 @@ RUN pip3 install --break-system-packages -r requirements.txt
 # Copy server files
 COPY server.js ./
 COPY auth.js ./
+COPY media-bridge.js ./
 
 ENV AWS_DEFAULT_REGION=us-east-1
 

@@ -147,11 +147,21 @@ class NovaSonic:
         self.llm_completion = os.getenv("LLM_COMPLETION", "false").lower() == "true"
         self.extra_system_prompt = os.getenv("EXTRA_SYSTEM_PROMPT", "")
         self.patient_id = os.getenv("PATIENT_ID", "")
+        self.simulation_group_id = os.getenv("SIMULATION_GROUP_ID", "")
         # Cache system prompt and bedrock client
         self._cached_system_prompt = None
         self._bedrock_client = None
         self._chat_context = None
         self._current_user_input = ""
+
+        # AI message buffering — accumulate fragments, persist once per turn
+        self._buffered_ai_message = ""
+        self._last_persisted_ai_message = ""
+
+        # Track user audio state to correctly attribute transcribed text
+        self._user_audio_active = False
+        self._last_emitted_text = None
+        self._emitted_texts_this_turn = set()
 
     def _init_client(self):
         """Initialize the Bedrock Client for Nova"""
@@ -359,6 +369,7 @@ class NovaSonic:
     async def start_audio_input(self):
         self.audio_content_name = str(uuid.uuid4())
         self._current_user_input = ""  # Track user input for empathy evaluation
+        self._user_audio_active = True
         await self.send_event({
         "event": {
             "contentStart": {
@@ -392,6 +403,8 @@ class NovaSonic:
         })
     
     async def end_audio_input(self):
+        self._buffered_ai_message = ""
+
         await self.send_event({
         "event": {
             "contentEnd": {
@@ -400,22 +413,28 @@ class NovaSonic:
             }
         }
         })
-        
-        # Trigger empathy evaluation for the completed user audio input if enabled
-        if hasattr(self, '_current_user_input') and self._current_user_input and self._current_user_input.strip():
-            print(f"🔍 DEBUG: Audio ended, user input: {self._current_user_input[:50]}...", flush=True)
-            logger.info(f"🎤 AUDIO END - User input: {self._current_user_input[:30]}...")
-            
-            # Save user message to DB
-            asyncio.create_task(self._save_user_message_async(self._current_user_input))
-            
-            # Empathy evaluation disabled — may be re-enabled later
-            # asyncio.create_task(self._check_and_evaluate_empathy(self._current_user_input))
-            
-            self._current_user_input = ""  # Reset for next input
 
     
     async def end_session(self):
+        # Flush any remaining buffered AI message before closing
+        if self._buffered_ai_message and self._buffered_ai_message != self._last_persisted_ai_message:
+            try:
+                langchain_chat_history.add_message(self.session_id, "ai", self._buffered_ai_message)
+                self._save_message_to_db(self.session_id, False, self._buffered_ai_message, None)
+                self._last_persisted_ai_message = self._buffered_ai_message
+                logger.info(f"💬 [PERSIST] AI (final) | {self.session_id} | {self._buffered_ai_message[:30]}")
+            except Exception as e:
+                logger.error(f"Failed to persist final AI message: {e}")
+            self._buffered_ai_message = ""
+
+        # Flush any remaining buffered user message
+        if hasattr(self, '_current_user_input') and self._current_user_input and self._current_user_input.strip():
+            try:
+                await self._save_user_message_async(self._current_user_input)
+            except Exception as e:
+                logger.error(f"Failed to persist final user message: {e}")
+            self._current_user_input = ""
+
         # promptEnd
         await self.send_event({
         "event": {
@@ -473,12 +492,45 @@ class NovaSonic:
         # contentStart
         if "contentStart" in evt:
             content_start = evt["contentStart"]
-            self.role = content_start.get("role")
-            print(f"🔍 DEBUG ROLE SET: {self.role}", flush=True)
+            prev_role = self.role
+            new_role = content_start.get("role")
+            print(f"🔍 DEBUG ROLE SET: {new_role}", flush=True)
+
+            # Flush buffered AI message when the AI turn ends
+            if self.role == "ASSISTANT" and new_role != "ASSISTANT":
+                if self._buffered_ai_message and self._buffered_ai_message != self._last_persisted_ai_message:
+                    try:
+                        langchain_chat_history.add_message(self.session_id, "ai", self._buffered_ai_message)
+                        self._save_message_to_db(self.session_id, False, self._buffered_ai_message, None)
+                        self._last_persisted_ai_message = self._buffered_ai_message
+                        logger.info(f"💬 [PERSIST] AI | {self.session_id} | {self._buffered_ai_message[:30]}")
+                    except Exception as e:
+                        logger.error(f"Failed to persist buffered AI message: {e}")
+                self._buffered_ai_message = ""
+
+            # Flush buffered user message when the user turn ends
+            if self.role == "USER" and new_role != "USER":
+                if hasattr(self, '_current_user_input') and self._current_user_input and self._current_user_input.strip():
+                    asyncio.create_task(self._save_user_message_async(self._current_user_input))
+                    self._current_user_input = ""
+
+            # When AI starts talking, user audio phase is over
+            if new_role and new_role.upper() == "ASSISTANT":
+                self._user_audio_active = False
+
+            self.role = new_role
+            if new_role != prev_role:
+                self._emitted_texts_this_turn = set()
             # optional SPECULATIVE check
             if "additionalModelFields" in content_start:
                 fields = json.loads(content_start["additionalModelFields"])
                 self.display_assistant_text = (fields.get("generationStage") == "SPECULATIVE")
+            # Signal a new turn to the frontend so it creates a new chat bubble
+            if self.role:
+                if self.role.upper() == "USER":
+                    print(json.dumps({"type": "user-turn-start"}), flush=True)
+                else:
+                    print(json.dumps({"type": "turn-start", "role": self.role.lower()}), flush=True)
 
         # textOutput
         elif "textOutput" in evt:
@@ -490,6 +542,18 @@ class NovaSonic:
             if text.strip() == '{"interrupted": true}':
                 print(f"Filtered interrupted message", flush=True)
                 return
+
+            # Deduplicate — skip any text already emitted this turn
+            if text in self._emitted_texts_this_turn:
+                return
+            self._emitted_texts_this_turn.add(text)
+
+            # Determine effective role — if user audio is active, any
+            # transcribed text belongs to the user even if self.role
+            # hasn't switched yet (Nova Sonic timing issue)
+            effective_role = self.role
+            if self._user_audio_active and effective_role == "ASSISTANT":
+                effective_role = "USER"
             
             # Check for diagnosis completion
             diagnosis_achieved = "SESSION COMPLETED" in text
@@ -499,19 +563,20 @@ class NovaSonic:
                 # Add completion message
                 text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
             
-            if self.role == "ASSISTANT":
+            if effective_role == "ASSISTANT":
+                self._buffered_ai_message += text
                 print(f"🔍 DEBUG: Processing ASSISTANT message", flush=True)
                 print(f"Assistant: {text}", flush=True)
-                print(json.dumps({"type": "text", "text": text}), flush=True)
+                print(json.dumps({"type": "text", "text": text, "role": "assistant"}), flush=True)
                 
                 # If diagnosis achieved, signal completion
                 if diagnosis_achieved and self.llm_completion:
                     print(json.dumps({"type": "diagnosis_complete", "text": "Session completed successfully"}), flush=True)
 
-            elif self.role == "USER":
+            elif effective_role == "USER":
                 print(f"🔍 DEBUG: Processing USER message - Text: {text}", flush=True)
                 print(f"User: {text}", flush=True)
-                print(json.dumps({"type": "text", "text": text}), flush=True)
+                print(json.dumps({"type": "user-text", "text": text}), flush=True)
                 
                 # Accumulate user input for empathy evaluation
                 if not hasattr(self, '_current_user_input'):
@@ -593,17 +658,6 @@ class NovaSonic:
 
             print(f"🔍 DEBUG: Final role processing - Role: {self.role}, Text length: {len(text)}", flush=True)
             logger.info(f"💬 [add_message] {self.role.upper()} | {self.session_id} | {text[:30]}")
-
-            # Mirror to PostgreSQL
-            try:
-                normalized_role = "ai" if self.role and self.role.upper() == "ASSISTANT" else "user"
-                langchain_chat_history.add_message(self.session_id, normalized_role, text)
-                # Save AI messages to messages table too
-                if self.role and self.role.upper() == "ASSISTANT":
-                    self._save_message_to_db(self.session_id, False, text, None)
-                logger.info(f"💬 [PG INSERT] {normalized_role.upper()} | {self.session_id} | {text[:30]}")
-            except Exception as e:
-                print(f"❌ Failed to insert message into PostgreSQL: {e}", flush=True)
 
         # audioOutput
         elif "audioOutput" in evt:
@@ -741,13 +795,45 @@ class NovaSonic:
         """Save user message to database asynchronously"""
         try:
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(None, self._save_message_to_db, self.session_id, True, user_text, None)
+            message_id = await loop.run_in_executor(None, self._save_message_to_db, self.session_id, True, user_text, None)
             # Also add to chat history
             await loop.run_in_executor(None, langchain_chat_history.add_message, self.session_id, "user", user_text)
             logger.info(f"💾 User audio message saved: {user_text[:30]}...")
+
+            # Trigger semantic matching via text generation endpoint
+            if message_id and user_text.strip():
+                await loop.run_in_executor(
+                    None, self._call_matching_endpoint, message_id, user_text
+                )
         except Exception as e:
             logger.error(f"Failed to save user audio message: {e}")
     
+    def _call_matching_endpoint(self, message_id, message_content):
+        """Call the text generation service's /match endpoint for semantic question matching."""
+        import urllib.request
+        endpoint = os.getenv("TEXT_GENERATION_ENDPOINT", "")
+        token = os.getenv("COGNITO_TOKEN", "")
+        if not endpoint:
+            logger.warning("TEXT_GENERATION_ENDPOINT not set, skipping semantic matching")
+            return
+        try:
+            url = (
+                f"{endpoint}/student/text_generation"
+                f"?simulation_group_id={self.simulation_group_id or ''}"
+                f"&session_id={self.session_id}"
+                f"&patient_id={self.patient_id or ''}"
+                f"&mode=match"
+            )
+            data = json.dumps({"message_id": message_id, "message_content": message_content}).encode()
+            req = urllib.request.Request(url, data=data, method="POST", headers={
+                "Content-Type": "application/json",
+                "Authorization": token,
+            })
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                logger.info(f"Matching endpoint responded: {resp.status}")
+        except Exception as e:
+            logger.error(f"Failed to call matching endpoint: {e}")
+
     # ── Empathy evaluation methods disabled — may be re-enabled later ──────
     # async def _evaluate_empathy(self, student_response, patient_context):
     #     """LLM-as-a-Judge empathy evaluation using Nova Pro"""
@@ -764,18 +850,20 @@ class NovaSonic:
             conn = get_pg_connection()
             cursor = conn.cursor()
             
-            empathy_json = json.dumps(empathy_evaluation) if empathy_evaluation else None
+            sender = "student" if student_sent else "ai"
+            msg_id = str(uuid.uuid4())
             
             cursor.execute(
-                'INSERT INTO "messages" (chat_id, student_sent, message_content, time_sent) VALUES (%s, %s, %s, NOW())',
-                (session_id, student_sent, message_content)
+                'INSERT INTO "messages" (message_id, chat_id, sender_type, message_content, sent_at) VALUES (%s, %s, %s, %s, NOW())',
+                (msg_id, session_id, sender, message_content)
             )
             
             conn.commit()
             cursor.close()
             pg_conn_pool.putconn(conn)  # Return to pool
             
-            logger.info(f"💾 Message saved to DB")
+            logger.info(f"💾 Message saved to DB: message_id={msg_id}")
+            return msg_id
                 
         except Exception as e:
             logger.error(f"Error saving message: {e}")
@@ -783,15 +871,11 @@ class NovaSonic:
                 pg_conn_pool.putconn(conn, close=True)  # Close bad connection
             except:
                 pass
+            return None
 
 
 
-async def handle_stdin(nova_client):
-    reader = asyncio.StreamReader()
-    loop = asyncio.get_event_loop()
-    protocol = asyncio.StreamReaderProtocol(reader)
-    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
-
+async def handle_stdin(nova_client, reader):
     while True:
         line = await reader.readline()
         if not line:
@@ -845,30 +929,17 @@ async def main():
     protocol = asyncio.StreamReaderProtocol(reader)
     await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     
-    # Wait for initial configuration for a short time
-    try:
-        # Set a timeout for initial configuration
-        line = await asyncio.wait_for(reader.readline(), 2.0)
-        if line:
-            try:
-                msg = json.loads(line.decode("utf-8"))
-                if msg["type"] == "set_voice":
-                    print(f"🎭 Setting initial voice: {msg.get('voice_id')}", flush=True)
-                    nova_client.voice_id = msg.get("voice_id")
-            except Exception as e:
-                print(f"❌ Failed to process initial config: {e}", flush=True)
-    except asyncio.TimeoutError:
-        print("No initial configuration received, using default voice", flush=True)
-    
-    # Start the session with the configured voice
+    # Start the session immediately (no 2 second delay)
     await nova_client.start_session()
-    print("Nova session started. Listening for stdin input...")
+    print("Nova session started. Listening for stdin input...", flush=True)
     
-    stdin_task = asyncio.create_task(handle_stdin(nova_client))
+    # Pass the reader to prevent double-pipe crashes
+    stdin_task = asyncio.create_task(handle_stdin(nova_client, reader))
     await stdin_task
 
     await nova_client.end_session()
-    print("Session ended")
+    print("Session ended", flush=True)
+
 
     
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+project:
+  name: voice-agent
+agents:
+  - name: voice-agent
+    language: Python
+    build: Container
+    entrypoint: bot.py
+    port: 8080

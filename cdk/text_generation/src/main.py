@@ -274,6 +274,69 @@ def handler(event, context):
                 "body": json.dumps({"error": f"Debrief generation failed: {str(e)}"}),
             }
 
+    if mode == "match":
+        logger.info(f"🔄 MATCH MODE — running semantic matching for session={session_id}")
+        try:
+            body = {} if event.get("body") is None else json.loads(event.get("body"))
+            message_id = body.get("message_id", "")
+            message_content = body.get("message_content", "")
+
+            if not message_id or not message_content:
+                return {
+                    "statusCode": 400,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Headers": "*",
+                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Methods": "*",
+                    },
+                    "body": json.dumps("Missing required fields: message_id, message_content"),
+                }
+
+            from helpers.chat import run_matching_async, cache_key_questions
+            # Ensure key questions are cached for this session
+            try:
+                cache_key_questions(
+                    session_id=session_id,
+                    simulation_group_id=simulation_group_id,
+                    persona_id=persona_id,
+                    embeddings_model=embeddings,
+                    table_name=TABLE_NAME,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to cache key questions for matching: {e}")
+
+            run_matching_async(
+                message_content=message_content,
+                session_id=session_id,
+                message_id=message_id,
+                embeddings_model=embeddings,
+                table_name=TABLE_NAME,
+            )
+
+            return {
+                "statusCode": 200,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                "body": json.dumps({"status": "matching_started"}),
+            }
+        except Exception as e:
+            logger.error(f"Match mode failed: {e}")
+            return {
+                "statusCode": 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                "body": json.dumps({"error": f"Matching failed: {str(e)}"}),
+            }
+
     # =========================================================================
     # DEFAULT CHAT MODE — existing flow below
     # =========================================================================

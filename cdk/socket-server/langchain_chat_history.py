@@ -46,13 +46,6 @@ def add_message(session_id: str, role: str, content: str, table_name: str = "Dyn
     else:
         raise ValueError(f"Invalid role '{role}'. Must be 'user' or 'ai'.")
 
-    # Mirror to PostgreSQL
-    try:
-        insert_message_to_postgres(session_id, role, content)
-    
-    except Exception as e:
-        logger.error(f"❌ Failed to insert message into PostgreSQL: {e}")
-
 
 def get_secret(secret_name, expect_json=True):
     global db_secret

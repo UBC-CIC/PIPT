@@ -3,15 +3,18 @@ import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { studentService, type StudentChatMessage as Message, type PatientDetail, type StudentCaseMaterial, type PatientFile, type AIDebriefData, type PersonaMedia } from '@/services/studentService';
-import { ArrowLeft, Mic, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeft, Mic, MicOff, Send, FileText, User, CheckCircle, X, Menu, Stethoscope, Flag, ChevronRight, ChevronLeft, Eye, Loader2, ArrowLeftIcon, RotateCcw} from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { io, type Socket } from 'socket.io-client';
+import { SocketIOAudioClient, type VoiceSessionState } from '@/lib/socketio-audio-client';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { useAuth } from '@/App';
+import { authService } from '@/lib/auth';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 import ResizeHandle from '@/components/ResizeHandle';
 
@@ -168,6 +171,157 @@ function StudentChatPage() {
   // State for voice mode
   const [isVoiceModeActive, setIsVoiceModeActive] = useState(false);
 
+  // WebRTC voice session state
+  const [voiceSessionState, setVoiceSessionState] = useState<VoiceSessionState>('idle');
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const audioClientRef = useRef<SocketIOAudioClient | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+
+  // Ref for polling interval during voice mode
+  const voicePollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Session ID — set by createSession (new chat) or from route (existing chat)
+  const [sessionId, setSessionId] = useState<string | null>(null);
+
+  /**
+   * Clean up voice session and Socket.IO connection.
+   */
+  const cleanupVoiceSession = useCallback(() => {
+    if (audioClientRef.current) {
+      audioClientRef.current.disconnect();
+      audioClientRef.current = null;
+    }
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
+    if (voicePollIntervalRef.current) {
+      clearInterval(voicePollIntervalRef.current);
+      voicePollIntervalRef.current = null;
+    }
+    setVoiceSessionState('idle');
+    setVoiceError(null);
+    setIsMuted(false);
+  }, []);
+
+  /**
+   * Start a voice session when the mic button is clicked.
+   */
+  const handleStartVoiceMode = useCallback(() => {
+    setIsVoiceModeActive(true);
+    setVoiceError(null);
+    setVoiceSessionState('connecting');
+
+    // Create Socket.IO connection (or reuse existing)
+    if (!socketRef.current || !socketRef.current.connected) {
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
+      authService.getIdToken().then((token) => {
+        socketRef.current = io(socketUrl, {
+          transports: ['websocket'],
+          auth: { token: token || '' },
+        });
+        startAudioClient();
+      }).catch(() => {
+        setVoiceError('Failed to get authentication token.');
+        setVoiceSessionState('error');
+      });
+      return;
+    }
+
+    startAudioClient();
+
+    function startAudioClient() {
+    if (!socketRef.current) {
+      setVoiceError('Socket connection not available.');
+      setVoiceSessionState('error');
+      return;
+    }
+    const client = new SocketIOAudioClient({
+      socket: socketRef.current,
+      onStateChange: (state) => {
+        setVoiceSessionState(state);
+        if (state === 'disconnected' || state === 'error') {
+          setIsVoiceModeActive(false);
+        }
+      },
+      onError: (error) => {
+        const msg = error.message || '';
+        if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {
+          setVoiceError('Microphone access was denied. Please allow microphone permission in your browser settings and try again.');
+        } else {
+          setVoiceError(msg);
+        }
+        setVoiceSessionState('error');
+      },
+      onTurnStart: () => {
+        // Text bubbles are populated via DB polling, not real-time events
+      },
+      onTextMessage: () => {
+        // Text bubbles are populated via DB polling, not real-time events
+      },
+    });
+
+    audioClientRef.current = client;
+    client.connect({
+      session_id: sessionId || routeChatId || '',
+      patient_name: patient?.name || '',
+      patient_id: patientId || '',
+      simulation_group_id: groupId || '',
+    }).then(() => {
+      // Start polling DB for messages every 2 seconds while voice mode is active
+      const sid = sessionId || routeChatId || '';
+      if (sid && !voicePollIntervalRef.current) {
+        voicePollIntervalRef.current = setInterval(() => {
+          studentService.fetchMessages(sid).then((msgs) => {
+            if (msgs.length > 0) {
+              setMessages(msgs);
+            }
+          }).catch(() => { /* ignore polling errors */ });
+        }, 2000);
+      }
+    }).catch((err) => {
+      console.error('[VoiceMode] Failed to connect:', err);
+      const msg = err instanceof Error ? err.message : 'Failed to start voice session';
+      if (msg.includes('Permission denied') || msg.includes('NotAllowedError')) {
+        setVoiceError('Microphone access was denied. Please allow microphone permission in your browser settings and try again.');
+      } else {
+        setVoiceError(msg);
+      }
+      setVoiceSessionState('error');
+    });
+    } // end startAudioClient
+  }, [patient, routeChatId, patientId, groupId, sessionId]);
+
+  /**
+   * Stop the voice session when the X button is clicked.
+   */
+  const handleStopVoiceMode = useCallback(() => {
+    cleanupVoiceSession();
+    setIsVoiceModeActive(false);
+    // Final fetch to get any remaining messages
+    const sid = sessionId || routeChatId || '';
+    if (sid) {
+      studentService.fetchMessages(sid).then((msgs) => {
+        if (msgs.length > 0) setMessages(msgs);
+      });
+    }
+  }, [cleanupVoiceSession, sessionId, routeChatId]);
+
+  // Clean up WebRTC on unmount or navigation away
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (audioClientRef.current) {
+        audioClientRef.current.disconnect();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      cleanupVoiceSession();
+    };
+  }, [cleanupVoiceSession]);
+
   // State for sidebar visibility
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -187,7 +341,6 @@ function StudentChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [isAiResponding, setIsAiResponding] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
@@ -881,71 +1034,6 @@ function StudentChatPage() {
             marginRight: contentSidebarType ? `${physicalAssessmentWidth}px` : '0px',
           }}
         >
-          {/* Voice Mode Overlay */}
-          {isVoiceModeActive && (
-            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center" style={{ backgroundColor: UI_COLORS.background.white }}>
-              {/* Patient Avatar */}
-              <div className="mb-8">
-                <UserAvatar
-                  name={patient.name}
-                  imageUrl={patient.imageUrl}
-                  size="xlarge"
-                />
-              </div>
-
-              {/* Voice Mode Active Text */}
-              <h2 className="text-2xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-                Voice Mode Active
-              </h2>
-              <p className="text-base mb-12" style={{ color: UI_COLORS.text.body }}>
-                Speak naturally to interact with the AI patient.
-              </p>
-
-              {/* Voice Visualization Bars */}
-              <div className="flex items-center gap-1 mb-16">
-                {[...Array(5)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-1 rounded-full animate-pulse"
-                    style={{
-                      backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1],
-                      height: `${20 + Math.random() * 40}px`,
-                      animationDelay: `${i * 0.1}s`,
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Control Buttons */}
-              <div className="flex gap-4">
-                {/* Close Voice Mode Button */}
-                <button
-                  onClick={() => setIsVoiceModeActive(false)}
-                  className="w-16 h-16 rounded-full flex items-center justify-center transition-colors shadow-lg"
-                  style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
-                  aria-label="Close voice mode"
-                >
-                  <X className="w-6 h-6 text-white" />
-                </button>
-
-                {/* Open Notes Button */}
-                <button
-                  onClick={() => {
-                    // Scroll to notes section in sidebar or just close voice mode
-                    setIsVoiceModeActive(false);
-                  }}
-                  className="w-16 h-16 rounded-full flex items-center justify-center transition-colors shadow-lg"
-                  style={{
-                    backgroundColor: UI_COLORS.button.primary,
-                  }}
-                  aria-label="Close voice mode and view notes"
-                >
-                  <Menu className="w-6 h-6 text-white" />
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Chat Messages Area */}
           <div className="flex-1 overflow-y-auto p-6">
             {messages.length === 0 ? (
@@ -1044,46 +1132,122 @@ function StudentChatPage() {
           {/* Message Input Area — only shown when session is active */}
           {sessionStatus === 'active' && (
             <div className="p-6" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }}>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setIsVoiceModeActive(true)}
-                  className="p-3 rounded-full transition-colors"
-                  style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                  aria-label="Voice input"
-                >
-                  <Mic className="w-5 h-5" />
-                </button>
-                
-                <div className="flex-1 relative">
-                  <input
-                    type="text"
-                    value={inputMessage}
-                    onChange={(e) => setInputMessage(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    placeholder="Type your message..."
-                    className="w-full px-4 py-3 pr-12 rounded-lg focus:outline-none focus:ring-2"
-                    style={{ 
-                      borderWidth: '1px', 
-                      borderStyle: 'solid', 
-                      borderColor: UI_COLORS.border.default,
-                      outlineColor: UI_COLORS.border.medium
-                    }}
-                  />
+              {isVoiceModeActive ? (
+                /* Voice mode controls — replaces text input */
+                <div className="flex items-center gap-3">
+                  {/* Voice status indicator */}
+                  <div className="flex-1 flex items-center gap-3 px-4 py-3 rounded-lg" style={{ backgroundColor: UI_COLORS.background.hoverLight }}>
+                    {voiceSessionState === 'connecting' ? (
+                      <>
+                        <Loader2 className="w-5 h-5 animate-spin" style={{ color: SIMULATION_GROUP_COLOR_PALETTE[1] }} />
+                        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Connecting...</span>
+                      </>
+                    ) : voiceSessionState === 'error' ? (
+                      <>
+                        <span className="text-sm" style={{ color: '#ef4444' }}>{voiceError || 'Connection error'}</span>
+                        <button
+                          onClick={() => { cleanupVoiceSession(); handleStartVoiceMode(); }}
+                          className="ml-auto p-2 rounded-full transition-colors"
+                          style={{ backgroundColor: UI_COLORS.button.primary }}
+                          aria-label="Retry voice connection"
+                        >
+                          <RotateCcw className="w-4 h-4 text-white" />
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        {/* Animated bars */}
+                        <div className="flex items-center gap-0.5">
+                          {[...Array(4)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="w-0.5 rounded-full animate-pulse"
+                              style={{
+                                backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1],
+                                height: `${10 + Math.random() * 10}px`,
+                                animationDelay: `${i * 0.15}s`,
+                              }}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                          {isMuted ? 'Microphone muted' : 'Voice mode active — speak naturally'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Mute/Unmute — only when active */}
+                  {voiceSessionState === 'active' && (
+                    <button
+                      onClick={() => {
+                        if (!audioClientRef.current) return;
+                        audioClientRef.current.toggleMute();
+                        setIsMuted(!isMuted);
+                      }}
+                      className="p-3 rounded-full transition-colors"
+                      style={{ backgroundColor: isMuted ? '#ef4444' : UI_COLORS.button.secondary, color: isMuted ? '#ffffff' : UI_COLORS.button.text }}
+                      aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                    >
+                      {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                    </button>
+                  )}
+
+                  {/* Stop voice mode */}
                   <button
-                    onClick={handleSendMessage}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                    onMouseEnter={(e) => !inputMessage.trim() ? null : e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                    aria-label="Send message"
-                    disabled={!inputMessage.trim() || isAiResponding || !sessionId}
+                    onClick={handleStopVoiceMode}
+                    className="p-3 rounded-full transition-colors"
+                    style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
+                    aria-label="Stop voice mode"
                   >
-                    <Send className="w-4 h-4" />
+                    <X className="w-5 h-5 text-white" />
                   </button>
                 </div>
-              </div>
+              ) : (
+                /* Text input mode */
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleStartVoiceMode}
+                    disabled={!sessionId || !patient?.name || patient.name === 'Loading...'}
+                    className="p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                    onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
+                    onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
+                    aria-label="Voice input"
+                    title={!sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : 'Start voice mode'}
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                  
+                  <div className="flex-1 relative">
+                    <input
+                      type="text"
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyPress={handleKeyPress}
+                      placeholder="Type your message..."
+                      className="w-full px-4 py-3 pr-12 rounded-lg focus:outline-none focus:ring-2"
+                      style={{ 
+                        borderWidth: '1px', 
+                        borderStyle: 'solid', 
+                        borderColor: UI_COLORS.border.default,
+                        outlineColor: UI_COLORS.border.medium
+                      }}
+                    />
+                    <button
+                      onClick={handleSendMessage}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                      onMouseEnter={(e) => !inputMessage.trim() ? null : e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                      aria-label="Send message"
+                      disabled={!inputMessage.trim() || isAiResponding || !sessionId}
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
