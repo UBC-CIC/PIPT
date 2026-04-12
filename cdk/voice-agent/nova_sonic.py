@@ -14,7 +14,7 @@ import json
 import uuid
 import random
 import logging
-
+import re
 import boto3
 import psycopg2
 from psycopg2 import pool
@@ -40,6 +40,7 @@ from smithy_aws_core.identity import (
 )
 
 import chat_history
+_INTERRUPTED_RE = re.compile(r'\{\s*"interrupted"\s*:\s*true\s*\}', re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -207,44 +208,36 @@ class NovaSonic:
         return self._bedrock_client
 
     def _get_medical_context(self):
-        """Fetch relevant medical documents from pgvector for the patient."""
+        """Fetch the ENTIRE patient case file from pgvector."""
         if not self.patient_id:
             return ""
         try:
-            db_secret_name = os.environ.get("SM_DB_CREDENTIALS")
-            rds_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
-            if not db_secret_name or not rds_endpoint:
-                logger.warning("DB credentials not available for medical context")
-                return ""
-
-            secrets_client = boto3.client("secretsmanager")
-            secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
-            secret = json.loads(secret_response["SecretString"])
-
-            bedrock_client = self._get_bedrock_client()
-            embeddings = BedrockEmbeddings(
-                model_id="amazon.titan-embed-text-v2:0", client=bedrock_client
-            )
-
-            connection_string = (
-                f"postgresql+psycopg://{secret['username']}:{secret['password']}"
-                f"@{rds_endpoint}:{secret['port']}/{secret['dbname']}"
-            )
-            vectorstore = PGVector(
-                embeddings=embeddings,
-                collection_name=self.patient_id,
-                connection=connection_string,
-                use_jsonb=True,
-            )
-
-            query = f"Patient {self.patient_name} medical history symptoms diagnosis"
-            docs = vectorstore.similarity_search(query, k=5)
-            if docs:
-                context = "\n".join([doc.page_content for doc in docs])
-                logger.info("Retrieved %d medical context docs for patient %s", len(docs), self.patient_id)
+            # We use the existing connection pool instead of making a new one
+            conn = get_pg_connection()
+            cursor = conn.cursor()
+            
+            # Fetch ALL document chunks for this patient directly from the vector store tables
+            # bypassing the need for a similarity search completely.
+            cursor.execute("""
+                SELECT document 
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE c.name = %s
+            """, (self.patient_id,))
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            pg_conn_pool.putconn(conn)
+            
+            if rows:
+                # Combine all the document chunks into one massive string
+                context = "\n---\n".join([r[0] for r in rows])
+                logger.info("Loaded complete case file (%d chunks) into Voice Agent memory for patient %s", len(rows), self.patient_id)
                 return context
+                
         except Exception as e:
-            logger.error("Failed to retrieve medical context: %s", e)
+            logger.error("[VOICE AGENT] Failed to retrieve complete medical context: %s", e)
+            
         return ""
 
     # ------------------------------------------------------------------
@@ -291,6 +284,46 @@ class NovaSonic:
         Start by saying only "Hello." Then describe your symptoms when asked.
         """
 
+    def _sanitize_prompt_for_voice(self, prompt: str) -> str:
+        """
+        Make DB/system prompts safe for streaming voice.
+
+        Main goals:
+        - Prevent 'greet every response' bugs (Hello/Hi repeating).
+        - Keep the same patient-role constraints.
+        - Avoid instructions that only make sense in text-mode / single-shot prompts.
+        """
+        if not prompt:
+            return prompt
+
+        p = prompt
+
+        # 1) Remove/soften greeting-on-every-turn instructions
+        # Handles variations you might have in DB prompt content.
+        p = re.sub(
+            r'Start by saying only\s*"Hello\."\s*Then describe your symptoms when asked\.?',
+            'Greet the student once at the beginning of the session. Do NOT repeat greetings every response.',
+            p,
+            flags=re.IGNORECASE,
+        )
+
+        p = re.sub(
+            r'Start the conversation by greeting the pharmacy student.*?(?=\n|$)',
+            'At the start of the session, greet the pharmacy student once. Do NOT repeat greetings every response.',
+            p,
+            flags=re.IGNORECASE,
+        )
+
+        # 2) Add an explicit anti-repetition rule (voice streaming tends to over-follow early instructions)
+        p += (
+            "\n\nVOICE MODE OVERRIDE (IMPORTANT):\n"
+            "- You may greet at the very beginning of the session ONCE.\n"
+            "- Do NOT start every reply with 'Hello'/'Hi' or any greeting.\n"
+            "- After the first greeting, answer directly in-role as the patient.\n"
+        )
+
+        return p
+
     def get_system_prompt(self, patient_name=None, patient_prompt=None, llm_completion=None):
         if self._cached_system_prompt:
             return self._cached_system_prompt
@@ -311,9 +344,8 @@ class NovaSonic:
         except Exception as e:
             logger.error("Error retrieving system prompt: %s", e)
 
-        self._cached_system_prompt = self.get_default_system_prompt(
-            patient_name or self.patient_name
-        )
+        raw_default = self.get_default_system_prompt(patient_name or self.patient_name)
+        self._cached_system_prompt = self._sanitize_prompt_for_voice(raw_default)
         return self._cached_system_prompt
 
     # ------------------------------------------------------------------
@@ -656,7 +688,10 @@ class NovaSonic:
             text = evt["textOutput"]["content"]
 
             # Filter interrupted marker
-            if text.strip() == '{"interrupted": true}':
+            text = _INTERRUPTED_RE.sub("", text)
+
+            # If the chunk is now empty, drop it
+            if not text.strip():
                 return
 
             # Deduplicate — skip any text already emitted this turn
