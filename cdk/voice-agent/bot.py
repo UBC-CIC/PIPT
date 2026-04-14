@@ -1,13 +1,18 @@
 """AgentCore voice agent entry point.
 
-Exposes the AgentCore contract:
-  GET  /ping          — health check
-  POST /invocations   — HTTP request (returns agent info)
+This is the container's main process. It runs on Bedrock AgentCore (not ECS)
+and exposes the three required AgentCore endpoints:
+
+  GET  /ping          — health check (AgentCore uses this to know we're alive)
+  POST /invocations   — HTTP request handler (returns agent info; not used for voice)
   WS   /ws            — bidirectional audio streaming via WebSocket
 
-The WebSocket handler receives an init message with session config,
-opens a Nova Sonic 2.0 bidirectional stream, and pipes audio frames
-between the client and Bedrock.
+The socket server (server.js on ECS) connects to /ws via a SigV4-signed
+WebSocket through the AgentCore runtime proxy. Each WebSocket connection
+maps to one voice chat session with one patient.
+
+Flow:
+  socket server → AgentCore proxy → /ws → websocket_handler() → NovaSonic
 """
 
 import logging
