@@ -274,8 +274,8 @@ class NovaSonic:
         """
         if not self.patient_id:
             return ""
+        conn = None
         try:
-            # We use the existing connection pool instead of making a new one
             conn = get_pg_connection()
             cursor = conn.cursor()
             
@@ -290,16 +290,22 @@ class NovaSonic:
             
             rows = cursor.fetchall()
             cursor.close()
-            pg_conn_pool.putconn(conn)
             
             if rows:
-                # Combine all the document chunks into one massive string
                 context = "\n---\n".join([r[0] for r in rows])
                 logger.info("Loaded complete case file (%d chunks) into Voice Agent memory for patient %s", len(rows), self.patient_id)
                 return context
                 
         except Exception as e:
             logger.error("[VOICE AGENT] Failed to retrieve complete medical context: %s", e)
+        finally:
+            # Always return the connection to the pool so we don't leak
+            # connections on error — the pool only has 5 slots.
+            if conn is not None:
+                try:
+                    pg_conn_pool.putconn(conn)
+                except Exception:
+                    pass
             
         return ""
 

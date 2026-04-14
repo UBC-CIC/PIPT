@@ -296,10 +296,13 @@ def handler(event, context):
 
             from helpers.chat import match_message_to_questions, get_cached_key_questions
             
-            # Check cache first to save time and Bedrock API costs
+            # Check cache first to save time and Bedrock API costs.
+            # Use explicit None check — an empty list [] means the cache was
+            # populated but there are no key questions for this patient, which
+            # is a valid state and should not trigger a re-cache.
             try:
                 cached = get_cached_key_questions(session_id, TABLE_NAME)
-                if not cached:
+                if cached is None:
                     cache_key_questions(
                         session_id=session_id,
                         simulation_group_id=simulation_group_id,
