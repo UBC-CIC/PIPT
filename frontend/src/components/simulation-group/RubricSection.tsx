@@ -226,7 +226,7 @@ export function RubricSection({
               </div>
 
               {/* Action Buttons (shown when onSaveQuestion or onDeleteQuestion provided) */}
-              {(onSaveQuestion || onDeleteQuestion) && (
+              {(onSaveQuestion !== undefined || onDeleteQuestion !== undefined) && (
                 <div className="flex items-center gap-4 pt-4">
                   {onSaveQuestion && (
                     <Button

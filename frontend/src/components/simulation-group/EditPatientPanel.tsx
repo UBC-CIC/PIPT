@@ -25,7 +25,7 @@ export function EditPatientPanel({
   profilePictures,
   onBack,
   labels,
-  groupId,
+  groupId: _groupId,
   globalRubricQuestions,
   onSavePatient,
   onSaveCaseQuestion,

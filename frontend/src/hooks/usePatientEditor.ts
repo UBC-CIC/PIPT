@@ -60,9 +60,9 @@ export function usePatientEditor({
   role,
   manageablePatients,
   setManageablePatients,
-  profilePictures,
+  profilePictures: _profilePictures,
   setProfilePictures,
-  reloadPatients,
+  reloadPatients: _reloadPatients,
 }: UsePatientEditorParams): UsePatientEditorReturn {
   // Form state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);

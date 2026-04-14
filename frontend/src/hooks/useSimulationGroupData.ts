@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   instructorService,
-  type InstructorSimulationGroup,
-  type PatientAnalytics,
-  type Student,
-  type ManageablePatient,
   type KeyQuestionAnalytics,
   type KeyQuestionCoverage,
   type StudentProgressData,
