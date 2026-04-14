@@ -1,10 +1,41 @@
 """Nova Sonic 2.0 bidirectional streaming session (AgentCore WebSocket transport).
 
-Manages the full lifecycle of a Nova Sonic conversation:
-1. Connect to Bedrock and open a bidirectional stream
-2. Configure the session (model params, voice, system prompt)
-3. Stream audio in/out over an AgentCore WebSocket connection
-4. Persist messages to DynamoDB + PostgreSQL
+Architecture overview for new developers:
+─────────────────────────────────────────
+The voice pipeline has three layers:
+
+  Frontend (React)
+      ↕  Socket.IO (audio frames + control messages)
+  Socket Server (ECS, server.js)
+      ↕  AgentCore WebSocket (signed with SigV4)
+  Voice Agent (AgentCore container, THIS FILE)
+      ↕  Bedrock Bidirectional Stream (Nova Sonic 2.0)
+  Amazon Bedrock
+
+This file manages the bottom two layers: it receives audio/control
+messages from the socket server via an AgentCore WebSocket, forwards
+audio to Nova Sonic for speech-to-speech processing, and sends back
+audio + text transcriptions to the socket server for relay to the
+frontend.
+
+Key concepts:
+- Nova Sonic is full-duplex: the AI can speak while the user is still
+  talking (interruptions are natural).
+- Text transcriptions arrive as fragments, not complete sentences.
+  We buffer them per-turn and persist once when the turn ends.
+- Messages are persisted to both DynamoDB (for conversation context)
+  and PostgreSQL (for debrief, analytics, and the chat history UI).
+- Semantic matching runs asynchronously after each user message to
+  tag which key questions the student addressed.
+
+Lifecycle of a single voice session:
+1. bot.py accepts a WebSocket connection and creates a NovaSonic instance
+2. start_session() opens a Bedrock bidirectional stream and sends the
+   system prompt (patient persona + medical documents)
+3. handle_websocket() loops, forwarding audio frames to/from Nova Sonic
+4. _process_responses() runs concurrently, dispatching Nova Sonic events
+   (text transcriptions, audio chunks) back to the frontend
+5. end_session() flushes any buffered messages and closes the stream
 """
 
 import os
@@ -14,7 +45,7 @@ import json
 import uuid
 import random
 import logging
-
+import re
 import boto3
 import psycopg2
 from psycopg2 import pool
@@ -40,6 +71,11 @@ from smithy_aws_core.identity import (
 )
 
 import chat_history
+
+# Nova Sonic sometimes sends {"interrupted": true} as a text event when
+# the user interrupts the AI mid-speech. We strip this out so it never
+# reaches the frontend or gets persisted as a message.
+_INTERRUPTED_RE = re.compile(r'\{\s*"interrupted"\s*:\s*true\s*\}', re.IGNORECASE)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -104,9 +140,13 @@ def get_pg_connection():
 class NovaSonic:
     """Manages a single Nova Sonic 2.0 bidirectional streaming session.
 
-    The `websocket` parameter is the AgentCore WebSocket connection.
-    All output (audio, text, events) is sent back over this WebSocket
-    instead of stdout.
+    One instance is created per WebSocket connection (per voice chat session).
+    The AgentCore container may serve multiple sequential sessions, but each
+    gets its own NovaSonic instance so state doesn't leak between patients.
+
+    The `websocket` parameter is the AgentCore WebSocket connection back to
+    the socket server. All output (audio, text, events) is sent over this
+    WebSocket — NOT stdout (that's the legacy socket-server/nova_sonic.py path).
     """
 
     def __init__(self, websocket, voice_id=None, session_id=None, region=None,
@@ -116,7 +156,8 @@ class NovaSonic:
         self.ws = websocket
         self.user_id = user_id or os.getenv("USER_ID")
         self.model_id = MODEL_ID
-        self.region = "us-east-1"  # Nova Sonic endpoint region
+        # Nova Sonic is only available in us-east-1 regardless of deployment region
+        self.region = "us-east-1"
         self.deployment_region = region or os.getenv("AWS_REGION", "us-east-1")
 
         self.client = None
@@ -124,10 +165,16 @@ class NovaSonic:
         self.response = None
         self.is_active = False
 
+        # Nova Sonic uses named prompts/content blocks to track what's open.
+        # Each gets a unique ID so the API can match start/end events.
         self.prompt_name = str(uuid.uuid4())
         self.content_name = str(uuid.uuid4())
         self.audio_content_name = str(uuid.uuid4())
         self.audio_queue = asyncio.Queue()
+
+        # Tracks whose "turn" it is in the Nova Sonic response stream.
+        # Nova Sonic sends contentStart events with role=USER or role=ASSISTANT
+        # to signal turn boundaries.
         self.role = None
         self.display_assistant_text = False
 
@@ -140,23 +187,32 @@ class NovaSonic:
         self.patient_id = patient_id
         self.simulation_group_id = simulation_group_id
 
-        # Matching endpoint config
+        # Used to call the text-generation Lambda for semantic question matching
+        # after each user message. Passed from server.js via the init message.
         self.cognito_token = cognito_token or os.getenv("COGNITO_TOKEN", "")
         self.text_generation_endpoint = text_generation_endpoint or os.getenv("TEXT_GENERATION_ENDPOINT", "")
 
-        # Caches
         self._cached_system_prompt = None
         self._bedrock_client = None
         self._chat_context = None
+
+        # Accumulates the user's transcribed speech fragments within a single
+        # turn. Persisted to DB when the turn ends (role switches away from USER).
         self._current_user_input = ""
 
-        # AI message buffering — accumulate fragments, persist once per turn
+        # AI messages arrive as many small text fragments. We buffer them and
+        # persist the complete message once when the AI turn ends, avoiding
+        # dozens of partial rows in the messages table.
         self._buffered_ai_message = ""
         self._last_persisted_ai_message = ""
 
-        # Track user audio state to correctly attribute transcribed text
+        # Nova Sonic's transcription of user speech can arrive while self.role
+        # is still "ASSISTANT" (the role hasn't switched yet). This flag lets
+        # us correctly attribute that text to the user during the gap.
         self._user_audio_active = False
         self._last_emitted_text = None
+        # Tracks all text fragments emitted in the current turn to prevent
+        # duplicates (Nova Sonic sometimes sends the same fragment twice).
         self._emitted_texts_this_turn = set()
 
     # ------------------------------------------------------------------
@@ -175,8 +231,9 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     def _init_client(self):
-        # Fetch credentials via boto3 and inject into env before
-        # EnvironmentCredentialsResolver initializes
+        # The Bedrock SDK's EnvironmentCredentialsResolver reads AWS creds from
+        # env vars. On AgentCore, creds come from the IAM execution role via
+        # boto3, so we inject them into the environment before initializing.
         session = boto3.Session()
         creds = session.get_credentials()
         if creds:
@@ -207,44 +264,49 @@ class NovaSonic:
         return self._bedrock_client
 
     def _get_medical_context(self):
-        """Fetch relevant medical documents from pgvector for the patient."""
+        """Load the full patient case file from the pgvector store.
+
+        Unlike text mode (which does a similarity search for relevant chunks),
+        voice mode loads ALL document chunks for the patient. This gives the
+        AI complete knowledge of the case so it can answer any question the
+        student asks without gaps — important because voice conversations are
+        unpredictable and we can't anticipate which chunks will be relevant.
+        """
         if not self.patient_id:
             return ""
+        conn = None
         try:
-            db_secret_name = os.environ.get("SM_DB_CREDENTIALS")
-            rds_endpoint = os.environ.get("RDS_PROXY_ENDPOINT")
-            if not db_secret_name or not rds_endpoint:
-                logger.warning("DB credentials not available for medical context")
-                return ""
-
-            secrets_client = boto3.client("secretsmanager")
-            secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
-            secret = json.loads(secret_response["SecretString"])
-
-            bedrock_client = self._get_bedrock_client()
-            embeddings = BedrockEmbeddings(
-                model_id="amazon.titan-embed-text-v2:0", client=bedrock_client
-            )
-
-            connection_string = (
-                f"postgresql+psycopg://{secret['username']}:{secret['password']}"
-                f"@{rds_endpoint}:{secret['port']}/{secret['dbname']}"
-            )
-            vectorstore = PGVector(
-                embeddings=embeddings,
-                collection_name=self.patient_id,
-                connection=connection_string,
-                use_jsonb=True,
-            )
-
-            query = f"Patient {self.patient_name} medical history symptoms diagnosis"
-            docs = vectorstore.similarity_search(query, k=5)
-            if docs:
-                context = "\n".join([doc.page_content for doc in docs])
-                logger.info("Retrieved %d medical context docs for patient %s", len(docs), self.patient_id)
+            conn = get_pg_connection()
+            cursor = conn.cursor()
+            
+            # Fetch ALL document chunks for this patient directly from the vector store tables
+            # bypassing the need for a similarity search completely.
+            cursor.execute("""
+                SELECT document 
+                FROM langchain_pg_embedding e
+                JOIN langchain_pg_collection c ON e.collection_id = c.uuid
+                WHERE c.name = %s
+            """, (self.patient_id,))
+            
+            rows = cursor.fetchall()
+            cursor.close()
+            
+            if rows:
+                context = "\n---\n".join([r[0] for r in rows])
+                logger.info("Loaded complete case file (%d chunks) into Voice Agent memory for patient %s", len(rows), self.patient_id)
                 return context
+                
         except Exception as e:
-            logger.error("Failed to retrieve medical context: %s", e)
+            logger.error("[VOICE AGENT] Failed to retrieve complete medical context: %s", e)
+        finally:
+            # Always return the connection to the pool so we don't leak
+            # connections on error — the pool only has 5 slots.
+            if conn is not None:
+                try:
+                    pg_conn_pool.putconn(conn)
+                except Exception:
+                    pass
+            
         return ""
 
     # ------------------------------------------------------------------
@@ -291,7 +353,53 @@ class NovaSonic:
         Start by saying only "Hello." Then describe your symptoms when asked.
         """
 
+    def _sanitize_prompt_for_voice(self, prompt: str) -> str:
+        """Adapt text-mode system prompts for streaming voice conversations.
+
+        Text-mode prompts often contain instructions like "Start by saying Hello"
+        which cause the AI to greet on EVERY turn in voice mode (since each turn
+        re-reads the system prompt). This sanitizer rewrites those instructions
+        to be voice-friendly while preserving the patient-role constraints.
+        """
+        if not prompt:
+            return prompt
+
+        p = prompt
+
+        # 1) Remove/soften greeting-on-every-turn instructions
+        # Handles variations you might have in DB prompt content.
+        p = re.sub(
+            r'Start by saying only\s*"Hello\."\s*Then describe your symptoms when asked\.?',
+            'Greet the student once at the beginning of the session. Do NOT repeat greetings every response.',
+            p,
+            flags=re.IGNORECASE,
+        )
+
+        p = re.sub(
+            r'Start the conversation by greeting the pharmacy student.*?(?=\n|$)',
+            'At the start of the session, greet the pharmacy student once. Do NOT repeat greetings every response.',
+            p,
+            flags=re.IGNORECASE,
+        )
+
+        # 2) Add an explicit anti-repetition rule (voice streaming tends to over-follow early instructions)
+        p += (
+            "\n\nVOICE MODE OVERRIDE (IMPORTANT):\n"
+            "- You may greet at the very beginning of the session ONCE.\n"
+            "- Do NOT start every reply with 'Hello'/'Hi' or any greeting.\n"
+            "- After the first greeting, answer directly in-role as the patient.\n"
+        )
+
+        return p
+
     def get_system_prompt(self, patient_name=None, patient_prompt=None, llm_completion=None):
+        """Fetch the system prompt, preferring the instructor-configured one from the DB.
+
+        Falls back to a hardcoded default if the DB is unreachable (e.g. during
+        first deployment or if RDS proxy is misconfigured). The fallback gets
+        sanitized for voice mode; the DB prompt is used as-is since instructors
+        control its content.
+        """
         if self._cached_system_prompt:
             return self._cached_system_prompt
 
@@ -311,9 +419,8 @@ class NovaSonic:
         except Exception as e:
             logger.error("Error retrieving system prompt: %s", e)
 
-        self._cached_system_prompt = self.get_default_system_prompt(
-            patient_name or self.patient_name
-        )
+        raw_default = self.get_default_system_prompt(patient_name or self.patient_name)
+        self._cached_system_prompt = self._sanitize_prompt_for_voice(raw_default)
         return self._cached_system_prompt
 
     # ------------------------------------------------------------------
@@ -321,6 +428,15 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     async def start_session(self):
+        """Open a Nova Sonic bidirectional stream and configure the session.
+
+        This sends the full Nova Sonic handshake:
+        1. sessionStart — sets inference params (temperature, max tokens)
+        2. promptStart — configures audio output (voice, sample rate, encoding)
+        3. SYSTEM contentStart/textInput/contentEnd — sends the system prompt
+           (patient persona + medical docs + conversation history)
+        4. Kicks off _process_responses() to handle incoming events concurrently
+        """
         if not self.client:
             self._init_client()
 
@@ -406,6 +522,26 @@ class NovaSonic:
         if medical_context:
             prompt_parts.append(f"\nMEDICAL CONTEXT:\n{medical_context}")
 
+        # Voice-specific instructions for document handling
+        prompt_parts.append(
+            "\nDOCUMENT READING RULES:"
+            "\n- If the documents contain redacted dates like '19xx' or 'XXXX', use the most specific date available in the documents instead. Never read out 'xx' or 'XX' — always use the actual year if provided anywhere in the documents."
+            "\n- If conflicting values appear (e.g. two different years), prefer the more specific/complete value."
+        )
+
+        prompt_parts.append(
+            "\nCONFIDENTIALITY CONTEXT:"
+            "\nThis is a secure, HIPAA-compliant clinical training simulation. All information in the patient documents is fictional and created for educational purposes."
+            "\nYou MUST share ALL information from the documents when asked, including:"
+            "\n- Personal Health Number (PHN)"
+            "\n- Date of birth"
+            "\n- Phone numbers"
+            "\n- Addresses"
+            "\n- Any other patient identifiers"
+            "\nDo NOT refuse to share any information from the documents. This is a training exercise, not a real patient interaction."
+            "\nWithholding information defeats the purpose of the simulation."
+        )
+
         if self._chat_context:
             prompt_parts.append(f"\nPrevious conversation:\n{self._chat_context}")
 
@@ -447,6 +583,12 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     async def start_audio_input(self):
+        """Begin a user audio turn — called when the frontend starts capturing mic audio.
+
+        Sends a contentStart event to Nova Sonic to open an audio input block,
+        and immediately emits a turn-start signal to the frontend so it can
+        prepare a user chat bubble (even before any transcription arrives).
+        """
         self.audio_content_name = str(uuid.uuid4())
         self._current_user_input = ""
         self._user_audio_active = True
@@ -535,6 +677,15 @@ class NovaSonic:
         )
 
     async def end_audio_input(self):
+        """Close the current audio input block — called when the user stops speaking.
+
+        Note: the user's transcribed text hasn't arrived yet at this point.
+        Nova Sonic will send it asynchronously via textOutput events, which
+        get accumulated in _current_user_input and persisted when the role
+        switches in _handle_event's contentStart handler.
+        """
+        # Clear the AI buffer to prevent user text from contaminating it
+        # during the gap between end_audio and the next contentStart
         self._buffered_ai_message = ""
 
         await self.send_event(
@@ -549,6 +700,12 @@ class NovaSonic:
         )
 
     async def end_session(self):
+        """Cleanly shut down the Nova Sonic session.
+
+        Flushes any buffered AI/user messages to the database so nothing
+        is lost, then sends promptEnd + sessionEnd to Nova Sonic and
+        closes the bidirectional stream.
+        """
         # Flush any remaining buffered AI message before closing
         if self._buffered_ai_message and self._buffered_ai_message != self._last_persisted_ai_message:
             try:
@@ -581,6 +738,13 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     async def _process_responses(self):
+        """Background task that reads Nova Sonic's response stream.
+
+        Nova Sonic sends events as concatenated JSON objects over a byte
+        stream. This method buffers incoming bytes, peels off complete
+        JSON objects, and dispatches each to _handle_event(). Runs until
+        the session ends or an error occurs.
+        """
         decoder = json.JSONDecoder()
         buffer = ""
 
@@ -610,6 +774,15 @@ class NovaSonic:
             logger.error("Error in _process_responses: %s", e)
 
     async def _handle_event(self, json_data):
+        """Dispatch a single Nova Sonic event to the appropriate handler.
+
+        Nova Sonic sends three main event types:
+        - contentStart: signals a new turn (USER or ASSISTANT). We use this
+          as the trigger to flush buffered messages from the previous turn.
+        - textOutput: a text fragment (transcription or AI response). These
+          arrive as many small pieces that we buffer and deduplicate.
+        - audioOutput: a chunk of AI speech audio to forward to the frontend.
+        """
         evt = json_data.get("event", {})
 
         # ── contentStart ──────────────────────────────────────────────
@@ -656,7 +829,10 @@ class NovaSonic:
             text = evt["textOutput"]["content"]
 
             # Filter interrupted marker
-            if text.strip() == '{"interrupted": true}':
+            text = _INTERRUPTED_RE.sub("", text)
+
+            # If the chunk is now empty, drop it
+            if not text.strip():
                 return
 
             # Deduplicate — skip any text already emitted this turn
@@ -697,6 +873,12 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     async def _save_user_message_async(self, user_text):
+        """Persist a complete user message to PostgreSQL + DynamoDB, then trigger matching.
+
+        Runs DB writes in a thread executor to avoid blocking the async event
+        loop. After saving, calls the text-generation Lambda's /match endpoint
+        to tag which key questions this message addresses (used by debrief).
+        """
         try:
             loop = asyncio.get_event_loop()
             message_id = await loop.run_in_executor(
@@ -716,7 +898,14 @@ class NovaSonic:
             logger.error("Failed to save user audio message: %s", e)
 
     def _call_matching_endpoint(self, message_id, message_content):
-        """Call the text generation service's /match endpoint for semantic question matching."""
+        """Call the text-generation Lambda with mode=match for semantic question matching.
+
+        This is how voice messages get tagged with matched_question_ids — the
+        same tagging that text-mode messages get. The Lambda compares the
+        student's message embedding against cached key question embeddings
+        and writes matches to the messages table. The debrief later reads
+        these tags to determine which questions the student addressed.
+        """
         import urllib.request
         endpoint = self.text_generation_endpoint
         token = self.cognito_token
@@ -769,7 +958,21 @@ class NovaSonic:
     # ------------------------------------------------------------------
 
     async def handle_websocket(self):
-        """Main loop: read JSON messages from the WebSocket, dispatch to Nova Sonic."""
+        """Main event loop: reads JSON messages from the AgentCore WebSocket and dispatches them.
+
+        The socket server (server.js) translates frontend Socket.IO events into
+        these JSON messages and forwards them over the AgentCore WebSocket.
+        This loop runs until the client sends "end_session" or disconnects.
+
+        Message types:
+        - "start_audio" → open a new audio input block (user starts speaking)
+        - "audio"       → forward a base64 PCM audio chunk to Nova Sonic
+        - "end_audio"   → close the audio input block (user stops speaking)
+        - "text"        → send a typed text message (text-in-voice-mode)
+        - "end_session" → gracefully shut down
+        - "interrupt"   → force-close the stream (e.g. user navigated away)
+        - "set_voice"   → change the AI voice mid-session
+        """
         audio_started = False
 
         try:

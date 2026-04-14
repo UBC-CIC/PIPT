@@ -294,20 +294,27 @@ def handler(event, context):
                     "body": json.dumps("Missing required fields: message_id, message_content"),
                 }
 
-            from helpers.chat import run_matching_async, cache_key_questions
-            # Ensure key questions are cached for this session
+            from helpers.chat import match_message_to_questions, get_cached_key_questions
+            
+            # Check cache first to save time and Bedrock API costs.
+            # Use explicit None check — an empty list [] means the cache was
+            # populated but there are no key questions for this patient, which
+            # is a valid state and should not trigger a re-cache.
             try:
-                cache_key_questions(
-                    session_id=session_id,
-                    simulation_group_id=simulation_group_id,
-                    persona_id=persona_id,
-                    embeddings_model=embeddings,
-                    table_name=TABLE_NAME,
-                )
+                cached = get_cached_key_questions(session_id, TABLE_NAME)
+                if cached is None:
+                    cache_key_questions(
+                        session_id=session_id,
+                        simulation_group_id=simulation_group_id,
+                        persona_id=persona_id,
+                        embeddings_model=embeddings,
+                        table_name=TABLE_NAME,
+                    )
             except Exception as e:
-                logger.warning(f"Failed to cache key questions for matching: {e}")
+                logger.warning(f"Failed to handle key questions cache: {e}")
 
-            run_matching_async(
+            # Run SYNCHRONOUSLY so Lambda actually writes to the DB before freezing
+            match_message_to_questions(
                 message_content=message_content,
                 session_id=session_id,
                 message_id=message_id,
