@@ -435,6 +435,11 @@ def handler(event, context):
                     "body": json.dumps({"error": "Persona not found"}),
                 }
 
+            # Allow overriding the patient prompt from the request body
+            custom_patient_prompt = body.get("patient_prompt", "").strip()
+            if custom_patient_prompt:
+                patient_prompt = custom_patient_prompt
+
             if not message_content:
                 student_query = get_initial_student_query(patient_name)
             else:
