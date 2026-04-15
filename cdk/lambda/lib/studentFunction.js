@@ -271,6 +271,7 @@ exports.handler = async (event, context) => {
                   p.persona_gender,
                   p.persona_number,
                   p.llm_completion,
+                  p.voice_enabled,
                   sp.student_interaction_id,
                   sp.persona_score,
                   sp.last_accessed,

@@ -44,7 +44,6 @@ function InstructorSimulationGroupPage() {
   const [isMainSidebarVisible, setIsMainSidebarVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
 
   // Shared hooks
   const groupData = useSimulationGroupData({ groupId, role: 'instructor' });
@@ -93,6 +92,7 @@ function InstructorSimulationGroupPage() {
   const accessCode = simulationGroup?.group_access_code || 'XXXX-XXXX-XXXX-XXXX';
   const hasAdminRole = authUser?.groups.includes('admin') || false;
   const selectedQuestion = globalRubricQuestions.find(q => q.id === selectedQuestionId);
+  const enableVoiceForAll = manageablePatients.length > 0 && manageablePatients.every((p: any) => p.voice_enabled !== false);
 
   // ── Load prompts ──
   useEffect(() => {
@@ -184,6 +184,15 @@ function InstructorSimulationGroupPage() {
   const handleBackFromEditPatient = () => { patientEditor.stopEditing(); setActiveSection('patients'); };
   const handleSavePatientChanges = async () => { await patientEditor.savePatient(); handleBackFromEditPatient(); };
   const handleCreateNewPatient = () => { patientEditor.startCreating(); setActiveSection('editPatient'); };
+  const handleTogglePatientVoice = async (patientId: string, enabled: boolean) => {
+    groupData.setManageablePatients(prev =>
+      prev.map(p => (p.id === patientId || p.patient_id === patientId) ? { ...p, voice_enabled: enabled } : p)
+    );
+    if (groupId) {
+      try { await instructorService.updatePatientVoiceEnabled(patientId, groupId, enabled); }
+      catch (err) { console.error('Failed to update voice setting:', err); }
+    }
+  };
   const handleViewStudent = async (studentId: string) => { await studentViewer.viewStudent(studentId); setActiveSection('viewStudent'); };
   const handleBackFromViewStudent = () => { studentViewer.closeStudentView(); setActiveSection('students'); };
 
@@ -351,7 +360,12 @@ function InstructorSimulationGroupPage() {
 
         <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'editPatient', 'viewStudent'].includes(activeSection) ? '0' : '2rem' }}>
           {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
-          {activeSection === 'patients' && <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={setEnableVoiceForAll} />}
+          {activeSection === 'patients' && <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} onTogglePatientVoice={handleTogglePatientVoice} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (enabled) => {
+            for (const p of manageablePatients) {
+              const pid = (p as any).id || (p as any).patient_id;
+              await handleTogglePatientVoice(pid, enabled);
+            }
+          }} />}
           {activeSection === 'students' && <StudentsSection students={students} searchQuery={studentSearchQuery} onSearchChange={setStudentSearchQuery} onViewStudent={handleViewStudent} labels={labels} />}
           {activeSection === 'rubric' && <RubricSection questions={globalRubricQuestions} selectedQuestionId={selectedQuestionId} onSelectQuestion={setSelectedQuestionId} searchQuery={rubricSearchQuery} onSearchChange={setRubricSearchQuery} onSaveQuestion={handleSaveQuestion} onUpdateField={handleUpdateQuestionField} />}
           {activeSection === 'questionBank' && <QuestionBankSection questionBank={questionBank} role="instructor" groupId={groupId || '1'} patients={manageablePatients} onConfirmSelections={handleConfirmSelections} onGlobalTabClick={syncGlobalIds} onPatientSpecificTabClick={() => syncPatientIds(selectedPatientForQuestionBank)} onPatientSelect={syncPatientIds} />}

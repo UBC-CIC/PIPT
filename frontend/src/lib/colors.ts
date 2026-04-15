@@ -86,6 +86,15 @@ export const UI_COLORS = {
     loginEnd: '#2E8BA8', // Login page gradient end color
     signupEnd: '#15A085', // Signup page gradient end color
   },
+  changelog: {
+    workingBg: '#DCFCE7',       // green-100
+    workingText: '#166534',     // green-800
+    inProgressBg: '#FEF9C3',   // yellow-100
+    inProgressText: '#854D0E',  // yellow-800
+    notWorkingBg: '#FEE2E2',   // red-100
+    notWorkingText: '#991B1B',  // red-800
+    pulseDot: '#FDE047',        // yellow-300
+  },
 } as const;
 
 /**

@@ -46,7 +46,6 @@ function AdminSimulationGroupPage() {
   const [isMainSidebarVisible, setIsMainSidebarVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [studentSearchQuery, setStudentSearchQuery] = useState('');
-  const [enableVoiceForAll, setEnableVoiceForAll] = useState(false);
 
   // Shared hooks
   const groupData = useSimulationGroupData({ groupId, organizationId, role: 'admin' });
@@ -76,6 +75,7 @@ function AdminSimulationGroupPage() {
 
   const { aiPersonaPlural: aiPersonaLabelPlural, aiPersonaLower: aiPersonaLabelLower, userRole: userRoleLabel } = labels;
   const accessCode = simulationGroup?.group_access_code || 'XXXX-XXXX-XXXX-XXXX';
+  const enableVoiceForAll = manageablePatients.length > 0 && manageablePatients.every((p: any) => p.voice_enabled !== false);
 
   // Admin-specific state: instructors
   const [instructors, setInstructors] = useState<adminApi.AdminInstructor[]>([]);
@@ -260,6 +260,15 @@ function AdminSimulationGroupPage() {
   const handleBackFromEditPatient = () => { patientEditor.stopEditing(); setActiveSection('patients'); };
   const handleSavePatientChanges = async () => { await patientEditor.savePatient(); };
   const handleCreateNewPatient = () => { patientEditor.startCreating(); setActiveSection('editPatient'); };
+  const handleTogglePatientVoice = async (patientId: string, enabled: boolean) => {
+    groupData.setManageablePatients(prev =>
+      prev.map((p: any) => (p.id === patientId || p.patient_id === patientId) ? { ...p, voice_enabled: enabled } : p)
+    );
+    if (groupId) {
+      try { await instructorService.updatePatientVoiceEnabled(patientId, groupId, enabled); }
+      catch (err) { console.error('Failed to update voice setting:', err); }
+    }
+  };
   const handleViewStudent = async (studentId: string) => { await studentViewer.viewStudent(studentId); setActiveSection('viewStudent'); };
   const handleBackFromViewStudent = () => { studentViewer.closeStudentView(); setActiveSection('students'); };
 
@@ -467,9 +476,11 @@ function AdminSimulationGroupPage() {
           {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
 
           {activeSection === 'patients' && (
-            <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (newValue) => {
-              setEnableVoiceForAll(newValue);
-              if (groupId) { try { await adminApi.updateGroupAccess({ simulation_group_id: groupId, access: true }); } catch (err) { console.error('Failed to update voice setting via API:', err); } }
+            <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} onTogglePatientVoice={handleTogglePatientVoice} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (newValue) => {
+              for (const p of manageablePatients) {
+                const pid = (p as any).id || (p as any).patient_id;
+                await handleTogglePatientVoice(pid, newValue);
+              }
             }}>
               {/* Max messages per chat setting */}
               <div className="border rounded-xl p-5 space-y-3" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>

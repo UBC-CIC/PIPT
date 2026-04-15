@@ -141,6 +141,7 @@ export interface ManageablePatient {
   patient_prompt: string;               // Patient prompt for LLM (persona_prompt in DB)
   average_wpm?: number;                 // Average words per minute (average_wpm in DB)
   voice_id?: string;                    // Voice ID for TTS (voice_id in DB)
+  voice_enabled?: boolean;              // Whether voice mode is enabled for this patient (voice_enabled in DB)
   interaction_mode?: string;            // Interaction mode (interaction_mode in DB)
   llm_completion: boolean;              // Whether LLM evaluation is enabled (derived from settings)
   photo_url?: string;                   // Optional patient photo URL (stored separately or in media)
@@ -266,6 +267,7 @@ export interface PatientUpdateData {
   patient_number?: number;              // persona_number (optional)
   average_wpm?: number;                 // average_wpm (optional)
   voice_id?: string;                    // voice_id (optional)
+  voice_enabled?: boolean;              // voice_enabled (optional)
   interaction_mode?: string;            // interaction_mode (optional)
   llm_upload_file?: File;               // File upload for LLM
   patient_info_file?: File;             // File upload for patient info
@@ -314,6 +316,7 @@ export interface InstructorDataService {
   fetchProfilePictures: (simulationGroupId: string) => Promise<Record<string, string>>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
+  updatePatientVoiceEnabled: (patientId: string, simulationGroupId: string, enabled: boolean) => Promise<void>;
   deletePatient: (patientId: string) => Promise<void>;
   getGlobalRubricQuestions: (simulationGroupId: string) => GlobalRubricQuestion[];
   addGlobalRubricQuestion: (simulationGroupId: string, question: GlobalRubricQuestion) => void;
@@ -1042,6 +1045,7 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
       patient_prompt: patient.persona_prompt,
       average_wpm: patient.average_wpm,
       voice_id: patient.voice_id,
+      voice_enabled: patient.voice_enabled !== false,
       interaction_mode: patient.interaction_mode,
       llmEvaluationEnabled: patient.llm_completion || false,
       llm_completion: patient.llm_completion || false,
@@ -1126,6 +1130,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
         persona_age: patientData.patient_age,
         persona_gender: patientData.patient_gender,
         persona_prompt: patientData.patient_prompt,
+        voice_enabled: patientData.voice_enabled,
       },
     });
 
@@ -1255,6 +1260,43 @@ async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): 
     );
   } catch (error) {
     console.error('Failed to update LLM evaluation:', error);
+    throw error;
+  }
+}
+
+/**
+ * Toggle voice mode for a specific patient.
+ * Uses the edit_patient endpoint with only voice_enabled in the body.
+ * The backend treats undefined fields as no-change for other columns.
+ */
+async function updatePatientVoiceEnabled(patientId: string, simulationGroupId: string, enabled: boolean): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    // Fetch current patient data so we can send the required fields
+    const patients = await getManageablePatients(simulationGroupId);
+    const patient = patients.find(p => p.patient_id === patientId);
+    if (!patient) throw new Error('Patient not found');
+
+    const queryParams = new URLSearchParams({
+      persona_id: patientId,
+      instructor_email: user.email,
+      simulation_group_id: simulationGroupId,
+    });
+
+    await apiClient.request(`instructor/edit_patient?${queryParams.toString()}`, {
+      method: 'PUT',
+      body: {
+        persona_name: patient.patient_name,
+        persona_age: patient.patient_age,
+        persona_gender: patient.patient_gender,
+        persona_prompt: patient.patient_prompt,
+        voice_enabled: enabled,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to update voice enabled:', error);
     throw error;
   }
 }
@@ -2081,6 +2123,7 @@ export const instructorService: InstructorDataService = {
   fetchProfilePictures,
   uploadPatientFile,
   updatePatientLLMEvaluation,
+  updatePatientVoiceEnabled,
   deletePatient,
   getGlobalRubricQuestions,
   addGlobalRubricQuestion,

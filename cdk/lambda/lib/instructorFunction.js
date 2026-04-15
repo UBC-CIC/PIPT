@@ -713,7 +713,7 @@ exports.handler = async (event, context) => {
         ) {
           const { persona_id, instructor_email, simulation_group_id } =
             event.queryStringParameters;
-          const { persona_name, persona_age, persona_gender, persona_prompt } =
+          const { persona_name, persona_age, persona_gender, persona_prompt, voice_enabled } =
             JSON.parse(event.body || "{}");
 
           if (
@@ -746,7 +746,8 @@ exports.handler = async (event, context) => {
                             persona_name = ${persona_name}, 
                             persona_age = ${persona_age}, 
                             persona_gender = ${persona_gender}, 
-                            persona_prompt = ${persona_prompt}
+                            persona_prompt = ${persona_prompt},
+                            voice_enabled = ${voice_enabled !== undefined ? voice_enabled : true}
                         WHERE persona_id = ${persona_id};
                     `;
 
@@ -985,7 +986,7 @@ exports.handler = async (event, context) => {
           try {
             // Query to get all patients for the given simulation group
             const simulationPatients = await sqlConnection`
-                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion
+                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled
                     FROM "personas" p
                     WHERE p.simulation_group_id = ${simulation_group_id}
                     ORDER BY p.persona_name ASC;

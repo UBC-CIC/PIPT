@@ -136,6 +136,7 @@ export interface PatientDetail {
   name: string;
   age: number;
   gender: string;
+  voice_enabled?: boolean;
   imageUrl?: string;
   pronouns?: string;
   sex?: string;
@@ -468,6 +469,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       persona_name: string;
       persona_age: number;
       persona_gender: string;
+      voice_enabled?: boolean;
     }>>(
       `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
@@ -479,6 +481,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
         name: persona.persona_name,
         age: persona.persona_age,
         gender: persona.persona_gender,
+        voice_enabled: persona.voice_enabled !== false,
         imageUrl: profilePictureUrl,
         avatarUrl: profilePictureUrl,
       };
@@ -1220,6 +1223,21 @@ async function fetchAnswerKeyUrl(simulationGroupId: string, patientId: string): 
 }
 
 /**
+ * Fetch the voice_id assigned to a patient (persona) from the API.
+ */
+async function fetchPatientVoiceId(patientId: string): Promise<string | null> {
+  try {
+    const data = await apiClient.request<{ voice_id?: string }>(
+      `student/patient_voice_id?patient_id=${encodeURIComponent(patientId)}`
+    );
+    return data.voice_id || null;
+  } catch (error) {
+    console.warn('[fetchPatientVoiceId] Failed to fetch voice_id:', error);
+    return null;
+  }
+}
+
+/**
  * Student service — public API used by pages
  */
 export const studentService = {
@@ -1244,7 +1262,8 @@ export const studentService = {
   fetchDebrief,
   fetchPersonaMedia,
   fetchNotes,
-  updateNotes
+  updateNotes,
+  fetchPatientVoiceId
 };
 
 /**

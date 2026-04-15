@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { authService } from '@/lib/auth';
 import { useAuth } from '@/App';
+import ChangelogButton from '@/components/ChangelogButton';
 
 /**
  * LoginPage Component
@@ -348,6 +349,9 @@ function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Changelog floating button */}
+      <ChangelogButton />
     </div>
   );
 }

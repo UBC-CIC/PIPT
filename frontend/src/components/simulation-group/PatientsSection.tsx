@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Search, Edit, Trash2, Plus } from 'lucide-react';
+import { Search, Edit, Trash2, Plus, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS } from '@/lib/colors';
@@ -13,6 +13,7 @@ export interface PatientsSectionProps {
   onEditPatient: (patientId: string) => void;
   onDeletePatient: (patientId: string) => void;
   onCreatePatient: () => void;
+  onTogglePatientVoice: (patientId: string, enabled: boolean) => void;
   labels: OrganizationLabels;
   enableVoiceForAll: boolean;
   onToggleVoice: (enabled: boolean) => void;
@@ -26,6 +27,7 @@ export function PatientsSection({
   onEditPatient,
   onDeletePatient,
   onCreatePatient,
+  onTogglePatientVoice,
   labels,
   enableVoiceForAll,
   onToggleVoice,
@@ -59,7 +61,7 @@ export function PatientsSection({
       {/* Patient Table */}
       <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
         {/* Table Header */}
-        <div className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+        <div className="grid grid-cols-[2fr_80px_100px_80px_2fr] gap-4 px-6 py-4" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
           <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
             Patient Name
           </div>
@@ -70,15 +72,21 @@ export function PatientsSection({
             Gender
           </div>
           <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+            Voice
+          </div>
+          <div className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
             Actions
           </div>
         </div>
 
         {/* Table Rows */}
-        {filteredPatients.map((patient) => (
+        {filteredPatients.map((patient) => {
+          const voiceEnabled = patient.voice_enabled !== false;
+          const pid = patient.id || patient.patient_id;
+          return (
           <div
-            key={patient.id || patient.patient_id}
-            className="grid grid-cols-[2fr_1fr_1fr_2fr] gap-4 px-6 py-4 border-t items-center"
+            key={pid}
+            className="grid grid-cols-[2fr_80px_100px_80px_2fr] gap-4 px-6 py-4 border-t items-center"
             style={{ borderColor: UI_COLORS.border.default }}
           >
             <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
@@ -90,9 +98,33 @@ export function PatientsSection({
             <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
               {patient.gender || patient.patient_gender}
             </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={voiceEnabled}
+                onClick={() => onTogglePatientVoice(pid, !voiceEnabled)}
+                className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                style={{
+                  backgroundColor: voiceEnabled ? UI_COLORS.toggle.active : UI_COLORS.toggle.inactive
+                }}
+                title={voiceEnabled ? 'Voice enabled — click to disable' : 'Voice disabled — click to enable'}
+              >
+                <span
+                  className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                  style={{
+                    transform: voiceEnabled ? 'translateX(18px)' : 'translateX(2px)'
+                  }}
+                />
+              </button>
+              {voiceEnabled
+                ? <Mic className="w-4 h-4" style={{ color: UI_COLORS.toggle.active }} />
+                : <MicOff className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+              }
+            </div>
             <div className="flex items-center gap-3">
               <Button
-                onClick={() => onEditPatient(patient.id || patient.patient_id)}
+                onClick={() => onEditPatient(pid)}
                 className="px-6 py-2 text-sm font-medium transition-colors"
                 style={{
                   backgroundColor: UI_COLORS.button.primary,
@@ -105,7 +137,7 @@ export function PatientsSection({
                 Edit
               </Button>
               <button
-                onClick={() => onDeletePatient(patient.id || patient.patient_id)}
+                onClick={() => onDeletePatient(pid)}
                 className="p-2 rounded transition-colors"
                 style={{
                   border: 'none',
@@ -119,7 +151,8 @@ export function PatientsSection({
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Create New Patient Button */}

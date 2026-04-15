@@ -158,12 +158,22 @@ function StudentChatPage() {
 
     startAudioClient();
 
-    function startAudioClient() {
+    async function startAudioClient() {
     if (!socketRef.current) {
       setVoiceError('Socket connection not available.');
       setVoiceSessionState('error');
       return;
     }
+
+    // Fetch the patient's assigned voice_id from the DB before starting the session
+    let voiceId: string | undefined;
+    if (patientId) {
+      const fetchedVoiceId = await studentService.fetchPatientVoiceId(patientId);
+      if (fetchedVoiceId) {
+        voiceId = fetchedVoiceId;
+      }
+    }
+
     const client = new SocketIOAudioClient({
       socket: socketRef.current,
       onStateChange: (state) => {
@@ -195,6 +205,7 @@ function StudentChatPage() {
       patient_name: patient?.name || '',
       patient_id: patientId || '',
       simulation_group_id: groupId || '',
+      voice_id: voiceId || '',
     }).then(() => {
       // Start polling DB for messages every 2 seconds while voice mode is active
       const sid = sessionId || routeChatId || '';
@@ -1132,6 +1143,7 @@ function StudentChatPage() {
               ) : (
                 /* Text input mode */
                 <div className="flex items-center gap-3">
+                  {patient.voice_enabled !== false && (
                   <button
                     onClick={handleStartVoiceMode}
                     disabled={!sessionId || !patient?.name || patient.name === 'Loading...'}
@@ -1144,6 +1156,7 @@ function StudentChatPage() {
                   >
                     <Mic className="w-5 h-5" />
                   </button>
+                  )}
                   
                   <div className="flex-1 relative">
                     <input
