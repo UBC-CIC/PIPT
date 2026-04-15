@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
-import CreateSimulationGroupDialog from '@/components/CreateSimulationGroupDialog';
+import CreateSimulationGroupDialog, { type AdminCreateData } from '@/components/CreateSimulationGroupDialog';
 import { mockAdminDataService, mockOrganizations } from '@/services/adminService';
 import {type InstructorSimulationGroup } from '@/services/instructorService';
 import { getSimulationGroupColor, UI_COLORS } from '@/lib/colors';
@@ -99,7 +99,7 @@ function AdminOrganizationPage() {
     }
   };
 
-  const handleCreateGroupSubmit = async (data: { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean }) => {
+  const handleCreateGroupSubmit = async (data: AdminCreateData) => {
     try {
       const created = await adminApi.createSimulationGroup({
         group_name: data.name,
@@ -246,6 +246,7 @@ function AdminOrganizationPage() {
       <CreateSimulationGroupDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
+        role="admin"
         onCreate={handleCreateGroupSubmit}
       />
     </PageContainer>

@@ -1,15 +1,16 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { ArrowLeft, Trash2 } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/App';
-import { studentService, type ChatHistoryEntry, type PatientDetail } from '@/services/studentService';
+import { studentService, type ChatHistoryEntry, type PatientDetail, type PatientFile, type PersonaMedia } from '@/services/studentService';
 import type { KeyQuestionsCoverageData } from '@/services/studentService';
 import ConfirmDeleteSessionDialog from '@/components/ConfirmDeleteSessionDialog';
+import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 
 /**
  * PatientDashboardPage Component
@@ -19,12 +20,18 @@ import ConfirmDeleteSessionDialog from '@/components/ConfirmDeleteSessionDialog'
 function PatientDashboardPage() {
   const navigate = useNavigate();
   const { groupId, patientId } = useParams();
+  const location = useLocation();
+  const adminReturnUrl = (location.state as any)?.adminReturnUrl as string | undefined;
   
   const { user: authUser, signOut } = useAuth();
   const user = { name: authUser?.email || 'Student', avatarUrl: undefined };
   
   // State for showing all attempts
   const [showAllAttempts, setShowAllAttempts] = useState(false);
+
+  // Pagination for chat history
+  const [chatPage, setChatPage] = useState(0);
+  const chatsPerPage = 10;
 
   // State for delete confirmation dialog
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -33,14 +40,41 @@ function PatientDashboardPage() {
   // Load patient data from API
   const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: 'Loading...', age: 0, gender: '' });
 
+  // Patient Information files
+  const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
+  const [selectedPatientFile, setSelectedPatientFile] = useState<PatientFile | null>(null);
+  const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(true);
+
+  // Physical Assessment materials
+  const [personaMedia, setPersonaMedia] = useState<PersonaMedia[]>([]);
+  const [personaMediaLoading, setPersonaMediaLoading] = useState(false);
+  const [isPhysicalAssessmentOpen, setIsPhysicalAssessmentOpen] = useState(true);
+
   useEffect(() => {
     if (!groupId || !patientId) return;
     let cancelled = false;
     studentService.fetchPatientDetail(groupId, patientId).then((data) => {
       if (!cancelled) setPatient(data);
     });
+    studentService.fetchPatientFiles(groupId, patientId).then((data) => {
+      if (!cancelled) setPatientFiles(data);
+    });
     return () => { cancelled = true; };
   }, [groupId, patientId]);
+
+  // Fetch persona media when physical assessment section is opened
+  useEffect(() => {
+    if (!isPhysicalAssessmentOpen || !patientId) return;
+    let cancelled = false;
+    setPersonaMediaLoading(true);
+    studentService.fetchPersonaMedia(patientId).then((data) => {
+      if (!cancelled) {
+        setPersonaMedia(data);
+        setPersonaMediaLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [isPhysicalAssessmentOpen, patientId]);
 
   // Load chat history from API (falls back to mock)
   const [chatHistory, setChatHistory] = useState<ChatHistoryEntry[]>([]);
@@ -91,7 +125,7 @@ function PatientDashboardPage() {
    * Handle back to patients navigation
    */
   const handleBackToPatients = () => {
-    navigate(`/patients/${groupId}`);
+    navigate(`/patients/${groupId}`, { state: { adminReturnUrl } });
   };
 
   /**
@@ -127,7 +161,13 @@ function PatientDashboardPage() {
     if (!groupId || !patientId || !deleteTargetChatId) return;
     const success = await studentService.deleteSession(groupId, patientId, deleteTargetChatId);
     if (success) {
-      setChatHistory((prev) => prev.filter((c) => c.id !== deleteTargetChatId));
+      setChatHistory((prev) => {
+        const updated = prev.filter((c) => c.id !== deleteTargetChatId);
+        // Reset to last valid page if current page is now empty
+        const maxPage = Math.max(0, Math.ceil(updated.length / chatsPerPage) - 1);
+        if (chatPage > maxPage) setChatPage(maxPage);
+        return updated;
+      });
     }
     setIsDeleteDialogOpen(false);
     setDeleteTargetChatId(null);
@@ -167,7 +207,19 @@ function PatientDashboardPage() {
           </div>
         </div>
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
+          {adminReturnUrl && (
+            <Button
+              variant="default"
+              onClick={() => navigate(adminReturnUrl)}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+            >
+              Back to Admin View
+            </Button>
+          )}
           <Button
             variant="default"
             onClick={handleSignOut}
@@ -183,7 +235,7 @@ function PatientDashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-8 py-6">
-        <div className={hasChats ? "grid grid-cols-2 gap-6 h-full overflow-hidden" : "max-w-4xl"}>
+        <div className={hasChats ? "grid grid-cols-2 gap-6" : "max-w-4xl"}>
           {/* Left Column - Patient Overview */}
           <div className={hasChats ? "pr-6 overflow-y-auto" : ""} style={hasChats ? { borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default } : {}}>
             <h2 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>Patient Overview</h2>
@@ -313,10 +365,144 @@ function PatientDashboardPage() {
               )}
             </div>
 
+            {/* Patient Information Section */}
+            <div className="mb-8">
+              <button
+                onClick={() => { setIsPatientInfoOpen(!isPatientInfoOpen); setSelectedPatientFile(null); }}
+                className="flex items-center gap-2 w-full text-left mb-3"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                {isPatientInfoOpen ? (
+                  <ChevronDown className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                ) : (
+                  <ChevronRight className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                )}
+                <User className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                <h3 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  Patient Information
+                </h3>
+              </button>
+
+              {isPatientInfoOpen && (
+                <div
+                  className="rounded-lg p-4"
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: UI_COLORS.border.default,
+                    backgroundColor: UI_COLORS.background.white,
+                  }}
+                >
+                  {selectedPatientFile ? (
+                    <div className="flex flex-col">
+                      <button
+                        onClick={() => setSelectedPatientFile(null)}
+                        className="flex items-center gap-1 text-sm mb-3 bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                        style={{ color: UI_COLORS.text.body }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                        onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+                      >
+                        <ArrowLeftIcon className="w-4 h-4" />
+                        Back to files
+                      </button>
+                      <h4 className="font-semibold text-sm mb-2" style={{ color: UI_COLORS.text.heading }}>
+                        {selectedPatientFile.filename}
+                      </h4>
+                      {selectedPatientFile.url ? (
+                        <iframe
+                          src={selectedPatientFile.url}
+                          title={selectedPatientFile.filename}
+                          className="w-full rounded border"
+                          style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : (
+                        <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No preview available for this file.</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {patientFiles.length === 0 ? (
+                        <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>No patient information files uploaded.</p>
+                      ) : (
+                        patientFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            onClick={() => setSelectedPatientFile(file)}
+                            className="p-4 rounded-lg cursor-pointer transition-colors"
+                            style={{ backgroundColor: UI_COLORS.background.hoverLight }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+                          >
+                            <div className="flex items-start gap-3">
+                              <FileText className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: UI_COLORS.text.muted }} />
+                              <div className="flex-1">
+                                <h4 className="font-semibold text-sm mb-1" style={{ color: UI_COLORS.text.heading }}>
+                                  {file.filename}
+                                </h4>
+                                <p className="text-xs" style={{ color: UI_COLORS.text.body }}>
+                                  {file.description}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Physical Assessment Section */}
+            <div className="mb-8">
+              <button
+                onClick={() => setIsPhysicalAssessmentOpen(!isPhysicalAssessmentOpen)}
+                className="flex items-center gap-2 w-full text-left mb-3"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                {isPhysicalAssessmentOpen ? (
+                  <ChevronDown className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                ) : (
+                  <ChevronRight className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                )}
+                <Stethoscope className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                <h3 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                  Physical Assessment
+                </h3>
+              </button>
+
+              {isPhysicalAssessmentOpen && (
+                <div
+                  className="rounded-lg p-4"
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: UI_COLORS.border.default,
+                    backgroundColor: UI_COLORS.background.white,
+                  }}
+                >
+                  <PhysicalAssessmentContent materials={personaMedia} loading={personaMediaLoading} />
+                </div>
+              )}
+            </div>
+
             {/* Chat History - Show in left column when no chats */}
             {!hasChats && (
               <div>
-                <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
+                  <Button
+                    onClick={handleStartNewChat}
+                    variant="default"
+                    className="px-6 transition-colors"
+                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                  >
+                    + Start New Chat
+                  </Button>
+                </div>
                 <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
                   Click on an in-progress chat to continue your diagnosis.<br />
                   Click on a completed chat to view the AI debrief.
@@ -337,8 +523,15 @@ function PatientDashboardPage() {
                     No chat history yet
                   </p>
                 </div>
+              </div>
+            )}
+          </div>
 
-                {/* Start New Chat Button */}
+          {/* Right Column - Chat History (only when there are chats) */}
+          {hasChats && (
+            <div className="pl-6 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
                 <Button
                   onClick={handleStartNewChat}
                   variant="default"
@@ -350,20 +543,13 @@ function PatientDashboardPage() {
                   + Start New Chat
                 </Button>
               </div>
-            )}
-          </div>
-
-          {/* Right Column - Chat History (only when there are chats) */}
-          {hasChats && (
-            <div className="pl-6 flex flex-col overflow-hidden h-full">
-              <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
               <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
                 Click on an in-progress chat to continue your diagnosis.<br />
                 Click on a completed chat to view the AI debrief.
               </p>
 
               {/* Chat History Table */}
-              <div className="rounded-lg overflow-y-auto flex-1 min-h-0 mb-4" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
+              <div className="rounded-lg overflow-y-auto" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
                 <table className="w-full">
                   <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
                     <tr>
@@ -373,7 +559,7 @@ function PatientDashboardPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {chatHistory.map((chat) => (
+                    {chatHistory.slice(chatPage * chatsPerPage, (chatPage + 1) * chatsPerPage).map((chat) => (
                       <tr
                         key={chat.id}
                         onClick={() => handleChatClick(chat.id, chat.completionStatus)}
@@ -402,17 +588,36 @@ function PatientDashboardPage() {
                 </table>
               </div>
 
-              {/* Start New Chat Button */}
-              <Button
-                onClick={handleStartNewChat}
-                variant="default"
-                className="px-6 transition-colors"
-                style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-              >
-                + Start New Chat
-              </Button>
+              {/* Pagination Controls */}
+              {chatHistory.length > chatsPerPage && (
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                    Showing {chatPage * chatsPerPage + 1}–{Math.min((chatPage + 1) * chatsPerPage, chatHistory.length)} of {chatHistory.length} chats
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setChatPage((p) => Math.max(0, p - 1))}
+                      disabled={chatPage === 0}
+                      className="px-3 py-1 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text, border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={(e) => { if (chatPage > 0) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => setChatPage((p) => p + 1)}
+                      disabled={(chatPage + 1) * chatsPerPage >= chatHistory.length}
+                      className="px-3 py-1 text-sm rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text, border: 'none', cursor: 'pointer' }}
+                      onMouseEnter={(e) => { if ((chatPage + 1) * chatsPerPage < chatHistory.length) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

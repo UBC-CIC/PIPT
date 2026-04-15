@@ -11,41 +11,50 @@ import { Button } from '@/components/ui/button';
 import { UI_COLORS } from '@/lib/colors';
 import { getAllInstructors, type AdminInstructor } from '@/services/adminApiService';
 
-interface CreateSimulationGroupDialogProps {
+export type AdminCreateData = { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean };
+export type InstructorCreateData = { name: string; description: string; active: boolean; enableVoice: boolean };
+
+type CreateSimulationGroupDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (data: { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean }) => void;
-}
+} & (
+  | { role: 'admin'; onCreate: (data: AdminCreateData) => void }
+  | { role: 'instructor'; onCreate: (data: InstructorCreateData) => void }
+);
 
 function CreateSimulationGroupDialog({ 
   open, 
   onOpenChange, 
+  role,
   onCreate 
 }: CreateSimulationGroupDialogProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
-  const [systemPrompt, setSystemPrompt] = useState('');
   const [active, setActive] = useState(true);
   const [enableVoice, setEnableVoice] = useState(true);
+
+  // Admin-only state
+  const [selectedInstructors, setSelectedInstructors] = useState<string[]>([]);
+  const [systemPrompt, setSystemPrompt] = useState('');
   const [availableInstructors, setAvailableInstructors] = useState<AdminInstructor[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loadingInstructors, setLoadingInstructors] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch instructors when dialog opens
+  // Fetch instructors when dialog opens (admin only)
   useEffect(() => {
-    if (open) {
+    if (open && role === 'admin') {
       setLoadingInstructors(true);
       getAllInstructors()
         .then((instructors) => setAvailableInstructors(instructors))
         .catch((err) => console.error('Failed to load instructors:', err))
         .finally(() => setLoadingInstructors(false));
     }
-  }, [open]);
+  }, [open, role]);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click (admin only)
   useEffect(() => {
+    if (role !== 'admin') return;
     const handleClickOutside = (e: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
@@ -53,7 +62,7 @@ function CreateSimulationGroupDialog({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [role]);
 
   const toggleInstructor = (email: string) => {
     setSelectedInstructors((prev) =>
@@ -61,8 +70,14 @@ function CreateSimulationGroupDialog({
     );
   };
 
+  const isValid = role === 'admin'
+    ? Boolean(name.trim() && description.trim() && selectedInstructors.length > 0)
+    : Boolean(name.trim() && description.trim());
+
   const handleCreate = () => {
-    if (name.trim() && description.trim() && selectedInstructors.length > 0) {
+    if (!isValid) return;
+
+    if (role === 'admin') {
       onCreate({
         name: name.trim(),
         description: description.trim(),
@@ -71,9 +86,16 @@ function CreateSimulationGroupDialog({
         active,
         enableVoice
       });
-      resetForm();
-      onOpenChange(false);
+    } else {
+      onCreate({
+        name: name.trim(),
+        description: description.trim(),
+        active,
+        enableVoice
+      });
     }
+    resetForm();
+    onOpenChange(false);
   };
 
   const resetForm = () => {
@@ -149,128 +171,132 @@ function CreateSimulationGroupDialog({
             />
           </div>
 
-          {/* Instructor Multi-Select Dropdown */}
-          <div className="flex flex-col gap-2">
-            <label 
-              className="text-sm font-medium"
-              style={{ color: UI_COLORS.text.heading }}
-            >
-              Add Instructors <span style={{ color: UI_COLORS.status.error }}>*</span>
-            </label>
-            <div ref={dropdownRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="w-full flex items-center justify-between text-left px-3 py-2 rounded-md text-base"
-                style={{
-                  borderWidth: '1px',
-                  borderStyle: 'solid',
-                  borderColor: UI_COLORS.border.default,
-                  backgroundColor: UI_COLORS.background.white,
-                  minHeight: '40px',
-                  color: selectedInstructors.length > 0 ? UI_COLORS.text.heading : '#9ca3af',
-                }}
+          {/* Instructor Multi-Select Dropdown (admin only) */}
+          {role === 'admin' && (
+            <div className="flex flex-col gap-2">
+              <label 
+                className="text-sm font-medium"
+                style={{ color: UI_COLORS.text.heading }}
               >
-                <span className="truncate">
-                  {selectedInstructors.length > 0
-                    ? `${selectedInstructors.length} instructor${selectedInstructors.length > 1 ? 's' : ''} selected`
-                    : 'Select instructors...'}
-                </span>
-                <svg className="w-4 h-4 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropdownOpen ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
-                </svg>
-              </button>
-
-              {dropdownOpen && (
-                <div
-                  className="absolute z-50 w-full mt-1 rounded-md shadow-lg overflow-auto"
+                Add Instructors <span style={{ color: UI_COLORS.status.error }}>*</span>
+              </label>
+              <div ref={dropdownRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setDropdownOpen(!dropdownOpen)}
+                  className="w-full flex items-center justify-between text-left px-3 py-2 rounded-md text-base"
                   style={{
-                    maxHeight: '200px',
                     borderWidth: '1px',
                     borderStyle: 'solid',
                     borderColor: UI_COLORS.border.default,
                     backgroundColor: UI_COLORS.background.white,
+                    minHeight: '40px',
+                    color: selectedInstructors.length > 0 ? UI_COLORS.text.heading : '#9ca3af',
                   }}
                 >
-                  {loadingInstructors ? (
-                    <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
-                      Loading instructors...
-                    </div>
-                  ) : availableInstructors.length === 0 ? (
-                    <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
-                      No instructors found
-                    </div>
-                  ) : (
-                    availableInstructors.map((instructor) => (
-                      <label
-                        key={instructor.user_email}
-                        className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50"
+                  <span className="truncate">
+                    {selectedInstructors.length > 0
+                      ? `${selectedInstructors.length} instructor${selectedInstructors.length > 1 ? 's' : ''} selected`
+                      : 'Select instructors...'}
+                  </span>
+                  <svg className="w-4 h-4 flex-shrink-0 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={dropdownOpen ? 'M5 15l7-7 7 7' : 'M19 9l-7 7-7-7'} />
+                  </svg>
+                </button>
+
+                {dropdownOpen && (
+                  <div
+                    className="absolute z-50 w-full mt-1 rounded-md shadow-lg overflow-auto"
+                    style={{
+                      maxHeight: '200px',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      borderColor: UI_COLORS.border.default,
+                      backgroundColor: UI_COLORS.background.white,
+                    }}
+                  >
+                    {loadingInstructors ? (
+                      <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                        Loading instructors...
+                      </div>
+                    ) : availableInstructors.length === 0 ? (
+                      <div className="px-3 py-2 text-sm" style={{ color: UI_COLORS.text.muted }}>
+                        No instructors found
+                      </div>
+                    ) : (
+                      availableInstructors.map((instructor) => (
+                        <label
+                          key={instructor.user_email}
+                          className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-50"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedInstructors.includes(instructor.user_email)}
+                            onChange={() => toggleInstructor(instructor.user_email)}
+                            className="rounded"
+                          />
+                          <span className="text-sm" style={{ color: UI_COLORS.text.heading }}>
+                            {instructor.first_name && instructor.last_name
+                              ? `${instructor.first_name} ${instructor.last_name} (${instructor.user_email})`
+                              : instructor.user_email}
+                          </span>
+                        </label>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+              {/* Selected instructor chips */}
+              {selectedInstructors.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {selectedInstructors.map((email) => (
+                    <span
+                      key={email}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
+                      style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                    >
+                      {email}
+                      <button
+                        type="button"
+                        onClick={() => toggleInstructor(email)}
+                        className="hover:opacity-70"
+                        aria-label={`Remove ${email}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedInstructors.includes(instructor.user_email)}
-                          onChange={() => toggleInstructor(instructor.user_email)}
-                          className="rounded"
-                        />
-                        <span className="text-sm" style={{ color: UI_COLORS.text.heading }}>
-                          {instructor.first_name && instructor.last_name
-                            ? `${instructor.first_name} ${instructor.last_name} (${instructor.user_email})`
-                            : instructor.user_email}
-                        </span>
-                      </label>
-                    ))
-                  )}
+                        ×
+                      </button>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
-            {/* Selected instructor chips */}
-            {selectedInstructors.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {selectedInstructors.map((email) => (
-                  <span
-                    key={email}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs"
-                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
-                  >
-                    {email}
-                    <button
-                      type="button"
-                      onClick={() => toggleInstructor(email)}
-                      className="hover:opacity-70"
-                      aria-label={`Remove ${email}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
-          {/* System Prompt Field */}
-          <div className="flex flex-col gap-2">
-            <label 
-              htmlFor="group-system-prompt" 
-              className="text-sm font-medium"
-              style={{ color: UI_COLORS.text.heading }}
-            >
-              System Prompt
-            </label>
-            <textarea
-              id="group-system-prompt"
-              placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient."
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              rows={4}
-              className="text-base px-3 py-2 rounded-md resize-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              style={{ 
-                borderWidth: '1px', 
-                borderStyle: 'solid', 
-                borderColor: UI_COLORS.border.default,
-                backgroundColor: UI_COLORS.background.white
-              }}
-            />
-          </div>
+          {/* System Prompt Field (admin only) */}
+          {role === 'admin' && (
+            <div className="flex flex-col gap-2">
+              <label 
+                htmlFor="group-system-prompt" 
+                className="text-sm font-medium"
+                style={{ color: UI_COLORS.text.heading }}
+              >
+                System Prompt
+              </label>
+              <textarea
+                id="group-system-prompt"
+                placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient."
+                value={systemPrompt}
+                onChange={(e) => setSystemPrompt(e.target.value)}
+                rows={4}
+                className="text-base px-3 py-2 rounded-md resize-none focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                style={{ 
+                  borderWidth: '1px', 
+                  borderStyle: 'solid', 
+                  borderColor: UI_COLORS.border.default,
+                  backgroundColor: UI_COLORS.background.white
+                }}
+              />
+            </div>
+          )}
 
           {/* Toggle Switches */}
           <div className="flex gap-8">
@@ -332,14 +358,14 @@ function CreateSimulationGroupDialog({
           {/* Create Group Button */}
           <Button
             onClick={handleCreate}
-            disabled={!name.trim() || !description.trim() || selectedInstructors.length === 0}
+            disabled={!isValid}
             className="w-full py-6 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: UI_COLORS.button.primary, 
               color: UI_COLORS.button.text 
             }}
             onMouseEnter={(e) => {
-              if (name.trim() && description.trim() && selectedInstructors.length > 0) {
+              if (isValid) {
                 e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover;
               }
             }}

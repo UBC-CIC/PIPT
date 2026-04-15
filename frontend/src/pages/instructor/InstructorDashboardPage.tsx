@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
-import CreateSimulationGroupDialogInstructor from '@/components/CreateSimulationGroupDialogInstructor';
+import CreateSimulationGroupDialog from '@/components/CreateSimulationGroupDialog';
 import { instructorService, type InstructorSimulationGroup } from '@/services/instructorService';
 import { useAuth } from '@/App';
 
@@ -127,9 +127,10 @@ function InstructorDashboardPage() {
           }}
         />
       </main>
-      <CreateSimulationGroupDialogInstructor
+      <CreateSimulationGroupDialog
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
+        role="instructor"
         onCreate={handleCreateGroupSubmit}
       />
     </PageContainer>

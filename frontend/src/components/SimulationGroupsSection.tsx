@@ -58,8 +58,28 @@ function SimulationGroupsSection({
 
       {/* Groups Grid or Empty State */}
       {groups.length === 0 ? (
-        <div className="text-center py-12" style={{ color: UI_COLORS.text.body }}>
-          No simulation groups available. Click '+ Join Group' to get started.
+        <div className="flex flex-col items-center justify-center py-16 px-4">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: UI_COLORS.background.hover }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={UI_COLORS.text.muted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>No simulation groups yet</h3>
+          <p className="text-sm text-center max-w-md mb-6" style={{ color: UI_COLORS.text.body }}>
+            Get started by joining a simulation group with an access code from your instructor.
+          </p>
+          <Button
+            onClick={onJoinGroup}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+          >
+            + Join Group
+          </Button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

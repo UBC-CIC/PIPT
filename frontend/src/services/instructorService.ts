@@ -18,7 +18,8 @@ import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
 import { mockAdminDataService } from '@/services/adminService';
 import { mapBackendToQuestionBankItem } from '@/services/adminApiService';
-import { type AIDebriefData, deepParseJson, extractDebriefFromRawJson } from '@/services/studentService';
+import { type AIDebriefData } from '@/services/studentService';
+import { deepParseJson, extractDebriefFromRawJson } from '@/lib/debrief-parser';
 
 /**
  * Represents a simulation group from instructor perspective

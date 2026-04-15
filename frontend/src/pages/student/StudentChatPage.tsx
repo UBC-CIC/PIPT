@@ -17,80 +17,7 @@ import { useAuth } from '@/App';
 import { authService } from '@/lib/auth';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 import ResizeHandle from '@/components/ResizeHandle';
-
-/**
- * Attempts to extract structured debrief data from a raw JSON string.
- * Handles both complete and truncated JSON from the LLM.
- * Tries direct parse first, then progressively repairs truncated JSON
- * by closing open brackets/braces.
- */
-function extractDebriefFromRawJson(raw: string): Record<string, unknown> | null {
-  // 1. Try direct parse
-  try {
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj === 'object' && obj.summary) return obj;
-  } catch { /* continue to repair attempts */ }
-
-  // 2. Find the JSON object boundaries and try to repair truncated JSON
-  const firstBrace = raw.indexOf('{');
-  if (firstBrace === -1) return null;
-
-  let jsonStr = raw.slice(firstBrace);
-
-  // Try progressively closing the JSON to make it parseable
-  // The LLM may have been cut off mid-output
-  const closers = ['"}', '"]', '}]', '}}', '}'];
-  for (let attempt = 0; attempt < 8; attempt++) {
-    for (const closer of closers) {
-      try {
-        const repaired = jsonStr + closer.repeat(attempt + 1);
-        const obj = JSON.parse(repaired);
-        if (obj && typeof obj === 'object' && obj.summary) return obj;
-      } catch { /* try next */ }
-    }
-    // Also try adding specific common truncation repairs
-    try {
-      const obj = JSON.parse(jsonStr + ']}]}');
-      if (obj && typeof obj === 'object' && obj.summary) return obj;
-    } catch { /* try next */ }
-    try {
-      const obj = JSON.parse(jsonStr + '"}]}');
-      if (obj && typeof obj === 'object' && obj.summary) return obj;
-    } catch { /* try next */ }
-  }
-
-  // 3. Last resort: truncate to the last complete key-value and close
-  const lastCompleteComma = jsonStr.lastIndexOf('",');
-  const lastCompleteBracket = jsonStr.lastIndexOf('],');
-  const lastCompleteBrace = jsonStr.lastIndexOf('},');
-  const cutPoint = Math.max(lastCompleteComma, lastCompleteBracket, lastCompleteBrace);
-  
-  if (cutPoint > 0) {
-    const truncated = jsonStr.slice(0, cutPoint + 1);
-    // Count open braces/brackets and close them
-    let openBraces = 0;
-    let openBrackets = 0;
-    let inString = false;
-    let escaped = false;
-    for (const ch of truncated) {
-      if (escaped) { escaped = false; continue; }
-      if (ch === '\\') { escaped = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === '{') openBraces++;
-      if (ch === '}') openBraces--;
-      if (ch === '[') openBrackets++;
-      if (ch === ']') openBrackets--;
-    }
-    const suffix = ']'.repeat(Math.max(0, openBrackets)) + '}'.repeat(Math.max(0, openBraces));
-    try {
-      const obj = JSON.parse(truncated + suffix);
-      if (obj && typeof obj === 'object' && obj.summary) return obj;
-    } catch { /* give up */ }
-  }
-
-  return null;
-}
+import { extractDebriefFromRawJson } from '@/lib/debrief-parser';
 
 /**
  * StudentChatPage Component
@@ -829,41 +756,40 @@ function StudentChatPage() {
             borderRightColor: UI_COLORS.border.default,
             width: isSidebarVisible ? '16rem' : '0rem',
             minWidth: isSidebarVisible ? '16rem' : '0rem',
-            overflowY: isSidebarVisible ? 'auto' : 'hidden',
-            overflowX: 'hidden',
+            overflow: 'hidden',
             opacity: isSidebarVisible ? 1 : 0,
             pointerEvents: isSidebarVisible ? 'auto' : 'none',
           }}
         >
           {/* Patient Info */}
-          <div className="p-6" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+          <div className="p-6 flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
             <h2 className="font-semibold text-lg mb-1 whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>{patient.name}</h2>
             <p className="text-sm whitespace-nowrap" style={{ color: UI_COLORS.text.body }}>{patient.gender}, {patient.age} years old</p>
           </div>
 
-          {/* Notes Section */}
-          <div className="p-4 flex flex-col flex-shrink-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-            <h3 className="font-semibold text-sm mb-3 whitespace-nowrap" style={{ color: UI_COLORS.text.heading }}>Notes</h3>
-            <p className="text-xs mb-2 whitespace-nowrap" style={{ color: UI_COLORS.text.muted }}>This note saves automatically!</p>
+          {/* Notes Section - flexible, takes remaining space between patient info and buttons */}
+          <div className="p-4 flex flex-col flex-1 min-h-0" style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
+            <h3 className="font-semibold text-sm mb-2 whitespace-nowrap flex-shrink-0" style={{ color: UI_COLORS.text.heading }}>Notes</h3>
+            <p className="text-xs mb-2 whitespace-nowrap flex-shrink-0" style={{ color: UI_COLORS.text.muted }}>This note saves automatically!</p>
             
             {/* Note Textarea - Auto-saves */}
             <textarea
               value={noteText}
               onChange={handleNoteChange}
               placeholder="Type your notes here..."
-              className="w-full px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2"
+              className="w-full px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 flex-1"
               style={{ 
                 borderWidth: '1px', 
                 borderStyle: 'solid', 
                 borderColor: UI_COLORS.border.default,
                 outlineColor: UI_COLORS.border.medium,
-                height: '300px',
+                minHeight: '80px',
               }}
             />
           </div>
 
-          {/* Sidebar Buttons */}
-          <div className="mt-auto flex flex-col gap-3 p-4">
+          {/* Sidebar Buttons - always visible at bottom */}
+          <div className="flex flex-col gap-3 p-4 flex-shrink-0">
             <Button
               variant="outline"
               className="w-full justify-start transition-colors border-0 whitespace-nowrap"

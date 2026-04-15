@@ -107,16 +107,9 @@ applications:
       enableAutoBuild: true,
     });
 
-    const debrief = new amplify.CfnBranch(this, `${id}-debriefBranch`, {
+    const sponsorChanges = new amplify.CfnBranch(this, `${id}-sponsorChangesBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "debrief",
-      enableAutoBuild: true,
-    });
-
-    // TODO: remove when merging to main
-    const frontendChanges = new amplify.CfnBranch(this, `${id}-frontendChangesBranch`, {
-      appId: amplifyApp.attrAppId,
-      branchName: "frontend-changes",
+      branchName: "sponsor-changes",
       enableAutoBuild: true,
     });
 
