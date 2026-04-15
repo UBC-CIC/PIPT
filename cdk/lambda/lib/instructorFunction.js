@@ -2719,6 +2719,43 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "media_id is required" });
         }
         break;
+      case "GET /instructor/completed_sessions":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+
+          try {
+            const completedSessions = await sqlConnection`
+              SELECT c.chat_id, c.chat_name, c.last_accessed,
+                     u.first_name, u.last_name,
+                     p.persona_name, p.persona_id
+              FROM "chats" c
+              JOIN "student_interactions" si ON c.student_interaction_id = si.student_interaction_id
+              JOIN "enrollments" e ON si.enrollment_id = e.enrollment_id
+              JOIN "users" u ON e.user_id = u.user_id
+              JOIN "personas" p ON si.persona_id = p.persona_id
+              WHERE e.simulation_group_id = ${simulation_group_id}
+                AND si.is_completed = true
+              ORDER BY c.last_accessed DESC
+              LIMIT 50;
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(completedSessions);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

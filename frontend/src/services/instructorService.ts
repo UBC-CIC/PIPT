@@ -129,6 +129,17 @@ export interface ScoreDistributionBucket {
 }
 
 /**
+ * Represents a completed chat session for the prompt playground session picker
+ */
+export interface CompletedSession {
+  chatId: string;           // chat_id from chats table
+  studentName: string;      // first_name + last_name from users table
+  personaName: string;      // persona_name from personas table
+  personaId: string;        // persona_id from personas table
+  lastAccessed: string;     // ISO timestamp from chats.last_accessed
+}
+
+/**
  * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
@@ -360,6 +371,8 @@ export interface InstructorDataService {
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
   fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
   getStudentProgress: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<StudentProgressData[]>;
+  getCompletedSessions: (simulationGroupId: string) => Promise<CompletedSession[]>;
+  runTestDebrief: (params: { simulationGroupId: string; sessionId: string; personaId: string; debriefPrompt: string }) => Promise<AIDebriefData>;
 }
 
 /**
@@ -2061,6 +2074,119 @@ async function getStudentProgress(simulationGroupId: string, personaId: string, 
 }
 
 /**
+ * Get completed chat sessions for the prompt playground session picker.
+ * Returns sessions where the student has reached the debrief stage.
+ */
+async function getCompletedSessions(simulationGroupId: string): Promise<CompletedSession[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/completed_sessions?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.map((session: any) => ({
+      chatId: session.chat_id,
+      studentName: `${session.first_name || ''} ${session.last_name || ''}`.trim(),
+      personaName: session.persona_name,
+      personaId: session.persona_id,
+      lastAccessed: session.last_accessed,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch completed sessions:', error);
+    return [];
+  }
+}
+
+/**
+ * Run a test debrief with a custom prompt against a completed session.
+ * Calls POST /student/text_generation?mode=test_debrief with the prompt in the request body.
+ * The backend runs the debrief pipeline without persisting results.
+ */
+async function runTestDebrief(params: {
+  simulationGroupId: string;
+  sessionId: string;
+  personaId: string;
+  debriefPrompt: string;
+}): Promise<AIDebriefData> {
+  const { simulationGroupId, sessionId, personaId, debriefPrompt } = params;
+
+  const endpoint = `student/text_generation?mode=test_debrief&simulation_group_id=${encodeURIComponent(simulationGroupId)}&session_id=${encodeURIComponent(sessionId)}&patient_id=${encodeURIComponent(personaId)}`;
+
+  const data = await apiClient.request<any>(endpoint, {
+    method: 'POST',
+    body: { debrief_prompt: debriefPrompt },
+  });
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  let debrief = deepParseJson(data);
+  if (!debrief || typeof debrief !== 'object') {
+    throw new Error('Failed to parse test debrief response');
+  }
+
+  // Apply the same summary repair logic used in fetchInstructorDebrief
+  if (debrief.summary && typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+    const extracted = extractDebriefFromRawJson(debrief.summary);
+    if (extracted && typeof extracted === 'object') {
+      debrief = { ...debrief, ...extracted } as Record<string, any>;
+    }
+  }
+
+  if (typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+    try {
+      const firstBrace = debrief.summary.indexOf('{');
+      const lastBrace = debrief.summary.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const summaryObj = JSON.parse(debrief.summary.substring(firstBrace, lastBrace + 1));
+        if (summaryObj.summary) debrief.summary = summaryObj.summary;
+      }
+    } catch {
+      const m = debrief.summary.match(/"summary"\s*:\s*"([^"]+)"/);
+      if (m) {
+        debrief.summary = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+      } else {
+        debrief.summary = 'AI debrief summary could not be fully parsed.';
+      }
+    }
+  }
+
+  const toStrArray = (arr: any[]) => arr.map(
+    (q: string | { question_text?: string }) => typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+  );
+  const addressedQuestions = toStrArray(debrief.questions_addressed || []);
+  const missedQuestions = toStrArray(debrief.questions_missed || []);
+
+  return {
+    summary: typeof debrief.summary === 'string' ? debrief.summary : '',
+    questionsAddressed: addressedQuestions,
+    missedKeyQuestionsCount: missedQuestions.length,
+    missedQuestions,
+    missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
+    overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+    recommendation: typeof debrief.recommendation === 'string' ? debrief.recommendation : undefined,
+    recommendationFeedback: {
+      strengths: debrief.recommendation_feedback?.strengths || [],
+      areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
+    },
+    suggestedRewrites: (debrief.suggested_rewrites || []).map(
+      (r: { original_message?: string; suggested_rewrite?: string }) => ({
+        original: r.original_message || '',
+        suggested: r.suggested_rewrite || '',
+      })
+    ),
+    rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+    answerKeyComparison: debrief.answer_key_comparison ? {
+      answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
+      correctElements: debrief.answer_key_comparison.correct_elements,
+      missingElements: debrief.answer_key_comparison.missing_elements,
+      incorrectElements: debrief.answer_key_comparison.incorrect_elements,
+      overallAlignment: debrief.answer_key_comparison.overall_alignment,
+    } : undefined,
+  };
+}
+
+/**
  * Instructor data service object
  */
 export const instructorService: InstructorDataService = {
@@ -2126,7 +2252,9 @@ export const instructorService: InstructorDataService = {
   unassignQuestion,
   updateQuestionAssignment,
   fetchDebrief: fetchInstructorDebrief,
-  getStudentProgress: getStudentProgress
+  getStudentProgress: getStudentProgress,
+  getCompletedSessions,
+  runTestDebrief,
 };
 
 // Keep backward-compatible export

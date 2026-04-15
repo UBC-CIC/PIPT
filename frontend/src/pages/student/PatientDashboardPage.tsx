@@ -487,7 +487,7 @@ function PatientDashboardPage() {
               )}
             </div>
 
-            {/* Chat History - Show in left column when no chats */}
+            {/* Chat History - Show in left column when no chats - REMOVE THIS ENTIRELY */}
             {!hasChats && (
               <div>
                 <div className="flex items-center justify-between mb-2">
