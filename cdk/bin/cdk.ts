@@ -74,7 +74,7 @@ const turnServerStack = new TurnServerStack(
 
 // Voice agent is hosted on Bedrock AgentCore — pass the runtime ARN
 // to the socket-server so it can connect via SigV4-signed WebSocket.
-// Set via: cdk deploy -c voiceAgentArn="arn:aws:bedrock-agentcore:..."
+// Priority: 1) -c voiceAgentArn="..." context override  2) SSM parameter /{StackPrefix}/voiceAgentArn
 const voiceAgentArn = app.node.tryGetContext("voiceAgentArn") || "";
 
 const ecsSocketStack = new EcsSocketStack(
@@ -86,6 +86,7 @@ const ecsSocketStack = new EcsSocketStack(
   cicdStack.ecrRepositories["socketServer"],
   turnServerStack,
   voiceAgentArn,
+  StackPrefix,
   { env }
 );
 const dbFlowStack = new DBFlowStack(

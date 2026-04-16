@@ -9,6 +9,7 @@ import * as iam from "aws-cdk-lib/aws-iam";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
 import { TurnServerStack } from "./turn-server-stack";
@@ -24,10 +25,15 @@ export class EcsSocketStack extends Stack {
     apiServiceStack: any,
     socketServerRepo: ecr.IRepository,
     turnServerStack: TurnServerStack,
-    voiceAgentEndpoint?: string,
+    voiceAgentEndpoint: string | undefined,
+    stackPrefix: string,
     props?: StackProps
   ) {
     super(scope, id, props);
+
+    // Resolve voice agent ARN: use explicit value if provided, otherwise read from SSM
+    const resolvedVoiceAgentEndpoint = voiceAgentEndpoint ||
+      ssm.StringParameter.valueForStringParameter(this, `/${stackPrefix}/voiceAgentArn`);
 
     const vpc = vpcStack.vpc;
 
@@ -161,7 +167,7 @@ export class EcsSocketStack extends Stack {
         SOCKET_EXECUTION_ROLE_ARN: taskRole.roleArn,
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
-        ...(voiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: voiceAgentEndpoint } : {}),
+        ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {
         TURN_SHARED_SECRET: ecs.Secret.fromSecretsManager(turnServerStack.turnSecret),

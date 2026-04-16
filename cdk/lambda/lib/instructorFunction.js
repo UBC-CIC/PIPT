@@ -437,7 +437,7 @@ exports.handler = async (event, context) => {
           const persona_id = event.queryStringParameters.persona_id;
           const filename = event.queryStringParameters.filename;
           const filetype = event.queryStringParameters.filetype;
-          const { metadata } = JSON.parse(event.body);
+          const { metadata, display_name } = JSON.parse(event.body);
 
           try {
             // Query to find the file with the given persona_id and filename
@@ -450,8 +450,8 @@ exports.handler = async (event, context) => {
 
             if (existingFile.length === 0) {
               const result = await sqlConnection`
-                INSERT INTO "persona_data" (persona_id, filename, filetype, metadata)
-                VALUES (${persona_id}, ${filename}, ${filetype}, ${metadata})
+                INSERT INTO "persona_data" (persona_id, filename, filetype, metadata, display_name)
+                VALUES (${persona_id}, ${filename}, ${filetype}, ${metadata}, ${display_name || null})
                 RETURNING *;
               `;
               response.body = JSON.stringify({
@@ -459,10 +459,11 @@ exports.handler = async (event, context) => {
               });
             }
 
-            // Update the metadata field
+            // Update the metadata and display_name fields
             const result = await sqlConnection`
                       UPDATE "persona_data"
-                      SET metadata = ${metadata}
+                      SET metadata = ${metadata},
+                          display_name = ${display_name || null}
                       WHERE persona_id = ${persona_id}
                       AND filename = ${filename}
                       AND filetype = ${filetype}

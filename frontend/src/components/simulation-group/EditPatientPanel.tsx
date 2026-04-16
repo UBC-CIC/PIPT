@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle } from 'lucide-react';
+import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -169,7 +169,7 @@ function InfoTab({
       <div className="flex items-center gap-4">
         <UserAvatar
           name={patientEditor.editPatientName || 'P'}
-          imageUrl={patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' ? profilePictures[patientEditor.selectedPatientForEdit] : undefined}
+          imageUrl={patientEditor.editPatientProfilePicUrl || (patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' ? profilePictures[patientEditor.selectedPatientForEdit] : undefined)}
           size="large"
         />
         <label className="cursor-pointer">
@@ -189,7 +189,7 @@ function InfoTab({
             <Camera className="w-6 h-6" />
           </div>
         </label>
-        {patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' && profilePictures[patientEditor.selectedPatientForEdit] && (
+        {patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' && (patientEditor.editPatientProfilePicUrl || profilePictures[patientEditor.selectedPatientForEdit]) && (
           <button
             onClick={patientEditor.handlePhotoDelete}
             className="p-3 rounded-full transition-colors"
@@ -291,36 +291,56 @@ function InfoTab({
       {/* File Upload Sections */}
       <div className="space-y-4">
         {([
-          { label: 'LLM Upload', type: 'llm' as const },
-          { label: 'Patient Information', type: 'patientInfo' as const },
-          { label: 'Answer Key', type: 'answerKey' as const },
-        ]).map(({ label, type }) => (
-          <div key={type} className="flex items-center justify-between p-4 border rounded-lg" style={{ borderColor: UI_COLORS.border.default }}>
-            <div className="flex items-center gap-2">
-              <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
-                {label}
-              </span>
-              {patientEditor.uploadStatus[type] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
-              {patientEditor.uploadStatus[type] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
-              {patientEditor.uploadStatus[type] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
-            </div>
-            <label className={`cursor-pointer ${patientEditor.uploadStatus[type] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
-              <input
-                type="file"
-                onChange={(e) => patientEditor.handleFileUpload(type, e)}
-                className="hidden"
-              />
-              <div
-                className="p-2 rounded-lg transition-colors flex items-center gap-2"
-                style={{
-                  backgroundColor: UI_COLORS.background.tableHeader,
-                  color: UI_COLORS.text.body
-                }}
-              >
-                <Upload className="w-5 h-5" />
-                Upload
+          { label: 'LLM Upload', type: 'llm' as const, description: 'Document used by the AI to roleplay as this patient.' },
+          { label: 'Patient Information', type: 'patientInfo' as const, description: 'Medical record for this patient. This document is visible to students.' },
+          { label: 'Answer Key', type: 'answerKey' as const, description: 'Reference answers for debrief evaluation.' },
+        ]).map(({ label, type, description }) => (
+          <div key={type} className="p-4 border rounded-lg space-y-3" style={{ borderColor: UI_COLORS.border.default }}>
+            {/* Header row: label + status + upload button */}
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>
+                  {label}
+                </span>
+                <p className="text-xs mt-0.5" style={{ color: UI_COLORS.text.muted }}>{description}</p>
               </div>
-            </label>
+              <div className="flex items-center gap-2">
+                {patientEditor.uploadStatus[type] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
+                {patientEditor.uploadStatus[type] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
+                {patientEditor.uploadStatus[type] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
+                <label className={`cursor-pointer ${patientEditor.uploadStatus[type] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
+                  <input
+                    type="file"
+                    onChange={(e) => patientEditor.handleFileUpload(type, e)}
+                    className="hidden"
+                  />
+                  <div
+                    className="p-2 rounded-lg transition-colors flex items-center gap-2"
+                    style={{
+                      backgroundColor: UI_COLORS.background.tableHeader,
+                      color: UI_COLORS.text.body
+                    }}
+                  >
+                    <Upload className="w-5 h-5" />
+                    Upload
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {/* Uploaded files list with display name inputs */}
+            {patientEditor.uploadedFiles[type].length > 0 && (
+              <div className="space-y-2 pt-1">
+                {patientEditor.uploadedFiles[type].map((file) => (
+                  <FileDisplayNameRow
+                    key={file.filename}
+                    file={file}
+                    fileType={type}
+                    onSaveDisplayName={patientEditor.handleDisplayNameSave}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -339,6 +359,67 @@ function InfoTab({
         >
           Save Changes
         </Button>
+      </div>
+    </div>
+  );
+}
+
+
+/* ─── File Display Name Row ─── */
+
+function FileDisplayNameRow({
+  file,
+  fileType,
+  onSaveDisplayName,
+}: {
+  file: import('@/services/instructorService').UploadedFileInfo;
+  fileType: 'llm' | 'patientInfo' | 'answerKey';
+  onSaveDisplayName: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => Promise<void>;
+}) {
+  const [localName, setLocalName] = useState(file.displayName || '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleBlur = async () => {
+    if (localName === (file.displayName || '')) return;
+    setSaving(true);
+    try {
+      await onSaveDisplayName(fileType, file.filename, localName);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="flex items-start gap-3 p-3 rounded-lg"
+      style={{ backgroundColor: UI_COLORS.background.tableHeader }}
+    >
+      <FileText className="w-4 h-4 mt-1 flex-shrink-0" style={{ color: UI_COLORS.text.muted }} />
+      <div className="flex-1 min-w-0 space-y-1.5">
+        <p className="text-xs truncate" style={{ color: UI_COLORS.text.muted }} title={file.filename}>
+          {file.filename}
+        </p>
+        <div className="flex items-center gap-2">
+          <Input
+            value={localName}
+            onChange={(e) => setLocalName(e.target.value)}
+            onBlur={handleBlur}
+            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+            placeholder="Enter display name..."
+            className="h-8 text-sm flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
+            style={{
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: UI_COLORS.border.default,
+              backgroundColor: UI_COLORS.background.white,
+            }}
+          />
+          {saving && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: UI_COLORS.text.muted }} />}
+          {saved && <CheckCircle className="w-3 h-3 flex-shrink-0" style={{ color: '#16a34a' }} />}
+        </div>
       </div>
     </div>
   );

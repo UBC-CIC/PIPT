@@ -20,6 +20,7 @@ const changelog: ChangelogEntry[] = [
     date: 'April 16, 2026',
     items: [
       { feature: 'Prompt playground for admins', status: 'working', note: 'can simulate interactions with the Persona for both debrief and chat before saving it' },
+      { feature: 'Ability to rename patient documents', status: 'working', note: 'display name for patient information is used in student view instead of the raw filename' },
       { feature: 'Report issue dialog', status: 'not-working', note: 'UI exists but reports are not saved to the backend yet' },
       { feature: 'Custom toast notifications', status: 'not-working', note: 'still using browser alert() dialogs — toast system not built yet' },
       ],
@@ -35,7 +36,7 @@ const changelog: ChangelogEntry[] = [
   {
     date: 'April 10, 2026',
     items: [
-      { feature: 'Voice mode (Nova Sonic 2.0 via AgentCore)', status: 'working', note: 'us-east-1 only' },
+      { feature: 'Voice mode', status: 'working', note: 'us-east-1 only' },
       { feature: 'Text chat with streaming responses', status: 'working' },
       { feature: 'AI debrief generation', status: 'working' },
       { feature: 'Question bank management (global + case-specific)', status: 'working' },

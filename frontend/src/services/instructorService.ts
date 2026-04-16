@@ -326,6 +326,8 @@ export interface InstructorDataService {
   deletePatientPhoto: (simulationGroupId: string, patientId: string) => Promise<void>;
   fetchProfilePictures: (simulationGroupId: string) => Promise<Record<string, string>>;
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
+  fetchPatientUploadedFiles: (simulationGroupId: string, patientId: string) => Promise<{ files: Record<'llm' | 'patientInfo' | 'answerKey', import('@/services/instructorService').UploadedFileInfo[]>; profilePictureUrl: string | null }>;
+  updateFileDisplayName: (patientId: string, filename: string, filetype: string, displayName: string) => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
   updatePatientVoiceEnabled: (patientId: string, simulationGroupId: string, enabled: boolean) => Promise<void>;
   deletePatient: (patientId: string) => Promise<void>;
@@ -843,6 +845,90 @@ async function uploadPatientFile(
   folderType: 'documents' | 'info' | 'answer_key'
 ): Promise<void> {
   await uploadFileToS3(simulationGroupId, patientId, file, folderType);
+}
+
+/**
+ * Represents an uploaded file with its display name and metadata.
+ */
+export interface UploadedFileInfo {
+  filename: string;
+  displayName: string | null;
+  metadata: string | null;
+  url: string;
+  folderType: 'documents' | 'info' | 'answer_key';
+}
+
+/**
+ * Fetch all uploaded files for a patient, grouped by folder type.
+ * Uses the same get_all_files endpoint as the student side.
+ */
+async function fetchPatientUploadedFiles(
+  simulationGroupId: string,
+  patientId: string
+): Promise<{ files: Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>; profilePictureUrl: string | null }> {
+  try {
+    const data = await apiClient.request<{
+      document_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+      info_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+      answer_key_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+      profile_picture_url?: string | null;
+    }>(
+      `instructor/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=${encodeURIComponent(patientId)}`
+    );
+
+    const mapFiles = (files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>, folderType: 'documents' | 'info' | 'answer_key'): UploadedFileInfo[] =>
+      Object.entries(files ?? {}).map(([filename, info]) => ({
+        filename,
+        displayName: info.display_name ?? null,
+        metadata: info.metadata ?? null,
+        url: info.url,
+        folderType,
+      }));
+
+    return {
+      files: {
+        llm: mapFiles(data.document_files, 'documents'),
+        patientInfo: mapFiles(data.info_files, 'info'),
+        answerKey: mapFiles(data.answer_key_files, 'answer_key'),
+      },
+      profilePictureUrl: data.profile_picture_url ?? null,
+    };
+  } catch (error) {
+    console.error('Failed to fetch uploaded files:', error);
+    return { files: { llm: [], patientInfo: [], answerKey: [] }, profilePictureUrl: null };
+  }
+}
+
+/**
+ * Update the display name for an uploaded file via PUT /instructor/update_metadata.
+ */
+async function updateFileDisplayName(
+  patientId: string,
+  filename: string,
+  filetype: string,
+  displayName: string
+): Promise<void> {
+  try {
+    const user = await authService.getCurrentUser();
+    if (!user?.email) throw new Error('Not authenticated');
+
+    const queryParams = new URLSearchParams({
+      persona_id: patientId,
+      filename: filename,
+      filetype: filetype,
+    });
+
+    await apiClient.request(`instructor/update_metadata?${queryParams.toString()}`, {
+      method: 'PUT',
+      body: {
+        metadata: null,
+        display_name: displayName || null,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to update file display name:', error);
+    throw error;
+  }
 }
 
 /**
@@ -1879,6 +1965,8 @@ export const instructorService: InstructorDataService = {
   deletePatientPhoto,
   fetchProfilePictures,
   uploadPatientFile,
+  fetchPatientUploadedFiles,
+  updateFileDisplayName,
   updatePatientLLMEvaluation,
   updatePatientVoiceEnabled,
   deletePatient,

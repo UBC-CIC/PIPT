@@ -243,9 +243,9 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
  * Response shape from /student/get_all_files
  */
 interface GetAllFilesResponse {
-  document_files: Record<string, { url: string; metadata: string | null }>;
-  info_files: Record<string, { url: string; metadata: string | null }>;
-  answer_key_files: Record<string, { url: string; metadata: string | null }>;
+  document_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+  info_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+  answer_key_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
   profile_picture_url: string | null;
 }
 
@@ -263,7 +263,7 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
     let idx = 1;
 
     for (const [filename, info] of Object.entries(data.info_files ?? {})) {
-      files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available', url: info.url });
+      files.push({ id: String(idx++), filename: info.display_name || filename, description: info.metadata ?? 'No description available', url: info.url });
     }
 
     return files.length > 0 ? files : [];

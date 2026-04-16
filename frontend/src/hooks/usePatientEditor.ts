@@ -4,6 +4,7 @@ import {
   type CaseMaterial,
   type GlobalRubricQuestion,
   type ManageablePatient,
+  type UploadedFileInfo,
 } from '@/services/instructorService';
 
 export interface UsePatientEditorParams {
@@ -25,6 +26,8 @@ export interface UsePatientEditorReturn {
   editPatientGender: string;
   editPatientPrompt: string;
   uploadStatus: Record<string, 'idle' | 'uploading' | 'success' | 'error'>;
+  uploadedFiles: Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>;
+  editPatientProfilePicUrl: string | null;
   caseMaterials: CaseMaterial[];
   selectedMaterialId: string;
   caseSpecificQuestions: GlobalRubricQuestion[];
@@ -47,6 +50,7 @@ export interface UsePatientEditorReturn {
   autoSaveNewPatient: () => Promise<string | null>;
   handleEditPatientTabSwitch: (tab: 'info' | 'questions' | 'materials') => Promise<void>;
   handleFileUpload: (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleDisplayNameSave: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => Promise<void>;
   handlePhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   handlePhotoDelete: () => Promise<void>;
 
@@ -72,6 +76,8 @@ export function usePatientEditor({
   const [editPatientGender, setEditPatientGender] = useState('');
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>>({ llm: [], patientInfo: [], answerKey: [] });
+  const [editPatientProfilePicUrl, setEditPatientProfilePicUrl] = useState<string | null>(null);
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Case materials state
@@ -101,6 +107,25 @@ export function usePatientEditor({
     });
     return () => { cancelled = true; };
   }, [selectedPatientForEdit]);
+
+  /**
+   * Load uploaded files for a patient from the API
+   */
+  const loadUploadedFiles = async (patientId: string) => {
+    if (!groupId || patientId === 'new') {
+      setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+      setEditPatientProfilePicUrl(null);
+      return;
+    }
+    try {
+      const result = await instructorService.fetchPatientUploadedFiles(groupId, patientId);
+      setUploadedFiles(result.files);
+      setEditPatientProfilePicUrl(result.profilePictureUrl);
+    } catch {
+      setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+      setEditPatientProfilePicUrl(null);
+    }
+  };
 
   /**
    * Start editing an existing patient
@@ -142,6 +167,9 @@ export function usePatientEditor({
     }
 
     // Materials are loaded by the useEffect above
+
+    // Load uploaded files for display name editing
+    loadUploadedFiles(patientId);
   };
 
   /**
@@ -157,6 +185,8 @@ export function usePatientEditor({
     setCaseMaterials([]);
     setSelectedMaterialId('');
     setCaseSpecificQuestions([]);
+    setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+    setEditPatientProfilePicUrl(null);
   };
 
   /**
@@ -165,6 +195,8 @@ export function usePatientEditor({
   const stopEditing = () => {
     setSelectedPatientForEdit(null);
     setUploadStatus({});
+    setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+    setEditPatientProfilePicUrl(null);
     Object.values(uploadTimers.current).forEach(clearTimeout);
     uploadTimers.current = {};
   };
@@ -253,6 +285,8 @@ export function usePatientEditor({
       ]);
       setManageablePatients(patients);
       setProfilePictures(pics);
+      // Refresh the profile picture URL from get_all_files (reliable source)
+      loadUploadedFiles(patientId);
     }
   };
 
@@ -265,6 +299,7 @@ export function usePatientEditor({
     try {
       await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
       setProfilePictures(await instructorService.fetchProfilePictures(groupId));
+      setEditPatientProfilePicUrl(null);
     } catch (error) {
       console.error('Failed to delete photo:', error);
     }
@@ -289,6 +324,8 @@ export function usePatientEditor({
         await instructorService.uploadPatientFile(groupId, patientId, file, folderType);
         setUploadStatus(prev => ({ ...prev, [fileType]: 'success' }));
         uploadTimers.current[fileType] = setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 3000);
+        // Refresh uploaded files list to show the new file
+        loadUploadedFiles(patientId);
       } catch (error) {
         console.error('Failed to upload patient file', { fileType, groupId, patientId, error });
         setUploadStatus(prev => ({ ...prev, [fileType]: 'error' }));
@@ -334,6 +371,28 @@ export function usePatientEditor({
     }
   };
 
+  /**
+   * Save a display name for an uploaded file (auto-saves on blur)
+   */
+  const handleDisplayNameSave = async (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new') return;
+    const lastDot = filename.lastIndexOf('.');
+    const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;
+    const ext = lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : '';
+    try {
+      await instructorService.updateFileDisplayName(selectedPatientForEdit, baseName, ext, displayName);
+      // Update local state optimistically
+      setUploadedFiles(prev => ({
+        ...prev,
+        [fileType]: prev[fileType].map(f =>
+          f.filename === filename ? { ...f, displayName: displayName || null } : f
+        ),
+      }));
+    } catch (error) {
+      console.error('Failed to save display name:', error);
+    }
+  };
+
   return {
     // Form state
     selectedPatientForEdit,
@@ -343,6 +402,8 @@ export function usePatientEditor({
     editPatientGender,
     editPatientPrompt,
     uploadStatus,
+    uploadedFiles,
+    editPatientProfilePicUrl,
     caseMaterials,
     selectedMaterialId,
     caseSpecificQuestions,
@@ -365,6 +426,7 @@ export function usePatientEditor({
     autoSaveNewPatient,
     handleEditPatientTabSwitch,
     handleFileUpload,
+    handleDisplayNameSave,
     handlePhotoUpload,
     handlePhotoDelete,
 

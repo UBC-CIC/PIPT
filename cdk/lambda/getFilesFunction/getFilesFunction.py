@@ -108,12 +108,12 @@ def get_file_metadata_from_db(persona_id, file_name, file_type):
     connection = connect_to_db()
     if connection is None:
         logger.error("No database connection available.")
-        return None
+        return None, None
 
     try:
         cur = connection.cursor()
         query = """
-            SELECT metadata 
+            SELECT metadata, display_name 
             FROM "persona_data" 
             WHERE persona_id = %s AND filename = %s AND filetype = %s;
         """
@@ -122,17 +122,17 @@ def get_file_metadata_from_db(persona_id, file_name, file_type):
         cur.close()
 
         if result:
-            return result[0]
+            return result[0], result[1]
         else:
             logger.warning(f"No metadata found for {file_name}.{file_type} for persona {persona_id}")
-            return None
+            return None, None
 
     except Exception as e:
         logger.error(f"Error retrieving metadata for {file_name}.{file_type}: {e}")
         if cur:
             cur.close()
         connection.rollback()
-        return None
+        return None, None
 
 @logger.inject_lambda_context
 def lambda_handler(event, context):
@@ -176,28 +176,31 @@ def lambda_handler(event, context):
         for file_name in document_files:
             file_type = file_name.split('.')[-1]  # Get the file extension
             presigned_url = generate_presigned_url(BUCKET, f"{document_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
+            metadata, display_name = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             document_files_urls[file_name] = {
                 "url": presigned_url,
-                "metadata": metadata
+                "metadata": metadata,
+                "display_name": display_name
             }
 
         for file_name in info_files:
             file_type = file_name.split('.')[-1]
             presigned_url = generate_presigned_url(BUCKET, f"{info_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
+            metadata, display_name = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             info_files_urls[file_name] = {
                 "url": presigned_url,
-                "metadata": metadata
+                "metadata": metadata,
+                "display_name": display_name
             }
 
         for file_name in answer_key_files:
             file_type = file_name.split('.')[-1]
             presigned_url = generate_presigned_url(BUCKET, f"{answer_key_prefix}{file_name}")
-            metadata = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
+            metadata, display_name = get_file_metadata_from_db(persona_id, file_name.split('.')[0], file_type)
             answer_key_files_urls[file_name] = {
                 "url": presigned_url,
-                "metadata": metadata
+                "metadata": metadata,
+                "display_name": display_name
             }
 
         # Get the profile picture URL if it exists
