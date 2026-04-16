@@ -407,7 +407,7 @@ function SystemPromptPlayground({ simulationGroupId, currentSystemPrompt }: Syst
             className="p-4 space-y-4 overflow-y-auto"
             style={{
               maxHeight: '400px',
-              backgroundColor: UI_COLORS.background.page,
+              backgroundColor: UI_COLORS.background.input,
             }}
           >
             {messages.map((msg, idx) => (

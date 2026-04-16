@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Stethoscope, Heart, Thermometer, Eye, Ear, Activity } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
-import { mockDataService, type AssessmentActivity } from '@/services/studentService';
+import { studentService, type AssessmentActivity } from '@/services/studentService';
 
 interface PhysicalAssessmentDialogProps {
   isOpen: boolean;
@@ -17,8 +17,8 @@ function PhysicalAssessmentDialog({ isOpen, onClose }: PhysicalAssessmentDialogP
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  // Load assessment activities from mock data service
-  const assessmentActivities = mockDataService.getAssessmentActivities();
+  // Load assessment activities from student service
+  const assessmentActivities = studentService.getAssessmentActivities();
 
   useEffect(() => {
     if (!isOpen) return;
