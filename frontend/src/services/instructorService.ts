@@ -129,6 +129,17 @@ export interface ScoreDistributionBucket {
 }
 
 /**
+ * Represents a completed chat session for the prompt playground session picker
+ */
+export interface CompletedSession {
+  chatId: string;           // chat_id from chats table
+  studentName: string;      // first_name + last_name from users table
+  personaName: string;      // persona_name from personas table
+  personaId: string;        // persona_id from personas table
+  lastAccessed: string;     // ISO timestamp from chats.last_accessed
+}
+
+/**
  * Represents a patient for management (maps to personas table in DB)
  */
 export interface ManageablePatient {
@@ -363,334 +374,12 @@ export interface InstructorDataService {
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
   fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
   getStudentProgress: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<StudentProgressData[]>;
+  getCompletedSessions: (simulationGroupId: string) => Promise<CompletedSession[]>;
+  runTestDebrief: (params: { simulationGroupId: string; sessionId: string; personaId: string; debriefPrompt: string }) => Promise<AIDebriefData>;
+  runTestChat: (params: { simulationGroupId: string; sessionId: string; personaId: string; systemPrompt: string; messageContent: string; patientPrompt?: string }) => Promise<{ llm_output: string }>;
 }
 
-/**
- * Hardcoded simulation groups for instructors
- */
-const mockInstructorSimulationGroups: InstructorSimulationGroup[] = [
-  {
-    simulation_group_id: '1',
-    group_name: 'Chronic Pain',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(0),
-    group_access_code: 'NB3W-PI3I-Q2EH-WPA3',
-    student_count: 20,
-    instructor_count: 5,
-    persona_count: 2,
-    organization_id: 'org-1'
-  },
-  {
-    simulation_group_id: '2',
-    group_name: 'Acne',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(1),
-    group_access_code: 'XY7Z-AB2C-DE4F-GH8I',
-    student_count: 18,
-    instructor_count: 3,
-    persona_count: 3,
-    organization_id: 'org-1'
-  },
-  {
-    simulation_group_id: '3',
-    group_name: 'Diabetes Management',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(2),
-    group_access_code: 'PQ9R-ST1U-VW3X-YZ5A',
-    student_count: 32,
-    instructor_count: 4,
-    persona_count: 2,
-    organization_id: 'org-2'
-  }
-];
 
-/**
- * Hardcoded user data for instructor
- */
-const mockInstructorUserData: UserData = {
-  name: 'Dr. Sarah Johnson',
-  avatarUrl: undefined // Will display initials
-};
-
-/**
- * Hardcoded patient analytics data
- */
-const mockPatientAnalytics: Record<string, PatientAnalytics[]> = {
-  '1': [ // Chronic Pain group
-    {
-      patient_id: 'pamela',
-      patient_name: 'Pamela',
-      instructor_completion_percentage: 60,
-      llm_completion_percentage: 0,
-      student_message_count: 49,
-      ai_message_count: 36,
-      student_access_count: 10
-    },
-    {
-      patient_id: 'timothy',
-      patient_name: 'Timothy',
-      instructor_completion_percentage: 0,
-      llm_completion_percentage: 0,
-      student_message_count: 32,
-      ai_message_count: 28,
-      student_access_count: 8
-    }
-  ],
-  '2': [ // Acne group
-    {
-      patient_id: 'john',
-      patient_name: 'John Davis',
-      instructor_completion_percentage: 15,
-      llm_completion_percentage: 20,
-      student_message_count: 65,
-      ai_message_count: 52,
-      student_access_count: 15
-    }
-  ]
-};
-
-/**
- * Default patient prompt for all patients
- */
-const DEFAULT_PATIENT_PROMPT = "Pretend to be a patient with the context you are given. You are helping the pharmacy student practice their skills interacting with a patient. Engage with the student by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the student is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the student identify the proper diagnosis of the patient you are pretending to be.";
-
-/**
- * Hardcoded manageable patients data
- */
-const mockManageablePatients: Record<string, ManageablePatient[]> = {
-  '1': [ // Chronic Pain group
-    {
-      patient_id: 'pamela',
-      simulation_group_id: '1',
-      patient_name: 'Pamela',
-      patient_age: 56,
-      patient_gender: 'Female',
-      patient_prompt: DEFAULT_PATIENT_PROMPT,
-      llm_completion: true
-    },
-    {
-      patient_id: 'timothy',
-      simulation_group_id: '1',
-      patient_name: 'Timothy',
-      patient_age: 42,
-      patient_gender: 'Other',
-      patient_prompt: DEFAULT_PATIENT_PROMPT,
-      llm_completion: true
-    }
-  ],
-  '2': [ // Acne group
-    {
-      patient_id: 'john',
-      simulation_group_id: '2',
-      patient_name: 'John',
-      patient_age: 38,
-      patient_gender: 'Male',
-      patient_prompt: DEFAULT_PATIENT_PROMPT,
-      llm_completion: false
-    }
-  ]
-};
-
-/**
- * Hardcoded students data
- */
-const mockStudents: Record<string, Student[]> = {
-  '1': [ // Chronic Pain group
-    {
-      id: 'student-1',
-      name: 'Student 1',
-      email: 'student1@example.com'
-    },
-    {
-      id: 'student-2',
-      name: 'Student 2',
-      email: 'student2@example.com'
-    },
-    {
-      id: 'student-3',
-      name: 'Student 3',
-      email: 'student3@example.com'
-    },
-    {
-      id: 'student-4',
-      name: 'Student 4',
-      email: 'student4@example.com'
-    },
-    {
-      id: 'student-5',
-      name: 'Student 5',
-      email: 'student5@example.com'
-    }
-  ],
-  '2': [ // Acne group
-    {
-      id: 'student-6',
-      name: 'Student 6',
-      email: 'student6@example.com'
-    },
-    {
-      id: 'student-7',
-      name: 'Student 7',
-      email: 'student7@example.com'
-    }
-  ]
-};
-
-/**
- * Hardcoded student details data
- */
-const mockStudentDetails: Record<string, StudentDetails> = {
-  'student-1': {
-    id: 'student-1',
-    name: 'Student 1',
-    email: 'student1@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 4,
-    caseCompletionRate: 50
-  },
-  'student-2': {
-    id: 'student-2',
-    name: 'Student 2',
-    email: 'student2@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 3,
-    caseCompletionRate: 67
-  },
-  'student-3': {
-    id: 'student-3',
-    name: 'Student 3',
-    email: 'student3@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 2,
-    caseCompletionRate: 100
-  },
-  'student-4': {
-    id: 'student-4',
-    name: 'Student 4',
-    email: 'student4@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 5,
-    caseCompletionRate: 80
-  },
-  'student-5': {
-    id: 'student-5',
-    name: 'Student 5',
-    email: 'student5@example.com',
-    groupName: 'Chronic Pain',
-    casesAttempted: 1,
-    caseCompletionRate: 0
-  }
-};
-
-/**
- * Hardcoded chat attempts data (per student per patient)
- */
-const mockChatAttempts: Record<string, Record<string, ChatAttempt[]>> = {
-  'student-1': {
-    'pamela': [
-      {
-        id: 'attempt-1',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 4,
-        date: 'Feb 19, 2026',
-        completionStatus: 'In Progress',
-        score: null
-      },
-      {
-        id: 'attempt-2',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 3,
-        date: 'Feb 18, 2026',
-        completionStatus: 'Debrief Reached',
-        score: 67
-      },
-      {
-        id: 'attempt-3',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 2,
-        date: 'Feb 14, 2026',
-        completionStatus: 'Debrief Reached',
-        score: 88
-      },
-      {
-        id: 'attempt-4',
-        student_interaction_id: 'interaction-1',
-        attemptNumber: 1,
-        date: 'Jan 27, 2026',
-        completionStatus: 'In Progress',
-        score: null
-      }
-    ],
-    'timothy': [
-      {
-        id: 'attempt-5',
-        student_interaction_id: 'interaction-2',
-        attemptNumber: 2,
-        date: 'Feb 20, 2026',
-        completionStatus: 'Debrief Reached',
-        score: 75
-      },
-      {
-        id: 'attempt-6',
-        student_interaction_id: 'interaction-2',
-        attemptNumber: 1,
-        date: 'Feb 10, 2026',
-        completionStatus: 'Debrief Reached',
-        score: 82
-      }
-    ]
-  }
-};
-
-/**
- * Hardcoded chat messages data (per attempt)
- */
-const mockChatMessages: Record<string, ChatMessage[]> = {
-  'attempt-2': [
-    {
-      message_id: 'msg-1',
-      chat_id: 'attempt-2',
-      sender_type: 'ai',
-      message_content: "Hello there! I'm Pamela, nice to meet you. I've been feeling really unwell lately, and I'm worried about these chest pains I've been having for the last week. They're quite uncomfortable and I'm not sure what's causing them. Do you think it could be related to my heart?",
-      sent_at: '10:00 AM'
-    },
-    {
-      message_id: 'msg-2',
-      chat_id: 'attempt-2',
-      sender_type: 'student',
-      message_content: "Yes it's possible, can you please tell me a little bit about your medical history?",
-      sent_at: '10:01 AM'
-    },
-    {
-      message_id: 'msg-3',
-      chat_id: 'attempt-2',
-      sender_type: 'ai',
-      message_content: "I have a history of hypertension, which I've had for about 4 years now. I've also had a total abdominal hysterectomy, and I've been experiencing dyspnea, or shortness of breath, lately. Oh, and I've had a peptic ulcer in the past, which is why I've been taking over-the-counter non-steroidal anti-inflammatory drugs. Could any of these things be contributing to my chest pains?",
-      sent_at: '10:02 AM'
-    },
-    {
-      message_id: 'msg-4',
-      chat_id: 'attempt-2',
-      sender_type: 'student',
-      message_content: "What medications are you taking?",
-      sent_at: '10:03 AM'
-    },
-    {
-      message_id: 'msg-5',
-      chat_id: 'attempt-2',
-      sender_type: 'ai',
-      message_content: "I'm not currently taking any prescription medications, but I do take ibuprofen (Advil) occasionally for headaches. I've also been taking NSAIDs regularly, which I know can irritate my stomach and make my peptic ulcer symptoms worse. I'm worried that maybe my medication use is related to my chest pains, but I'm not sure. Do you think that's possible?",
-      sent_at: '10:04 AM'
-    },
-    {
-      message_id: 'msg-6',
-      chat_id: 'attempt-2',
-      sender_type: 'student',
-      message_content: "Tell me more about how the pain feels",
-      sent_at: '10:05 AM'
-    }
-  ]
-};
 
 /**
  * Get simulation groups for the current instructor
@@ -716,8 +405,8 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
       organization_id: group.organization_id || '',
     }));
   } catch (error) {
-    console.error('Failed to fetch instructor groups, using mock data:', error);
-    return mockInstructorSimulationGroups;
+    console.error('Failed to fetch instructor groups:', error);
+    throw new Error('Failed to load simulation groups. Please try again.');
   }
 }
 
@@ -753,39 +442,9 @@ async function createSimulationGroup(data: { name: string; description: string; 
   };
 }
 
-/**
- * Hardcoded global question bank data
- * These are available questions that can be added to simulation groups
- */
-const mockGlobalQuestionBank: QuestionBankItem[] = [
-  { id: 'bank-global-1', title: 'Patient History Assessment', questionText: 'Ask the patient about their complete medical history, including past diagnoses, surgeries, and hospitalizations.', clinicalIntent: 'Evaluates the student\'s ability to systematically gather a comprehensive patient history to inform clinical decision-making.', evaluationCriteria: 'Student should attempt to identify:\n• Past medical conditions and diagnoses\n• Previous surgeries or hospitalizations\n• Relevant family history\n• Social history (smoking, alcohol, occupation)', isMandatory: true, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-2', title: 'Medication Review', questionText: 'Review the patient\'s current medications, including dosages, frequency, and adherence.', clinicalIntent: 'Assesses the student\'s ability to identify potential drug interactions, duplications, and adherence issues.', evaluationCriteria: 'Student should attempt to identify:\n• All current prescription medications\n• OTC medications and supplements\n• Dosage and frequency for each\n• Adherence patterns and barriers', isMandatory: true, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-3', title: 'Communication Skills', questionText: 'Demonstrate effective communication techniques including active listening, empathy, and clear explanations.', clinicalIntent: 'Evaluates the student\'s ability to build rapport and communicate effectively with patients from diverse backgrounds.', evaluationCriteria: 'Student should demonstrate:\n• Active listening and appropriate responses\n• Use of open-ended questions\n• Empathetic and non-judgmental tone\n• Clear, jargon-free explanations', isMandatory: false, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-4', title: 'Clinical Reasoning', questionText: 'Apply clinical reasoning to formulate a differential diagnosis based on the patient\'s presentation.', clinicalIntent: 'Assesses the student\'s ability to synthesize patient information and apply pharmacological knowledge to clinical scenarios.', evaluationCriteria: 'Student should demonstrate:\n• Systematic approach to problem identification\n• Consideration of multiple diagnoses\n• Evidence-based reasoning\n• Appropriate prioritization of concerns', isMandatory: true, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-5', title: 'Patient Education', questionText: 'Provide appropriate patient education about their condition, treatment options, and self-management strategies.', clinicalIntent: 'Evaluates the student\'s ability to educate patients in an understandable and actionable manner.', evaluationCriteria: 'Student should:\n• Explain the condition in lay terms\n• Discuss treatment options and rationale\n• Provide self-management strategies\n• Verify patient understanding (teach-back)', isMandatory: false, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-6', title: 'Documentation Quality', questionText: 'Ensure accurate and complete documentation of the patient encounter.', clinicalIntent: 'Assesses the student\'s ability to maintain thorough clinical records that support continuity of care.', evaluationCriteria: 'Student should document:\n• Chief complaint and HPI\n• Relevant findings from assessment\n• Clinical decisions and rationale\n• Follow-up plan and recommendations', isMandatory: false, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-7', title: 'Professionalism', questionText: 'Demonstrate professional behavior, including respect for patient autonomy, confidentiality, and ethical practice.', clinicalIntent: 'Evaluates the student\'s adherence to professional standards and ethical guidelines in patient interactions.', evaluationCriteria: 'Student should demonstrate:\n• Respect for patient autonomy and preferences\n• Maintenance of confidentiality\n• Professional demeanor and appearance\n• Ethical decision-making', isMandatory: false, isActive: true, tags: [], usedBySimulationGroups: [] },
-  { id: 'bank-global-8', title: 'Safety Considerations', questionText: 'Identify and address potential safety concerns, including drug interactions, contraindications, and adverse effects.', clinicalIntent: 'Assesses the student\'s ability to prioritize patient safety and identify potential risks in the treatment plan.', evaluationCriteria: 'Student should identify:\n• Potential drug-drug interactions\n• Contraindications based on patient history\n• Common and serious adverse effects\n• Appropriate monitoring parameters', isMandatory: true, isActive: true, tags: [], usedBySimulationGroups: [] },
-];
-
-/**
- * Hardcoded patient-specific question bank data
- * These are available questions that can be added to specific patients
- */
-const mockPatientSpecificQuestionBank: QuestionBankItem[] = [
-  { id: 'bank-patient-1', title: 'Pain Assessment Scale', questionText: 'Use a validated pain assessment scale to evaluate the patient\'s current pain level, location, and quality.', clinicalIntent: 'Evaluates the student\'s ability to systematically assess pain using standardized tools.', evaluationCriteria: 'Student should assess:\n• Pain intensity (0-10 scale)\n• Pain location and radiation\n• Quality of pain (sharp, dull, burning)\n• Impact on daily activities', isMandatory: true, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-2', title: 'Allergy Verification', questionText: 'Verify the patient\'s allergy history, including drug allergies, food allergies, and environmental allergens.', clinicalIntent: 'Assesses the student\'s diligence in confirming allergy information to prevent adverse reactions.', evaluationCriteria: 'Student should verify:\n• Known drug allergies and reaction types\n• Food and environmental allergies\n• Severity of previous reactions\n• Cross-reactivity considerations', isMandatory: true, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-3', title: 'Symptom Duration', questionText: 'Determine the onset, duration, and progression of the patient\'s primary symptoms.', clinicalIntent: 'Evaluates the student\'s ability to establish a clear timeline for symptom development.', evaluationCriteria: 'Student should determine:\n• When symptoms first appeared\n• Whether symptoms are acute or chronic\n• Progression pattern over time\n• Any triggering or precipitating events', isMandatory: false, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-4', title: 'Previous Treatment History', questionText: 'Inquire about previous treatments tried for the current condition, including their effectiveness.', clinicalIntent: 'Assesses the student\'s ability to gather treatment history to avoid repeating ineffective therapies.', evaluationCriteria: 'Student should identify:\n• Previous medications tried and outcomes\n• Non-pharmacological treatments attempted\n• Reasons for discontinuation\n• Patient preferences and concerns', isMandatory: false, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-5', title: 'Lifestyle Factors', questionText: 'Assess relevant lifestyle factors including diet, exercise, sleep patterns, and stress levels.', clinicalIntent: 'Evaluates the student\'s ability to identify modifiable lifestyle factors that impact the patient\'s condition.', evaluationCriteria: 'Student should assess:\n• Dietary habits and nutritional status\n• Physical activity level\n• Sleep quality and patterns\n• Stress and coping mechanisms', isMandatory: false, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-6', title: 'Family Medical History', questionText: 'Gather a comprehensive family medical history to identify hereditary risk factors.', clinicalIntent: 'Assesses the student\'s ability to identify genetic and familial predispositions relevant to the patient\'s care.', evaluationCriteria: 'Student should identify:\n• First-degree relatives with relevant conditions\n• Age of onset for family conditions\n• Hereditary patterns or genetic conditions\n• Impact on patient\'s risk profile', isMandatory: false, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-7', title: 'Current Medications', questionText: 'Review all current medications including prescription, OTC, herbal supplements, and vitamins.', clinicalIntent: 'Evaluates the student\'s thoroughness in identifying all substances the patient is currently taking.', evaluationCriteria: 'Student should identify:\n• All prescription medications with doses\n• OTC medications used regularly\n• Herbal supplements and vitamins\n• Recreational substance use if applicable', isMandatory: true, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-  { id: 'bank-patient-8', title: 'Treatment Goals', questionText: 'Discuss and establish shared treatment goals with the patient based on their values and preferences.', clinicalIntent: 'Assesses the student\'s ability to practice patient-centered care by incorporating patient preferences into the treatment plan.', evaluationCriteria: 'Student should:\n• Explore patient expectations and goals\n• Discuss realistic treatment outcomes\n• Align treatment plan with patient values\n• Establish measurable treatment endpoints', isMandatory: false, isActive: true, tags: ['patient_specific'], usedBySimulationGroups: [], usedByPatients: [] },
-];
-
-// Mock data structures for questions
-const mockGlobalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {};
-const mockCaseSpecificQuestions: Record<string, GlobalRubricQuestion[]> = {};
+// In-memory data structures for questions (populated via API or add functions)
+const globalRubricQuestions: Record<string, GlobalRubricQuestion[]> = {};
+const caseSpecificQuestions: Record<string, GlobalRubricQuestion[]> = {};
 
 /**
  * Get current instructor user data
@@ -804,8 +463,8 @@ async function getCurrentUser(): Promise<UserData> {
       avatarUrl: undefined,
     };
   } catch (error) {
-    console.error('Failed to fetch user name, using mock data:', error);
-    return mockInstructorUserData;
+    console.error('Failed to fetch user name:', error);
+    throw new Error('Failed to load user data. Please try again.');
   }
 }
 
@@ -869,8 +528,8 @@ async function getPatientAnalytics(
       student_access_count: Number(patient.access_count) || 0,
     }));
   } catch (error) {
-    console.error('Failed to fetch patient analytics, using mock data:', error);
-    return mockPatientAnalytics[simulationGroupId] || [];
+    console.error('Failed to fetch patient analytics:', error);
+    throw new Error('Failed to load patient analytics. Please try again.');
   }
 }
 
@@ -1052,16 +711,8 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
       photo_url: patient.photo_url,
     }));
   } catch (error) {
-    console.error('Failed to fetch manageable patients, using mock data:', error);
-    const mocks = mockManageablePatients[simulationGroupId] || [];
-    return mocks.map((p) => ({
-      ...p,
-      id: p.patient_id,
-      name: p.patient_name,
-      age: p.patient_age,
-      gender: p.patient_gender,
-      llmEvaluationEnabled: p.llm_completion,
-    })) as any[];
+    console.error('Failed to fetch manageable patients:', error);
+    throw new Error('Failed to load patients. Please try again.');
   }
 }
 
@@ -1332,22 +983,17 @@ function getGlobalRubricQuestions(_simulationGroupId: string): GlobalRubricQuest
  * Add a new global rubric question
  */
 function addGlobalRubricQuestion(simulationGroupId: string, question: GlobalRubricQuestion): void {
-  if (!mockGlobalRubricQuestions[simulationGroupId]) {
-    mockGlobalRubricQuestions[simulationGroupId] = [];
+  if (!globalRubricQuestions[simulationGroupId]) {
+    globalRubricQuestions[simulationGroupId] = [];
   }
 
-  const existingQuestion = mockGlobalRubricQuestions[simulationGroupId].find(q => q.id === question.id);
+  const existingQuestion = globalRubricQuestions[simulationGroupId].find(q => q.id === question.id);
   if (existingQuestion) {
     console.log(`Question ${question.id} already exists in simulation group ${simulationGroupId}, skipping duplicate add`);
     return;
   }
 
-  mockGlobalRubricQuestions[simulationGroupId].push(question);
-
-  const bankQuestion = mockGlobalQuestionBank.find(q => q.id === question.id);
-  if (bankQuestion && !bankQuestion.usedBySimulationGroups.includes(simulationGroupId)) {
-    bankQuestion.usedBySimulationGroups.push(simulationGroupId);
-  }
+  globalRubricQuestions[simulationGroupId].push(question);
 }
 
 /**
@@ -1372,16 +1018,9 @@ async function updateGlobalRubricQuestion(_simulationGroupId: string, question: 
  * Delete a global rubric question
  */
 function deleteGlobalRubricQuestion(simulationGroupId: string, questionId: string): void {
-  const questions = mockGlobalRubricQuestions[simulationGroupId];
+  const questions = globalRubricQuestions[simulationGroupId];
   if (questions) {
-    mockGlobalRubricQuestions[simulationGroupId] = questions.filter(q => q.id !== questionId);
-
-    const bankQuestion = mockGlobalQuestionBank.find(q => q.id === questionId);
-    if (bankQuestion) {
-      bankQuestion.usedBySimulationGroups = bankQuestion.usedBySimulationGroups.filter(
-        groupId => groupId !== simulationGroupId
-      );
-    }
+    globalRubricQuestions[simulationGroupId] = questions.filter(q => q.id !== questionId);
   }
 }
 
@@ -1502,8 +1141,8 @@ async function getStudents(simulationGroupId: string): Promise<Student[]> {
       email: student.user_email,
     }));
   } catch (error) {
-    console.error('Failed to fetch students, using mock data:', error);
-    return mockStudents[simulationGroupId] || [];
+    console.error('Failed to fetch students:', error);
+    throw new Error('Failed to load students. Please try again.');
   }
 }
 
@@ -1524,14 +1163,14 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
     const students = await getStudents(simulationGroupId);
     const student = students.find(s => s.id === studentId) || students.find(s => s.email === studentId);
     if (!student) {
-      console.warn('Student not found in group, falling back to mock');
-      return mockStudentDetails[studentId];
+      console.warn('Student not found in group');
+      return undefined;
     }
     studentName = student.name;
     studentEmail = student.email;
   } catch (error) {
-    console.error('Failed to fetch students list, falling back to mock:', error);
-    return mockStudentDetails[studentId];
+    console.error('Failed to fetch students list:', error);
+    return undefined;
   }
 
   // Step 2: Get group name if not provided
@@ -1689,15 +1328,15 @@ async function getStudentPatientData(studentEmail: string, simulationGroupId: st
 /**
  * Get chat attempts for a student and patient
  */
-function getChatAttempts(studentId: string, patientId: string): ChatAttempt[] {
-  return mockChatAttempts[studentId]?.[patientId] || [];
+function getChatAttempts(_studentId: string, _patientId: string): ChatAttempt[] {
+  return [];
 }
 
 /**
  * Get chat messages for an attempt
  */
-function getChatMessages(attemptId: string): ChatMessage[] {
-  return mockChatMessages[attemptId] || [];
+function getChatMessages(_attemptId: string): ChatMessage[] {
+  return [];
 }
 
 /**
@@ -1723,27 +1362,17 @@ function getCaseSpecificQuestions(_patientId: string): GlobalRubricQuestion[] {
  * Removed async getManageablePatients call that was called with empty string anyway.
  */
 function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuestion): void {
-  if (!mockCaseSpecificQuestions[patientId]) {
-    mockCaseSpecificQuestions[patientId] = [];
+  if (!caseSpecificQuestions[patientId]) {
+    caseSpecificQuestions[patientId] = [];
   }
 
-  const existingQuestion = mockCaseSpecificQuestions[patientId].find(q => q.id === question.id);
+  const existingQuestion = caseSpecificQuestions[patientId].find(q => q.id === question.id);
   if (existingQuestion) {
     console.log(`Question ${question.id} already exists for patient ${patientId}, skipping duplicate add`);
     return;
   }
 
-  mockCaseSpecificQuestions[patientId].push(question);
-
-  const bankQuestion = mockPatientSpecificQuestionBank.find(q => q.id === question.id);
-  if (bankQuestion) {
-    if (!bankQuestion.usedByPatients) {
-      bankQuestion.usedByPatients = [];
-    }
-    if (!bankQuestion.usedByPatients.includes(patientId)) {
-      bankQuestion.usedByPatients.push(patientId);
-    }
-  }
+  caseSpecificQuestions[patientId].push(question);
 }
 
 /**
@@ -1760,16 +1389,9 @@ function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQ
  * Removed async getManageablePatients calls that used an empty string group ID.
  */
 function deleteCaseSpecificQuestion(patientId: string, questionId: string): void {
-  const questions = mockCaseSpecificQuestions[patientId];
+  const questions = caseSpecificQuestions[patientId];
   if (questions) {
-    mockCaseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
-
-    const bankQuestion = mockPatientSpecificQuestionBank.find(q => q.id === questionId);
-    if (bankQuestion && bankQuestion.usedByPatients) {
-      bankQuestion.usedByPatients = bankQuestion.usedByPatients.filter(
-        pId => pId !== patientId
-      );
-    }
+    caseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
   }
 }
 
@@ -1872,46 +1494,37 @@ async function getGlobalQuestionBank(): Promise<QuestionBankItem[]> {
     const rows = await apiClient.request<any[]>('instructor/question_bank');
     return rows.map(mapBackendToQuestionBankItem);
   } catch (error) {
-    console.error('Failed to fetch global question bank from API, falling back to mock data:', error);
-    return [...mockGlobalQuestionBank];
+    console.error('Failed to fetch global question bank from API:', error);
+    throw new Error('Failed to load question bank. Please try again.');
   }
 }
 
 /**
- * Get patient-specific question bank
+ * Get patient-specific question bank — requires API
  */
 function getPatientSpecificQuestionBank(): QuestionBankItem[] {
-  return [...mockPatientSpecificQuestionBank];
+  return [];
 }
 
 /**
  * Add a question to the global question bank
  */
-function addToGlobalQuestionBank(question: QuestionBankItem): void {
-  if (!question.usedBySimulationGroups) {
-    question.usedBySimulationGroups = [];
-  }
-  mockGlobalQuestionBank.push(question);
+function addToGlobalQuestionBank(_question: QuestionBankItem): void {
+  // No-op: question bank is managed via API
 }
 
 /**
  * Add a question to the patient-specific question bank
  */
-function addToPatientSpecificQuestionBank(question: QuestionBankItem): void {
-  if (!question.usedBySimulationGroups) {
-    question.usedBySimulationGroups = [];
-  }
-  if (!question.usedByPatients) {
-    question.usedByPatients = [];
-  }
-  mockPatientSpecificQuestionBank.push(question);
+function addToPatientSpecificQuestionBank(_question: QuestionBankItem): void {
+  // No-op: question bank is managed via API
 }
 
 /**
  * Get patient's case-specific question IDs
  */
 function getPatientCaseSpecificQuestionIds(patientId: string): Set<string> {
-  const questions = mockCaseSpecificQuestions[patientId] || [];
+  const questions = caseSpecificQuestions[patientId] || [];
   return new Set(questions.map(q => q.id));
 }
 
@@ -1925,18 +1538,15 @@ function updatePatientCaseSpecificQuestions(patientId: string, questionIds: Set<
 /**
  * Get simulation groups using a specific question
  */
-function getSimulationGroupsUsingQuestion(questionId: string, questionType: 'global' | 'patientSpecific' = 'global'): string[] {
-  const questionBank = questionType === 'global' ? mockGlobalQuestionBank : mockPatientSpecificQuestionBank;
-  const question = questionBank.find(q => q.id === questionId);
-  return question ? [...question.usedBySimulationGroups] : [];
+function getSimulationGroupsUsingQuestion(_questionId: string, _questionType: 'global' | 'patientSpecific' = 'global'): string[] {
+  return [];
 }
 
 /**
  * Get patients using a specific patient-specific question
  */
-function getPatientsUsingQuestion(questionId: string): string[] {
-  const question = mockPatientSpecificQuestionBank.find(q => q.id === questionId);
-  return question && question.usedByPatients ? [...question.usedByPatients] : [];
+function getPatientsUsingQuestion(_questionId: string): string[] {
+  return [];
 }
 
 /**
@@ -2103,6 +1713,153 @@ async function getStudentProgress(simulationGroupId: string, personaId: string, 
 }
 
 /**
+ * Get completed chat sessions for the prompt playground session picker.
+ * Returns sessions where the student has reached the debrief stage.
+ */
+async function getCompletedSessions(simulationGroupId: string): Promise<CompletedSession[]> {
+  try {
+    const data = await apiClient.request<any[]>(
+      `instructor/completed_sessions?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+    );
+
+    return data.map((session: any) => ({
+      chatId: session.chat_id,
+      studentName: `${session.first_name || ''} ${session.last_name || ''}`.trim(),
+      personaName: session.persona_name,
+      personaId: session.persona_id,
+      lastAccessed: session.last_accessed,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch completed sessions:', error);
+    return [];
+  }
+}
+
+/**
+ * Run a test debrief with a custom prompt against a completed session.
+ * Calls POST /student/text_generation?mode=test_debrief with the prompt in the request body.
+ * The backend runs the debrief pipeline without persisting results.
+ */
+async function runTestDebrief(params: {
+  simulationGroupId: string;
+  sessionId: string;
+  personaId: string;
+  debriefPrompt: string;
+}): Promise<AIDebriefData> {
+  const { simulationGroupId, sessionId, personaId, debriefPrompt } = params;
+
+  const endpoint = `student/text_generation?mode=test_debrief&simulation_group_id=${encodeURIComponent(simulationGroupId)}&session_id=${encodeURIComponent(sessionId)}&patient_id=${encodeURIComponent(personaId)}`;
+
+  const data = await apiClient.request<any>(endpoint, {
+    method: 'POST',
+    body: { debrief_prompt: debriefPrompt },
+  });
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  let debrief = deepParseJson(data);
+  if (!debrief || typeof debrief !== 'object') {
+    throw new Error('Failed to parse test debrief response');
+  }
+
+  // Apply the same summary repair logic used in fetchInstructorDebrief
+  if (debrief.summary && typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+    const extracted = extractDebriefFromRawJson(debrief.summary);
+    if (extracted && typeof extracted === 'object') {
+      debrief = { ...debrief, ...extracted } as Record<string, any>;
+    }
+  }
+
+  if (typeof debrief.summary === 'string' && debrief.summary.includes('{')) {
+    try {
+      const firstBrace = debrief.summary.indexOf('{');
+      const lastBrace = debrief.summary.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const summaryObj = JSON.parse(debrief.summary.substring(firstBrace, lastBrace + 1));
+        if (summaryObj.summary) debrief.summary = summaryObj.summary;
+      }
+    } catch {
+      const m = debrief.summary.match(/"summary"\s*:\s*"([^"]+)"/);
+      if (m) {
+        debrief.summary = m[1].replace(/\\"/g, '"').replace(/\\n/g, '\n');
+      } else {
+        debrief.summary = 'AI debrief summary could not be fully parsed.';
+      }
+    }
+  }
+
+  const toStrArray = (arr: any[]) => arr.map(
+    (q: string | { question_text?: string }) => typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+  );
+  const addressedQuestions = toStrArray(debrief.questions_addressed || []);
+  const missedQuestions = toStrArray(debrief.questions_missed || []);
+
+  return {
+    summary: typeof debrief.summary === 'string' ? debrief.summary : '',
+    questionsAddressed: addressedQuestions,
+    missedKeyQuestionsCount: missedQuestions.length,
+    missedQuestions,
+    missedQuestionsGuidance: typeof debrief.reasoning_gaps === 'string' ? debrief.reasoning_gaps : '',
+    overallScore: typeof debrief.overall_score === 'number' ? debrief.overall_score : undefined,
+    recommendation: typeof debrief.recommendation === 'string' ? debrief.recommendation : undefined,
+    recommendationFeedback: {
+      strengths: debrief.recommendation_feedback?.strengths || [],
+      areasForImprovement: debrief.recommendation_feedback?.areas_for_improvement || [],
+    },
+    suggestedRewrites: (debrief.suggested_rewrites || []).map(
+      (r: { original_message?: string; suggested_rewrite?: string }) => ({
+        original: r.original_message || '',
+        suggested: r.suggested_rewrite || '',
+      })
+    ),
+    rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+    answerKeyComparison: debrief.answer_key_comparison ? {
+      answerKeyAvailable: debrief.answer_key_comparison.answer_key_available ?? false,
+      correctElements: debrief.answer_key_comparison.correct_elements,
+      missingElements: debrief.answer_key_comparison.missing_elements,
+      incorrectElements: debrief.answer_key_comparison.incorrect_elements,
+      overallAlignment: debrief.answer_key_comparison.overall_alignment,
+    } : undefined,
+  };
+}
+
+/**
+ * Run a test chat message with a custom system prompt against a persona.
+ * Calls POST /student/text_generation?mode=test_system_prompt with the system prompt and message in the body.
+ * The backend runs the chat pipeline using the provided system prompt instead of the DB-stored one.
+ */
+async function runTestChat(params: {
+  simulationGroupId: string;
+  sessionId: string;
+  personaId: string;
+  systemPrompt: string;
+  messageContent: string;
+  patientPrompt?: string;
+}): Promise<{ llm_output: string }> {
+  const { simulationGroupId, sessionId, personaId, systemPrompt, messageContent, patientPrompt } = params;
+
+  const endpoint = `student/text_generation?mode=test_system_prompt&simulation_group_id=${encodeURIComponent(simulationGroupId)}&session_id=${encodeURIComponent(sessionId)}&patient_id=${encodeURIComponent(personaId)}`;
+
+  const body: Record<string, string> = { system_prompt: systemPrompt, message_content: messageContent };
+  if (patientPrompt !== undefined && patientPrompt.trim() !== '') {
+    body.patient_prompt = patientPrompt;
+  }
+
+  const data = await apiClient.request<any>(endpoint, {
+    method: 'POST',
+    body,
+  });
+
+  if (data?.error) {
+    throw new Error(data.error);
+  }
+
+  return { llm_output: data.llm_output || '' };
+}
+
+/**
  * Instructor data service object
  */
 export const instructorService: InstructorDataService = {
@@ -2169,7 +1926,10 @@ export const instructorService: InstructorDataService = {
   unassignQuestion,
   updateQuestionAssignment,
   fetchDebrief: fetchInstructorDebrief,
-  getStudentProgress: getStudentProgress
+  getStudentProgress: getStudentProgress,
+  getCompletedSessions,
+  runTestDebrief,
+  runTestChat,
 };
 
 // Keep backward-compatible export

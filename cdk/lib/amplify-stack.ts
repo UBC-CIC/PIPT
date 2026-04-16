@@ -107,9 +107,9 @@ applications:
       enableAutoBuild: true,
     });
 
-    const sponsorChanges = new amplify.CfnBranch(this, `${id}-sponsorChangesBranch`, {
+    const chatPlayground = new amplify.CfnBranch(this, `${id}-chatplaygroundBranch`, {
       appId: amplifyApp.attrAppId,
-      branchName: "sponsor-changes",
+      branchName: "chat-playground",
       enableAutoBuild: true,
     });
 

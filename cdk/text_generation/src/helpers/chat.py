@@ -137,6 +137,7 @@ def get_system_prompt(patient_name) -> str:
     Retrieve the latest system prompt from the system_prompt_history table in PostgreSQL.
     Returns the latest system prompt, or default if not found.
     """
+    # TODO(refactor): Extract DB connection logic into a call to _get_db_connection() to eliminate duplication
     try:
         secrets_client = boto3.client('secretsmanager')
         db_secret_name = os.environ.get('SM_DB_CREDENTIALS')
@@ -198,7 +199,8 @@ def get_response(
     student_user_id: str = "",
     persona_id: str = "",
     embeddings_model=None,
-    ddb_table_name: str = None
+    ddb_table_name: str = None,
+    raw_prompt_mode: bool = False
 ) -> dict:
     """
     Generates a response to a query using the LLM and a history-aware retriever for context.
@@ -229,23 +231,40 @@ def get_response(
                 Once the proper diagnosis is provided, include SESSION COMPLETED in your response and politely end the conversation.
                 """
 
-    system_prompt = (
-        f"""
-        <|begin_of_text|>
-        <|start_header_id|>patient<|end_header_id|>
-        Please pay close attention to this: {system_prompt} 
-        Here are some additional details about your personality, symptoms, or overall condition: {patient_prompt}
-        {completion_string}
-        You are a patient named {patient_name}.
-         
-        {get_system_prompt(patient_name=patient_name).replace("{", "{{").replace("}", "}}")}
+    if raw_prompt_mode:
+        # In raw prompt mode (playground), use the provided prompts directly
+        # without appending the hardcoded patient behavior template
+        system_prompt = (
+            f"""
+            <|begin_of_text|>
+            <|start_header_id|>patient<|end_header_id|>
+            {system_prompt}
+            {patient_prompt}
+            You are named {patient_name}.
+            <|eot_id|>
+            <|start_header_id|>documents<|end_header_id|>
+            {{context}}
+            <|eot_id|>
+            """
+        )
+    else:
+        system_prompt = (
+            f"""
+            <|begin_of_text|>
+            <|start_header_id|>patient<|end_header_id|>
+            Please pay close attention to this: {system_prompt} 
+            Here are some additional details about your personality, symptoms, or overall condition: {patient_prompt}
+            {completion_string}
+            You are a patient named {patient_name}.
+             
+            {get_system_prompt(patient_name=patient_name).replace("{", "{{").replace("}", "}}")}
 
-        <|eot_id|>
-        <|start_header_id|>documents<|end_header_id|>
-        {{context}}
-        <|eot_id|>
-        """
-    )
+            <|eot_id|>
+            <|start_header_id|>documents<|end_header_id|>
+            {{context}}
+            <|eot_id|>
+            """
+        )
 
     print(f"🔍 System prompt for {patient_name}:\\n{system_prompt}")
     logger.info(f"🔍 System prompt, {patient_name}:\\n{system_prompt}")
@@ -332,6 +351,9 @@ def generate_streaming_response(
     """
     Streams an answer via AppSync as fast as possible.
     """
+    # TODO(refactor): Extract streaming chunk iteration into a helper function
+    # TODO(refactor): Extract fallback-to-invoke logic into a helper function
+    # TODO(refactor): Extract student message saving + matching into a helper function (duplicated with get_response)
     import time
     
     logger.info(f"🚀 STREAMING FUNCTION STARTED with query: '{query}' - DEPLOYMENT TEST v2")
@@ -437,6 +459,8 @@ def get_cognito_token():
 
 def publish_to_appsync(session_id: str, data: dict):
     """Publish streaming data to AppSync subscription using Cognito User Pool authentication."""
+    # TODO(refactor): Extract AppSync GraphQL mutation construction into a helper function
+    # TODO(refactor): Extract AppSync authentication header setup into a helper function
     import requests
     import json
     import os
@@ -503,6 +527,7 @@ def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_
     Returns:
         The message_id UUID string on success, None on failure.
     """
+    # TODO(refactor): Extract DB connection logic into a call to _get_db_connection() to eliminate duplication
     try:
         import psycopg2
         import json
@@ -2049,6 +2074,7 @@ def fetch_debrief_prompt(simulation_group_id: str) -> str:
     Raises RuntimeError on DB connection failure.
     No fallback to DEBRIEF_SYSTEM_PROMPT — the system is fully DB-driven.
     """
+    # TODO(refactor): Extract DB connection logic into a call to _get_db_connection() to eliminate duplication
     try:
         secrets_client = boto3.client('secretsmanager')
         db_secret_name = os.environ.get('SM_DB_CREDENTIALS')
@@ -2114,6 +2140,10 @@ def generate_debrief(
     Returns the parsed debrief dict.
     """
     logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
+
+    # TODO(refactor): Extract context gathering (transcript, recommendation, key questions, student_id) into a helper function
+    # TODO(refactor): Extract _extract_json and _invoke_llm_json into module-level helper functions (duplicated in generate_test_debrief)
+    # TODO(refactor): Extract the multi-step debrief pipeline (steps a-f) into a shared helper function (duplicated in generate_test_debrief)
 
     # Wait for any in-flight matching threads so that all
     # matched_question_ids are persisted before we query for them.
@@ -2388,6 +2418,7 @@ The following is the instructor's answer key for this simulation case. Compare t
     missed_ids = _extract_ids(questions_missed)
 
     # 5. Write to debriefs table
+    # TODO(refactor): Extract debrief persistence (save_debrief_to_db + save_question_interactions) into a helper function
     debrief_id = save_debrief_to_db(
         session_id=session_id,
         student_id=student_id,
@@ -2417,6 +2448,7 @@ The following is the instructor's answer key for this simulation case. Compare t
         )
 
     # 7. Publish debrief via AppSync so frontend can receive it
+    # TODO(refactor): Extract debrief AppSync publishing into a helper function
     try:
         publish_to_appsync(session_id, {
             "type": "debrief",
@@ -2426,4 +2458,276 @@ The following is the instructor's answer key for this simulation case. Compare t
         logger.error(f"Failed to publish debrief to AppSync: {e}")
 
     logger.info(f"✅ DEBRIEF GENERATION COMPLETE for session={session_id}, score={overall_score}")
+    return debrief_data
+
+
+def generate_test_debrief(
+    session_id: str,
+    simulation_group_id: str,
+    persona_id: str,
+    llm: ChatBedrock,
+    debrief_prompt: str,
+    embeddings_model=None,
+    ddb_table_name: str = None,
+) -> dict:
+    """
+    Generates a debrief using the provided prompt text without any side effects.
+    Reuses the full debrief pipeline but skips DB writes and AppSync publishing.
+
+    This is used by the Prompt Playground so admins can test prompt variations
+    against real session data without persisting results.
+    """
+    logger.info(f"📋 TEST DEBRIEF GENERATION STARTED for session={session_id}")
+
+    # TODO(refactor): Extract context gathering (transcript, recommendation, key questions) into a shared helper function with generate_debrief()
+    # TODO(refactor): Extract _extract_json and _invoke_llm_json into module-level helper functions (duplicated from generate_debrief)
+    # TODO(refactor): Extract the multi-step debrief pipeline (steps a-f) into a shared helper function with generate_debrief()
+
+    # Wait for any in-flight matching threads so that all
+    # matched_question_ids are persisted before we query for them.
+    flush_matching_threads(session_id)
+
+    # 1. Gather all context (same as generate_debrief)
+    transcript = fetch_chat_transcript(session_id)
+    recommendation = fetch_recommendation(session_id)
+    key_questions = fetch_key_questions(simulation_group_id, persona_id)
+
+    if not transcript:
+        logger.error("No transcript found — cannot generate test debrief")
+        return {"error": "No chat transcript found"}
+
+    # Retrieve answer key text from S3 (empty string if none found)
+    answer_key_text = retrieve_answer_key_text(simulation_group_id, persona_id)
+
+    # NOTE: debrief_prompt is passed as a parameter — not fetched from DB
+
+    # 2. Check for tagged messages and decide which prompt path to use
+    tagged_messages = fetch_tagged_messages(session_id)
+
+    # --- Shared helpers for LLM JSON parsing ---
+    from langchain_core.messages import SystemMessage, HumanMessage
+
+    def _extract_json(raw: str) -> dict:
+        """Strip markdown fences and extract the JSON object from raw LLM output."""
+        cleaned = raw.strip()
+        cleaned = re.sub(r'^```(?:json)?\s*\n?', '', cleaned)
+        cleaned = re.sub(r'\n?\s*```\s*$', '', cleaned)
+        cleaned = cleaned.strip()
+        if not cleaned.startswith('{'):
+            first_brace = cleaned.find('{')
+            if first_brace != -1:
+                cleaned = cleaned[first_brace:]
+        if not cleaned.endswith('}'):
+            last_brace = cleaned.rfind('}')
+            if last_brace != -1:
+                cleaned = cleaned[:last_brace + 1]
+        return json.loads(cleaned)
+
+    def _invoke_llm_json(prompt_text: str, max_retries: int = 2) -> dict:
+        """Invoke LLM with a prompt and parse JSON response with retries."""
+        last_error = None
+        for attempt in range(1, max_retries + 2):
+            try:
+                messages = [
+                    SystemMessage(content=debrief_prompt),
+                    HumanMessage(content=prompt_text if attempt == 1 else prompt_text + f"\n\nRETRY: Previous response was not valid JSON. Error: {last_error}. Return ONLY valid JSON."),
+                ]
+                resp = llm.invoke(messages)
+                raw = resp.content if hasattr(resp, 'content') else str(resp)
+                return _extract_json(raw)
+            except json.JSONDecodeError as e:
+                last_error = str(e)
+            except Exception as e:
+                logger.error(f"LLM call failed: {e}")
+                break
+        return {}
+
+    if tagged_messages:
+        logger.info(f"📋 Found {len(tagged_messages)} tagged messages — using multi-step debrief pipeline")
+
+        # Get key questions from DynamoDB cache first, fall back to PostgreSQL
+        cached_questions = None
+        if ddb_table_name:
+            cached_questions = get_cached_key_questions(session_id, ddb_table_name)
+        if cached_questions is None:
+            logger.info("Cache miss or unavailable — using key questions from PostgreSQL")
+            cached_questions = key_questions
+
+        # Step a: Build questions deterministically from pre-matched data
+        questions_addressed, questions_missed = build_questions_from_matched_data(tagged_messages, cached_questions)
+
+        # Step b: Compute overall score deterministically
+        addressed_ids_set = {q["question_id"] for q in questions_addressed}
+        overall_score = compute_overall_score(cached_questions, addressed_ids_set)
+
+        # Step c: Call summary/feedback prompt via LLM
+        summary_prompt = build_summary_feedback_prompt(transcript, questions_addressed, questions_missed, recommendation)
+        summary_data = _invoke_llm_json(summary_prompt)
+        logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
+
+        # Step d: Generate rewrites for moderate-confidence matches
+        REWRITE_THRESHOLD = 0.85
+        suggested_rewrites = []
+        question_map = {q["question_id"]: q for q in cached_questions}
+        for qa_entry in questions_addressed:
+            for msg_match in qa_entry.get("matched_messages", []):
+                if msg_match.get("similarity_score", 1.0) < REWRITE_THRESHOLD:
+                    q = question_map.get(qa_entry["question_id"], {})
+                    rewrite_prompt = build_rewrite_prompt(
+                        msg_match["message_content"],
+                        qa_entry["question_text"],
+                        q.get("evaluation_criteria", ""),
+                    )
+                    rewrite_data = _invoke_llm_json(rewrite_prompt)
+                    rewrite_text = rewrite_data.get("suggested_rewrite", "").strip()
+                    if rewrite_text:
+                        suggested_rewrites.append({
+                            "original_message": msg_match["message_content"],
+                            "matched_question_id": qa_entry["question_id"],
+                            "similarity_score": msg_match.get("similarity_score", 0.0),
+                            "suggested_rewrite": rewrite_text,
+                        })
+        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites")
+
+        # Step e: Answer key comparison
+        if answer_key_text:
+            ak_prompt = build_answer_key_prompt(recommendation, answer_key_text)
+            answer_key_comparison = _invoke_llm_json(ak_prompt)
+            if "answer_key_available" not in answer_key_comparison:
+                answer_key_comparison["answer_key_available"] = True
+            logger.info(f"📋 Answer key comparison LLM call returned keys: {list(answer_key_comparison.keys())}")
+        else:
+            answer_key_comparison = {"answer_key_available": False}
+
+        # Step f: Assemble final debrief dict
+        debrief_data = {
+            "summary": summary_data.get("summary", ""),
+            "questions_addressed": questions_addressed,
+            "questions_missed": questions_missed,
+            "recommendation_feedback": summary_data.get("recommendation_feedback", {"strengths": [], "areas_for_improvement": []}),
+            "reasoning_gaps": summary_data.get("reasoning_gaps", ""),
+            "overall_score": overall_score,
+            "suggested_rewrites": suggested_rewrites,
+            "answer_key_comparison": answer_key_comparison,
+            "recommendation": recommendation,
+        }
+
+    else:
+        logger.info("📋 No tagged messages found — falling back to full-transcript debrief")
+
+        # Full-transcript fallback (original behavior)
+        transcript_text = "\n".join(
+            [f"[{m['sender'].upper()}]: {m['content']}" for m in transcript]
+        )
+
+        key_questions_text = "\n".join(
+            [f"- [{q['question_id']}] (mandatory={q['is_mandatory']}, weight={q['weight']}): {q['question_text']}"
+             for q in key_questions]
+        ) if key_questions else "No key questions were assigned for this patient."
+
+        user_prompt = f"""
+## Chat Transcript
+{transcript_text}
+
+## Student's Recommendation
+{recommendation if recommendation else "(No recommendation submitted)"}
+
+## Key Questions
+{key_questions_text}
+
+Please evaluate the student's performance and produce the JSON debrief.
+"""
+
+        # --- Answer Key section for fallback path ---
+        if answer_key_text:
+            user_prompt += f"""
+## Answer Key
+
+The following is the instructor's answer key for this simulation case. Compare the student's recommendation against this answer key and populate the answer_key_comparison field accordingly.
+
+{answer_key_text}
+"""
+
+        # Call the LLM with retry on invalid JSON (fallback path only)
+        def _attempt_llm_call(extra_instruction: str = "") -> str:
+            """Invoke the LLM and return raw string output."""
+            prompt_content = user_prompt
+            if extra_instruction:
+                prompt_content = user_prompt + f"\n\n{extra_instruction}"
+            messages = [
+                SystemMessage(content=debrief_prompt),
+                HumanMessage(content=prompt_content),
+            ]
+            resp = llm.invoke(messages)
+            return resp.content if hasattr(resp, 'content') else str(resp)
+
+        MAX_DEBRIEF_RETRIES = 2
+        raw_output = ""
+        debrief_data = None
+        last_parse_error = None
+
+        for attempt in range(1, MAX_DEBRIEF_RETRIES + 2):
+            try:
+                if attempt == 1:
+                    raw_output = _attempt_llm_call()
+                else:
+                    retry_msg = (
+                        f"RETRY ATTEMPT {attempt}: Your previous response was not valid JSON. "
+                        f"Error: {last_parse_error}. "
+                        "You MUST respond with ONLY a valid JSON object. "
+                        "The first character must be '{' and the last must be '}'. "
+                        "No markdown, no explanation, no preamble. Complete all arrays and objects."
+                    )
+                    logger.warning(f"📋 Retrying debrief LLM call (attempt {attempt}) due to JSON parse error")
+                    raw_output = _attempt_llm_call(extra_instruction=retry_msg)
+
+                logger.info(f"📋 Raw debrief LLM output (attempt {attempt}): {raw_output[:500]}...")
+                debrief_data = _extract_json(raw_output)
+                logger.info(f"📋 Successfully parsed debrief JSON on attempt {attempt}")
+                break
+            except json.JSONDecodeError as e:
+                last_parse_error = str(e)
+                logger.error(f"Failed to parse debrief JSON (attempt {attempt}): {e}\nRaw: {raw_output[:500]}")
+            except Exception as e:
+                logger.error(f"Debrief LLM call failed (attempt {attempt}): {e}")
+                return {"error": f"LLM call failed: {str(e)}"}
+
+        if debrief_data is None:
+            logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
+            debrief_data = {
+                "summary": raw_output,
+                "questions_addressed": [],
+                "questions_missed": [],
+                "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+                "reasoning_gaps": "",
+                "overall_score": 0.0,
+                "suggested_rewrites": [],
+            }
+
+    # Validate and repair the debrief output schema
+    debrief_data = validate_debrief_output(debrief_data, answer_key_provided=bool(answer_key_text))
+
+    # Include the student's recommendation in the debrief
+    if "recommendation" not in debrief_data:
+        debrief_data["recommendation"] = recommendation
+
+    questions_addressed = debrief_data.get("questions_addressed", [])
+    questions_missed = debrief_data.get("questions_missed", [])
+
+    # Recompute score deterministically when key_questions are available
+    if key_questions and questions_addressed:
+        _addr_ids_for_score: set[str] = set()
+        for item in questions_addressed:
+            if isinstance(item, dict):
+                qid = item.get("question_id", "")
+                if qid:
+                    _addr_ids_for_score.add(qid)
+        if _addr_ids_for_score:
+            overall_score = compute_overall_score(key_questions, _addr_ids_for_score)
+            debrief_data["overall_score"] = overall_score
+
+    # NOTE: Skipping save_debrief_to_db(), save_question_interactions(), and publish_to_appsync()
+    # This is a test debrief — no side effects.
+
+    logger.info(f"✅ TEST DEBRIEF GENERATION COMPLETE for session={session_id}, score={debrief_data.get('overall_score', 0.0)}")
     return debrief_data

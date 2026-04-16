@@ -1276,7 +1276,18 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { simulation_group_id } = event.queryStringParameters;
-            const { max_messages_per_chat } = JSON.parse(event.body);
+            let body = JSON.parse(event.body);
+            // Handle double-stringified body from API Gateway
+            if (typeof body === 'string') {
+              body = JSON.parse(body);
+            }
+            let { max_messages_per_chat } = body;
+
+            // Coerce string numbers to integers (e.g. "4" -> 4)
+            if (typeof max_messages_per_chat === 'string') {
+              const parsed = parseInt(max_messages_per_chat, 10);
+              max_messages_per_chat = isNaN(parsed) ? max_messages_per_chat : parsed;
+            }
 
             // null means unlimited; otherwise must be a positive integer
             if (max_messages_per_chat !== null && (!Number.isInteger(max_messages_per_chat) || max_messages_per_chat < 1)) {

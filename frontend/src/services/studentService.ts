@@ -57,55 +57,8 @@ export interface Session {
 }
 
 /**
- * Student data service — calls real API, falls back to mock
+ * Student data service — calls real API, throws on failure
  */
-const mockSimulationGroups: SimulationGroup[] = [
-  {
-    simulation_group_id: '1',
-    name: 'Chronic Pain',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(0)
-  },
-  {
-    simulation_group_id: '2',
-    name: 'Acne',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(1)
-  },
-  {
-    simulation_group_id: '3',
-    name: 'Diabetes Management',
-    subtitle: 'Medical Simulation Group',
-    icon_color: getSimulationGroupColor(2)
-  }
-];
-
-/**
- * Hardcoded patient data for Phase 1
- */
-const mockPatients: Patient[] = [
-  {
-    patient_id: '1',
-    patient_name: 'Pamela',
-    avatarUrl: undefined, // Will display initials
-    debrief_status: 'in_progress',
-    instructor_evaluation: 'Incomplete'
-  },
-  {
-    patient_id: '2',
-    patient_name: 'Timothy',
-    avatarUrl: undefined, // Will display initials
-    debrief_status: 'debrief_reached',
-    instructor_evaluation: 'Incomplete'
-  },
-  {
-    patient_id: '3',
-    patient_name: 'Sarah',
-    avatarUrl: undefined, // Will display initials
-    debrief_status: 'not_started',
-    instructor_evaluation: 'Incomplete'
-  }
-];
 
 /**
  * Represents a case material for physical assessment
@@ -213,233 +166,27 @@ export interface StudentChatMessage {
   sent_at: string;
 }
 
-/**
- * Hardcoded case materials for student chat views
- */
-const mockCaseMaterials: StudentCaseMaterial[] = [
-  {
-    id: '1',
-    title: 'Initial Triage Vital Signs',
-    description: 'Recorded upon arrival to clinic.',
-    type: 'image',
-    group: 'Vital Signs',
-  },
-  {
-    id: '2',
-    title: '12-Lead Electrocardiogram (ECG)',
-    description: 'Standard 12-lead ECG performed during assessment to evaluate cardiac rhythm and possible ischemic changes.',
-    type: 'image',
-    group: 'Diagnostic Tests',
-  },
-  {
-    id: '3',
-    title: 'Lung Auscultation Recording',
-    description: 'Audio recording of lung sounds to evaluate respiratory status.',
-    type: 'video',
-    group: 'Physical Examination',
-  },
-];
+
 
 /**
- * Hardcoded patient files
- */
-const mockPatientFiles: PatientFile[] = [
-  {
-    id: '1',
-    filename: 'Patient_Information_Upload_Pamela.pdf',
-    description: 'No description available',
-  },
-];
-
-/**
- * Hardcoded patient detail for Pamela (used in chat/dashboard views)
- */
-function getMockPatientDetail(patientId: string | undefined): PatientDetail {
-  return {
-    id: patientId,
-    name: 'Pamela',
-    age: 56,
-    gender: 'Female',
-    imageUrl: undefined,
-    pronouns: 'she/her',
-    sex: 'Female',
-    primaryComplaint: 'Chest Pain',
-    avatarUrl: undefined,
-  };
-}
-
-/**
- * Hardcoded chat history for patient dashboard
- */
-const mockChatHistory: ChatHistoryEntry[] = [
-  {
-    id: '1',
-    name: 'Attempt 4 - Feb 19, 2026',
-    completionStatus: 'In Progress',
-    score: null,
-  },
-  {
-    id: '2',
-    name: 'Attempt 3 - Feb 18, 2026',
-    completionStatus: 'Complete',
-    score: '67%',
-  },
-  {
-    id: '3',
-    name: 'Attempt 2 - Feb 14, 2026',
-    completionStatus: 'Complete',
-    score: '88%',
-  },
-  {
-    id: '4',
-    name: 'Attempt 1 - Jan 27, 2026',
-    completionStatus: 'In Progress',
-    score: null,
-  },
-];
-
-/**
- * Hardcoded key questions coverage data
- */
-const mockKeyQuestionsCoverageData: KeyQuestionsCoverageData[] = [
-  { attempt: 'Attempt 1', attemptNumber: 1, coverage: 45 },
-  { attempt: 'Attempt 2', attemptNumber: 2, coverage: 72 },
-  { attempt: 'Attempt 3', attemptNumber: 3, coverage: 58 },
-  { attempt: 'Attempt 4', attemptNumber: 4, coverage: 63 },
-  { attempt: 'Attempt 5', attemptNumber: 5, coverage: 78 },
-  { attempt: 'Attempt 6', attemptNumber: 6, coverage: 82 },
-  { attempt: 'Attempt 7', attemptNumber: 7, coverage: 75 },
-  { attempt: 'Attempt 8', attemptNumber: 8, coverage: 88 },
-  { attempt: 'Attempt 9', attemptNumber: 9, coverage: 91 },
-  { attempt: 'Attempt 10', attemptNumber: 10, coverage: 0 },
-];
-
-/**
- * Hardcoded AI debrief data
- */
-const mockAIDebriefData: AIDebriefData = {
-  summary: "You conducted a structured interview and identified the patient's primary concern of worsening shortness of breath. You gathered relevant medication history and symptom duration, but did not fully explore potential triggers or assess inhaler technique. Further questioning and physical assessment could have helped clarify the underlying cause.",
-  questionsAddressed: [
-    'Asked about symptom duration',
-    'Asked about current medications',
-    'Asked about previous diagnosis of asthma',
-  ],
-  missedKeyQuestionsCount: 5,
-  missedQuestions: [
-    'Did not ask about inhaler technique',
-    'Did not explore environmental triggers',
-    'Did not ask about exercise tolerance',
-    'Did not assess sleep quality',
-    'Did not ask about allergy history',
-  ],
-  missedQuestionsGuidance: "These questions are important to fully assess the patient's condition and guide appropriate clinical decision-making.",
-  overallScore: 62.0,
-  recommendationFeedback: {
-    strengths: [
-      'Identified relevant symptoms early',
-      'Asked focused medication-related questions',
-    ],
-    areasForImprovement: [
-      'Did not fully assess symptom severity',
-      'Missed opportunities to confirm potential causes',
-    ],
-  },
-  suggestedRewrites: [
-    {
-      original: 'Are you feeling okay lately?',
-      suggested: 'When did your shortness of breath begin, and has it changed over time?',
-    },
-  ],
-  rubricDescription: "Compare your recommendations with the answer key provided by your instructor.",
-  answerKeyComparison: {
-    answerKeyAvailable: true,
-    correctElements: [
-      'Identified shortness of breath as primary symptom',
-      'Asked about current medications',
-    ],
-    missingElements: [
-      'Did not assess inhaler technique',
-      'Did not explore potential environmental triggers',
-    ],
-    incorrectElements: [
-      'Suggested beta-blocker instead of inhaled corticosteroid',
-    ],
-    overallAlignment: 'Partial',
-  },
-};
-
-/**
- * Hardcoded physical assessment activities
- */
-const mockAssessmentActivities: AssessmentActivity[] = [
-  { id: '1', name: 'Auscultate Heart Sounds', category: 'Cardiovascular', icon: 'heart' },
-  { id: '2', name: 'Auscultate Lung Sounds', category: 'Respiratory', icon: 'stethoscope' },
-  { id: '3', name: 'Check Blood Pressure', category: 'Vital Signs', icon: 'activity' },
-  { id: '4', name: 'Measure Temperature', category: 'Vital Signs', icon: 'thermometer' },
-  { id: '5', name: 'Examine Pupils', category: 'Neurological', icon: 'eye' },
-  { id: '6', name: 'Otoscopic Examination', category: 'HEENT', icon: 'ear' },
-  { id: '7', name: 'Palpate Abdomen', category: 'Abdominal', icon: 'activity' },
-  { id: '8', name: 'Check Peripheral Pulses', category: 'Cardiovascular', icon: 'heart' },
-];
-
-/**
- * Hardcoded chat history messages (for read-only chat history view)
- */
-const mockChatHistoryMessages: StudentChatMessage[] = [
-  {
-    message_id: 'msg-1',
-    chat_id: '',
-    sender_type: 'student',
-    message_content: 'Hello, I\'m here to help you today. Can you tell me what brings you in?',
-    sent_at: '2026-02-18T10:00:00Z',
-  },
-  {
-    message_id: 'msg-2',
-    chat_id: '',
-    sender_type: 'ai',
-    message_content: 'I\'ve been having chest pain for the past few hours.',
-    sent_at: '2026-02-18T10:00:30Z',
-  },
-  {
-    message_id: 'msg-3',
-    chat_id: '',
-    sender_type: 'student',
-    message_content: 'I understand. Can you describe the pain? Is it sharp, dull, or pressure-like?',
-    sent_at: '2026-02-18T10:01:00Z',
-  },
-  {
-    message_id: 'msg-4',
-    chat_id: '',
-    sender_type: 'ai',
-    message_content: 'It feels like pressure, like my chest is being constricted.',
-    sent_at: '2026-02-18T10:01:45Z',
-  },
-];
-
-/**
- * Hardcoded saved note for chat history view
- */
-const mockSavedNote = 'Patient reports chest pain with pressure-like sensation. Need to check ECG results and vital signs. Considering cardiac workup.';
-
-/**
- * Get case materials for student views (sync mock fallback)
+ * Get case materials for student views — requires API call via fetchCaseMaterials
  */
 function getCaseMaterials(): StudentCaseMaterial[] {
-  return mockCaseMaterials;
+  return [];
 }
 
 /**
- * Get patient files (sync mock fallback)
+ * Get patient files — requires API call via fetchPatientFiles
  */
 function getPatientFiles(): PatientFile[] {
-  return mockPatientFiles;
+  return [];
 }
 
 /**
- * Get patient detail by ID (sync mock fallback)
+ * Get patient detail by ID — requires API call via fetchPatientDetail
  */
-function getPatientDetail(patientId: string | undefined): PatientDetail {
-  return getMockPatientDetail(patientId);
+function getPatientDetail(_patientId: string | undefined): PatientDetail {
+  return { id: undefined, name: '', age: 0, gender: '' };
 }
 
 /**
@@ -487,9 +234,9 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       };
     }
   } catch (error) {
-    console.error('Failed to fetch patient detail, using mock data:', error);
+    console.error('Failed to fetch patient detail:', error);
   }
-  return getMockPatientDetail(patientId);
+  throw new Error('Failed to load patient details. Please try again.');
 }
 
 /**
@@ -519,10 +266,10 @@ async function fetchPatientFiles(simulationGroupId: string, patientId: string): 
       files.push({ id: String(idx++), filename, description: info.metadata ?? 'No description available', url: info.url });
     }
 
-    return files.length > 0 ? files : mockPatientFiles;
+    return files.length > 0 ? files : [];
   } catch (error) {
-    console.error('Failed to fetch patient files, using mock data:', error);
-    return mockPatientFiles;
+    console.error('Failed to fetch patient files:', error);
+    throw new Error('Failed to load patient files. Please try again.');
   }
 }
 
@@ -566,10 +313,10 @@ async function fetchCaseMaterials(simulationGroupId: string, patientId: string):
       });
     }
 
-    return materials.length > 0 ? materials : mockCaseMaterials;
+    return materials.length > 0 ? materials : [];
   } catch (error) {
-    console.error('Failed to fetch case materials, using mock data:', error);
-    return mockCaseMaterials;
+    console.error('Failed to fetch case materials:', error);
+    throw new Error('Failed to load case materials. Please try again.');
   }
 }
 
@@ -606,10 +353,10 @@ async function fetchPersonaMedia(patientId: string): Promise<PersonaMedia[]> {
 }
 
 /**
- * Get chat history entries for patient dashboard (mock fallback)
+ * Get chat history entries for patient dashboard — requires API call via fetchChatHistory
  */
 function getChatHistory(): ChatHistoryEntry[] {
-  return mockChatHistory;
+  return [];
 }
 
 /**
@@ -670,8 +417,8 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       };
     });
   } catch (error) {
-    console.error('Failed to fetch chat history from API, using mock data:', error);
-    return mockChatHistory;
+    console.error('Failed to fetch chat history from API:', error);
+    throw new Error('Failed to load chat history. Please try again.');
   }
 }
 
@@ -884,38 +631,38 @@ export async function fetchDebrief(sessionId: string): Promise<AIDebriefData | n
 }
 
 /**
- * Get key questions coverage data
+ * Get key questions coverage data — no longer available without API
  */
 function getKeyQuestionsCoverageData(): KeyQuestionsCoverageData[] {
-  return mockKeyQuestionsCoverageData;
+  return [];
 }
 
 /**
- * Get AI debrief data
+ * Get AI debrief data — requires API call via fetchDebrief
  */
-function getAIDebriefData(): AIDebriefData {
-  return mockAIDebriefData;
+function getAIDebriefData(): AIDebriefData | null {
+  return null;
 }
 
 /**
- * Get physical assessment activities
+ * Get physical assessment activities — requires API call via fetchPersonaMedia
  */
 function getAssessmentActivities(): AssessmentActivity[] {
-  return mockAssessmentActivities;
+  return [];
 }
 
 /**
- * Get chat history messages for read-only view
+ * Get chat history messages for read-only view — requires API call via fetchMessages
  */
-function getChatHistoryMessages(chatId: string): StudentChatMessage[] {
-  return mockChatHistoryMessages.map(msg => ({ ...msg, chat_id: chatId }));
+function getChatHistoryMessages(_chatId: string): StudentChatMessage[] {
+  return [];
 }
 
 /**
- * Get saved note for a chat
+ * Get saved note for a chat — requires API call via fetchNotes
  */
 function getSavedNote(): string {
-  return mockSavedNote;
+  return '';
 }
 
 /**
@@ -973,8 +720,8 @@ async function getSimulationGroups(): Promise<SimulationGroup[]> {
     }));
 
   } catch (error) {
-    console.error('Failed to fetch simulation groups, using mock data:', error);
-    return mockSimulationGroups;
+    console.error('Failed to fetch simulation groups:', error);
+    throw new Error('Failed to load simulation groups. Please try again.');
   }
 }
 
@@ -1028,8 +775,8 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
       instructor_evaluation: p.persona_score > 0 ? 'Evaluated' : 'Not Evaluated',
     }));
   } catch (error) {
-    console.error('Failed to fetch patients, using mock data:', error);
-    return mockPatients;
+    console.error('Failed to fetch patients:', error);
+    throw new Error('Failed to load patients. Please try again.');
   }
 }
 
@@ -1266,24 +1013,5 @@ export const studentService = {
   fetchPatientVoiceId
 };
 
-/**
- * Mock data service object
- * Provides methods to retrieve hardcoded data for now
- */
-export const mockDataService = {
-  getSimulationGroups,
-  getCurrentUser,
-  getPatients,
-  getCaseMaterials,
-  getPatientFiles,
-  getPatientDetail,
-  getChatHistory,
-  getKeyQuestionsCoverageData,
-  getAIDebriefData,
-  getAssessmentActivities,
-  getChatHistoryMessages,
-  getSavedNote,
-  fetchDebrief,
-  fetchAnswerKeyUrl
-};
+
 

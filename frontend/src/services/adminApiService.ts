@@ -279,7 +279,7 @@ export async function updateGroupMessageLimit(
     `admin/update_group_message_limit?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
     {
       method: 'POST',
-      body: JSON.stringify({ max_messages_per_chat: maxMessagesPerChat }),
+      body: { max_messages_per_chat: maxMessagesPerChat },
     }
   );
 }
