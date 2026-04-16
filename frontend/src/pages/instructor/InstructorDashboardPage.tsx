@@ -66,7 +66,7 @@ function InstructorDashboardPage() {
     }
   };
 
-  const handleCreateGroupSubmit = async (data: { name: string; description: string; active: boolean; enableVoice: boolean }) => {
+  const handleCreateGroupSubmit = async (data: { name: string; description: string; active: boolean }) => {
     try {
       console.log('Creating group with data:', data);
 

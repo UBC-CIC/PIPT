@@ -12,7 +12,7 @@ import { UI_COLORS } from '@/lib/colors';
 import { getAllInstructors, type AdminInstructor } from '@/services/adminApiService';
 
 export type AdminCreateData = { name: string; description: string; instructors: string; systemPrompt: string; active: boolean; enableVoice: boolean };
-export type InstructorCreateData = { name: string; description: string; active: boolean; enableVoice: boolean };
+export type InstructorCreateData = { name: string; description: string; active: boolean };
 
 type CreateSimulationGroupDialogProps = {
   open: boolean;
@@ -91,7 +91,6 @@ function CreateSimulationGroupDialog({
         name: name.trim(),
         description: description.trim(),
         active,
-        enableVoice
       });
     }
     resetForm();
@@ -327,7 +326,8 @@ function CreateSimulationGroupDialog({
               </span>
             </div>
 
-            {/* Enable Voice Toggle */}
+            {/* Enable Voice Toggle (admin only — instructor voice is controlled per-patient) */}
+            {role === 'admin' && (
             <div className="flex items-center gap-3">
               <button
                 type="button"
@@ -353,6 +353,7 @@ function CreateSimulationGroupDialog({
                 Enable Voice
               </span>
             </div>
+            )}
           </div>
 
           {/* Create Group Button */}

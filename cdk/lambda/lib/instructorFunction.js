@@ -1753,7 +1753,7 @@ exports.handler = async (event, context) => {
           event.body
         ) {
           const { instructor_email } = event.queryStringParameters;
-          const { group_name, group_description, group_student_access, instructor_voice_enabled } = JSON.parse(event.body);
+          const { group_name, group_description, group_student_access } = JSON.parse(event.body);
 
           if (!group_name) {
             response.statusCode = 400;
@@ -1785,7 +1785,6 @@ exports.handler = async (event, context) => {
                 group_access_code,
                 group_student_access,
                 created_by,
-                instructor_voice_enabled,
                 debrief_prompt
               )
               VALUES (
@@ -1795,7 +1794,6 @@ exports.handler = async (event, context) => {
                 ${accessCode},
                 ${group_student_access !== undefined ? group_student_access : true},
                 ${userId},
-                ${instructor_voice_enabled !== undefined ? instructor_voice_enabled : true},
                 ${DEFAULT_DEBRIEF_PROMPT}
               )
               RETURNING *;

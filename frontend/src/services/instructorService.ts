@@ -311,7 +311,7 @@ export interface QuestionBankItem {
  */
 export interface InstructorDataService {
   getSimulationGroups: () => Promise<InstructorSimulationGroup[]>;
-  createSimulationGroup: (data: { name: string; description: string; active: boolean; enableVoice: boolean }) => Promise<InstructorSimulationGroup>;
+  createSimulationGroup: (data: { name: string; description: string; active: boolean }) => Promise<InstructorSimulationGroup>;
   getCurrentUser: () => Promise<UserData>;
   getSimulationGroup: (id: string) => Promise<InstructorSimulationGroup | undefined>;
   getOrganizationLabels: (simulationGroupId: string) => OrganizationLabels;
@@ -415,7 +415,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
 /**
  * Create a new simulation group
  */
-async function createSimulationGroup(data: { name: string; description: string; active: boolean; enableVoice: boolean }): Promise<InstructorSimulationGroup> {
+async function createSimulationGroup(data: { name: string; description: string; active: boolean }): Promise<InstructorSimulationGroup> {
   const user = await authService.getCurrentUser();
   if (!user?.email) throw new Error('Not authenticated');
 
@@ -427,7 +427,6 @@ async function createSimulationGroup(data: { name: string; description: string; 
         group_name: data.name,
         group_description: data.description,
         group_student_access: data.active,
-        instructor_voice_enabled: data.enableVoice,
       },
     }
   );
