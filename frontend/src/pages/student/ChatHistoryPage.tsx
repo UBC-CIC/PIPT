@@ -146,13 +146,6 @@ function ChatHistoryPage() {
   };
 
   /**
-   * Handle report issue submission
-   */
-  const handleReportIssue = (issues: string[], details: string) => {
-    console.log('Issue reported:', { issues, details, chatId, timestamp: new Date().toISOString() });
-  };
-
-  /**
    * Format timestamp for display
    */
   const formatTime = (timestamp: string) => {
@@ -166,7 +159,9 @@ function ChatHistoryPage() {
       <ReportIssueDialog
         isOpen={isReportIssueOpen}
         onClose={() => setIsReportIssueOpen(false)}
-        onSubmit={handleReportIssue}
+        simulationGroupId={groupId}
+        patientId={patientId}
+        chatId={chatId}
       />
 
       {/* AI Debrief Dialog */}
@@ -176,6 +171,7 @@ function ChatHistoryPage() {
         data={debriefData}
         simulationGroupId={groupId}
         patientId={patientId}
+        chatId={chatId}
         showAnswerKey={false}
       />
 

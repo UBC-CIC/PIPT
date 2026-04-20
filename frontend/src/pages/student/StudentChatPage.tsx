@@ -536,15 +536,6 @@ function StudentChatPage() {
     }
   };
 
-  /**
-   * Handle report issue submission
-   */
-  const handleReportIssue = (issues: string[], details: string) => {
-    console.log('Issue reported:', { issues, details, chatId, timestamp: new Date().toISOString() });
-    // Future: Send report to backend with chat context
-    // API call to save issue report with full chat history
-  };
-
   // Ref to hold the cancel function for an in-flight streaming request
   const cancelStreamRef = useRef<(() => void) | null>(null);
 
@@ -668,7 +659,9 @@ function StudentChatPage() {
       <ReportIssueDialog
         isOpen={isReportIssueOpen}
         onClose={() => setIsReportIssueOpen(false)}
-        onSubmit={handleReportIssue}
+        simulationGroupId={groupId}
+        patientId={patientId}
+        chatId={sessionId || routeChatId}
       />
 
       {/* AI Debrief Dialog */}
@@ -678,6 +671,7 @@ function StudentChatPage() {
         data={debriefData}
         simulationGroupId={groupId}
         patientId={patientId}
+        chatId={sessionId || routeChatId}
         showAnswerKey={false}
       />
 

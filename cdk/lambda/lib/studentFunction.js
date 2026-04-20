@@ -1,10 +1,6 @@
 const { initializeConnection } = require("./lib.js");
 const logger = require("./logger");
-let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT, USER_POOL } = process.env;
-const {
-  CognitoIdentityProviderClient,
-  AdminGetUserCommand,
-} = require("@aws-sdk/client-cognito-identity-provider");
+let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
 // SQL conneciton from global variable at lib.js
 let sqlConnection = global.sqlConnection;
@@ -14,17 +10,7 @@ exports.handler = async (event, context) => {
   logger.info("Student handler invoked", { queryStringParameters: event.queryStringParameters });
 
   const cognito_id = event.requestContext.authorizer.userId;
-  const client = new CognitoIdentityProviderClient();
-  const userAttributesCommand = new AdminGetUserCommand({
-    UserPoolId: USER_POOL,
-    Username: cognito_id,
-  });
-  const userAttributesResponse = await client.send(userAttributesCommand);
-
-  const emailAttr = userAttributesResponse.UserAttributes.find(
-    (attr) => attr.Name === "email",
-  );
-  const userEmailAttribute = emailAttr ? emailAttr.Value : null;
+  const userEmailAttribute = event.requestContext.authorizer.email || null;
   // Check for query string parameters
 
   const queryStringParams = event.queryStringParameters || {};
@@ -1632,6 +1618,160 @@ exports.handler = async (event, context) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "persona_id is required" });
+        }
+        break;
+      case "POST /student/debrief_feedback":
+        if (!event.body) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Request body is required" });
+          break;
+        }
+
+        try {
+          const feedbackBody = JSON.parse(event.body);
+          const { simulation_group_id, persona_id, chat_id, is_helpful, comment } = feedbackBody;
+
+          if (!simulation_group_id || !persona_id || !chat_id || is_helpful === undefined || is_helpful === null) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "simulation_group_id, persona_id, chat_id, and is_helpful are required",
+            });
+            break;
+          }
+
+          if (typeof is_helpful !== "boolean") {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "is_helpful must be a boolean" });
+            break;
+          }
+
+          // Look up user_id from authenticated email
+          const feedbackUserResult = await sqlConnection`
+            SELECT user_id FROM "users" WHERE user_email = ${userEmailAttribute};
+          `;
+
+          if (feedbackUserResult.length === 0) {
+            response.statusCode = 404;
+            response.body = JSON.stringify({ error: "User not found" });
+            break;
+          }
+
+          const feedbackUserId = feedbackUserResult[0].user_id;
+
+          // Insert into debrief_feedback table
+          const feedbackResult = await sqlConnection`
+            INSERT INTO "debrief_feedback" (
+              feedback_id, simulation_group_id, persona_id, chat_id, user_id, is_helpful, comment, submitted_at
+            ) VALUES (
+              uuid_generate_v4(),
+              ${simulation_group_id},
+              ${persona_id},
+              ${chat_id},
+              ${feedbackUserId},
+              ${is_helpful},
+              ${comment || null},
+              CURRENT_TIMESTAMP
+            )
+            RETURNING feedback_id;
+          `;
+
+          response.statusCode = 200;
+          response.body = JSON.stringify({ feedback_id: feedbackResult[0].feedback_id });
+        } catch (err) {
+          response.statusCode = 500;
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
+          response.body = JSON.stringify({ error: "Internal server error" });
+        }
+        break;
+      case "POST /student/issue_report":
+        if (!event.body) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Request body is required" });
+          break;
+        }
+
+        try {
+          const reportBody = JSON.parse(event.body);
+          const { simulation_group_id, persona_id, chat_id, issue_categories, details } = reportBody;
+
+          if (!simulation_group_id || !persona_id || !chat_id || !issue_categories) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "simulation_group_id, persona_id, chat_id, and issue_categories are required",
+            });
+            break;
+          }
+
+          if (!Array.isArray(issue_categories) || issue_categories.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "issue_categories must be a non-empty array" });
+            break;
+          }
+
+          // Look up user_id from authenticated email
+          const reportUserResult = await sqlConnection`
+            SELECT user_id FROM "users" WHERE user_email = ${userEmailAttribute};
+          `;
+
+          if (reportUserResult.length === 0) {
+            response.statusCode = 404;
+            response.body = JSON.stringify({ error: "User not found" });
+            break;
+          }
+
+          const reportUserId = reportUserResult[0].user_id;
+
+          // Insert into issue_reports table
+          const reportResult = await sqlConnection`
+            INSERT INTO "issue_reports" (
+              report_id, simulation_group_id, persona_id, chat_id, user_id, issue_categories, details, submitted_at
+            ) VALUES (
+              uuid_generate_v4(),
+              ${simulation_group_id},
+              ${persona_id},
+              ${chat_id},
+              ${reportUserId},
+              ${issue_categories},
+              ${details || null},
+              CURRENT_TIMESTAMP
+            )
+            RETURNING report_id;
+          `;
+
+          response.statusCode = 200;
+          response.body = JSON.stringify({ report_id: reportResult[0].report_id });
+        } catch (err) {
+          response.statusCode = 500;
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
+          response.body = JSON.stringify({ error: "Internal server error" });
+        }
+        break;
+      case "GET /student/me":
+        try {
+          const meEmail = event.requestContext.authorizer.email;
+          if (!meEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Email not available in authorizer context" });
+            break;
+          }
+
+          const meUserData = await sqlConnection`
+            SELECT user_email, first_name, last_name, roles, organization_id
+            FROM "users"
+            WHERE user_email = ${meEmail};
+          `;
+
+          if (meUserData.length > 0) {
+            response.statusCode = 200;
+            response.body = JSON.stringify(meUserData[0]);
+          } else {
+            response.statusCode = 404;
+            response.body = JSON.stringify({ error: "User not found" });
+          }
+        } catch (err) {
+          response.statusCode = 500;
+          logger.error("Operation failed", { error: err.message, stack: err.stack });
+          response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
       default:

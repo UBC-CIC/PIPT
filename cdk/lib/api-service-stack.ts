@@ -104,6 +104,16 @@ export class ApiServiceStack extends cdk.Stack {
 
     /**
      *
+     * Create Integration Lambda layer for jose (OIDC JWT verification)
+     */
+    const joseLayer = new lambda.LayerVersion(this, "jose", {
+      code: lambda.Code.fromAsset("./layers/jose.zip"),
+      compatibleRuntimes: [lambda.Runtime.NODEJS_22_X],
+      description: "Contains the jose library for provider-agnostic JWT verification",
+    });
+
+    /**
+     *
      * Create Integration Lambda layer for PSQL
      */
     const postgres = new lambda.LayerVersion(this, "postgres", {
@@ -322,7 +332,9 @@ export class ApiServiceStack extends cdk.Stack {
     this.stageARN_APIGW = this.api.deploymentStage.stageArn;
     this.apiGW_basedURL = this.api.urlForPath();
 
-    const studentRole = new iam.Role(this, `${id}-StudentRole`, {
+    // Default authenticated role for Identity Pool (used by Nova Sonic voice feature)
+    // Carries the permissions previously on studentRole: DynamoDB, Bedrock, Secrets Manager
+    const authenticatedRole = new iam.Role(this, `${id}-AuthenticatedRole`, {
       assumedBy: new iam.FederatedPrincipal(
         "cognito-identity.amazonaws.com",
         {
@@ -337,16 +349,10 @@ export class ApiServiceStack extends cdk.Stack {
       ),
     });
 
-    studentRole.attachInlinePolicy(
-      new iam.Policy(this, `${id}-StudentPolicy`, {
+    authenticatedRole.attachInlinePolicy(
+      new iam.Policy(this, `${id}-AuthenticatedPolicy`, {
         statements: [
-          createPolicyStatement(
-            ["execute-api:Invoke"],
-            [
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/student/*`,
-            ]
-          ),
-          // Add DynamoDB permissions for Nova Sonic
+          // DynamoDB permissions for Nova Sonic
           createPolicyStatement(
             [
               "dynamodb:GetItem",
@@ -359,7 +365,7 @@ export class ApiServiceStack extends cdk.Stack {
               `arn:aws:dynamodb:${this.region}:${this.account}:table/DynamoDB-Conversation-Table`,
             ]
           ),
-          // Add Bedrock permissions for Nova Sonic
+          // Bedrock permissions for Nova Sonic
           createPolicyStatement(
             [
               "bedrock:InvokeModel",
@@ -370,136 +376,13 @@ export class ApiServiceStack extends cdk.Stack {
             ],
             ["*"]
           ),
-          // Add Secrets Manager permissions for Nova Sonic
+          // Secrets Manager permissions for Nova Sonic
           createPolicyStatement(
             ["secretsmanager:GetSecretValue"],
             [db.secretPathUser.secretArn]
           ),
         ],
       })
-    );
-
-    const instructorRole = new iam.Role(this, `${id}-InstructorRole`, {
-      assumedBy: new iam.FederatedPrincipal(
-        "cognito-identity.amazonaws.com",
-        {
-          StringEquals: {
-            "cognito-identity.amazonaws.com:aud": this.identityPool.ref,
-          },
-          "ForAnyValue:StringLike": {
-            "cognito-identity.amazonaws.com:amr": "authenticated",
-          },
-        },
-        "sts:AssumeRoleWithWebIdentity"
-      ),
-    });
-
-    instructorRole.attachInlinePolicy(
-      new iam.Policy(this, `${id}-InstructorPolicy`, {
-        statements: [
-          createPolicyStatement(
-            ["execute-api:Invoke"],
-            [
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/instructor/*`,
-            ]
-          ),
-        ],
-      })
-    );
-
-    const adminRole = new iam.Role(this, `${id}-AdminRole`, {
-      assumedBy: new iam.FederatedPrincipal(
-        "cognito-identity.amazonaws.com",
-        {
-          StringEquals: {
-            "cognito-identity.amazonaws.com:aud": this.identityPool.ref,
-          },
-          "ForAnyValue:StringLike": {
-            "cognito-identity.amazonaws.com:amr": "authenticated",
-          },
-        },
-        "sts:AssumeRoleWithWebIdentity"
-      ),
-    });
-
-    adminRole.attachInlinePolicy(
-      new iam.Policy(this, `${id}-AdminPolicy`, {
-        statements: [
-          createPolicyStatement(
-            ["execute-api:Invoke"],
-            [
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin/*`,
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/instructor/*`,
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/student/*`,
-            ]
-          ),
-        ],
-      })
-    );
-
-    const techAdminRole = new iam.Role(this, `${id}-TechAdminRole`, {
-      assumedBy: new iam.FederatedPrincipal(
-        "cognito-identity.amazonaws.com",
-        {
-          StringEquals: {
-            "cognito-identity.amazonaws.com:aud": this.identityPool.ref,
-          },
-          "ForAnyValue:StringLike": {
-            "cognito-identity.amazonaws.com:amr": "authenticated",
-          },
-        },
-        "sts:AssumeRoleWithWebIdentity"
-      ),
-    });
-
-    techAdminRole.attachInlinePolicy(
-      new iam.Policy(this, `${id}-TechAdminPolicy`, {
-        statements: [
-          createPolicyStatement(
-            ["execute-api:Invoke"],
-            [
-              `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*`,
-            ]
-          ),
-        ],
-      })
-    );
-
-    // Create Cognito user pool groups
-    const studentGroup = new cognito.CfnUserPoolGroup(
-      this,
-      `${id}-StudentGroup`,
-      {
-        groupName: "student",
-        userPoolId: this.userPool.userPoolId,
-        roleArn: studentRole.roleArn,
-      }
-    );
-
-    const instructorGroup = new cognito.CfnUserPoolGroup(
-      this,
-      `${id}-InstructorGroup`,
-      {
-        groupName: "instructor",
-        userPoolId: this.userPool.userPoolId,
-        roleArn: instructorRole.roleArn,
-      }
-    );
-
-    const adminGroup = new cognito.CfnUserPoolGroup(this, `${id}-AdminGroup`, {
-      groupName: "admin",
-      userPoolId: this.userPool.userPoolId,
-      roleArn: adminRole.roleArn,
-    });
-
-    const techAdminGroup = new cognito.CfnUserPoolGroup(
-      this,
-      `${id}-TechAdminGroup`,
-      {
-        groupName: "techadmin",
-        userPoolId: this.userPool.userPoolId,
-        roleArn: techAdminRole.roleArn,
-      }
     );
 
     // Create unauthenticated role with no permissions
@@ -585,36 +468,11 @@ export class ApiServiceStack extends cdk.Stack {
       })
     );
 
-    // Inline policy to allow AdminAddUserToGroup action
-    const adminAddUserToGroupPolicyLambda = new iam.Policy(
-      this,
-      `${id}-adminAddUserToGroupPolicyLambda`,
-      {
-        statements: [
-          new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: [
-              "cognito-idp:AdminAddUserToGroup",
-              "cognito-idp:AdminRemoveUserFromGroup",
-              "cognito-idp:AdminGetUser",
-              "cognito-idp:AdminListGroupsForUser",
-            ],
-            resources: [
-              `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${this.userPool.userPoolId}`,
-            ],
-          }),
-        ],
-      }
-    );
-
-    // Attach the inline policy to the role
-    lambdaRole.attachInlinePolicy(adminAddUserToGroupPolicyLambda);
-
     // Attach roles to the identity pool
     new cognito.CfnIdentityPoolRoleAttachment(this, `${id}-IdentityPoolRoles`, {
       identityPoolId: this.identityPool.ref,
       roles: {
-        authenticated: studentRole.roleArn,
+        authenticated: authenticatedRole.roleArn,
         unauthenticated: unauthenticatedRole.roleArn,
       },
     });
@@ -631,7 +489,6 @@ export class ApiServiceStack extends cdk.Stack {
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
-          USER_POOL: this.userPool.userPoolId,
         },
         functionName: `${id}-studentFunction`,
         memorySize: 512,
@@ -664,7 +521,6 @@ export class ApiServiceStack extends cdk.Stack {
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
-          USER_POOL: this.userPool.userPoolId,
         },
         functionName: `${id}-instructorFunction`,
         memorySize: 512,
@@ -792,31 +648,6 @@ export class ApiServiceStack extends cdk.Stack {
       })
     );
 
-    // Inline policy to allow AdminAddUserToGroup action
-    const adminAddUserToGroupPolicy = new iam.Policy(
-      this,
-      `${id}-AdminAddUserToGroupPolicy`,
-      {
-        statements: [
-          new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: [
-              "cognito-idp:AdminAddUserToGroup",
-              "cognito-idp:AdminRemoveUserFromGroup",
-              "cognito-idp:AdminGetUser",
-              "cognito-idp:AdminListGroupsForUser",
-            ],
-            resources: [
-              `arn:aws:cognito-idp:${this.region}:${this.account}:userpool/${this.userPool.userPoolId}`,
-            ],
-          }),
-        ],
-      }
-    );
-
-    // Attach the inline policy to the role
-    coglambdaRole.attachInlinePolicy(adminAddUserToGroupPolicy);
-
     coglambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -870,28 +701,6 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
-    const adjustUserRoles = new lambda.Function(this, `${id}-adjustUserRoles`, {
-      runtime: lambda.Runtime.NODEJS_22_X,
-      code: lambda.Code.fromAsset("lambda/lib"),
-      handler: "adjustUserRoles.handler",
-      timeout: Duration.seconds(300),
-      environment: {
-        SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
-        RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
-      },
-      vpc: db.dbInstance.vpc,
-      functionName: `${id}-adjustUserRoles`,
-      memorySize: 512,
-      layers: [postgres],
-      role: coglambdaRole,
-      logRetention: logs.RetentionDays.INFINITE,
-    });
-
-    this.userPool.addTrigger(
-      cognito.UserPoolOperation.POST_AUTHENTICATION,
-      adjustUserRoles
-    );
-
     //cognito auto assign authenticated users to the student group
 
     this.userPool.addTrigger(
@@ -926,59 +735,35 @@ export class ApiServiceStack extends cdk.Stack {
       preSignupLambda
     );
 
-    // **
-    //  *
-    //  * Create Lambda for Admin Authorization endpoints
-    //  */
-    const authorizationFunction = new lambda.Function(
-      this,
-      `${id}-admin-authorization-api-gateway`,
-      {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda/adminAuthorizerFunction"),
-        handler: "adminAuthorizerFunction.handler",
-        timeout: Duration.seconds(300),
-        vpc: vpcStack.vpc,
-        environment: {
-          SM_COGNITO_CREDENTIALS: this.secret.secretName,
-        },
-        functionName: `${id}-adminLambdaAuthorizer`,
-        memorySize: 512,
-        layers: [jwt],
-        role: lambdaRole,
-        logRetention: logs.RetentionDays.INFINITE,
-      }
-    );
-
-    // Add the permission to the Lambda function's policy to allow API Gateway access
-    authorizationFunction.grantInvoke(
-      new iam.ServicePrincipal("apigateway.amazonaws.com")
-    );
-
-    // Change Logical ID to match the one decleared in YAML file of Open API
-    const apiGW_authorizationFunction = authorizationFunction.node
-      .defaultChild as lambda.CfnFunction;
-    apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
+    // Shared environment variables for all JWT authorizer deployments
+    const authJwksUri = `https://cognito-idp.${this.region}.amazonaws.com/${this.userPool.userPoolId}/.well-known/jwks.json`;
+    const authIssuer = `https://cognito-idp.${this.region}.amazonaws.com/${this.userPool.userPoolId}`;
+    const authAudience = this.appClient.userPoolClientId;
 
     /**
      *
-     * Create Lambda for User Authorization endpoints
+     * Create Lambda for Student Authorization endpoints
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=student,instructor,admin
      */
     const authorizationFunction_student = new lambda.Function(
       this,
       `${id}-student-authorization-api-gateway`,
       {
         runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda/studentAuthorizerFunction"),
-        handler: "studentAuthorizerFunction.handler",
+        code: lambda.Code.fromAsset("lambda/jwtAuthorizer"),
+        handler: "jwtAuthorizer.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
         environment: {
-          SM_COGNITO_CREDENTIALS: this.secret.secretName,
+          AUTH_JWKS_URI: authJwksUri,
+          AUTH_ISSUER: authIssuer,
+          AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "student,instructor,admin",
         },
         functionName: `${id}-studentLambdaAuthorizer`,
         memorySize: 512,
-        layers: [jwt],
+        layers: [joseLayer],
         role: lambdaRole,
         logRetention: logs.RetentionDays.INFINITE,
       }
@@ -989,7 +774,7 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.ServicePrincipal("apigateway.amazonaws.com")
     );
 
-    // Change Logical ID to match the one decleared in YAML file of Open API
+    // Change Logical ID to match the one declared in YAML file of Open API
     const apiGW_authorizationFunction_student = authorizationFunction_student
       .node.defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction_student.overrideLogicalId(
@@ -998,23 +783,28 @@ export class ApiServiceStack extends cdk.Stack {
 
     /**
      *
-     * Create Lambda for User Authorization endpoints
+     * Create Lambda for Instructor Authorization endpoints
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=instructor,admin
      */
     const authorizationFunction_instructor = new lambda.Function(
       this,
       `${id}-instructor-authorization-api-gateway`,
       {
         runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda/instructorAuthorizerFunction"),
-        handler: "instructorAuthorizerFunction.handler",
+        code: lambda.Code.fromAsset("lambda/jwtAuthorizer"),
+        handler: "jwtAuthorizer.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
         environment: {
-          SM_COGNITO_CREDENTIALS: this.secret.secretName,
+          AUTH_JWKS_URI: authJwksUri,
+          AUTH_ISSUER: authIssuer,
+          AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "instructor,admin",
         },
         functionName: `${id}-instructorLambdaAuthorizer`,
         memorySize: 512,
-        layers: [jwt],
+        layers: [joseLayer],
         role: lambdaRole,
         logRetention: logs.RetentionDays.INFINITE,
       }
@@ -1025,12 +815,51 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.ServicePrincipal("apigateway.amazonaws.com")
     );
 
-    // Change Logical ID to match the one decleared in YAML file of Open API
+    // Change Logical ID to match the one declared in YAML file of Open API
     const apiGW_authorizationFunction_instructor =
       authorizationFunction_instructor.node.defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction_instructor.overrideLogicalId(
       "instructorLambdaAuthorizer"
     );
+
+    /**
+     *
+     * Create Lambda for Admin Authorization endpoints
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=admin
+     */
+    const authorizationFunction = new lambda.Function(
+      this,
+      `${id}-admin-authorization-api-gateway`,
+      {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        code: lambda.Code.fromAsset("lambda/jwtAuthorizer"),
+        handler: "jwtAuthorizer.handler",
+        timeout: Duration.seconds(300),
+        vpc: vpcStack.vpc,
+        environment: {
+          AUTH_JWKS_URI: authJwksUri,
+          AUTH_ISSUER: authIssuer,
+          AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "admin",
+        },
+        functionName: `${id}-adminLambdaAuthorizer`,
+        memorySize: 512,
+        layers: [joseLayer],
+        role: lambdaRole,
+        logRetention: logs.RetentionDays.INFINITE,
+      }
+    );
+
+    // Add the permission to the Lambda function's policy to allow API Gateway access
+    authorizationFunction.grantInvoke(
+      new iam.ServicePrincipal("apigateway.amazonaws.com")
+    );
+
+    // Change Logical ID to match the one declared in YAML file of Open API
+    const apiGW_authorizationFunction = authorizationFunction.node
+      .defaultChild as lambda.CfnFunction;
+    apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(

@@ -1,8 +1,10 @@
 // Authentication service using AWS Amplify (Cognito)
 // Provider-agnostic interface — swap provider by changing this file
-// See: cdk/lambda/studentAuthorizerFunction/studentAuthorizerFunction.js for backend decoupling plan
+// Roles are fetched from the database via GET /student/me, not from JWT claims
+// See: cdk/lambda/jwtAuthorizer/jwtAuthorizer.js for backend auth implementation
 
-import { signIn, signUp, signOut, fetchAuthSession, getCurrentUser, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
+import { signIn, signUp, signOut, fetchAuthSession, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
+import { appConfig } from '@/config/aws-config';
 
 export interface AuthTokens {
   idToken: string;
@@ -29,9 +31,24 @@ export interface AuthResult {
   needsNewPassword?: boolean;
 }
 
+/** Response shape from GET /student/me */
+interface UserProfileResponse {
+  user_email: string;
+  first_name: string;
+  last_name: string;
+  roles: string[];
+  organization_id: string | null;
+}
+
 class AuthService {
+  // Session-level cache for user profile from /student/me
+  private cachedUser: AuthUser | null = null;
+
   // Sign in with email and password
   async signIn(email: string, password: string): Promise<AuthResult> {
+    // Clear cached profile on new sign-in
+    this.cachedUser = null;
+
     const result = await signIn({ username: email, password });
 
     if (result.nextStep?.signInStep === 'CONFIRM_SIGN_UP') {
@@ -83,8 +100,9 @@ class AuthService {
     return this.buildAuthResult();
   }
 
-  // Sign out
+  // Sign out and clear cached profile
   async signOut(): Promise<void> {
+    this.cachedUser = null;
     await signOut();
   }
 
@@ -98,8 +116,44 @@ class AuthService {
     }
   }
 
-  // Get current authenticated user
+  // Fetch user profile from GET /student/me using the ID token
+  private async fetchUserProfile(idToken: string): Promise<AuthUser | null> {
+    const endpoint = appConfig.api.endpoint.replace(/\/+$/, '');
+    const url = `${endpoint}/student/me`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': idToken,
+      },
+    });
+
+    if (response.status === 404) {
+      // No user record in database — treat as unauthenticated
+      return null;
+    }
+
+    if (!response.ok) {
+      throw new Error(`/student/me returned ${response.status}`);
+    }
+
+    const profile: UserProfileResponse = await response.json();
+
+    return {
+      username: profile.user_email,
+      email: profile.user_email,
+      groups: profile.roles || [],
+    };
+  }
+
+  // Get current authenticated user with roles from the database
   async getCurrentUser(): Promise<AuthUser | null> {
+    // Return cached user if available
+    if (this.cachedUser) {
+      return this.cachedUser;
+    }
+
     try {
       const session = await fetchAuthSession();
       const idToken = session.tokens?.idToken;
@@ -108,21 +162,31 @@ class AuthService {
         return null;
       }
 
-      const payload = idToken.payload;
-      const user = await getCurrentUser();
+      const tokenString = idToken.toString();
 
-      const authUser = {
-        username: user.username,
-        email: (payload.email as string) || user.username,
-        groups: (payload['cognito:groups'] as string[]) || [],
-      };
-      
-      console.log('getCurrentUser result:', authUser);
-      return authUser;
+      try {
+        const user = await this.fetchUserProfile(tokenString);
+        if (user) {
+          this.cachedUser = user;
+        }
+        return user;
+      } catch (error) {
+        // Network error — return cached user if available, otherwise null
+        console.error('Error fetching user profile from /student/me:', error);
+        if (this.cachedUser) {
+          return this.cachedUser;
+        }
+        return null;
+      }
     } catch (error) {
       console.error('Error getting current user:', error);
       return null;
     }
+  }
+
+  // Clear the cached user profile (useful when roles may have changed)
+  clearUserCache(): void {
+    this.cachedUser = null;
   }
 
   // Check if user is authenticated
@@ -135,7 +199,7 @@ class AuthService {
     }
   }
 
-  // Check if user has a specific role
+  // Check if user has a specific role using cached user profile
   async hasRole(role: 'student' | 'instructor' | 'admin'): Promise<boolean> {
     const user = await this.getCurrentUser();
     return user?.groups.includes(role) || false;
@@ -144,9 +208,29 @@ class AuthService {
   // Build auth result from current session
   private async buildAuthResult(): Promise<AuthResult> {
     const session = await fetchAuthSession();
-    const user = await this.getCurrentUser();
 
-    if (!user || !session.tokens) {
+    if (!session.tokens) {
+      throw new Error('Failed to get user session after sign in');
+    }
+
+    const idToken = session.tokens.idToken;
+    const payload = idToken?.payload;
+
+    // Try to get full user profile from /student/me
+    let user = await this.getCurrentUser();
+
+    // Fallback: if /student/me fails, build a minimal user from the JWT payload
+    // so sign-in still succeeds. Roles will be fetched on the next getCurrentUser() call.
+    if (!user && payload) {
+      user = {
+        username: (payload.email as string) || (payload.sub as string) || '',
+        email: (payload.email as string) || '',
+        groups: [], // roles will be populated when /student/me becomes available
+      };
+      console.warn('Using fallback user from JWT — /student/me was unavailable');
+    }
+
+    if (!user) {
       throw new Error('Failed to get user session after sign in');
     }
 

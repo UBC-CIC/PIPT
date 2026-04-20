@@ -1,10 +1,6 @@
 const { initializeConnection } = require("./lib.js");
 const logger = require("./logger");
-let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT, USER_POOL } = process.env;
-const {
-  CognitoIdentityProviderClient,
-  AdminGetUserCommand,
-} = require("@aws-sdk/client-cognito-identity-provider");
+let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
 let sqlConnection = global.sqlConnection;
 
@@ -91,18 +87,7 @@ exports.handler = async (event, context) => {
   logger.init(event, context);
   logger.info("Instructor handler invoked", { queryStringParameters: event.queryStringParameters });
 
-  const cognito_id = event.requestContext.authorizer.userId;
-  const client = new CognitoIdentityProviderClient();
-  const userAttributesCommand = new AdminGetUserCommand({
-    UserPoolId: USER_POOL,
-    Username: cognito_id,
-  });
-  const userAttributesResponse = await client.send(userAttributesCommand);
-
-  const emailAttr = userAttributesResponse.UserAttributes.find(
-    (attr) => attr.Name === "email",
-  );
-  const userEmailAttribute = emailAttr ? emailAttr.Value : null;
+  const userEmailAttribute = event.requestContext.authorizer.email;
 
   // Check for query string parameters
 
