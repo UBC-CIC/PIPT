@@ -353,6 +353,11 @@ class NovaSonic:
                         {self.get_system_prompt()}
                         {self._chat_context}
 
+SESSION COMPLETION RULE:
+Continue the conversation until the pharmacy student has properly diagnosed your condition.
+Once the proper diagnosis is provided, you MUST include the exact phrase SESSION COMPLETED in your response and politely end the conversation.
+Do NOT include SESSION COMPLETED until the student has clearly identified the correct diagnosis.
+
 VOICE MODE OVERRIDE (IMPORTANT):
 - You may greet at the very beginning of the session ONCE.
 - Do NOT start every reply with 'Hello'/'Hi' or any greeting.
@@ -587,7 +592,7 @@ VOICE MODE OVERRIDE (IMPORTANT):
             
             # Check for diagnosis completion
             diagnosis_achieved = "SESSION COMPLETED" in text
-            if diagnosis_achieved and self.llm_completion:
+            if diagnosis_achieved:
                 # Remove the marker from the text
                 text = text.replace("SESSION COMPLETED", "").strip()
                 # Add completion message
@@ -606,7 +611,7 @@ VOICE MODE OVERRIDE (IMPORTANT):
                 print(json.dumps({"type": "text", "text": text, "role": "assistant"}), flush=True)
                 
                 # If diagnosis achieved, signal completion
-                if diagnosis_achieved and self.llm_completion:
+                if diagnosis_achieved:
                     print(json.dumps({"type": "diagnosis_complete", "text": "Session completed successfully"}), flush=True)
 
             elif effective_role == "USER":

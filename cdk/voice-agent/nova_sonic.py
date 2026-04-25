@@ -544,6 +544,14 @@ class NovaSonic:
         if self.extra_system_prompt:
             prompt_parts.append(f"\n{self.extra_system_prompt}")
 
+        # Tell Nova Sonic to signal session completion when the student diagnoses correctly
+        prompt_parts.append(
+            "\nSESSION COMPLETION RULE:"
+            "\nContinue the conversation until the pharmacy student has properly diagnosed your condition."
+            "\nOnce the proper diagnosis is provided, you MUST include the exact phrase SESSION COMPLETED in your response and politely end the conversation."
+            "\nDo NOT include SESSION COMPLETED until the student has clearly identified the correct diagnosis."
+        )
+
         # Fetch medical documents from vector store
         medical_context = self._get_medical_context()
         if medical_context:
@@ -881,7 +889,7 @@ class NovaSonic:
 
             # Diagnosis completion check
             diagnosis_achieved = "SESSION COMPLETED" in text
-            if diagnosis_achieved and self.llm_completion:
+            if diagnosis_achieved:
                 text = text.replace("SESSION COMPLETED", "").strip()
                 text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
 
@@ -894,7 +902,7 @@ class NovaSonic:
                 else:
                     self._buffered_ai_message = text
                 await self._emit({"type": "text", "text": text, "role": "assistant"})
-                if diagnosis_achieved and self.llm_completion:
+                if diagnosis_achieved:
                     await self._emit({"type": "diagnosis_complete", "text": "Session completed successfully"})
 
             elif effective_role == "USER":
