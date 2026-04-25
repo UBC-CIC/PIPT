@@ -324,6 +324,14 @@ function StudentChatPage() {
       studentService.fetchMessages(routeChatId).then((msgs) => {
         if (!cancelled && msgs.length > 0) {
           setMessages(msgs);
+          // Check if the session was already completed (patient said goodbye)
+          const lastAiMsg = [...msgs].reverse().find((m) => m.sender_type === 'ai');
+          if (lastAiMsg && (
+            lastAiMsg.message_content.includes('SESSION COMPLETED') ||
+            lastAiMsg.message_content.includes('You may continue practicing with other patients')
+          )) {
+            setSessionCompleted(true);
+          }
         }
       });
       studentService.fetchDebrief(routeChatId).then((data) => {
