@@ -870,11 +870,13 @@ async function sendMessageStreaming(
           break;
         case 'end':
           callbacks.onDone(event.content);
-          // Clean up subscription after completion
-          if (unsubscribe) unsubscribe();
+          // Don't unsubscribe yet — session_complete may follow.
+          // Set a fallback timeout to clean up if it doesn't arrive.
+          setTimeout(() => { if (unsubscribe) unsubscribe(); }, 3000);
           break;
         case 'session_complete':
           callbacks.onSessionComplete?.();
+          if (unsubscribe) unsubscribe();
           break;
         case 'error':
           callbacks.onError(new Error(event.content));
