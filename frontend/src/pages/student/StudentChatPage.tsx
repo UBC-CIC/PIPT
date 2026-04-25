@@ -214,16 +214,19 @@ function StudentChatPage() {
       // Listen for session completion from voice mode
       if (socketRef.current) {
         socketRef.current.on('diagnosis-complete', () => {
-          setSessionCompleted(true);
-          cleanupVoiceSession();
-          setIsVoiceModeActive(false);
-          // Final fetch to get remaining messages
-          const sid = sessionId || routeChatId || '';
-          if (sid) {
-            studentService.fetchMessages(sid).then((msgs) => {
-              if (msgs.length > 0) setMessages(msgs);
-            });
-          }
+          // Delay cleanup to let the AI finish speaking the goodbye message
+          setTimeout(() => {
+            setSessionCompleted(true);
+            cleanupVoiceSession();
+            setIsVoiceModeActive(false);
+            // Final fetch to get remaining messages
+            const sid = sessionId || routeChatId || '';
+            if (sid) {
+              studentService.fetchMessages(sid).then((msgs) => {
+                if (msgs.length > 0) setMessages(msgs);
+              });
+            }
+          }, 5000);
         });
       }
 
@@ -1229,18 +1232,9 @@ function StudentChatPage() {
                     The patient has ended the conversation.
                   </p>
                   <p className="text-xs mt-0.5" style={{ color: UI_COLORS.text.muted }}>
-                    Please conclude the interaction and submit your recommendations.
+                    Please conclude the interaction using the sidebar and submit your recommendations.
                   </p>
                 </div>
-                <Button
-                  size="sm"
-                  className="text-white hover:opacity-90 border-0 whitespace-nowrap"
-                  style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
-                  onClick={() => setIsConfirmConcludeOpen(true)}
-                >
-                  <CheckCircle className="w-4 h-4 mr-1.5" />
-                  Conclude Interaction
-                </Button>
               </div>
             </div>
           )}
