@@ -157,6 +157,10 @@ export class SocketIOAudioClient {
         t.enabled = !this.muted;
       });
     }
+    // Signal the server so Nova Sonic gets proper audio content boundaries
+    if (this.muted) {
+      this.config.socket.emit('end-audio');
+    }
     return this.muted;
   }
 
@@ -209,7 +213,10 @@ export class SocketIOAudioClient {
     // Send start_audio once, then stream chunks
     let started = false;
     this.workletNode.port.onmessage = (event: MessageEvent) => {
-      if (this.muted) return;
+      if (this.muted) {
+        started = false; // reset so unmute triggers a fresh start_audio
+        return;
+      }
 
       if (!started) {
         this.config.socket.emit('audio-input', { data: '', type: 'start' });
