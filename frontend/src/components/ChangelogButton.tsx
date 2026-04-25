@@ -17,6 +17,19 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'April 25, 2026',
+    items: [
+      { feature: 'Real-time voice chat transcript bubbles', status: 'working', note: 'user and AI text now streams live during voice mode instead of fetching from DB!' },
+      { feature: 'Voice transcript spacing and capitalization', status: 'working', note: 'proper word spacing, sentence capitalization, and pronoun "I" correction in saved transcripts' },
+      { feature: 'Voice turn-taking sensitivity tuned to MEDIUM', status: 'working', note: 'reduces AI barge-ins when students pause to think' },
+      { feature: 'Stronger patient role adherence', status: 'working', note: 'non-negotiable guardrails prevent the AI from breaking character, over-sharing, or using formal/academic tone' },
+      { feature: 'Natural voice tone guidance', status: 'working', note: 'AI matches vocal tone to context: uncomfortable for pain, uncertain when unsure, not flat or cheerful' },
+      { feature: 'Session auto-lock on completion', status: 'working', note: 'chat input is disabled and a conclude banner appears when the patient ends the conversation (text and voice)' },
+      { feature: 'Mute/unmute reliability in voice mode', status: 'working', note: 'muting now properly closes the audio stream so unmuting resumes instantly' },
+      { feature: 'Session completion persists across navigation', status: 'working', note: 'returning to a completed chat still shows the banner prompting students to generate debrief' },
+    ],
+  },
+  {
     date: 'April 16, 2026',
     items: [
       { feature: 'Prompt playground for admins', status: 'working', note: 'can simulate interactions with the Persona for both debrief and chat before saving it' },
