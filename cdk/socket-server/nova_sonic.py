@@ -272,8 +272,11 @@ class NovaSonic:
             "inferenceConfiguration": {
                 "maxTokens": 2048,
                 "topP": 1.0,
-                "temperature": 0.8,
+                "temperature": 0.7,
                 "stopSequences": []
+            },
+            "turnDetectionConfiguration": {
+                "endpointingSensitivity": "MEDIUM"
             }
             }
         }
