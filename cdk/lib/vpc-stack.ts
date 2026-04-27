@@ -165,7 +165,11 @@ export class VpcStack extends Stack {
     } else {
       this.vpcCidrString = "10.0.0.0/16";
 
-      const natGatewayProvider = ec2.NatProvider.gateway();
+    // REVIEW: A single NAT Gateway is a single point of failure. If the AZ hosting the NAT GW
+    // goes down, all private-subnet Lambda functions and ECS tasks lose internet access.
+    // For production, consider natGateways: 2 (one per AZ) for high availability.
+    // Cost trade-off: ~$32/month per NAT GW + data processing charges.
+    const natGatewayProvider = ec2.NatProvider.gateway();
 
       // VPC for application
       this.vpc = new ec2.Vpc(this, "genrx-Vpc", {

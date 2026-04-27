@@ -75,11 +75,18 @@ export class DBFlowStack extends Stack {
             iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonSSMReadOnlyAccess")
         );
 
-        lambdaRole.addManagedPolicy(
+    // REVIEW: The DBFlow stack grants AmazonS3FullAccess to the migration Lambda.
+    // The migration runner only needs Secrets Manager and RDS access — it never touches S3.
+    // Remove this managed policy to follow least privilege.
+    lambdaRole.addManagedPolicy(
             iam.ManagedPolicy.fromAwsManagedPolicyName("AmazonS3FullAccess")
         );
 
-        // Create an initializer Lambda function for the RDS instance, invoked on every deployment
+        // REVIEW: The TriggerFunction runs on every CDK deployment (by design — the timestamp
+        // in the description forces a new version). This is correct for running migrations, but
+        // the 300-second timeout may be tight if migrations are complex. Consider increasing to 600s.
+        // Also note: the description includes a timestamp which changes on every synth, causing
+        // CloudFormation to always update this resource even if no code changed.
         const initializerLambda = new triggers.TriggerFunction(this, `${id}-triggerLambda`, {
             // Force a new deployment by adding a timestamp
             description: `Database initializer and migration runner - ${new Date().toISOString()}`,

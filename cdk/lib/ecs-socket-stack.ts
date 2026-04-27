@@ -136,12 +136,15 @@ export class EcsSocketStack extends Stack {
     // Grant ECS task role permission to read the TURN shared secret
     turnServerStack.turnSecret.grantRead(taskRole);
 
-    // 3) Fargate task definition
+    // REVIEW: The task role is also used as the execution role. These should be separate:
+    // - Task role: permissions the application code needs at runtime (Bedrock, DynamoDB, etc.)
+    // - Execution role: permissions ECS needs to pull images and write logs
+    // Sharing them means the ECS agent has access to Bedrock, DynamoDB, etc., which violates least privilege.
     const taskDef = new ecs.FargateTaskDefinition(this, "SocketTaskDef", {
       cpu: 1024,
       memoryLimitMiB: 2048,
       taskRole,
-      executionRole: taskRole,
+      executionRole: taskRole, // ← should be a separate, minimal execution role
     });
 
     // 4) Container listening on port 80
@@ -174,11 +177,15 @@ export class EcsSocketStack extends Stack {
       },
     });
 
-    // 5) ECS service
+    // REVIEW: ECS tasks are placed in PUBLIC subnets with assignPublicIp: true.
+    // This gives each task a public IP, which is necessary because the NLB is internet-facing
+    // and needs to route to public-subnet targets. However, this exposes the containers directly
+    // to the internet. The security group below mitigates this, but consider using an ALB with
+    // private subnets if the WebSocket protocol allows it, or use AWS PrivateLink.
     const service = new ecs.FargateService(this, "SocketService", {
       cluster,
       taskDefinition: taskDef,
-      desiredCount: 2, // Always keep 2 running to prevent cold starts
+      desiredCount: 2, // Fixed count — no auto-scaling policy. Add Application Auto Scaling for production traffic.
       assignPublicIp: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
@@ -208,6 +215,10 @@ export class EcsSocketStack extends Stack {
       internetFacing: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
+    // REVIEW: The NLB listener is on port 80 (unencrypted). WebSocket traffic from CloudFront
+    // arrives over HTTP. While CloudFront enforces HTTPS on the viewer side (REDIRECT_TO_HTTPS),
+    // the origin connection is HTTP_ONLY. Consider adding a TLS listener (port 443) with an
+    // ACM certificate for end-to-end encryption.
     const listener = nlb.addListener("TcpListener", {
       port: 80,
       protocol: elbv2.Protocol.TCP,

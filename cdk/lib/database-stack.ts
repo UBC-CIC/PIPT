@@ -5,9 +5,9 @@ import { Duration } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as secretmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as secretmanager from 'aws-cdk-lib/aws-secretsmanager';  // NOTE: duplicate import — 'secretmanager' and 'secretsmanager' both reference the same module
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'; // NOTE: this is the same module as 'secretmanager' above — consolidate to one alias
 
 import { VpcStack } from './vpc-stack';
 
@@ -61,6 +61,9 @@ export class DatabaseStack extends Stack {
             }
         });
 
+        // REVIEW: rds.force_ssl is set to '0', meaning database connections are NOT required to use
+        // SSL/TLS. All traffic between Lambda/ECS and RDS travels in plaintext within the VPC.
+        // Change to '1' and set requireTLS: true on the RDS Proxy instances below to enforce encryption in transit.
         const parameterGroup = new rds.ParameterGroup(this, `${id}-rdsParameterGroup`, {
             engine: rds.DatabaseInstanceEngine.postgres({
                 version: rds.PostgresEngineVersion.VER_16_10,
@@ -119,9 +122,11 @@ export class DatabaseStack extends Stack {
             console.log("Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.");
         }
 
-        // Add CIDR ranges of public subnets to inbound rules of RDS
+        // REVIEW: This rule opens port 5432 to the ENTIRE VPC CIDR, including public subnets.
+        // This is redundant with the per-private-subnet rules above and overly broad.
+        // Consider removing this block and relying solely on the private-subnet CIDR rules,
+        // or restricting to specific Lambda/ECS security group IDs for tighter access control.
         this.dbInstance.connections.securityGroups.forEach(function (securityGroup) {
-            // Allow Postgres access in VPC
             securityGroup.addIngressRule(
                 ec2.Peer.ipv4(vpcStack.vpcCidrString),
                 ec2.Port.tcp(5432),
@@ -136,6 +141,9 @@ export class DatabaseStack extends Stack {
             assumedBy: new iam.ServicePrincipal('rds.amazonaws.com')
         });
 
+        // REVIEW: This grants rds-db:connect on ALL RDS instances in the account.
+        // Scope the resource ARN to the specific DB instance:
+        //   `arn:aws:rds-db:${this.region}:${this.account}:dbuser:${this.dbInstance.instanceResourceId}/*`
         rdsProxyRole.addToPolicy(new iam.PolicyStatement({
             resources: ['*'],
             actions: [
@@ -146,6 +154,10 @@ export class DatabaseStack extends Stack {
         /**
          * Create RDS Proxy for database connections
          */
+        // REVIEW: All three RDS Proxy instances have requireTLS: false.
+        // This means proxy-to-client connections are unencrypted. Set to true alongside rds.force_ssl = '1'.
+        // Also note: the TableCreator proxy uses '+proxy' in its ID — this is unusual and may cause
+        // issues with CloudFormation resource naming. Consider using '-proxy-tablecreator' instead.
         const rdsProxy = this.dbInstance.addProxy(id + '-proxy', {
             secrets: [this.secretPathUser!],
             vpc: vpcStack.vpc,
@@ -154,7 +166,7 @@ export class DatabaseStack extends Stack {
             requireTLS: false,
         });
 
-        const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', {
+        const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', { // NOTE: '+' in construct ID is unconventional
             secrets: [this.secretPathTableCreator!],
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
@@ -173,7 +185,8 @@ export class DatabaseStack extends Stack {
         });
 
         /**
-         * Workaround for TargetGroupName not being set automatically
+         * Workaround for TargetGroupName not being set automatically by CDK.
+         * RDS Proxy requires exactly one target group named 'default'.
          */
         let targetGroup = rdsProxy.node.children.find((child: any) => {
             return child instanceof rds.CfnDBProxyTargetGroup;
@@ -185,7 +198,10 @@ export class DatabaseStack extends Stack {
             return child instanceof rds.CfnDBProxyTargetGroup;
         }) as rds.CfnDBProxyTargetGroup;
 
-        targetGroup.addPropertyOverride('TargetGroupName', 'default');
+        // BUG: targetGroup.addPropertyOverride is called twice — the first call here is a duplicate
+        // that overrides the user proxy's target group again instead of the table creator's.
+        // The second call (targetGroupTableCreator) is correct. Remove the duplicate line.
+        targetGroup.addPropertyOverride('TargetGroupName', 'default');       // ← duplicate, should be removed
         targetGroupTableCreator.addPropertyOverride('TargetGroupName', 'default');
 
         /**

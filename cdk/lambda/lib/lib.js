@@ -13,6 +13,9 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
 
     const credentials = JSON.parse(secretResponse.SecretString);
 
+    // REVIEW: ssl: false means the Node.js Lambda functions connect to RDS without TLS.
+    // When rds.force_ssl is changed to '1', update this to ssl: { rejectUnauthorized: true }
+    // or ssl: 'require' to match the server-side enforcement.
     const connectionConfig = {
       host: RDS_PROXY_ENDPOINT,
       port: credentials.port,
@@ -22,7 +25,11 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
       ssl: false,
     };
 
-    // Create the PostgreSQL connection
+    // REVIEW: The connection is stored on the global object and reused across Lambda invocations.
+    // The postgres library (porsager/postgres) manages its own connection pool internally,
+    // so this is efficient for warm starts. However, there is no health-check or reconnection
+    // logic — if the RDS Proxy rotates the connection, the cached handle may become stale.
+    // Consider adding a lightweight query (e.g., SELECT 1) to verify the connection on each invocation.
     global.sqlConnection = postgres(connectionConfig);
     
     console.log(JSON.stringify({ level: "INFO", message: "Database connection initialized successfully" }));

@@ -49,6 +49,10 @@ export class AmplifyStack extends cdk.Stack {
       { jsonField: "my-github-token" }
     );
 
+    // REVIEW: unsafeUnwrap() resolves the secret at CDK synthesis time, embedding the GitHub PAT
+    // in plaintext in the CloudFormation template (stored in S3). Anyone with access to the
+    // CloudFormation template can read the PAT. Migrate to CodeStar Connections (commented out above)
+    // to avoid this exposure. The CodeStar approach passes a connection ARN instead of a raw token.
     const amplifyApp = new amplify.CfnApp(this, `${id}-amplifyApp`, {
       name: `${id}-amplify`,
       repository: `https://github.com/${githubOwner}/${githubRepoName}`,
