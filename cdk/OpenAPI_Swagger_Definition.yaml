@@ -482,6 +482,57 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /student/me:
+    options:
+      summary: CORS support
+      description: |
+        Enable CORS by returning correct headers
+      responses:
+        200:
+          $ref: "#/components/responses/Success"
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: |
+            {
+              "statusCode" : 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {}
+    get:
+      tags:
+        - Student
+      summary: Get the current authenticated user profile
+      operationId: student_me_GET
+      responses:
+        "200":
+          description: User profile returned
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
+        "404":
+          description: User not found
+        "429":
+          description: Too Many Requests
+        "500":
+          description: Internal Server Error
+      security:
+        - studentAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${studentFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /student/get_user_roles:
     options:
       summary: CORS support
@@ -2165,6 +2216,174 @@ paths:
           description: Unauthorized
         "404":
           description: Session not found
+        "500":
+          description: Internal Server Error
+      security:
+        - studentAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${studentFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /student/debrief_feedback:
+    options:
+      summary: CORS support
+      description: |
+        Enable CORS by returning correct headers
+      responses:
+        200:
+          $ref: "#/components/responses/Success"
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: |
+            {
+              "statusCode" : 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {}
+    post:
+      tags:
+        - Student
+      summary: Submit debrief helpfulness feedback
+      description: |
+        Records whether the student found the AI debrief helpful,
+        with an optional comment.
+      operationId: student_debrief_feedback_POST
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - simulation_group_id
+                - persona_id
+                - chat_id
+                - is_helpful
+              properties:
+                simulation_group_id:
+                  type: string
+                  description: UUID of the simulation group
+                persona_id:
+                  type: string
+                  description: UUID of the persona (patient)
+                chat_id:
+                  type: string
+                  description: UUID of the chat session
+                is_helpful:
+                  type: boolean
+                  description: Whether the student found the debrief helpful
+                comment:
+                  type: string
+                  description: Optional comment from the student
+      responses:
+        "200":
+          description: Feedback submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback_id:
+                    type: string
+                    description: UUID of the created feedback record
+        "400":
+          description: Bad Request — missing required fields
+        "500":
+          description: Internal Server Error
+      security:
+        - studentAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${studentFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /student/issue_report:
+    options:
+      summary: CORS support
+      description: |
+        Enable CORS by returning correct headers
+      responses:
+        200:
+          $ref: "#/components/responses/Success"
+      x-amazon-apigateway-integration:
+        type: mock
+        requestTemplates:
+          application/json: |
+            {
+              "statusCode" : 200
+            }
+        responses:
+          default:
+            statusCode: "200"
+            responseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
+              method.response.header.Access-Control-Allow-Methods: "'*'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            responseTemplates:
+              application/json: |
+                {}
+    post:
+      tags:
+        - Student
+      summary: Submit an issue report for a patient simulation
+      description: |
+        Records issue categories and optional details reported by a student
+        about problems with the AI patient simulation.
+      operationId: student_issue_report_POST
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - simulation_group_id
+                - persona_id
+                - chat_id
+                - issue_categories
+              properties:
+                simulation_group_id:
+                  type: string
+                  description: UUID of the simulation group
+                persona_id:
+                  type: string
+                  description: UUID of the persona (patient)
+                chat_id:
+                  type: string
+                  description: UUID of the chat session
+                issue_categories:
+                  type: array
+                  items:
+                    type: string
+                  description: Non-empty array of issue category strings
+                details:
+                  type: string
+                  description: Optional details about the reported issue
+      responses:
+        "200":
+          description: Issue report submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report_id:
+                    type: string
+                    description: UUID of the created issue report record
+        "400":
+          description: Bad Request — missing required fields or empty issue_categories
         "500":
           description: Internal Server Error
       security:

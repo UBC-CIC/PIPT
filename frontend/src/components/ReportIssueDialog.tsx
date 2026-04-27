@@ -2,14 +2,18 @@ import { useState, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
+import { studentService } from '@/services/studentService';
 
 interface ReportIssueDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (issues: string[], details: string) => void;
+  onSubmit?: (issues: string[], details: string) => void;
+  simulationGroupId?: string;
+  patientId?: string;
+  chatId?: string;
 }
 
-function ReportIssueDialog({ isOpen, onClose, onSubmit }: ReportIssueDialogProps) {
+function ReportIssueDialog({ isOpen, onClose, simulationGroupId, patientId, chatId }: ReportIssueDialogProps) {
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [size, setSize] = useState({ width: 500, height: 450 });
   const [isDragging, setIsDragging] = useState(false);
@@ -20,6 +24,8 @@ function ReportIssueDialog({ isOpen, onClose, onSubmit }: ReportIssueDialogProps
 
   const [selectedIssues, setSelectedIssues] = useState<string[]>([]);
   const [details, setDetails] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const issueOptions = [
     'Patient acting out of character',
@@ -69,6 +75,8 @@ function ReportIssueDialog({ isOpen, onClose, onSubmit }: ReportIssueDialogProps
       // Reset form when dialog opens
       setSelectedIssues([]);
       setDetails('');
+      setSubmitting(false);
+      setSubmitError(null);
     }
   }, [isOpen]);
 
@@ -102,13 +110,29 @@ function ReportIssueDialog({ isOpen, onClose, onSubmit }: ReportIssueDialogProps
     );
   };
 
-  const handleSubmit = () => {
+  const hasContext = Boolean(simulationGroupId && patientId && chatId);
+
+  const handleSubmit = async () => {
     if (selectedIssues.length === 0) {
       alert('Please select at least one issue.');
       return;
     }
-    onSubmit(selectedIssues, details);
-    onClose();
+
+    if (!simulationGroupId || !patientId || !chatId) {
+      setSubmitError('Reporting is unavailable — missing session context.');
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      await studentService.submitIssueReport(simulationGroupId, patientId, chatId, selectedIssues, details || undefined);
+      onClose();
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit issue report. Please try again.');
+      setSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -203,29 +227,39 @@ function ReportIssueDialog({ isOpen, onClose, onSubmit }: ReportIssueDialogProps
 
         {/* Footer - Action Buttons */}
         <div
-          className="flex justify-end gap-3 p-6 flex-shrink-0"
+          className="flex flex-col gap-2 p-6 flex-shrink-0"
           style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.light }}
         >
-          <Button
-            variant="outline"
-            onClick={onClose}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.cancel, color: UI_COLORS.button.textDark }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancelHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.cancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="default"
-            onClick={handleSubmit}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-          >
-            Submit Report
-          </Button>
+          {submitError && (
+            <p className="text-sm" style={{ color: '#991b1b' }}>{submitError}</p>
+          )}
+          {!hasContext && (
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>Reporting is unavailable for this session.</p>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              disabled={submitting}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.cancel, color: UI_COLORS.button.textDark }}
+              onMouseEnter={(e) => { if (!submitting) e.currentTarget.style.backgroundColor = UI_COLORS.button.cancelHover; }}
+              onMouseLeave={(e) => { if (!submitting) e.currentTarget.style.backgroundColor = UI_COLORS.button.cancel; }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="default"
+              onClick={handleSubmit}
+              disabled={submitting || !hasContext}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => { if (!submitting && hasContext) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
+              onMouseLeave={(e) => { if (!submitting && hasContext) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
+            >
+              {submitting ? 'Submitting...' : 'Submit Report'}
+            </Button>
+          </div>
         </div>
 
         {/* Resize Handle */}

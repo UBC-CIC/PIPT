@@ -991,6 +991,70 @@ async function fetchPatientVoiceId(patientId: string): Promise<string | null> {
 }
 
 /**
+ * Submit debrief helpfulness feedback for an AI debrief session.
+ * Sends a POST request to the backend to persist the student's feedback.
+ */
+async function submitDebriefFeedback(
+  simulationGroupId: string,
+  patientId: string,
+  chatId: string,
+  isHelpful: boolean,
+  comment?: string
+): Promise<{ feedback_id: string }> {
+  try {
+    const result = await apiClient.request<{ feedback_id: string }>(
+      'student/debrief_feedback',
+      {
+        method: 'POST',
+        body: {
+          simulation_group_id: simulationGroupId,
+          persona_id: patientId,
+          chat_id: chatId,
+          is_helpful: isHelpful,
+          ...(comment !== undefined && { comment }),
+        },
+      }
+    );
+    return { feedback_id: result.feedback_id };
+  } catch (error) {
+    console.error('Failed to submit debrief feedback:', error);
+    throw new Error('Failed to submit feedback. Please try again.');
+  }
+}
+
+/**
+ * Submit an issue report for a patient simulation.
+ * Sends a POST request to the backend to persist the student's issue report.
+ */
+async function submitIssueReport(
+  simulationGroupId: string,
+  patientId: string,
+  chatId: string,
+  issueCategories: string[],
+  details?: string
+): Promise<{ report_id: string }> {
+  try {
+    const result = await apiClient.request<{ report_id: string }>(
+      'student/issue_report',
+      {
+        method: 'POST',
+        body: {
+          simulation_group_id: simulationGroupId,
+          persona_id: patientId,
+          chat_id: chatId,
+          issue_categories: issueCategories,
+          ...(details !== undefined && { details }),
+        },
+      }
+    );
+    return { report_id: result.report_id };
+  } catch (error) {
+    console.error('Failed to submit issue report:', error);
+    throw new Error('Failed to submit issue report. Please try again.');
+  }
+}
+
+/**
  * Student service — public API used by pages
  */
 export const studentService = {
@@ -1022,7 +1086,9 @@ export const studentService = {
   fetchPersonaMedia,
   fetchNotes,
   updateNotes,
-  fetchPatientVoiceId
+  fetchPatientVoiceId,
+  submitDebriefFeedback,
+  submitIssueReport
 };
 
 

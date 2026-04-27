@@ -656,7 +656,7 @@ VOICE MODE OVERRIDE (IMPORTANT):
                                     secret = json.loads(secret_response['SecretString'])
                                     
                                     # Create embeddings
-                                    embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-text-v1", client=bedrock_client)
+                                    embeddings = BedrockEmbeddings(model_id="amazon.titan-embed-text-v2:0", client=bedrock_client)
                                     
                                     # Connect to vectorstore
                                     connection_string = f"postgresql://{secret['username']}:{secret['password']}@{rds_endpoint}:{secret['port']}/{secret['dbname']}"
