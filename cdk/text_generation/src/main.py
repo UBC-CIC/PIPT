@@ -6,8 +6,7 @@ import logging
 import psycopg
 from langchain_aws import BedrockEmbeddings
 
-from helpers.vectorstore import get_vectorstore_retriever
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, get_response, update_session_name, generate_debrief, generate_test_debrief, cache_key_questions
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -245,6 +244,7 @@ def handler(event, context):
     if mode == "debrief":
         # TODO(refactor): Extract debrief mode handling into a helper function
         logger.info(f"📋 DEBRIEF MODE — generating debrief for session={session_id}")
+        from helpers.chat import generate_debrief
         try:
             llm = get_bedrock_llm(bedrock_llm_id=BEDROCK_LLM_ID, streaming=False)
             debrief_result = generate_debrief(
@@ -299,7 +299,7 @@ def handler(event, context):
                     "body": json.dumps("Missing required fields: message_id, message_content"),
                 }
 
-            from helpers.chat import match_message_to_questions, get_cached_key_questions
+            from helpers.chat import match_message_to_questions, get_cached_key_questions, cache_key_questions
             
             # Check cache first to save time and Bedrock API costs.
             # Use explicit None check — an empty list [] means the cache was
@@ -353,6 +353,7 @@ def handler(event, context):
     if mode == "test_debrief":
         # TODO(refactor): Extract test_debrief mode handling into a helper function
         logger.info(f"🧪 TEST DEBRIEF MODE — generating test debrief for session={session_id}")
+        from helpers.chat import generate_test_debrief
         try:
             body = json.loads(event.get("body") or "{}")
             debrief_prompt = body.get("debrief_prompt", "").strip()
@@ -404,6 +405,8 @@ def handler(event, context):
 
     if mode == "test_system_prompt":
         logger.info(f"🧪 TEST SYSTEM PROMPT MODE — chat with custom system prompt for persona={persona_id}")
+        from helpers.vectorstore import get_vectorstore_retriever
+        from helpers.chat import get_response
         try:
             body = json.loads(event.get("body") or "{}")
             custom_system_prompt = body.get("system_prompt", "").strip()
@@ -510,6 +513,10 @@ def handler(event, context):
     # =========================================================================
     # DEFAULT CHAT MODE — existing flow below
     # =========================================================================
+
+    # Lazy imports for chat mode
+    from helpers.vectorstore import get_vectorstore_retriever
+    from helpers.chat import get_response, update_session_name, cache_key_questions
 
     # TODO(refactor): Extract system prompt and persona detail fetching into a helper function
     system_prompt = get_system_prompt(simulation_group_id)
