@@ -37,6 +37,10 @@ export class CICDStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal("codebuild.amazonaws.com"),
     });
 
+    // REVIEW: The CodeBuild role has AmazonEC2ContainerRegistryPowerUser which grants
+    // push/pull to ALL ECR repositories in the account. Since we grant per-repo push via
+    // ecrRepo.grantPullPush(buildProject), the managed policy is redundant and overly broad.
+    // Remove it and rely on the per-repo grants instead.
     codeBuildRole.addManagedPolicy(
       iam.ManagedPolicy.fromAwsManagedPolicyName(
         "AmazonEC2ContainerRegistryPowerUser"

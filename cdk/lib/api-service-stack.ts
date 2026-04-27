@@ -252,6 +252,9 @@ export class ApiServiceStack extends cdk.Stack {
       },
     });
 
+    // REVIEW: allowUnauthenticatedIdentities is true. While the unauthenticated role has no
+    // policies, this still allows anyone to obtain temporary AWS credentials. Set to false
+    // unless there is a specific use case for unauthenticated access.
     this.identityPool = new cognito.CfnIdentityPool(
       this,
       `${id}-identity-pool`,
@@ -405,6 +408,11 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
+    // REVIEW: A single lambdaRole is shared across student, instructor, admin, and file-operation
+    // Lambda functions. This means every function has the union of all permissions. Create separate
+    // roles per function group (studentRole, instructorRole, adminRole, fileOpsRole) to follow
+    // least privilege. The EC2 network interface permissions (required for VPC Lambdas) can be
+    // shared via a managed policy.
     const lambdaRole = new iam.Role(
       this,
       `${id}-postgresLambdaRole-${this.region}`,
@@ -414,7 +422,10 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
-    // Grant access to Secret Manager
+    // REVIEW: Secrets Manager access is granted on `*` (all secrets in the account).
+    // Scope this to the specific secret ARNs that each Lambda actually needs:
+    //   resources: [db.secretPathUser.secretArn]
+    // This applies to lambdaRole, coglambdaRole, and every per-function grant below.
     lambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,

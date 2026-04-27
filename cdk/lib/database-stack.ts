@@ -61,9 +61,10 @@ export class DatabaseStack extends Stack {
             }
         });
 
-        // REVIEW: rds.force_ssl is set to '0', meaning database connections are NOT required to use
-        // SSL/TLS. All traffic between Lambda/ECS and RDS travels in plaintext within the VPC.
-        // Change to '1' and set requireTLS: true on the RDS Proxy instances below to enforce encryption in transit.
+        // REVIEW: rds.force_ssl is set to '0', meaning database connections are NOT required to use TLS.
+        // All traffic between Lambda/ECS and RDS travels in plaintext within the VPC.
+        // Change to '1' and update all client connection configs (lib.js ssl:false, psycopg2 calls)
+        // to use SSL before deploying to production.
         const parameterGroup = new rds.ParameterGroup(this, `${id}-rdsParameterGroup`, {
             engine: rds.DatabaseInstanceEngine.postgres({
                 version: rds.PostgresEngineVersion.VER_16_10,
@@ -141,9 +142,9 @@ export class DatabaseStack extends Stack {
             assumedBy: new iam.ServicePrincipal('rds.amazonaws.com')
         });
 
-        // REVIEW: This grants rds-db:connect on ALL RDS instances in the account.
-        // Scope the resource ARN to the specific DB instance:
-        //   `arn:aws:rds-db:${this.region}:${this.account}:dbuser:${this.dbInstance.instanceResourceId}/*`
+        // REVIEW: rds-db:connect on '*' is overly broad. Scope this to the specific
+        // RDS instance ARN and database user, e.g.:
+        //   `arn:aws:rds-db:${this.region}:${this.account}:dbuser:${dbInstance.instanceResourceId}/app_rw`
         rdsProxyRole.addToPolicy(new iam.PolicyStatement({
             resources: ['*'],
             actions: [
@@ -154,8 +155,8 @@ export class DatabaseStack extends Stack {
         /**
          * Create RDS Proxy for database connections
          */
-        // REVIEW: All three RDS Proxy instances have requireTLS: false.
-        // This means proxy-to-client connections are unencrypted. Set to true alongside rds.force_ssl = '1'.
+        // REVIEW: requireTLS is false on all three RDS Proxy instances. When rds.force_ssl is
+        // changed to '1', also set requireTLS: true here so the proxy enforces TLS on its side.
         // Also note: the TableCreator proxy uses '+proxy' in its ID — this is unusual and may cause
         // issues with CloudFormation resource naming. Consider using '-proxy-tablecreator' instead.
         const rdsProxy = this.dbInstance.addProxy(id + '-proxy', {
