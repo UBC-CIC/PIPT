@@ -76,10 +76,10 @@ def connect_to_db():
                 'host': RDS_PROXY_ENDPOINT,
                 'port': secret["port"]
             }
-    # REVIEW: Connection string is built via string concatenation. If any secret value contains
-    # a space or special character (e.g., a password with '='), this will corrupt the connection string.
-    # Use keyword arguments instead: psycopg2.connect(**connection_params)
-    connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
+            # REVIEW: Connection string is built via string concatenation. If any secret value contains
+            # a space or special character (e.g., a password with '='), this will corrupt the connection string.
+            # Use keyword arguments instead: psycopg2.connect(**connection_params)
+            connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
             connection = psycopg2.connect(connection_string)
             logger.info("Connected to the database!")
         except Exception as e:
