@@ -77,6 +77,7 @@ def connect_to_db():
                 'port': secret["port"]
             }
             connection = psycopg2.connect(**connection_params)
+            connection.autocommit = True
             logger.info("Connected to the database!")
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
