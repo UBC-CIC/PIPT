@@ -3,7 +3,7 @@ import os
 import json
 import boto3
 import logging
-import psycopg2
+import psycopg
 from langchain_aws import BedrockEmbeddings
 
 from helpers.vectorstore import get_vectorstore_retriever
@@ -86,15 +86,14 @@ def connect_to_db():
     if connection is None or connection.closed:
         try:
             secret = get_secret(DB_SECRET_NAME)
-            connection_params = {
-                'dbname': secret["dbname"],
-                'user': secret["username"],
-                'password': secret["password"],
-                'host': RDS_PROXY_ENDPOINT,
-                'port': secret["port"]
-            }
-            connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
-            connection = psycopg2.connect(connection_string)
+            connection = psycopg.connect(
+                host=RDS_PROXY_ENDPOINT,
+                port=secret["port"],
+                dbname=secret["dbname"],
+                user=secret["username"],
+                password=secret["password"],
+                autocommit=False,
+            )
             logger.info("Connected to the database!")
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")

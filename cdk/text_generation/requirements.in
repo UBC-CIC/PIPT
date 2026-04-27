@@ -13,4 +13,3 @@ sqlalchemy
 pgvector
 PyMuPDF==1.24.10
 psycopg[binary,pool]
-psycopg2-binary

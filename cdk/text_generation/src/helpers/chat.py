@@ -1,5 +1,5 @@
 import boto3, re, json, logging, math, threading
-import psycopg2
+import psycopg
 import os
 
 logging.basicConfig(level=logging.INFO)
@@ -170,10 +170,10 @@ def get_system_prompt(patient_name) -> str:
         secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
         secret = json.loads(secret_response['SecretString'])
 
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=rds_endpoint,
             port=secret['port'],
-            database=secret['dbname'],
+            dbname=secret['dbname'],
             user=secret['username'],
             password=secret['password']
         )
@@ -553,7 +553,7 @@ def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_
     """
     # TODO(refactor): Extract DB connection logic into a call to _get_db_connection() to eliminate duplication
     try:
-        import psycopg2
+        import psycopg
         import json
         import os
         import boto3
@@ -569,10 +569,10 @@ def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_
         secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
         secret = json.loads(secret_response['SecretString'])
         
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=rds_endpoint,
             port=secret['port'],
-            database=secret['dbname'],
+            dbname=secret['dbname'],
             user=secret['username'],
             password=secret['password']
         )
@@ -1200,7 +1200,7 @@ def build_questions_from_matched_data(
 
     for msg in tagged_messages:
         matches = msg.get("matched_question_ids", [])
-        # matched_question_ids may be a JSON string (from psycopg2) or already a list
+        # matched_question_ids may be a JSON string (from psycopg) or already a list
         if isinstance(matches, str):
             try:
                 matches = json.loads(matches)
@@ -1539,7 +1539,7 @@ def build_enhanced_debrief_prompt(
 
     for msg in tagged_messages:
         matches = msg.get("matched_question_ids", [])
-        # matched_question_ids may be a JSON string (from psycopg2) or already a list
+        # matched_question_ids may be a JSON string (from psycopg) or already a list
         if isinstance(matches, str):
             try:
                 matches = json.loads(matches)
@@ -2000,10 +2000,10 @@ def _get_db_connection():
     secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
     secret = json.loads(secret_response['SecretString'])
 
-    return psycopg2.connect(
+    return psycopg.connect(
         host=rds_endpoint,
         port=secret['port'],
-        database=secret['dbname'],
+        dbname=secret['dbname'],
         user=secret['username'],
         password=secret['password']
     )
@@ -2113,10 +2113,10 @@ def fetch_debrief_prompt(simulation_group_id: str) -> str:
         secret_response = secrets_client.get_secret_value(SecretId=db_secret_name)
         secret = json.loads(secret_response['SecretString'])
 
-        conn = psycopg2.connect(
+        conn = psycopg.connect(
             host=rds_endpoint,
             port=secret['port'],
-            database=secret['dbname'],
+            dbname=secret['dbname'],
             user=secret['username'],
             password=secret['password']
         )
