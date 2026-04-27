@@ -270,8 +270,9 @@ function StudentChatPage() {
           const nextPlay = client ? (client as unknown as { nextPlayTime: number }).nextPlayTime : 0;
           const now = playbackCtx ? playbackCtx.currentTime : 0;
           const remainingAudio = Math.max(0, nextPlay - now);
-          // Add a 1-second buffer after audio finishes, minimum 2 seconds
-          const delay = Math.max(2000, (remainingAudio + 1) * 1000);
+          // Add a 2-second buffer after audio finishes, minimum 8 seconds
+          // so Nova Sonic has time to finish speaking the goodbye
+          const delay = Math.max(8000, (remainingAudio + 2) * 1000);
 
           setTimeout(() => {
             cleanupVoiceSession();
@@ -282,7 +283,20 @@ function StudentChatPage() {
             const sid = sessionId || routeChatId || '';
             if (sid) {
               studentService.fetchMessages(sid).then((msgs) => {
-                if (msgs.length > 0) setMessages(msgs);
+                if (msgs.length > 0) {
+                  setMessages(msgs);
+                  // Safety net: re-confirm sessionCompleted from DB messages
+                  // in case state was lost during voice cleanup
+                  const wasCompleted = msgs.some((m) =>
+                    m.sender_type === 'ai' && (
+                      m.message_content.includes('SESSION COMPLETED') ||
+                      m.message_content.includes('You may continue practicing with other patients')
+                    )
+                  );
+                  if (wasCompleted) {
+                    setSessionCompleted(true);
+                  }
+                }
               });
             }
           }, delay);
@@ -317,7 +331,20 @@ function StudentChatPage() {
     const sid = sessionId || routeChatId || '';
     if (sid) {
       studentService.fetchMessages(sid).then((msgs) => {
-        if (msgs.length > 0) setMessages(msgs);
+        if (msgs.length > 0) {
+          setMessages(msgs);
+          // Re-check for session completion in case the marker was persisted
+          // but the real-time event was missed (e.g. user clicked stop late)
+          const wasCompleted = msgs.some((m) =>
+            m.sender_type === 'ai' && (
+              m.message_content.includes('SESSION COMPLETED') ||
+              m.message_content.includes('You may continue practicing with other patients')
+            )
+          );
+          if (wasCompleted) {
+            setSessionCompleted(true);
+          }
+        }
       });
     }
   }, [cleanupVoiceSession, sessionId, routeChatId]);
@@ -377,12 +404,16 @@ function StudentChatPage() {
       studentService.fetchMessages(routeChatId).then((msgs) => {
         if (!cancelled && msgs.length > 0) {
           setMessages(msgs);
-          // Check if the session was already completed (patient said goodbye)
-          const lastAiMsg = [...msgs].reverse().find((m) => m.sender_type === 'ai');
-          if (lastAiMsg && (
-            lastAiMsg.message_content.includes('SESSION COMPLETED') ||
-            lastAiMsg.message_content.includes('You may continue practicing with other patients')
-          )) {
+          // Check if the session was already completed (patient said goodbye).
+          // Scan all AI messages (not just the last) so we don't miss the
+          // marker if extra messages were appended after the completion one.
+          const wasCompleted = msgs.some((m) =>
+            m.sender_type === 'ai' && (
+              m.message_content.includes('SESSION COMPLETED') ||
+              m.message_content.includes('You may continue practicing with other patients')
+            )
+          );
+          if (wasCompleted) {
             setSessionCompleted(true);
           }
         }

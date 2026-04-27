@@ -891,7 +891,7 @@ class NovaSonic:
             diagnosis_achieved = "SESSION COMPLETED" in text
             if diagnosis_achieved:
                 text = text.replace("SESSION COMPLETED", "").strip()
-                text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
+                text += " SESSION COMPLETED"
 
             if effective_role == "ASSISTANT":
                 if self._buffered_ai_message:

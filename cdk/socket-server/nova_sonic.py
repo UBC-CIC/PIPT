@@ -593,10 +593,9 @@ VOICE MODE OVERRIDE (IMPORTANT):
             # Check for diagnosis completion
             diagnosis_achieved = "SESSION COMPLETED" in text
             if diagnosis_achieved:
-                # Remove the marker from the text
+                # Remove the marker and re-append it cleanly
                 text = text.replace("SESSION COMPLETED", "").strip()
-                # Add completion message
-                text += " I really appreciate your feedback. You may continue practicing with other patients. Goodbye."
+                text += " SESSION COMPLETED"
             
             if effective_role == "ASSISTANT":
                 if self._buffered_ai_message:
