@@ -1142,7 +1142,7 @@ exports.handler = async (event, context) => {
           try {
             const { organization_id } = event.queryStringParameters;
             // Resolve created_by: look up user_id from users table using the authenticated email
-            const authEmail = event.requestContext?.authorizer?.userEmail;
+            const authEmail = event.requestContext?.authorizer?.email;
             if (!authEmail) {
               response.statusCode = 401;
               response.body = JSON.stringify({ error: "Unable to determine user identity" });
