@@ -12,16 +12,16 @@ model ID starts with "cohere.embed".
 
 import json
 import logging
+from langchain_core.embeddings import Embeddings
 
 logger = logging.getLogger(__name__)
 
 
-class CohereBedrockEmbeddings:
+class CohereBedrockEmbeddings(Embeddings):
     """Thin wrapper around Bedrock's invoke_model for Cohere Embed v4.
 
-    Exposes the same ``embed_query`` / ``embed_documents`` interface that
-    LangChain's BedrockEmbeddings provides, so it can be used as a
-    drop-in replacement throughout the codebase.
+    Extends LangChain's Embeddings base class so it can be used anywhere
+    BedrockEmbeddings is expected (PGVector, etc.).
     """
 
     def __init__(self, *, model_id: str, client, region_name: str):
