@@ -795,7 +795,7 @@ EVALUATION RULES:
 - Be generous in matching — the student may phrase questions conversationally rather than using clinical terminology.
 - Be fair but thorough. Evaluate based on clinical relevance and completeness.
 - The overall_score should reflect the percentage of key questions addressed weighted by their importance, plus quality of the recommendation.
-- For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.55-0.79). Do NOT include rewrites for high-confidence matches.
+- For suggested_rewrites, only include rewrites for low or moderate-confidence matches (similarity 0.40-0.69). Do NOT include rewrites for high-confidence matches.
 - If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
 - For answer_key_comparison: if an answer key is provided in the prompt, set answer_key_available to true and populate correct_elements, missing_elements, incorrect_elements, and overall_alignment by comparing the student's recommendation against the answer key. If no answer key is provided, set answer_key_available to false and omit the other sub-fields.
 """
@@ -1014,9 +1014,10 @@ def match_message_to_questions(
     embeddings, and persist matches that exceed the 0.55 threshold.
 
     Classification tiers:
-        >= 0.80  → "high"
-        0.55–0.79 → "moderate"
-        < 0.55  → discarded
+        >= 0.70  → "high"
+        0.55-0.69 → "moderate"
+        0.40-0.54 → "low"
+        < 0.40  → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
@@ -1045,10 +1046,12 @@ def match_message_to_questions(
         logger.info(
             f"🔍 Similarity: message='{message_content[:60]}' vs question='{q.get('question_text', '')[:60]}' → score={score:.4f}"
         )
-        if score >= 0.80:
+        if score >= 0.65:
             confidence = "high"
         elif score >= 0.55:
             confidence = "moderate"
+        elif score >= 0.40:
+            confidence = "low"
         else:
             continue  # discard below threshold
         matches.append({
@@ -1250,14 +1253,14 @@ def build_questions_from_matched_data(
 def compute_overall_score(
     key_questions: list[dict],
     addressed_question_ids: set[str],
-    mandatory_cap: float = 70.0,
+    mandatory_cap: float = 90.0,
 ) -> float:
     """
     Compute a deterministic overall debrief score from question weights and
     mandatory flags — no LLM involved.
 
     Score = (sum of weights for addressed questions / sum of all weights) × 100,
-    capped at *mandatory_cap* if any mandatory question was missed.
+    capped at *mandatory_cap* (default 90) if any mandatory question was missed.
 
     Returns a float in [0.0, 100.0].
     """
