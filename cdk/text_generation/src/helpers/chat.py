@@ -393,11 +393,9 @@ def get_response(
         # AI message already saved inside generate_streaming_response
         return {"llm_output": response, "session_name": "Chat", "llm_verdict": False}
     
-    # Screen AI output through guardrails before returning to client
-    passed, blocked_msg = apply_text_guardrail(response, "OUTPUT")
-    if not passed:
-        logger.warning("Guardrail blocked AI output: %s", response[:60])
-        response = blocked_msg
+    # No output guardrail for text mode — the AI response is generated from
+    # a trusted system prompt with prompt-level role guardrails. Screening
+    # the output would flag legitimate patient dialogue about medical topics.
     
     result = get_llm_output(response, llm_completion)
     
@@ -519,14 +517,6 @@ def generate_streaming_response(
                 chunk = " ".join(words[i : i + 3]) + " "
                 publish_to_appsync(session_id, {"type": "chunk", "content": chunk})
                 time.sleep(0.005)
-
-        # Screen the complete AI response through guardrails before finalizing
-        passed, blocked_msg = apply_text_guardrail(full_response, "OUTPUT")
-        if not passed:
-            logger.warning("Guardrail blocked streamed AI output: %s", full_response[:60])
-            full_response = blocked_msg
-            # Send a correction to the frontend replacing the streamed content
-            publish_to_appsync(session_id, {"type": "guardrail_replace", "content": blocked_msg})
 
         publish_to_appsync(session_id, {"type": "end", "content": full_response})
         ai_message_id = save_message_to_db(session_id, persona_id, 'ai', full_response)
