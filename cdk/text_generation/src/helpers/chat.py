@@ -268,6 +268,12 @@ def get_response(
         passed, blocked_msg = apply_text_guardrail(query, "INPUT")
         if not passed:
             logger.warning("Guardrail blocked student input: %s", query[:60])
+            if stream:
+                # Publish the blocked message through AppSync so the frontend
+                # receives the full start → chunk → end sequence and stops loading.
+                publish_to_appsync(session_id, {"type": "start", "content": ""})
+                publish_to_appsync(session_id, {"type": "chunk", "content": blocked_msg})
+                publish_to_appsync(session_id, {"type": "end", "content": blocked_msg})
             return {"llm_output": blocked_msg, "session_name": "Chat", "llm_verdict": False}
     
     # Save the student's message for non-streaming only;
