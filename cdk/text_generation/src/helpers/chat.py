@@ -647,7 +647,7 @@ def split_into_sentences(paragraph: str) -> list[str]:
     """
     Splits a given paragraph into individual sentences using a regular expression to detect sentence boundaries.
     """
-    sentence_endings = r'(?<!\\w\\.\\w.)(?<![A-Z][a-z]\\.)(?<=\\.|\\?|\\!)\\s'
+    sentence_endings = r'(?<!\w\.\w.)(?<![A-Z][a-z]\.)(?<=\.|\?|!)\s'
     sentences = re.split(sentence_endings, paragraph)
     return sentences
 
