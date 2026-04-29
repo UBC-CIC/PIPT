@@ -546,6 +546,10 @@ VOICE MODE OVERRIDE (IMPORTANT):
             # Flush buffered user message when the user turn ends
             if self.role == "USER" and new_role != "USER":
                 if hasattr(self, '_current_user_input') and self._current_user_input and self._current_user_input.strip():
+                    # Screen user input through guardrails
+                    passed, _ = self._apply_guardrail(self._current_user_input, "INPUT")
+                    if not passed:
+                        logger.warning("🛡️ User input blocked by guardrail: %s", self._current_user_input[:60])
                     asyncio.create_task(self._save_user_message_async(self._current_user_input))
                     self._current_user_input = ""
 
@@ -598,6 +602,10 @@ VOICE MODE OVERRIDE (IMPORTANT):
                 text += " SESSION COMPLETED"
             
             if effective_role == "ASSISTANT":
+                # Screen AI output through guardrails before sending to client
+                passed, replacement = self._apply_guardrail(text, "OUTPUT")
+                if not passed:
+                    text = replacement
                 if self._buffered_ai_message:
                     if self._buffered_ai_message.endswith(" ") or text.startswith(" "):
                         self._buffered_ai_message += text
@@ -723,6 +731,41 @@ VOICE MODE OVERRIDE (IMPORTANT):
         if not self._bedrock_client:
             self._bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
         return self._bedrock_client
+
+    def _apply_guardrail(self, text: str, source: str) -> tuple:
+        """Screen text through Bedrock Guardrails using the ApplyGuardrail API.
+
+        Args:
+            text: The text to evaluate.
+            source: 'INPUT' for user messages, 'OUTPUT' for AI responses.
+
+        Returns:
+            (passed: bool, replacement: str | None)
+            If passed is False, replacement contains the guardrail's blocked message.
+        """
+        guardrail_id = os.getenv("BEDROCK_GUARDRAIL_ID", "")
+        if not guardrail_id or not guardrail_id.strip():
+            return True, None
+        if not text or not text.strip():
+            return True, None
+        try:
+            client = self._get_bedrock_client()
+            response = client.apply_guardrail(
+                guardrailIdentifier=guardrail_id,
+                guardrailVersion="DRAFT",
+                source=source,
+                content=[{"text": {"text": text}}],
+            )
+            action = response.get("action", "")
+            if action == "GUARDRAIL_INTERVENED":
+                blocked_msg = response.get("outputs", [{}])[0].get("text", "I'm sorry, I can't respond to that.")
+                logger.warning("🛡️ Guardrail INTERVENED (%s): %s → %s", source, text[:60], blocked_msg)
+                return False, blocked_msg
+            return True, None
+        except Exception as e:
+            logger.error("Guardrail check failed (%s): %s", source, e)
+            # Fail open — don't block the conversation if the guardrail API is unreachable
+            return True, None
     
     # ── Empathy prompt methods disabled — may be re-enabled later ───────────
     # def _get_empathy_prompt(self):

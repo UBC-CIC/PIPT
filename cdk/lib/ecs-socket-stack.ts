@@ -59,6 +59,7 @@ export class EcsSocketStack extends Stack {
                 "bedrock:Converse",
                 "bedrock:ConverseStream",
                 "bedrock:InvokeModelWithResponseStream",
+                "bedrock:ApplyGuardrail",
               ],
               resources: ["*"],
             }),
@@ -170,6 +171,7 @@ export class EcsSocketStack extends Stack {
         SOCKET_EXECUTION_ROLE_ARN: taskRole.roleArn,
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
+        BEDROCK_GUARDRAIL_ID: apiServiceStack.getGuardrailId(),
         ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {

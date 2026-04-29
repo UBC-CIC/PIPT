@@ -62,10 +62,12 @@ def get_bedrock_llm(
     streaming: bool = False
 ) -> ChatBedrock:
     """
-    Retrieve a Bedrock LLM instance with optional guardrail support and streaming.
-    """
-    guardrail_id = os.environ.get('BEDROCK_GUARDRAIL_ID')
+    Retrieve a Bedrock LLM instance.
     
+    Guardrails are NOT applied at the LLM level to avoid blocking the
+    trusted system prompt. Instead, use apply_text_guardrail() to screen
+    student input before the LLM call and AI output after.
+    """
     deployment_region = os.environ.get('AWS_REGION', 'us-east-1')
     if 'nova' in bedrock_llm_id.lower():
         region = 'us-east-1'
@@ -79,16 +81,48 @@ def get_bedrock_llm(
         "region_name": region
     }
     
-    if guardrail_id and guardrail_id.strip():
-        logger.info(f"Using Bedrock guardrail: {guardrail_id}")
-        base_kwargs["guardrails"] = {
-            "guardrailIdentifier": guardrail_id,
-            "guardrailVersion": "DRAFT"
-        }
-    else:
-        logger.info("Using system prompt protection (no guardrail configured)")
-    
     return ChatBedrock(**base_kwargs)
+
+
+def apply_text_guardrail(text: str, source: str) -> tuple:
+    """Screen text through Bedrock Guardrails using the ApplyGuardrail API.
+
+    Called on student input (source='INPUT') before the LLM and on AI
+    output (source='OUTPUT') before returning to the client. The system
+    prompt is intentionally NOT screened — it is instructor-controlled
+    trusted content.
+
+    Args:
+        text: The text to evaluate.
+        source: 'INPUT' for student messages, 'OUTPUT' for AI responses.
+
+    Returns:
+        (passed: bool, replacement: str | None)
+        If passed is False, replacement contains the guardrail's blocked message.
+    """
+    guardrail_id = os.environ.get('BEDROCK_GUARDRAIL_ID', '')
+    if not guardrail_id or not guardrail_id.strip():
+        return True, None
+    if not text or not text.strip():
+        return True, None
+    try:
+        client = boto3.client('bedrock-runtime', region_name=os.environ.get('AWS_REGION', 'us-east-1'))
+        response = client.apply_guardrail(
+            guardrailIdentifier=guardrail_id,
+            guardrailVersion='DRAFT',
+            source=source,
+            content=[{'text': {'text': text}}],
+        )
+        action = response.get('action', '')
+        if action == 'GUARDRAIL_INTERVENED':
+            blocked_msg = response.get('outputs', [{}])[0].get('text', "I'm sorry, I can't respond to that.")
+            logger.warning("Guardrail INTERVENED (%s): %s → %s", source, text[:60], blocked_msg)
+            return False, blocked_msg
+        return True, None
+    except Exception as e:
+        logger.error("Guardrail check failed (%s): %s", source, e)
+        # Fail open — don't block the conversation if the guardrail API is unreachable
+        return True, None
 
 def get_student_query(raw_query: str) -> str:
     """Format the student's raw query into a specific template suitable for processing."""
@@ -228,6 +262,14 @@ def get_response(
     """
     logger.info(f"🔍 GET_RESPONSE CALLED - Stream: {stream}, Query: '{query[:50]}...'")
     
+    # Screen student input through guardrails (skip the initial system-generated prompt
+    # which is trusted instructor content, not student input)
+    if not is_initial_prompt:
+        passed, blocked_msg = apply_text_guardrail(query, "INPUT")
+        if not passed:
+            logger.warning("Guardrail blocked student input: %s", query[:60])
+            return {"llm_output": blocked_msg, "session_name": "Chat", "llm_verdict": False}
+    
     # Save the student's message for non-streaming only;
     # streaming path saves are handled inside generate_streaming_response.
     # Skip saving and matching for the initial system-generated prompt that
@@ -344,6 +386,12 @@ def get_response(
     if stream:
         # AI message already saved inside generate_streaming_response
         return {"llm_output": response, "session_name": "Chat", "llm_verdict": False}
+    
+    # Screen AI output through guardrails before returning to client
+    passed, blocked_msg = apply_text_guardrail(response, "OUTPUT")
+    if not passed:
+        logger.warning("Guardrail blocked AI output: %s", response[:60])
+        response = blocked_msg
     
     result = get_llm_output(response, llm_completion)
     
@@ -465,6 +513,14 @@ def generate_streaming_response(
                 chunk = " ".join(words[i : i + 3]) + " "
                 publish_to_appsync(session_id, {"type": "chunk", "content": chunk})
                 time.sleep(0.005)
+
+        # Screen the complete AI response through guardrails before finalizing
+        passed, blocked_msg = apply_text_guardrail(full_response, "OUTPUT")
+        if not passed:
+            logger.warning("Guardrail blocked streamed AI output: %s", full_response[:60])
+            full_response = blocked_msg
+            # Send a correction to the frontend replacing the streamed content
+            publish_to_appsync(session_id, {"type": "guardrail_replace", "content": blocked_msg})
 
         publish_to_appsync(session_id, {"type": "end", "content": full_response})
         ai_message_id = save_message_to_db(session_id, persona_id, 'ai', full_response)

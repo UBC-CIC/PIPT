@@ -6,6 +6,7 @@ import * as ecs from "aws-cdk-lib/aws-ecs";
 import * as logs from "aws-cdk-lib/aws-logs";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as ecr from "aws-cdk-lib/aws-ecr";
+import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
@@ -27,6 +28,7 @@ export class VoiceAgentStack extends Stack {
     vpcStack: VpcStack,
     db: DatabaseStack,
     voiceAgentRepo: ecr.IRepository,
+    guardrailId?: string,
     props?: StackProps
   ) {
     super(scope, id, props);
@@ -63,6 +65,7 @@ export class VoiceAgentStack extends Stack {
               actions: [
                 "bedrock:InvokeModel",
                 "bedrock:InvokeModelWithBidirectionalStream",
+                "bedrock:ApplyGuardrail",
               ],
               resources: ["*"],
             }),
@@ -136,6 +139,7 @@ export class VoiceAgentStack extends Stack {
         KVS_CHANNEL_NAME: "genrx-voice-agent",
         SM_DB_CREDENTIALS: db.secretPathUser.secretName,
         RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+        ...(guardrailId ? { BEDROCK_GUARDRAIL_ID: guardrailId } : {}),
       },
     });
 
