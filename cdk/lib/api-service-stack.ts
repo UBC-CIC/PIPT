@@ -879,7 +879,7 @@ export class ApiServiceStack extends cdk.Stack {
       {
         parameterName: `/${id}/GenRx/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
-        stringValue: "anthropic.claude-sonnet-4-6",
+        stringValue: "us.anthropic.claude-sonnet-4-6",
       }
     );
 
@@ -1073,8 +1073,9 @@ export class ApiServiceStack extends cdk.Stack {
         "bedrock:ApplyGuardrail", // Required for guardrails
       ],
       resources: [
-        // Claude Sonnet 4.6 — called directly in us-east-1
-        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-4-6",
+        // Claude Sonnet 4.6 — US cross-region inference profile
+        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
         "arn:aws:bedrock:" +
           this.region +
           "::foundation-model/amazon.titan-embed-text-v2:0",
