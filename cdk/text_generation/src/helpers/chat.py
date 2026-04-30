@@ -1008,13 +1008,13 @@ def match_message_to_questions(
 ) -> list[dict]:
     """
     Compute embedding for a student message, compare against cached question
-    embeddings, and persist matches that exceed the 0.40 threshold.
+    embeddings, and persist matches that exceed the 0.45 threshold.
 
     Classification tiers:
         >= 0.70  → "high"
-        0.55-0.69 → "moderate"
-        0.40-0.54 → "low"
-        < 0.40  → discarded
+        0.60-0.69 → "moderate"
+        0.45-0.59 → "low"
+        < 0.45  → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
@@ -1043,11 +1043,11 @@ def match_message_to_questions(
         logger.info(
             f"🔍 Similarity: message='{message_content[:60]}' vs question='{q.get('question_text', '')[:60]}' → score={score:.4f}"
         )
-        if score >= 0.65:
+        if score >= 0.70:
             confidence = "high"
-        elif score >= 0.55:
+        elif score >= 0.60:
             confidence = "moderate"
-        elif score >= 0.40:
+        elif score >= 0.45:
             confidence = "low"
         else:
             continue  # discard below threshold
@@ -2254,7 +2254,7 @@ def generate_debrief(
         logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
 
         # Step d: Generate rewrites for moderate-confidence matches
-        REWRITE_THRESHOLD = 0.65
+        REWRITE_THRESHOLD = 0.70
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
         for qa_entry in questions_addressed:
@@ -2590,7 +2590,7 @@ def generate_test_debrief(
         logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
 
         # Step d: Generate rewrites for moderate-confidence matches
-        REWRITE_THRESHOLD = 0.65
+        REWRITE_THRESHOLD = 0.70
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
         for qa_entry in questions_addressed:
