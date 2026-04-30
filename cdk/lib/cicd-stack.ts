@@ -240,7 +240,7 @@ export class CICDStack extends cdk.Stack {
               build: {
                 commands: [
                   'echo "Building Docker image..."',
-                  `docker build -t $REPOSITORY_URI:$IMAGE_TAG $CODEBUILD_SRC_DIR/${lambdaConfig.sourceDir} -f $CODEBUILD_SRC_DIR/${lambdaConfig.sourceDir}/Dockerfile`,
+                  `docker build --build-arg REGISTRY=public.ecr.aws/docker/library/ -t $REPOSITORY_URI:$IMAGE_TAG $CODEBUILD_SRC_DIR/${lambdaConfig.sourceDir} -f $CODEBUILD_SRC_DIR/${lambdaConfig.sourceDir}/Dockerfile`,
                 ],
               },
               post_build: {
