@@ -58,7 +58,20 @@ def emit(obj: dict):
 
 
 def make_client() -> BedrockRuntimeClient:
-    # Credentials come from env vars set by server.js (STS via Cognito)
+    # ECS task role credentials come via the container metadata endpoint,
+    # not env vars. Use boto3 to resolve them and inject into env so the
+    # Bedrock SDK's EnvironmentCredentialsResolver can find them.
+    session = boto3.Session()
+    creds = session.get_credentials()
+    if creds:
+        frozen = creds.get_frozen_credentials()
+        if frozen.access_key:
+            os.environ["AWS_ACCESS_KEY_ID"] = frozen.access_key
+        if frozen.secret_key:
+            os.environ["AWS_SECRET_ACCESS_KEY"] = frozen.secret_key
+        if frozen.token:
+            os.environ["AWS_SESSION_TOKEN"] = frozen.token
+
     config = Config(
         endpoint_uri=f"https://bedrock-runtime.{REGION}.amazonaws.com",
         region=REGION,
