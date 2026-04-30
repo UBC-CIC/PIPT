@@ -447,3 +447,81 @@ export async function deleteQuestionBankQuestion(
     { method: 'DELETE' }
   );
 }
+
+// ─── Issue Reports & Debrief Feedback ────────────────────────────────────────
+
+export interface IssueReport {
+  report_id: string;
+  simulation_group_id: string;
+  persona_id: string;
+  chat_id: string;
+  user_id: string;
+  issue_categories: string[];
+  details: string | null;
+  submitted_at: string;
+  student_email: string | null;
+  student_first_name: string | null;
+  student_last_name: string | null;
+  patient_name: string | null;
+}
+
+export interface DebriefFeedback {
+  feedback_id: string;
+  simulation_group_id: string;
+  persona_id: string;
+  chat_id: string;
+  user_id: string;
+  is_helpful: boolean;
+  comment: string | null;
+  submitted_at: string;
+  student_email: string | null;
+  student_first_name: string | null;
+  student_last_name: string | null;
+  patient_name: string | null;
+}
+
+/**
+ * Get all issue reports for a simulation group.
+ */
+export async function getIssueReports(
+  simulationGroupId: string
+): Promise<IssueReport[]> {
+  return apiClient.request<IssueReport[]>(
+    `admin/issue_reports?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+  );
+}
+
+/**
+ * Delete an issue report by ID.
+ */
+export async function deleteIssueReport(
+  reportId: string
+): Promise<{ message: string }> {
+  return apiClient.request<{ message: string }>(
+    `admin/issue_report?report_id=${encodeURIComponent(reportId)}`,
+    { method: 'DELETE' }
+  );
+}
+
+/**
+ * Get all debrief feedback for a simulation group.
+ */
+export async function getDebriefFeedback(
+  simulationGroupId: string
+): Promise<DebriefFeedback[]> {
+  return apiClient.request<DebriefFeedback[]>(
+    `admin/debrief_feedback?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+  );
+}
+
+/**
+ * Delete a debrief feedback entry by ID.
+ */
+export async function deleteDebriefFeedback(
+  feedbackId: string
+): Promise<{ message: string }> {
+  return apiClient.request<{ message: string }>(
+    `admin/debrief_feedback?feedback_id=${encodeURIComponent(feedbackId)}`,
+    { method: 'DELETE' }
+  );
+}

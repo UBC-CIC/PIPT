@@ -235,9 +235,9 @@ function PatientDashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-8 py-6">
-        <div className={hasChats ? "grid grid-cols-2 gap-6" : "max-w-4xl"}>
+        <div className="grid grid-cols-2 gap-6">
           {/* Left Column - Patient Overview */}
-          <div className={hasChats ? "pr-6 overflow-y-auto" : ""} style={hasChats ? { borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default } : {}}>
+          <div className="pr-6 overflow-y-auto" style={{ borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default }}>
             <h2 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>Patient Overview</h2>
             
             {/* Patient Info Card */}

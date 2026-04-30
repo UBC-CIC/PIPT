@@ -7212,6 +7212,124 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /admin/issue_reports:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Get all issue reports for a simulation group
+      operationId: admin_issue_reports_GET
+      parameters:
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of issue reports with student and patient details
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/issue_report:
+    <<: *commonOptions
+    delete:
+      tags:
+        - Admin
+      summary: Delete an issue report
+      operationId: admin_issue_report_DELETE
+      parameters:
+        - in: query
+          name: report_id
+          required: true
+          description: ID of the issue report to delete
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Issue report deleted successfully
+        "400":
+          description: Bad Request
+        "404":
+          description: Issue report not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+  /admin/debrief_feedback:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Get all debrief feedback for a simulation group
+      operationId: admin_debrief_feedback_GET
+      parameters:
+        - in: query
+          name: simulation_group_id
+          required: true
+          description: ID of the simulation group
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of debrief feedback with student and patient details
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+    delete:
+      tags:
+        - Admin
+      summary: Delete a debrief feedback entry
+      operationId: admin_debrief_feedback_DELETE
+      parameters:
+        - in: query
+          name: feedback_id
+          required: true
+          description: ID of the debrief feedback to delete
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Debrief feedback deleted successfully
+        "400":
+          description: Bad Request
+        "404":
+          description: Debrief feedback not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
 
 components:
   securitySchemes:

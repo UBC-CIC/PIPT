@@ -4,15 +4,37 @@ import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { studentService, type Patient, type UserData } from '@/services/studentService';
-import { ArrowLeft, CheckCircle, Loader, Circle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Loader, Circle, Clock, MessageSquare, BarChart3 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useAuth } from '@/App';
 
 /**
+ * Format a date string into a human-readable relative time or short date.
+ */
+function formatLastPracticed(dateStr: string | null): string {
+  if (!dateStr) return '—';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '—';
+
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/**
  * PatientsPage Component
- * 
- * Displays a list of patients for a specific simulation group.
- * Fetches data from the backend API.
+ *
+ * Displays a list of patients for a specific simulation group as stacked cards.
+ * Each card shows avatar, name, status, best coverage progress, attempt count,
+ * last practiced date, and a View Dashboard button.
  */
 function PatientsPage() {
   const navigate = useNavigate();
@@ -44,65 +66,79 @@ function PatientsPage() {
     loadData();
   }, [groupId]);
 
-  /**
-   * Handle sign out event
-   */
   const handleSignOut = async () => {
     await signOut();
   };
 
-  /**
-   * Handle back to home navigation
-   */
   const handleBackToHome = () => {
     navigate('/student');
   };
 
-  /**
-   * Handle review button click
-   */
-  const handleReview = (patientId: string) => {
+  const handleViewDashboard = (patientId: string) => {
     navigate(`/patients/${groupId}/${patientId}`, { state: { adminReturnUrl } });
   };
 
   /**
-   * Get debrief status badge
+   * Render the status badge for a patient.
    */
-  const getDebriefStatusBadge = (status: 'not_started' | 'in_progress' | 'debrief_reached') => {
-    const statusConfig = {
-      'debrief_reached': {
+  const renderStatusBadge = (status: Patient['debrief_status']) => {
+    const config = {
+      debrief_reached: {
         icon: CheckCircle,
         text: 'Debrief Reached',
-        bgColor: UI_COLORS.border.light,
-        textColor: UI_COLORS.text.body
+        dotColor: UI_COLORS.status.success,
       },
-      'in_progress': {
+      in_progress: {
         icon: Loader,
         text: 'In Progress',
-        bgColor: UI_COLORS.border.light,
-        textColor: UI_COLORS.text.body
+        dotColor: UI_COLORS.status.warning,
       },
-      'not_started': {
+      not_started: {
         icon: Circle,
         text: 'Not Started',
-        bgColor: UI_COLORS.border.light,
-        textColor: UI_COLORS.text.body
-      }
-    };
+        dotColor: UI_COLORS.text.light,
+      },
+    }[status];
 
-    const config = statusConfig[status];
     const Icon = config.icon;
 
     return (
       <div
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-full"
-        style={{
-          backgroundColor: config.bgColor,
-          color: config.textColor
-        }}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full"
+        style={{ backgroundColor: UI_COLORS.border.light, color: UI_COLORS.text.body }}
       >
-        <Icon className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
-        <span className="font-medium text-sm">{config.text}</span>
+        <Icon className="w-3.5 h-3.5" style={{ color: config.dotColor }} />
+        <span className="font-medium text-xs">{config.text}</span>
+      </div>
+    );
+  };
+
+  /**
+   * Render the coverage progress bar with percentage label.
+   */
+  const renderCoverageBar = (coverage: number | null) => {
+    const value = coverage ?? 0;
+    const hasCoverage = coverage != null;
+
+    // Color the bar based on score
+    let barColor: string = UI_COLORS.text.light; // gray for no data
+    if (hasCoverage) {
+      if (value >= 70) barColor = UI_COLORS.status.success;
+      else if (value >= 40) barColor = UI_COLORS.status.warning;
+      else barColor = UI_COLORS.status.error;
+    }
+
+    return (
+      <div className="flex items-center gap-3 min-w-[180px]">
+        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ backgroundColor: UI_COLORS.border.light }}>
+          <div
+            className="h-full rounded-full transition-all duration-500"
+            style={{ width: `${value}%`, backgroundColor: barColor }}
+          />
+        </div>
+        <span className="text-sm font-semibold tabular-nums w-10 text-right" style={{ color: hasCoverage ? UI_COLORS.text.heading : UI_COLORS.text.light }}>
+          {hasCoverage ? `${value}%` : '—'}
+        </span>
       </div>
     );
   };
@@ -118,13 +154,12 @@ function PatientsPage() {
   return (
     <PageContainer>
       {/* Header */}
-      <header className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8" style={{ backgroundColor: UI_COLORS.header.background }}>
+      <header
+        className="flex-shrink-0 flex border-b border-border items-center justify-between py-6 px-8"
+        style={{ backgroundColor: UI_COLORS.header.background }}
+      >
         <div className="flex items-center gap-4">
-          <UserAvatar
-            name={user.name}
-            imageUrl={user.avatarUrl}
-            size="medium"
-          />
+          <UserAvatar name={user.name} imageUrl={user.avatarUrl} size="medium" />
           <div className="flex flex-col items-start gap-0.5">
             <h1 className="font-bold tracking-tight leading-tight text-2xl" style={{ color: UI_COLORS.text.heading }}>
               Patients
@@ -133,8 +168,8 @@ function PatientsPage() {
               onClick={handleBackToHome}
               className="font-normal text-sm flex items-center gap-1 bg-transparent border-0 cursor-pointer p-0 transition-colors"
               style={{ color: UI_COLORS.text.body }}
-              onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
-              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+              onMouseEnter={(e) => (e.currentTarget.style.color = UI_COLORS.text.heading)}
+              onMouseLeave={(e) => (e.currentTarget.style.color = UI_COLORS.text.body)}
             >
               <ArrowLeft className="w-4 h-4" />
               Back to Home Page
@@ -149,8 +184,8 @@ function PatientsPage() {
               onClick={() => navigate(adminReturnUrl)}
               className="px-6 transition-colors"
               style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
             >
               Back to Admin View
             </Button>
@@ -160,61 +195,109 @@ function PatientsPage() {
             onClick={handleSignOut}
             className="px-6 transition-colors"
             style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover)}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary)}
           >
             Sign Out
           </Button>
         </div>
       </header>
 
-      {/* Main Content */}
+      {/* Main Content — Stacked Patient Cards */}
       <main className="flex-1 overflow-y-auto px-8 py-6">
-        <div className="rounded-lg overflow-hidden" style={{ backgroundColor: UI_COLORS.background.white, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default }}>
-          <table className="w-full">
-            <thead style={{ backgroundColor: UI_COLORS.background.tableHeader, borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
-              <tr>
-                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Patient</th>
-                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Status</th>
-                <th className="px-6 py-4 text-center font-semibold" style={{ color: UI_COLORS.text.heading }}>Review</th>
-              </tr>
-            </thead>
-            <tbody>
-              {patients.map((patient) => (
-                <tr
-                  key={patient.patient_id}
-                  className="last:border-b-0"
-                  style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.light }}
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3 justify-center">
-                      <UserAvatar
-                        name={patient.patient_name}
-                        imageUrl={patient.avatarUrl}
-                        size="small"
-                      />
-                      <span style={{ color: UI_COLORS.text.heading }}>{patient.patient_name}</span>
+        <div className="flex flex-col gap-4 max-w-5xl mx-auto">
+          {patients.length === 0 && (
+            <div className="text-center py-12" style={{ color: UI_COLORS.text.muted }}>
+              No patients available in this simulation group.
+            </div>
+          )}
+
+          {patients.map((patient) => (
+            <div
+              key={patient.patient_id}
+              className="rounded-lg p-5 transition-shadow hover:shadow-md"
+              style={{
+                backgroundColor: UI_COLORS.background.white,
+                borderWidth: '1px',
+                borderStyle: 'solid',
+                borderColor: UI_COLORS.border.default,
+              }}
+            >
+              {/* Card content: horizontal layout */}
+              <div className="flex items-center gap-6">
+                {/* Left section — Avatar + Name + Status */}
+                <div className="flex items-center gap-4 min-w-[220px]">
+                  <UserAvatar name={patient.patient_name} imageUrl={patient.avatarUrl} size="medium" />
+                  <div className="flex flex-col gap-1.5">
+                    <span className="font-semibold text-base" style={{ color: UI_COLORS.text.heading }}>
+                      {patient.patient_name}
+                    </span>
+                    {renderStatusBadge(patient.debrief_status)}
+                  </div>
+                </div>
+
+                {/* Middle section — Stats */}
+                <div className="flex items-center gap-8 flex-1">
+                  {/* Best Coverage */}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <BarChart3 className="w-3.5 h-3.5" style={{ color: UI_COLORS.text.muted }} />
+                      <span className="text-xs font-medium" style={{ color: UI_COLORS.text.muted }}>
+                        Best Coverage
+                      </span>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    {getDebriefStatusBadge(patient.debrief_status)}
-                  </td>
-                  <td className="px-6 py-4 text-center">
-                    <Button
-                      onClick={() => handleReview(patient.patient_id)}
-                      variant="default"
-                      className="px-6 transition-colors"
-                      style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                    {renderCoverageBar(patient.best_coverage)}
+                  </div>
+
+                  {/* Attempts */}
+                  <div className="flex flex-col gap-1 items-center">
+                    <div className="flex items-center gap-1.5">
+                      <MessageSquare className="w-3.5 h-3.5" style={{ color: UI_COLORS.text.muted }} />
+                      <span className="text-xs font-medium" style={{ color: UI_COLORS.text.muted }}>
+                        Attempts
+                      </span>
+                    </div>
+                    <span
+                      className="text-sm font-semibold"
+                      style={{ color: patient.attempt_count > 0 ? UI_COLORS.text.heading : UI_COLORS.text.light }}
                     >
-                      Review
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      {patient.attempt_count}
+                    </span>
+                  </div>
+
+                  {/* Last Practiced */}
+                  <div className="flex flex-col gap-1 items-center">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5" style={{ color: UI_COLORS.text.muted }} />
+                      <span className="text-xs font-medium" style={{ color: UI_COLORS.text.muted }}>
+                        Last Practiced
+                      </span>
+                    </div>
+                    <span
+                      className="text-sm font-medium"
+                      style={{ color: patient.last_accessed ? UI_COLORS.text.body : UI_COLORS.text.light }}
+                    >
+                      {formatLastPracticed(patient.last_accessed)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right section — View Dashboard button */}
+                <div className="flex-shrink-0">
+                  <Button
+                    onClick={() => handleViewDashboard(patient.patient_id)}
+                    variant="default"
+                    className="px-6 transition-colors"
+                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover)}
+                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary)}
+                  >
+                    View Dashboard
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </main>
     </PageContainer>

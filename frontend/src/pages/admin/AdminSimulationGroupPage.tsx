@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -32,7 +32,10 @@ import AIDebriefDialog from '@/components/AIDebriefDialog';
 import PromptPlayground from '@/components/prompt-playground/PromptPlayground';
 import SystemPromptPlayground from '@/components/prompt-playground/SystemPromptPlayground';
 
-type ActiveSection = 'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent';
+import { IssuesFeedbackSection } from '@/components/simulation-group/IssuesFeedbackSection';
+import type { IssueReport, DebriefFeedback } from '@/services/adminApiService';
+
+type ActiveSection = 'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent' | 'issuesFeedback';
 
 /**
  * AdminSimulationGroupPage — thin shell composing shared hooks and components.
@@ -101,6 +104,11 @@ function AdminSimulationGroupPage() {
 
   // Global rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>([]);
+
+  // Issues & Feedback state
+  const [issueReports, setIssueReports] = useState<IssueReport[]>([]);
+  const [debriefFeedbackList, setDebriefFeedbackList] = useState<DebriefFeedback[]>([]);
+  const [issuesFeedbackLoading, setIssuesFeedbackLoading] = useState(false);
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [rubricSearchQuery, setRubricSearchQuery] = useState('');
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
@@ -183,6 +191,20 @@ function AdminSimulationGroupPage() {
         .then(setInstructors)
         .catch(err => { console.error('Failed to load group instructors, using mock data:', err); setInstructors(mockGroupInstructors); })
         .finally(() => setInstructorsLoading(false));
+    }
+  }, [activeSection, groupId]);
+
+  // ── Load issues & feedback ──
+  useEffect(() => {
+    if (activeSection === 'issuesFeedback' && groupId) {
+      setIssuesFeedbackLoading(true);
+      Promise.all([
+        adminApi.getIssueReports(groupId).catch(err => { console.error('Failed to load issue reports:', err); return [] as IssueReport[]; }),
+        adminApi.getDebriefFeedback(groupId).catch(err => { console.error('Failed to load debrief feedback:', err); return [] as DebriefFeedback[]; }),
+      ]).then(([reports, feedback]) => {
+        setIssueReports(reports);
+        setDebriefFeedbackList(feedback);
+      }).finally(() => setIssuesFeedbackLoading(false));
     }
   }, [activeSection, groupId]);
 
@@ -465,6 +487,7 @@ function AdminSimulationGroupPage() {
             { id: 'instructors', label: 'Manage Instructors', icon: <UserPlus className="w-5 h-5" /> },
             { id: 'rubric', label: 'Global Rubric', icon: <FileText className="w-5 h-5" /> },
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" /> },
+            { id: 'issuesFeedback', label: 'Issues and Feedback', icon: <AlertTriangle className="w-5 h-5" /> },
             { id: 'prompts', label: 'Manage Prompts', icon: <FileCode className="w-5 h-5" /> },
           ]}
           accessCode={accessCode}
@@ -474,7 +497,7 @@ function AdminSimulationGroupPage() {
           onToggleVisibility={() => setIsMainSidebarVisible(!isMainSidebarVisible)}
         />
 
-        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'prompts', 'editPatient', 'viewStudent'].includes(activeSection) ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'prompts', 'editPatient', 'viewStudent', 'issuesFeedback'].includes(activeSection) ? '0' : '2rem' }}>
           {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
 
           {activeSection === 'patients' && (
@@ -556,6 +579,30 @@ function AdminSimulationGroupPage() {
                 if (patientId && groupId) {
                   instructorService.getSimulationGroupQuestions(groupId, patientId).then((assigned: any[]) => setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)))).catch(() => setIncludedQuestionIds(new Set()));
                 } else { setIncludedQuestionIds(new Set()); }
+              }}
+            />
+          )}
+
+          {activeSection === 'issuesFeedback' && (
+            <IssuesFeedbackSection
+              issueReports={issueReports}
+              debriefFeedback={debriefFeedbackList}
+              loading={issuesFeedbackLoading}
+              onDeleteIssueReport={async (reportId) => {
+                try {
+                  await adminApi.deleteIssueReport(reportId);
+                  setIssueReports((prev) => prev.filter((r) => r.report_id !== reportId));
+                } catch (err) {
+                  console.error('Failed to delete issue report:', err);
+                }
+              }}
+              onDeleteDebriefFeedback={async (feedbackId) => {
+                try {
+                  await adminApi.deleteDebriefFeedback(feedbackId);
+                  setDebriefFeedbackList((prev) => prev.filter((f) => f.feedback_id !== feedbackId));
+                } catch (err) {
+                  console.error('Failed to delete debrief feedback:', err);
+                }
               }}
             />
           )}

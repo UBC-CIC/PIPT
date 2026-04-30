@@ -42,6 +42,9 @@ export interface Patient {
   avatarUrl?: string;            // Optional patient image URL
   debrief_status: 'not_started' | 'in_progress' | 'debrief_reached'; // Overall patient case status
   instructor_evaluation: string;  // Instructor evaluation status
+  best_coverage: number | null;  // Best key question coverage % across completed chats
+  attempt_count: number;         // Total number of chat sessions
+  last_accessed: string | null;  // Last time the student interacted with this patient
 }
 
 
@@ -767,13 +770,65 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     });
     const profilePicUrls = await Promise.all(profilePicPromises);
 
-    return data.map((p, i) => ({
-      patient_id: p.persona_id,
-      patient_name: p.persona_name,
-      avatarUrl: profilePicUrls[i],
-      debrief_status: p.is_completed ? 'debrief_reached' as const : 'not_started' as const,
-      instructor_evaluation: p.persona_score > 0 ? 'Evaluated' : 'Not Evaluated',
-    }));
+    // Fetch chat history per patient in parallel to get attempt count + best coverage
+    const chatStatsPromises = data.map(async (p) => {
+      try {
+        const chats = await apiClient.request<Array<{
+          chat_id: string;
+          status: string | null;
+          overall_score: number | null;
+          last_accessed: string | null;
+        }>>(
+          `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(p.persona_id)}`
+        );
+        if (!Array.isArray(chats) || chats.length === 0) return { attemptCount: 0, bestCoverage: null, hasActiveChat: false, lastChatAccessed: null };
+        const completedScores = chats
+          .filter((c) => c.status === 'concluded' && c.overall_score != null)
+          .map((c) => c.overall_score as number);
+        const hasActiveChat = chats.some((c) => c.status !== 'concluded');
+        // Most recent chat activity (actual practice, not just viewing the dashboard)
+        const chatDates = chats
+          .map((c) => c.last_accessed)
+          .filter((d): d is string => d != null)
+          .map((d) => new Date(d).getTime())
+          .filter((t) => !isNaN(t));
+        const lastChatAccessed = chatDates.length > 0
+          ? new Date(Math.max(...chatDates)).toISOString()
+          : null;
+        return {
+          attemptCount: chats.length,
+          bestCoverage: completedScores.length > 0 ? Math.max(...completedScores) : null,
+          hasActiveChat,
+          lastChatAccessed,
+        };
+      } catch {
+        return { attemptCount: 0, bestCoverage: null, hasActiveChat: false, lastChatAccessed: null };
+      }
+    });
+    const chatStats = await Promise.all(chatStatsPromises);
+
+    return data.map((p, i) => {
+      const stats = chatStats[i];
+      let debriefStatus: Patient['debrief_status'];
+      if (p.is_completed) {
+        debriefStatus = 'debrief_reached';
+      } else if (stats.hasActiveChat) {
+        debriefStatus = 'in_progress';
+      } else {
+        debriefStatus = 'not_started';
+      }
+
+      return {
+        patient_id: p.persona_id,
+        patient_name: p.persona_name,
+        avatarUrl: profilePicUrls[i],
+        debrief_status: debriefStatus,
+        instructor_evaluation: p.persona_score > 0 ? 'Evaluated' : 'Not Evaluated',
+        best_coverage: stats.bestCoverage != null ? Math.round(stats.bestCoverage) : null,
+        attempt_count: stats.attemptCount,
+        last_accessed: stats.lastChatAccessed,
+      };
+    });
   } catch (error) {
     console.error('Failed to fetch patients:', error);
     throw new Error('Failed to load patients. Please try again.');
