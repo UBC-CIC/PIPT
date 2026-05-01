@@ -1,12 +1,14 @@
-"""Pure TTS via Nova Sonic 2 — no database, no chat history, no agent logic.
+"""Lightweight voice preview via Nova Sonic — no database, no chat history.
 
 Spawned by server.js as a child process for voice preview.
-Reads a single JSON config from stdin, opens a Bedrock Nova Sonic
-bidirectional stream, sends the text, and writes base64 audio chunks
-to stdout as JSON lines. Exits when the model finishes speaking.
+The instructor speaks into their mic, and the model responds in the
+selected voice so they can hear what it sounds like.
 
-Input (one JSON line on stdin):
-    {"voice_id": "amy", "text": "Hello, I have chest pain."}
+Input (JSON lines on stdin):
+    {"voice_id": "amy"}                          — initial config (first line)
+    {"type": "start_audio"}                      — mic recording started
+    {"type": "audio", "data": "<base64 PCM>"}    — mic audio chunks
+    {"type": "end_audio"}                        — mic recording stopped
 
 Output (JSON lines on stdout):
     {"type": "ready"}
@@ -43,12 +45,15 @@ logger = logging.getLogger("voice_preview_tts")
 
 MODEL_ID = "amazon.nova-2-sonic-v1:0"
 REGION = "us-east-1"
+INPUT_SAMPLE_RATE = 16000
 OUTPUT_SAMPLE_RATE = 24000
 
 SYSTEM_PROMPT = (
-    "You are a voice preview assistant. "
-    "Say exactly what the user tells you, in a natural conversational tone. "
-    "Do not add anything extra. Do not greet. Just speak the text naturally."
+    "You are a friendly patient at a doctor's office. "
+    "When the user greets you, respond with a brief, natural greeting back "
+    "and mention that you're here for a check-up. "
+    "Keep your response to two or three short sentences. "
+    "Speak naturally and conversationally."
 )
 
 
@@ -58,9 +63,6 @@ def emit(obj: dict):
 
 
 def make_client() -> BedrockRuntimeClient:
-    # ECS task role credentials come via the container metadata endpoint,
-    # not env vars. Use boto3 to resolve them and inject into env so the
-    # Bedrock SDK's EnvironmentCredentialsResolver can find them.
     session = boto3.Session()
     creds = session.get_credentials()
     if creds:
@@ -90,7 +92,163 @@ async def send_event(stream, event: dict):
     await stream.input_stream.send(chunk)
 
 
-async def run_tts(voice_id: str, text: str):
+async def process_responses(stream, done_event: asyncio.Event):
+    """Read the response stream and emit audio chunks to stdout.
+
+    Once ``done_event`` is set (user finished speaking) we watch for the
+    model's response to complete and then return so the session can be
+    torn down — one exchange only.
+    """
+    decoder = json.JSONDecoder()
+    buffer = ""
+    audio_count = 0
+    user_done = False
+    # After the user finishes speaking we give the model some time to
+    # respond.  Every audio chunk resets this timer so we only stop once
+    # the model has gone silent for a bit.
+    SILENCE_TIMEOUT = 3.0  # seconds of silence after last audio chunk
+    last_audio_time: float | None = None
+
+    try:
+        while True:
+            # If the user is done speaking, use a timeout so we can detect
+            # when the model has stopped sending audio.
+            if user_done:
+                timeout = SILENCE_TIMEOUT
+                if last_audio_time is not None:
+                    elapsed = asyncio.get_event_loop().time() - last_audio_time
+                    timeout = max(0.1, SILENCE_TIMEOUT - elapsed)
+                try:
+                    output = await asyncio.wait_for(stream.await_output(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    # Model has been silent long enough — we're done
+                    logger.info("Model silent for %.1fs after user finished — ending", SILENCE_TIMEOUT)
+                    break
+            else:
+                output = await stream.await_output()
+                # Check if user finished while we were waiting
+                if done_event.is_set():
+                    user_done = True
+
+            result = await output[1].receive()
+
+            if not (result.value and result.value.bytes_):
+                continue
+
+            chunk = result.value.bytes_.decode("utf-8")
+            buffer += chunk
+
+            idx = 0
+            while True:
+                try:
+                    obj, offset = decoder.raw_decode(buffer[idx:])
+                except json.JSONDecodeError:
+                    break
+                idx += offset
+
+                evt = obj.get("event", {})
+                if "audioOutput" in evt:
+                    emit({"type": "audio", "data": evt["audioOutput"]["content"]})
+                    audio_count += 1
+                    last_audio_time = asyncio.get_event_loop().time()
+
+            buffer = buffer[idx:]
+
+            # Re-check after processing
+            if not user_done and done_event.is_set():
+                user_done = True
+
+    except Exception as e:
+        logger.info("Stream ended: %s", e)
+
+    logger.info("Response processing complete — emitted %d audio chunks", audio_count)
+
+
+async def handle_stdin(stream, prompt_name, done_event: asyncio.Event):
+    """Read audio commands from stdin and forward to the Nova Sonic stream.
+
+    Only processes a single speak→stop cycle, then signals ``done_event``
+    so the response reader knows to wrap up after the model finishes.
+    """
+    loop = asyncio.get_event_loop()
+    reader = asyncio.StreamReader()
+    protocol = asyncio.StreamReaderProtocol(reader)
+    await loop.connect_read_pipe(lambda: protocol, sys.stdin)
+
+    audio_content_name = None
+    got_audio = False
+
+    while True:
+        line = await reader.readline()
+        if not line:
+            break
+
+        line = line.decode("utf-8").strip()
+        if not line:
+            continue
+
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        msg_type = msg.get("type", "")
+
+        if msg_type == "start_audio" and not got_audio:
+            audio_content_name = str(uuid.uuid4())
+            await send_event(stream, {
+                "event": {
+                    "contentStart": {
+                        "promptName": prompt_name,
+                        "contentName": audio_content_name,
+                        "type": "AUDIO",
+                        "interactive": True,
+                        "role": "USER",
+                        "audioInputConfiguration": {
+                            "mediaType": "audio/lpcm",
+                            "sampleRateHertz": INPUT_SAMPLE_RATE,
+                            "sampleSizeBits": 16,
+                            "channelCount": 1,
+                            "audioType": "SPEECH",
+                            "encoding": "base64",
+                        },
+                    }
+                }
+            })
+
+        elif msg_type == "audio" and audio_content_name:
+            await send_event(stream, {
+                "event": {
+                    "audioInput": {
+                        "promptName": prompt_name,
+                        "contentName": audio_content_name,
+                        "content": msg.get("data", ""),
+                    }
+                }
+            })
+
+        elif msg_type == "end_audio" and audio_content_name:
+            await send_event(stream, {
+                "event": {
+                    "contentEnd": {
+                        "promptName": prompt_name,
+                        "contentName": audio_content_name,
+                    }
+                }
+            })
+            audio_content_name = None
+            got_audio = True
+            # Signal that the user is done — one exchange only
+            done_event.set()
+            break
+
+        elif msg_type == "stop":
+            break
+
+    # Don't close the stream here — let process_responses finish first
+
+
+async def run(voice_id: str):
     client = make_client()
     stream = await client.invoke_model_with_bidirectional_stream(
         InvokeModelWithBidirectionalStreamOperationInput(model_id=MODEL_ID)
@@ -103,7 +261,7 @@ async def run_tts(voice_id: str, text: str):
         "event": {
             "sessionStart": {
                 "inferenceConfiguration": {
-                    "maxTokens": 1024,
+                    "maxTokens": 512,
                     "topP": 1.0,
                     "temperature": 0.7,
                 },
@@ -111,7 +269,7 @@ async def run_tts(voice_id: str, text: str):
         }
     })
 
-    # 2) promptStart — configure audio output
+    # 2) promptStart — configure audio output with the selected voice
     await send_event(stream, {
         "event": {
             "promptStart": {
@@ -162,123 +320,19 @@ async def run_tts(voice_id: str, text: str):
         }
     })
 
-    # 4) Dummy audio input to satisfy Nova Sonic's "at least one audio content" requirement
-    audio_content = str(uuid.uuid4())
-    await send_event(stream, {
-        "event": {
-            "contentStart": {
-                "promptName": prompt_name,
-                "contentName": audio_content,
-                "type": "AUDIO",
-                "role": "USER",
-                "audioInputConfiguration": {
-                    "mediaType": "audio/lpcm",
-                    "sampleRateHertz": 16000,
-                    "sampleSizeBits": 16,
-                    "channelCount": 1,
-                    "audioType": "SPEECH",
-                    "encoding": "base64",
-                },
-            }
-        }
-    })
-    # Send 0.1s of silence (16000 Hz × 2 bytes × 0.1s = 3200 zero bytes)
-    await send_event(stream, {
-        "event": {
-            "audioInput": {
-                "promptName": prompt_name,
-                "contentName": audio_content,
-                "content": base64.b64encode(b"\x00" * 3200).decode("utf-8"),
-            }
-        }
-    })
-    await send_event(stream, {
-        "event": {
-            "contentEnd": {
-                "promptName": prompt_name,
-                "contentName": audio_content,
-            }
-        }
-    })
-
-    # 5) User text input — the text to speak
-    user_content = str(uuid.uuid4())
-    await send_event(stream, {
-        "event": {
-            "contentStart": {
-                "promptName": prompt_name,
-                "contentName": user_content,
-                "type": "TEXT",
-                "interactive": True,
-                "role": "USER",
-                "textInputConfiguration": {"mediaType": "text/plain"},
-            }
-        }
-    })
-    await send_event(stream, {
-        "event": {
-            "textInput": {
-                "promptName": prompt_name,
-                "contentName": user_content,
-                "content": text,
-            }
-        }
-    })
-    await send_event(stream, {
-        "event": {
-            "contentEnd": {
-                "promptName": prompt_name,
-                "contentName": user_content,
-            }
-        }
-    })
-
-    # 6) Signal that the prompt is complete
-    await send_event(stream, {
-        "event": {
-            "promptEnd": {
-                "promptName": prompt_name
-            }
-        }
-    })
-
     emit({"type": "ready"})
 
-    # 7) Read audio from the response stream
-    decoder = json.JSONDecoder()
-    buffer = ""
-    audio_count = 0
+    # Run response reader and stdin handler concurrently.
+    # The done_event coordinates the single-exchange lifecycle:
+    # stdin handler sets it after end_audio, response reader watches
+    # for the model to go silent, then both tasks complete.
+    done_event = asyncio.Event()
+    await asyncio.gather(
+        process_responses(stream, done_event),
+        handle_stdin(stream, prompt_name, done_event),
+    )
 
-    try:
-        while True:
-            output = await stream.await_output()
-            result = await output[1].receive()
-
-            if not (result.value and result.value.bytes_):
-                continue
-
-            chunk = result.value.bytes_.decode("utf-8")
-            buffer += chunk
-
-            idx = 0
-            while True:
-                try:
-                    obj, offset = decoder.raw_decode(buffer[idx:])
-                except json.JSONDecodeError:
-                    break
-                idx += offset
-
-                evt = obj.get("event", {})
-                if "audioOutput" in evt:
-                    emit({"type": "audio", "data": evt["audioOutput"]["content"]})
-                    audio_count += 1
-
-            buffer = buffer[idx:]
-
-    except Exception as e:
-        logger.info("Stream ended: %s", e)
-
-    # Clean up
+    # Clean up session
     try:
         await send_event(stream, {"event": {"sessionEnd": {}}})
         await stream.input_stream.close()
@@ -286,11 +340,9 @@ async def run_tts(voice_id: str, text: str):
         pass
 
     emit({"type": "done"})
-    logger.info("TTS complete — emitted %d audio chunks", audio_count)
 
 
 async def main():
-    # Read config from stdin (single JSON line)
     line = sys.stdin.readline().strip()
     if not line:
         emit({"type": "error", "error": "No input received"})
@@ -303,13 +355,7 @@ async def main():
         return
 
     voice_id = config.get("voice_id", "amy")
-    text = config.get("text", "")
-
-    if not text:
-        emit({"type": "error", "error": "No text provided"})
-        return
-
-    await run_tts(voice_id, text)
+    await run(voice_id)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import { Play, Square, Volume2 } from 'lucide-react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { Mic, Square, Volume2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { UI_COLORS } from '@/lib/colors';
 import { authService } from '@/lib/auth';
@@ -25,10 +25,7 @@ const VOICES: VoiceOption[] = [
   { id: 'carlos', name: 'Carlos', gender: 'Masculine' },
 ];
 
-const DEFAULT_SAMPLE_TEXT =
-  "Hello, I'm your patient today. I've been having some chest pain for the past few days and I'm a little worried about it.";
-
-type PreviewState = 'idle' | 'connecting' | 'playing' | 'error';
+type PreviewState = 'idle' | 'connecting' | 'ready' | 'recording' | 'playing' | 'error';
 
 // ---------------------------------------------------------------------------
 // Component
@@ -36,24 +33,45 @@ type PreviewState = 'idle' | 'connecting' | 'playing' | 'error';
 
 export default function VoicePreview() {
   const [selectedVoice, setSelectedVoice] = useState<string>('amy');
-  const [sampleText, setSampleText] = useState(DEFAULT_SAMPLE_TEXT);
   const [previewState, setPreviewState] = useState<PreviewState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Refs for cleanup
   const socketRef = useRef<Socket | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const micCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef(0);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /**
-   * Clean up socket connection and audio context.
+   * Stop mic recording and release resources.
+   */
+  const stopMic = useCallback(() => {
+    if (workletNodeRef.current) {
+      workletNodeRef.current.disconnect();
+      workletNodeRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((t) => t.stop());
+      micStreamRef.current = null;
+    }
+    if (micCtxRef.current) {
+      micCtxRef.current.close().catch(() => {});
+      micCtxRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Full cleanup — socket, audio contexts, mic.
    */
   const cleanup = useCallback(() => {
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current);
       autoStopTimerRef.current = null;
     }
+    stopMic();
     if (socketRef.current) {
       socketRef.current.emit('stop-voice-preview', {});
       socketRef.current.disconnect();
@@ -64,7 +82,10 @@ export default function VoicePreview() {
       playbackCtxRef.current = null;
     }
     nextPlayTimeRef.current = 0;
-  }, []);
+  }, [stopMic]);
+
+  // Cleanup on unmount
+  useEffect(() => cleanup, [cleanup]);
 
   /**
    * Play a base64-encoded 24kHz PCM audio chunk through the AudioContext.
@@ -77,7 +98,6 @@ export default function VoicePreview() {
     const bytes = new Uint8Array(raw.length);
     for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
 
-    // Convert 16-bit signed PCM to float32
     const int16 = new Int16Array(bytes.buffer);
     const float32 = new Float32Array(int16.length);
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768;
@@ -96,20 +116,17 @@ export default function VoicePreview() {
   }, []);
 
   /**
-   * Start a voice preview session — pure TTS, no agent/DB involved.
+   * Connect to the socket server and start a voice preview session.
+   * The session stays open so the instructor can tap the mic to speak.
    */
-  const handlePreview = useCallback(async () => {
-    if (!sampleText.trim()) return;
-
+  const handleConnect = useCallback(async () => {
     cleanup();
     setPreviewState('connecting');
     setErrorMessage(null);
 
     try {
-      // Create playback context BEFORE any async work so it's within the
-      // user-gesture window and won't be auto-suspended by the browser.
+      // Create playback context within user gesture
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      // Explicitly resume in case the browser still suspends it.
       if (playbackCtxRef.current.state === 'suspended') {
         await playbackCtxRef.current.resume();
       }
@@ -121,43 +138,33 @@ export default function VoicePreview() {
       const socketUrl = appConfig.socket.url;
       if (!socketUrl) throw new Error('Socket server URL not configured');
 
-      // Connect to Socket.IO
       const socket = io(socketUrl, {
         transports: ['websocket'],
         auth: { token },
       });
       socketRef.current = socket;
 
-      // Listen for audio chunks
       socket.on('audio-chunk', (data: { data: string }) => {
+        setPreviewState('playing');
         playAudioChunk(data.data);
 
-        // Reset auto-stop timer on each chunk — stop 3s after last chunk
+        // Auto-return to ready state 2s after last audio chunk
         if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
         autoStopTimerRef.current = setTimeout(() => {
-          setPreviewState('idle');
-          cleanup();
-        }, 3000);
+          setPreviewState('ready');
+        }, 2000);
       });
 
-      // TTS process is ready and streaming
       socket.on('voice-preview-ready', () => {
-        setPreviewState('playing');
+        setPreviewState('ready');
       });
 
-      // TTS process finished
       socket.on('voice-preview-done', () => {
-        // Let the last audio chunks finish playing before cleaning up.
-        // The auto-stop timer on audio-chunk handles this — if no more
-        // chunks arrive within 3s it will clean up automatically.
-        // If we never got any audio, clean up now.
-        if (!autoStopTimerRef.current) {
-          setPreviewState('idle');
-          cleanup();
-        }
+        // Session ended (one exchange complete) — go back to idle
+        setPreviewState('idle');
+        cleanup();
       });
 
-      // Listen for errors
       socket.on('nova-error', (data: { error: string }) => {
         setErrorMessage(data.error);
         setPreviewState('error');
@@ -170,28 +177,93 @@ export default function VoicePreview() {
         cleanup();
       });
 
-      // Send the voice preview request — pure TTS, separate from start-nova-sonic
-      socket.emit('voice-preview', {
-        voice_id: selectedVoice,
-        text: sampleText,
-      });
+      socket.emit('voice-preview', { voice_id: selectedVoice });
 
-      // Safety timeout — auto-disconnect after 30s max
+      // Safety timeout — 60s max session
       autoStopTimerRef.current = setTimeout(() => {
         setPreviewState('idle');
         cleanup();
-      }, 30000);
+      }, 60000);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Failed to start preview');
       setPreviewState('error');
       cleanup();
     }
-  }, [selectedVoice, sampleText, cleanup, playAudioChunk]);
+  }, [selectedVoice, cleanup, playAudioChunk]);
 
   /**
-   * Stop the current preview.
+   * Start recording from the mic and streaming audio to the server.
    */
-  const handleStop = useCallback(() => {
+  const handleStartRecording = useCallback(async () => {
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      micStreamRef.current = stream;
+
+      // Create an AudioContext at 16kHz for mic capture
+      const micCtx = new AudioContext({ sampleRate: 16000 });
+      micCtxRef.current = micCtx;
+
+      // Use a ScriptProcessor as a simple fallback for PCM capture
+      const source = micCtx.createMediaStreamSource(stream);
+      const processor = micCtx.createScriptProcessor(4096, 1, 1);
+
+      // Tell the server we're starting audio
+      socket.emit('voice-preview-start-audio');
+      setPreviewState('recording');
+
+      processor.onaudioprocess = (e) => {
+        const float32 = e.inputBuffer.getChannelData(0);
+        // Convert float32 to 16-bit PCM
+        const int16 = new Int16Array(float32.length);
+        for (let i = 0; i < float32.length; i++) {
+          const s = Math.max(-1, Math.min(1, float32[i]));
+          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        const base64 = btoa(
+          String.fromCharCode(...new Uint8Array(int16.buffer))
+        );
+        socket.emit('voice-preview-audio', { data: base64 });
+      };
+
+      source.connect(processor);
+      processor.connect(micCtx.destination);
+
+      // Store processor ref for cleanup (reuse workletNodeRef)
+      workletNodeRef.current = processor as unknown as AudioWorkletNode;
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : 'Microphone access denied'
+      );
+      setPreviewState('error');
+    }
+  }, []);
+
+  /**
+   * Stop recording and wait for the model's response.
+   */
+  const handleStopRecording = useCallback(() => {
+    const socket = socketRef.current;
+    if (socket) {
+      socket.emit('voice-preview-end-audio');
+    }
+    stopMic();
+    setPreviewState('ready');
+  }, [stopMic]);
+
+  /**
+   * Disconnect the session entirely.
+   */
+  const handleDisconnect = useCallback(() => {
     cleanup();
     setPreviewState('idle');
   }, [cleanup]);
@@ -203,7 +275,7 @@ export default function VoicePreview() {
           Voice Preview
         </h2>
         <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-          Select a voice to preview how it sounds with your patient personas.
+          Select a voice, connect, then tap the mic and say hello to hear how it sounds.
         </p>
       </div>
 
@@ -218,14 +290,20 @@ export default function VoicePreview() {
             return (
               <button
                 key={voice.id}
-                onClick={() => setSelectedVoice(voice.id)}
+                onClick={() => {
+                  if (previewState === 'idle' || previewState === 'error') {
+                    setSelectedVoice(voice.id);
+                  }
+                }}
+                disabled={previewState !== 'idle' && previewState !== 'error'}
                 className="rounded-lg p-4 text-left transition-all"
                 style={{
                   backgroundColor: isSelected ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
                   borderWidth: '2px',
                   borderStyle: 'solid',
                   borderColor: isSelected ? UI_COLORS.button.primary : UI_COLORS.border.default,
-                  cursor: 'pointer',
+                  cursor: previewState === 'idle' || previewState === 'error' ? 'pointer' : 'default',
+                  opacity: previewState !== 'idle' && previewState !== 'error' && !isSelected ? 0.5 : 1,
                 }}
               >
                 <div className="flex items-center gap-3">
@@ -255,48 +333,72 @@ export default function VoicePreview() {
         </div>
       </div>
 
-      {/* Sample Text */}
-      <div>
-        <label className="text-sm font-medium mb-2 block" style={{ color: UI_COLORS.text.heading }}>
-          Sample Text
-        </label>
-        <textarea
-          value={sampleText}
-          onChange={(e) => setSampleText(e.target.value)}
-          placeholder="Enter text for the voice to speak..."
-          rows={3}
-          className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
-          style={{
-            borderWidth: '1px',
-            borderStyle: 'solid',
-            borderColor: UI_COLORS.border.default,
-            backgroundColor: UI_COLORS.background.white,
-            color: UI_COLORS.text.heading,
-          }}
-        />
-      </div>
-
       {/* Controls */}
       <div className="flex items-center gap-4">
         {previewState === 'idle' || previewState === 'error' ? (
           <Button
-            onClick={handlePreview}
-            disabled={!sampleText.trim()}
+            onClick={handleConnect}
             className="px-6 gap-2 transition-colors"
             style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            <Play className="w-4 h-4" />
-            Preview Voice
+            <Volume2 className="w-4 h-4" />
+            Connect
           </Button>
         ) : previewState === 'connecting' ? (
-          <div className="flex items-center gap-3">
-            <LoadingIndicator size="sm" message="Connecting to voice server..." />
-          </div>
-        ) : (
+          <LoadingIndicator size="sm" message="Connecting to voice server..." />
+        ) : previewState === 'ready' ? (
           <div className="flex items-center gap-4">
-            {/* Playing animation */}
+            <Button
+              onClick={handleStartRecording}
+              className="px-6 gap-2 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+            >
+              <Mic className="w-4 h-4" />
+              Hold to Speak
+            </Button>
+            <Button
+              onClick={handleDisconnect}
+              variant="outline"
+              className="px-4 gap-2"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              <Square className="w-4 h-4" />
+              Disconnect
+            </Button>
+            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+              Say hello and listen to the response
+            </span>
+          </div>
+        ) : previewState === 'recording' ? (
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={handleStopRecording}
+              className="px-6 gap-2 transition-colors animate-pulse"
+              style={{ backgroundColor: UI_COLORS.status.error, color: '#fff' }}
+            >
+              <Mic className="w-4 h-4" />
+              Recording — Click to Stop
+            </Button>
+            <div className="flex items-end gap-1">
+              {[14, 22, 16, 26, 18].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-1 rounded-full"
+                  style={{
+                    backgroundColor: UI_COLORS.status.error,
+                    height: `${h}px`,
+                    animation: `loadingPulse 1.2s ease-in-out ${i * 0.15}s infinite`,
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        ) : previewState === 'playing' ? (
+          <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <div className="flex items-end gap-1">
                 {[14, 22, 16, 26, 18].map((h, i) => (
@@ -315,17 +417,8 @@ export default function VoicePreview() {
                 Playing — {VOICES.find((v) => v.id === selectedVoice)?.name}
               </span>
             </div>
-            <Button
-              onClick={handleStop}
-              variant="outline"
-              className="px-4 gap-2"
-              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
-            >
-              <Square className="w-4 h-4" />
-              Stop
-            </Button>
           </div>
-        )}
+        ) : null}
       </div>
 
       {/* Error message */}
@@ -335,7 +428,6 @@ export default function VoicePreview() {
         </p>
       )}
 
-      {/* Inline keyframes (shared with LoadingIndicator) */}
       <style>{`
         @keyframes loadingPulse {
           0%, 100% { transform: scaleY(1); opacity: 0.5; }

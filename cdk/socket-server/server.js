@@ -606,8 +606,9 @@ io.on("connection", (socket) => {
     }
   });
 
-  // ─── Voice Preview (pure TTS — no agent, no DB) ──────────────────────────
+  // ─── Voice Preview (mic-based — no agent, no DB) ─────────────────────────
   let ttsProcess = null;
+  let ttsReady = false;
 
   socket.on("voice-preview", (config = {}) => {
     console.log("🎙️ Voice preview requested:", config.voice_id);
@@ -617,6 +618,7 @@ io.on("connection", (socket) => {
       ttsProcess.kill();
       ttsProcess = null;
     }
+    ttsReady = false;
 
     const pythonCmd = process.env.PYTHON_CMD || "python3";
 
@@ -633,11 +635,10 @@ io.on("connection", (socket) => {
       return;
     }
 
-    // Send config to the TTS process via stdin
+    // Send initial config (voice_id) — stdin stays open for audio
     ttsProcess.stdin.write(
-      JSON.stringify({ voice_id: config.voice_id || "amy", text: config.text || "" }) + "\n",
+      JSON.stringify({ voice_id: config.voice_id || "amy" }) + "\n",
     );
-    ttsProcess.stdin.end();
 
     // Read JSON lines from stdout
     ttsProcess.stdout.on("data", (data) => {
@@ -647,6 +648,7 @@ io.on("connection", (socket) => {
           if (msg.type === "audio") {
             socket.emit("audio-chunk", { data: msg.data });
           } else if (msg.type === "ready") {
+            ttsReady = true;
             socket.emit("voice-preview-ready", {});
           } else if (msg.type === "done") {
             socket.emit("voice-preview-done", {});
@@ -671,13 +673,36 @@ io.on("connection", (socket) => {
     ttsProcess.on("close", (code) => {
       console.log("🎙️ TTS process exited with code:", code);
       ttsProcess = null;
+      ttsReady = false;
     });
+  });
+
+  // Relay mic audio to the voice preview process
+  socket.on("voice-preview-audio", (msg) => {
+    if (ttsProcess && ttsProcess.stdin.writable && ttsReady) {
+      ttsProcess.stdin.write(JSON.stringify({ type: "audio", data: msg.data }) + "\n");
+    }
+  });
+
+  socket.on("voice-preview-start-audio", () => {
+    if (ttsProcess && ttsProcess.stdin.writable && ttsReady) {
+      ttsProcess.stdin.write(JSON.stringify({ type: "start_audio" }) + "\n");
+      console.log("🎬 Voice preview: start_audio");
+    }
+  });
+
+  socket.on("voice-preview-end-audio", () => {
+    if (ttsProcess && ttsProcess.stdin.writable && ttsReady) {
+      ttsProcess.stdin.write(JSON.stringify({ type: "end_audio" }) + "\n");
+      console.log("🛑 Voice preview: end_audio");
+    }
   });
 
   socket.on("stop-voice-preview", () => {
     if (ttsProcess) {
       ttsProcess.kill();
       ttsProcess = null;
+      ttsReady = false;
       console.log("🛑 Voice preview stopped by client");
     }
   });
