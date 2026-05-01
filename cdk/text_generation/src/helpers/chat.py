@@ -371,7 +371,6 @@ def generate_streaming_response(
     # TODO(refactor): Extract streaming chunk iteration into a helper function
     # TODO(refactor): Extract fallback-to-invoke logic into a helper function
     # TODO(refactor): Extract student message saving + matching into a helper function (duplicated with get_response)
-    import time
     
     logger.info(f"🚀 STREAMING FUNCTION STARTED with query: '{query}' - DEPLOYMENT TEST v2")
 
@@ -414,8 +413,6 @@ def generate_streaming_response(
                 table_name=ddb_table_name,
             )
 
-        publish_to_appsync(session_id, {"type": "start", "content": ""})
-
         full_response = ""
 
         try:
@@ -436,7 +433,6 @@ def generate_streaming_response(
 
                 if content:
                     full_response += content
-                    publish_to_appsync(session_id, {"type": "chunk", "content": content})
 
             if not full_response:
                 raise Exception("No content received from streaming")
@@ -448,93 +444,14 @@ def generate_streaming_response(
                 config={"configurable": {"session_id": session_id}},
             )
             full_response = result.get("answer", str(result))
-            words = full_response.split(" ")
-            for i in range(0, len(words), 3):
-                chunk = " ".join(words[i : i + 3]) + " "
-                publish_to_appsync(session_id, {"type": "chunk", "content": chunk})
-                time.sleep(0.005)
 
-        publish_to_appsync(session_id, {"type": "end", "content": full_response})
         ai_message_id = save_message_to_db(session_id, persona_id, 'ai', full_response)
-
-        # Signal the frontend to lock the chat if the patient ended the session
-        if "SESSION COMPLETED" in full_response:
-            publish_to_appsync(session_id, {"type": "session_complete", "content": ""})
 
         return full_response
 
     except Exception as e:
         error_msg = "I am sorry, I cannot provide a response to that query."
-        publish_to_appsync(session_id, {"type": "error", "content": error_msg})
         return error_msg
-
-def get_cognito_token():
-    """Get the current user's Cognito JWT token from the Lambda event context."""
-    token = getattr(get_cognito_token, 'current_token', None)
-    if token:
-        logger.info(f"✅ Found Cognito JWT token: {token[:20]}...")
-        return token
-    else:
-        logger.error("❌ No Cognito token available in context")
-        return None
-
-def publish_to_appsync(session_id: str, data: dict):
-    """Publish streaming data to AppSync subscription using Cognito User Pool authentication."""
-    # TODO(refactor): Extract AppSync GraphQL mutation construction into a helper function
-    # TODO(refactor): Extract AppSync authentication header setup into a helper function
-    import requests
-    import json
-    import os
-    
-    try:        
-        appsync_url = os.environ.get('APPSYNC_GRAPHQL_URL')
-        if not appsync_url:
-            logger.error("AppSync GraphQL URL not available in environment")
-            return
-            
-        logger.info(f"🔗 Using AppSync URL: {appsync_url}")
-            
-        mutation = """
-        mutation PublishTextStream($sessionId: String!, $data: AWSJSON!) {
-            publishTextStream(sessionId: $sessionId, data: $data) {
-                sessionId
-                data
-            }
-        }
-        """
-        
-        payload = {
-            'query': mutation,
-            'variables': {
-                'sessionId': session_id,
-                'data': json.dumps(data)
-            }
-        }
-        
-        token = get_cognito_token()
-        if not token:
-            logger.error("No Cognito token available for AppSync authentication")
-            return
-            
-        headers = {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': token
-        }
-        
-        logger.info("🔑 Using Cognito User Pool token for authentication")
-        
-        logger.info(f"📶 Making AppSync request to: {appsync_url}")
-        response = requests.post(appsync_url, data=json.dumps(payload), headers=headers)
-        
-        if response.status_code != 200:
-            logger.error(f"Request payload: {json.dumps(payload, indent=2)}")
-        else:
-            logger.info(f"📝 Response DEPLOYMENT TEST v3: {response.text[:200]}...")
-        
-    except Exception as e:
-        logger.error(f"Failed to publish to AppSync: {e}")
-        logger.exception("Full AppSync error:")
 
 def save_message_to_db(session_id: str, user_id: str, sender_type: str, message_content: str) -> str | None:
     """Save message to PostgreSQL messages table and return the message_id.
@@ -2470,16 +2387,6 @@ The following is the instructor's answer key for this simulation case. Compare t
             questions_missed=missed_ids,
             all_questions=key_questions,
         )
-
-    # 7. Publish debrief via AppSync so frontend can receive it
-    # TODO(refactor): Extract debrief AppSync publishing into a helper function
-    try:
-        publish_to_appsync(session_id, {
-            "type": "debrief",
-            "content": json.dumps(debrief_data),
-        })
-    except Exception as e:
-        logger.error(f"Failed to publish debrief to AppSync: {e}")
 
     logger.info(f"✅ DEBRIEF GENERATION COMPLETE for session={session_id}, score={overall_score}")
     return debrief_data
