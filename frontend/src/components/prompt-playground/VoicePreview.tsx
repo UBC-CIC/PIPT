@@ -106,15 +106,20 @@ export default function VoicePreview() {
     setErrorMessage(null);
 
     try {
+      // Create playback context BEFORE any async work so it's within the
+      // user-gesture window and won't be auto-suspended by the browser.
+      playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
+      // Explicitly resume in case the browser still suspends it.
+      if (playbackCtxRef.current.state === 'suspended') {
+        await playbackCtxRef.current.resume();
+      }
+      nextPlayTimeRef.current = 0;
+
       const token = await authService.getIdToken();
       if (!token) throw new Error('Not authenticated');
 
       const socketUrl = appConfig.socket.url;
       if (!socketUrl) throw new Error('Socket server URL not configured');
-
-      // Create playback context
-      playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
-      nextPlayTimeRef.current = 0;
 
       // Connect to Socket.IO
       const socket = io(socketUrl, {

@@ -194,6 +194,14 @@ async def run_tts(voice_id: str, text: str):
         }
     })
 
+    await send_event(stream, {
+        "event": {
+            "promptEnd": {
+                "promptName": prompt_name
+            }
+        }
+    })
+
     emit({"type": "ready"})
 
     # 5) Read audio from the response stream
@@ -232,7 +240,6 @@ async def run_tts(voice_id: str, text: str):
 
     # Clean up
     try:
-        await send_event(stream, {"event": {"promptEnd": {"promptName": prompt_name}}})
         await send_event(stream, {"event": {"sessionEnd": {}}})
         await stream.input_stream.close()
     except Exception:
