@@ -19,9 +19,6 @@ COPY server.js ./
 COPY auth.js ./
 COPY media-bridge.js ./
 
-# Copy text generation modules
-COPY text-generation/ ./text-generation/
-
 ENV AWS_DEFAULT_REGION=us-east-1
 
 # Listen on HTTP port

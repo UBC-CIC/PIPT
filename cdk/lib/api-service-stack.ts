@@ -44,9 +44,6 @@ export class ApiServiceStack extends cdk.Stack {
   public readonly apiGW_basedURL: string;
   public readonly secret: secretsmanager.ISecret;
   public readonly appSyncApi: appsync.GraphqlApi;
-  public readonly embeddingStorageBucket: s3.Bucket;
-  public readonly bedrockLLMParameter: ssm.StringParameter;
-  public readonly embeddingModelParameter: ssm.StringParameter;
   public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
   public getUserPoolClientId = () => this.appClient.userPoolClientId;
@@ -94,7 +91,6 @@ export class ApiServiceStack extends cdk.Stack {
         enforceSSL: true,
       }
     );
-    this.embeddingStorageBucket = embeddingStorageBucket;
 
     /**
      *
@@ -886,7 +882,6 @@ export class ApiServiceStack extends cdk.Stack {
         stringValue: "us.anthropic.claude-sonnet-4-6",
       }
     );
-    this.bedrockLLMParameter = bedrockLLMParameter;
 
     const embeddingModelParameter = new ssm.StringParameter(
       this,
@@ -897,7 +892,6 @@ export class ApiServiceStack extends cdk.Stack {
         stringValue: "cohere.embed-v4:0",
       }
     );
-    this.embeddingModelParameter = embeddingModelParameter;
 
     const tableNameParameter = new ssm.StringParameter(
       this,

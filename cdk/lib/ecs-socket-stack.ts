@@ -10,7 +10,6 @@ import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as ssm from "aws-cdk-lib/aws-ssm";
-import * as s3 from "aws-cdk-lib/aws-s3";
 import { VpcStack } from "./vpc-stack";
 import { DatabaseStack } from "./database-stack";
 import { TurnServerStack } from "./turn-server-stack";
@@ -137,41 +136,6 @@ export class EcsSocketStack extends Stack {
     // Grant ECS task role permission to read the TURN shared secret
     turnServerStack.turnSecret.grantRead(taskRole);
 
-    // SSM GetParameter permission for reading Bedrock model IDs from Parameter Store
-    taskRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["ssm:GetParameter"],
-        resources: [
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/${stackPrefix}-Api/GenRx/BedrockLLMId`,
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/${stackPrefix}-Api/GenRx/EmbeddingModelId`,
-        ],
-      })
-    );
-
-    // S3 permissions for reading answer key files from the embedding storage bucket
-    const embeddingBucketName = apiServiceStack.embeddingStorageBucket?.bucketName;
-    if (embeddingBucketName) {
-      taskRole.addToPolicy(
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["s3:GetObject"],
-          resources: [
-            `arn:aws:s3:::${embeddingBucketName}/*`,
-          ],
-        })
-      );
-      taskRole.addToPolicy(
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: ["s3:ListBucket"],
-          resources: [
-            `arn:aws:s3:::${embeddingBucketName}`,
-          ],
-        })
-      );
-    }
-
     // REVIEW: The task role is also used as the execution role. These should be separate:
     // - Task role: permissions the application code needs at runtime (Bedrock, DynamoDB, etc.)
     // - Execution role: permissions ECS needs to pull images and write logs
@@ -206,11 +170,6 @@ export class EcsSocketStack extends Stack {
         SOCKET_EXECUTION_ROLE_ARN: taskRole.roleArn,
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
-        BEDROCK_MODEL_ID: apiServiceStack.bedrockLLMParameter?.parameterName ?? '',
-        BEDROCK_EMBEDDING_MODEL_ID: apiServiceStack.embeddingModelParameter?.parameterName ?? '',
-        EMBEDDING_REGION: "us-east-1",
-        DYNAMODB_TABLE_NAME: "DynamoDB-Conversation-Table",
-        ...(apiServiceStack.embeddingStorageBucket ? { EMBEDDING_STORAGE_BUCKET: apiServiceStack.embeddingStorageBucket.bucketName } : {}),
         ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {

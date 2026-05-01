@@ -8,7 +8,6 @@ import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { io, type Socket } from 'socket.io-client';
 import { SocketIOAudioClient, type VoiceSessionState } from '@/lib/socketio-audio-client';
-import { SocketIOTextClient, type TextSessionState } from '@/lib/socketio-text-client';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
@@ -111,11 +110,6 @@ function StudentChatPage() {
 
   // Ref for polling interval during voice mode
   const voicePollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Socket.IO text client for chat streaming and debrief
-  const textClientRef = useRef<SocketIOTextClient | null>(null);
-  const [, setTextSessionState] = useState<TextSessionState>('idle');
-  const [debriefProgressStage, setDebriefProgressStage] = useState<string | null>(null);
 
   // Real-time voice bubble tracking
   const currentVoiceBubbleRef = useRef<{ id: string; role: 'user' | 'assistant' } | null>(null);
@@ -372,38 +366,6 @@ function StudentChatPage() {
     };
   }, [cleanupVoiceSession]);
 
-  // Initialize Socket.IO text client on mount for chat streaming and debrief
-  useEffect(() => {
-    const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
-    if (!socketUrl) return;
-
-    let cancelled = false;
-
-    authService.getIdToken().then((token) => {
-      if (cancelled || !token) return;
-
-      const client = new SocketIOTextClient({
-        socketUrl,
-        token,
-        onStateChange: (state) => setTextSessionState(state),
-        onError: (err) => console.warn('[SocketIOTextClient] error:', err.message),
-      });
-
-      textClientRef.current = client;
-      client.connect();
-    }).catch((err) => {
-      console.warn('[SocketIOTextClient] Failed to get auth token:', err);
-    });
-
-    return () => {
-      cancelled = true;
-      if (textClientRef.current) {
-        textClientRef.current.disconnect();
-        textClientRef.current = null;
-      }
-    };
-  }, []);
-
   // State for sidebar visibility
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
@@ -516,87 +478,75 @@ function StudentChatPage() {
     const aiGreetingId = `msg-greeting-${Date.now()}`;
     let greetingAdded = false;
 
-    const callbacks = {
-      onChunk: (text: string) => {
-        if (!greetingAdded) {
-          greetingAdded = true;
+    studentService.sendMessageStreaming(
+      groupId, patientId, sessionId, '',
+      {
+        onChunk: (text) => {
+          if (!greetingAdded) {
+            greetingAdded = true;
+            setMessages([{
+              message_id: aiGreetingId,
+              chat_id: chatId,
+              sender_type: 'ai',
+              message_content: text,
+              sent_at: new Date().toISOString(),
+            }]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiGreetingId
+                  ? { ...m, message_content: m.message_content + text }
+                  : m
+              )
+            );
+          }
+        },
+        onDone: (fullText) => {
+          if (!greetingAdded) {
+            setMessages([{
+              message_id: aiGreetingId,
+              chat_id: chatId,
+              sender_type: 'ai',
+              message_content: fullText || 'Hello! How can I help you today?',
+              sent_at: new Date().toISOString(),
+            }]);
+          } else {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiGreetingId
+                  ? { ...m, message_content: fullText || m.message_content }
+                  : m
+              )
+            );
+          }
+          setIsAiResponding(false);
+        },
+        onError: (error) => {
+          console.error('AI greeting error:', error);
           setMessages([{
             message_id: aiGreetingId,
             chat_id: chatId,
-            sender_type: 'ai' as const,
-            message_content: text,
+            sender_type: 'ai',
+            message_content: 'Hello! How can I help you today?',
             sent_at: new Date().toISOString(),
           }]);
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.message_id === aiGreetingId
-                ? { ...m, message_content: m.message_content + text }
-                : m
-            )
-          );
-        }
+          setIsAiResponding(false);
+        },
+        onSessionComplete: () => {
+          setSessionCompleted(true);
+        },
       },
-      onDone: (fullText: string) => {
-        if (!greetingAdded) {
-          setMessages([{
-            message_id: aiGreetingId,
-            chat_id: chatId,
-            sender_type: 'ai' as const,
-            message_content: fullText || 'Hello! How can I help you today?',
-            sent_at: new Date().toISOString(),
-          }]);
-        } else {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.message_id === aiGreetingId
-                ? { ...m, message_content: fullText || m.message_content }
-                : m
-            )
-          );
-        }
-        setIsAiResponding(false);
-      },
-      onError: (error: Error) => {
-        console.error('AI greeting error:', error);
-        setMessages([{
-          message_id: aiGreetingId,
-          chat_id: chatId,
-          sender_type: 'ai' as const,
-          message_content: 'Hello! How can I help you today?',
-          sent_at: new Date().toISOString(),
-        }]);
-        setIsAiResponding(false);
-      },
-      onSessionComplete: () => {
-        setSessionCompleted(true);
-      },
-    };
-
-    // Use Socket.IO text client if connected, otherwise fall back to AppSync streaming
-    const textClient = textClientRef.current;
-    if (textClient && textClient.getState() === 'connected') {
-      textClient.sendMessage(
-        { session_id: sessionId, simulation_group_id: groupId, patient_id: patientId, message: '' },
-        callbacks,
-      );
-    } else {
-      // Fallback to AppSync-based streaming
-      studentService.sendMessageStreaming(
-        groupId, patientId, sessionId, '',
-        callbacks,
-      ).catch((err) => {
-        console.error('AI greeting streaming failed:', err);
-        setMessages([{
-          message_id: aiGreetingId,
-          chat_id: chatId,
-          sender_type: 'ai',
-          message_content: 'Hello! How can I help you today?',
-          sent_at: new Date().toISOString(),
-        }]);
-        setIsAiResponding(false);
-      });
-    }
+    ).catch((err) => {
+      console.error('AI greeting streaming failed:', err);
+      setMessages([{
+        message_id: aiGreetingId,
+        chat_id: chatId,
+        sender_type: 'ai',
+        message_content: 'Hello! How can I help you today?',
+        sent_at: new Date().toISOString(),
+      }]);
+      setIsAiResponding(false);
+    });
   }, [sessionId]);
 
   /**
@@ -621,7 +571,6 @@ function StudentChatPage() {
 
     setIsConfirmConcludeOpen(false);
     setSessionStatus('generating_debrief');
-    setDebriefProgressStage(null);
 
     // Call the conclude API
     const result = await studentService.concludeInteraction(groupId, patientId, sessionId, recommendations);
@@ -632,127 +581,79 @@ function StudentChatPage() {
       return;
     }
 
-    /**
-     * Parse raw debrief data (from socket or REST) into the AIDebriefData shape
-     * used by the UI. Handles both legacy string arrays and enhanced object arrays.
-     */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parseDebriefData = (parsed: Record<string, any>): AIDebriefData => {
-      // Safety net: if the backend JSON parse failed, the entire LLM output
-      // ends up in the "summary" field as a raw JSON string. Detect this and
-      // extract the structured data from it.
-      if (
-        parsed.summary &&
-        typeof parsed.summary === 'string' &&
-        parsed.summary.trimStart().startsWith('{') &&
-        (!parsed.questions_addressed || parsed.questions_addressed.length === 0)
-      ) {
-        const extracted = extractDebriefFromRawJson(parsed.summary);
-        if (extracted) {
-          parsed = extracted;
-        }
-      }
-
-      // questions_addressed may be strings (legacy) or objects with question_text (enhanced)
-      const addressedQuestions = (parsed.questions_addressed || []).map(
-        (q: string | { question_text?: string; quality_assessment?: string }) =>
-          typeof q === 'string' ? q : (q.question_text || 'Unknown question')
-      );
-      const missedQuestions = (parsed.questions_missed || []).map(
-        (q: string | { question_text?: string }) =>
-          typeof q === 'string' ? q : (q.question_text || 'Unknown question')
-      );
-
-      return {
-        summary: parsed.summary || '',
-        questionsAddressed: addressedQuestions,
-        missedKeyQuestionsCount: missedQuestions.length,
-        missedQuestions: missedQuestions,
-        missedQuestionsGuidance: parsed.reasoning_gaps || '',
-        overallScore: typeof parsed.overall_score === 'number' ? parsed.overall_score : undefined,
-        recommendation: typeof parsed.recommendation === 'string' ? parsed.recommendation : undefined,
-        recommendationFeedback: {
-          strengths: parsed.recommendation_feedback?.strengths || [],
-          areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
-        },
-        suggestedRewrites: (parsed.suggested_rewrites || []).map(
-          (r: { original_message?: string; suggested_rewrite?: string }) => ({
-            original: r.original_message || '',
-            suggested: r.suggested_rewrite || '',
-          })
-        ),
-        rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
-        answerKeyComparison: parsed.answer_key_comparison ? {
-          answerKeyAvailable: parsed.answer_key_comparison.answer_key_available ?? false,
-          correctElements: parsed.answer_key_comparison.correct_elements,
-          missingElements: parsed.answer_key_comparison.missing_elements,
-          incorrectElements: parsed.answer_key_comparison.incorrect_elements,
-          overallAlignment: parsed.answer_key_comparison.overall_alignment,
-        } : undefined,
-      };
-    };
-
-    // Request debrief via Socket.IO text client
-    const textClient = textClientRef.current;
-    if (textClient && (textClient.getState() === 'connected' || textClient.getState() === 'connecting')) {
-      textClient.requestDebrief(
-        { session_id: sessionId, simulation_group_id: groupId, patient_id: patientId },
-        {
-          onProgress: (stage) => {
-            setDebriefProgressStage(stage);
-          },
-          onComplete: (data) => {
-            try {
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const parsed = typeof data === 'string' ? JSON.parse(data) : (data as Record<string, any>);
-              setDebriefData(parseDebriefData(parsed));
-              setSessionStatus('concluded');
-              setDebriefProgressStage(null);
-              setIsAIDebriefOpen(true);
-            } catch (e) {
-              console.error('Failed to parse debrief data:', e);
-              setSessionStatus('concluded');
-              setDebriefProgressStage(null);
-            }
-          },
-          onError: (err) => {
-            console.warn('Debrief via socket failed, falling back to REST polling:', err.message);
-            // Fall back to REST polling for debrief
-            studentService.fetchDebrief(sessionId).then((data) => {
-              if (data) {
-                setDebriefData(data);
-                setSessionStatus('concluded');
-                setDebriefProgressStage(null);
-                setIsAIDebriefOpen(true);
-              } else {
-                console.error('Debrief not available via REST fallback');
-                setSessionStatus('concluded');
-                setDebriefProgressStage(null);
+    // Listen for the debrief result via AppSync subscription
+    // The backend publishes a "debrief" event when generation is complete
+    try {
+      const { subscribeToTextStream } = await import('@/lib/appsync-client');
+      const unsubscribe = await subscribeToTextStream(sessionId, (event) => {
+        if (event.type === 'debrief') {
+          try {
+            let parsed = JSON.parse(event.content);
+            
+            // Safety net: if the backend JSON parse failed, the entire LLM output
+            // ends up in the "summary" field as a raw JSON string. Detect this and
+            // extract the structured data from it.
+            if (
+              parsed.summary &&
+              typeof parsed.summary === 'string' &&
+              parsed.summary.trimStart().startsWith('{') &&
+              (!parsed.questions_addressed || parsed.questions_addressed.length === 0)
+            ) {
+              const extracted = extractDebriefFromRawJson(parsed.summary);
+              if (extracted) {
+                parsed = extracted;
               }
-            }).catch(() => {
-              setSessionStatus('concluded');
-              setDebriefProgressStage(null);
+            }
+
+            // questions_addressed may be strings (legacy) or objects with question_text (enhanced)
+            const addressedQuestions = (parsed.questions_addressed || []).map(
+              (q: string | { question_text?: string; quality_assessment?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
+            const missedQuestions = (parsed.questions_missed || []).map(
+              (q: string | { question_text?: string }) =>
+                typeof q === 'string' ? q : (q.question_text || 'Unknown question')
+            );
+            setDebriefData({
+              summary: parsed.summary || '',
+              questionsAddressed: addressedQuestions,
+              missedKeyQuestionsCount: missedQuestions.length,
+              missedQuestions: missedQuestions,
+              missedQuestionsGuidance: parsed.reasoning_gaps || '',
+              overallScore: typeof parsed.overall_score === 'number' ? parsed.overall_score : undefined,
+              recommendation: typeof parsed.recommendation === 'string' ? parsed.recommendation : undefined,
+              recommendationFeedback: {
+                strengths: parsed.recommendation_feedback?.strengths || [],
+                areasForImprovement: parsed.recommendation_feedback?.areas_for_improvement || [],
+              },
+              suggestedRewrites: (parsed.suggested_rewrites || []).map(
+                (r: { original_message?: string; suggested_rewrite?: string }) => ({
+                  original: r.original_message || '',
+                  suggested: r.suggested_rewrite || '',
+                })
+              ),
+              rubricDescription: 'Compare your recommendations with the answer key provided by your instructor.',
+              answerKeyComparison: parsed.answer_key_comparison ? {
+                answerKeyAvailable: parsed.answer_key_comparison.answer_key_available ?? false,
+                correctElements: parsed.answer_key_comparison.correct_elements,
+                missingElements: parsed.answer_key_comparison.missing_elements,
+                incorrectElements: parsed.answer_key_comparison.incorrect_elements,
+                overallAlignment: parsed.answer_key_comparison.overall_alignment,
+              } : undefined,
             });
-          },
-        },
-      );
-    } else {
-      // Socket not connected — fall back to REST polling
-      console.warn('Text client not connected, falling back to REST polling for debrief');
-      try {
-        const data = await studentService.fetchDebrief(sessionId);
-        if (data) {
-          setDebriefData(data);
-          setSessionStatus('concluded');
-          setIsAIDebriefOpen(true);
-        } else {
-          setSessionStatus('concluded');
+            setSessionStatus('concluded');
+            setIsAIDebriefOpen(true);
+          } catch (e) {
+            console.error('Failed to parse debrief data:', e);
+            setSessionStatus('concluded');
+          }
+          unsubscribe();
         }
-      } catch (err) {
-        console.error('Failed to fetch debrief via REST:', err);
-        setSessionStatus('concluded');
-      }
-      setDebriefProgressStage(null);
+      });
+    } catch (err) {
+      console.error('Failed to subscribe for debrief:', err);
+      // Even if subscription fails, the session is concluded — debrief can be fetched later
+      setSessionStatus('concluded');
     }
   };
 
@@ -765,8 +666,7 @@ function StudentChatPage() {
   }, []);
 
   /**
-   * Handle sending a message — uses Socket.IO text client for real-time chunks,
-   * falls back to AppSync streaming or non-streaming REST if socket is unavailable.
+   * Handle sending a message — uses AppSync streaming for real-time chunks
    */
   const handleSendMessage = async () => {
     if (!inputMessage.trim() || !groupId || !patientId || !sessionId || isAiResponding || sessionCompleted) return;
@@ -796,70 +696,60 @@ function StudentChatPage() {
     };
     setMessages((prev) => [...prev, aiMessage]);
 
-    const callbacks = {
-      onChunk: (text: string) => {
-        // Append chunk to the AI message in-place
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.message_id === aiMessageId
-              ? { ...m, message_content: m.message_content + text }
-              : m
-          )
-        );
-      },
-      onDone: (fullText: string) => {
-        // Finalize with the complete text (in case chunks were missed)
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.message_id === aiMessageId
-              ? { ...m, message_content: fullText || m.message_content }
-              : m
-          )
-        );
-        setIsAiResponding(false);
-        cancelStreamRef.current = null;
-      },
-      onError: (error: Error) => {
-        console.error('Streaming error:', error);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.message_id === aiMessageId
-              ? { ...m, message_content: m.message_content || 'Sorry, something went wrong. Please try again.' }
-              : m
-          )
-        );
-        setIsAiResponding(false);
-        cancelStreamRef.current = null;
-      },
-      onSessionComplete: () => {
-        setSessionCompleted(true);
-      },
-    };
-
-    // Use Socket.IO text client if connected, otherwise fall back
-    const textClient = textClientRef.current;
-    if (textClient && textClient.getState() === 'connected') {
-      textClient.sendMessage(
-        { session_id: sessionId, simulation_group_id: groupId, patient_id: patientId, message: messageText },
-        callbacks,
+    try {
+      const cancel = await studentService.sendMessageStreaming(
+        groupId, patientId, sessionId, messageText,
+        {
+          onChunk: (text) => {
+            // Append chunk to the AI message in-place
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiMessageId
+                  ? { ...m, message_content: m.message_content + text }
+                  : m
+              )
+            );
+          },
+          onDone: (fullText) => {
+            // Finalize with the complete text (in case chunks were missed)
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiMessageId
+                  ? { ...m, message_content: fullText || m.message_content }
+                  : m
+              )
+            );
+            setIsAiResponding(false);
+            cancelStreamRef.current = null;
+          },
+          onError: (error) => {
+            console.error('Streaming error:', error);
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.message_id === aiMessageId
+                  ? { ...m, message_content: m.message_content || 'Sorry, something went wrong. Please try again.' }
+                  : m
+              )
+            );
+            setIsAiResponding(false);
+            cancelStreamRef.current = null;
+          },
+          onSessionComplete: () => {
+            setSessionCompleted(true);
+          },
+        },
       );
-    } else {
-      // Fallback: try AppSync streaming, then non-streaming REST
-      try {
-        const cancel = await studentService.sendMessageStreaming(
-          groupId, patientId, sessionId, messageText, callbacks,
-        );
-        cancelStreamRef.current = cancel;
-      } catch (error) {
-        console.error('Failed to start streaming:', error);
-        // Final fallback: non-streaming REST call
-        try {
-          const result = await studentService.sendMessage(groupId, patientId, sessionId, messageText);
-          callbacks.onDone(result.llm_output);
-        } catch (restError) {
-          callbacks.onError(restError instanceof Error ? restError : new Error(String(restError)));
-        }
-      }
+      cancelStreamRef.current = cancel;
+    } catch (error) {
+      console.error('Failed to start streaming:', error);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.message_id === aiMessageId
+            ? { ...m, message_content: 'Sorry, something went wrong. Please try again.' }
+            : m
+        )
+      );
+      setIsAiResponding(false);
     }
   };
 
@@ -928,11 +818,6 @@ function StudentChatPage() {
           <p className="text-lg font-medium" style={{ color: '#fff' }}>
             Generating Debrief...
           </p>
-          {debriefProgressStage && (
-            <p className="text-sm" style={{ color: 'rgba(255, 255, 255, 0.8)' }}>
-              {debriefProgressStage}
-            </p>
-          )}
         </div>
       )}
 
@@ -1446,7 +1331,7 @@ function StudentChatPage() {
               <div className="flex items-center gap-3">
                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: UI_COLORS.text.muted }} />
                 <p className="text-base" style={{ color: UI_COLORS.text.body }}>
-                  {debriefProgressStage || 'Generating debrief...'}
+                  Generating debrief...
                 </p>
               </div>
             </div>
