@@ -210,10 +210,53 @@ async function embedText(modelId, text, region = 'us-east-1', inputType = 'searc
   return embeddings[0];
 }
 
+/**
+ * Compute embeddings for multiple texts in a single Bedrock InvokeModel call.
+ * Cohere Embed v4 supports up to 96 texts per request.
+ * This avoids hitting Bedrock rate limits that occur with sequential single-text calls.
+ *
+ * @param {string} modelId - Cohere embedding model ID (e.g. 'cohere.embed-v4:0')
+ * @param {string[]} texts - Array of texts to embed
+ * @param {string} [region='us-east-1'] - AWS region for the embedding model
+ * @param {string} [inputType='search_document'] - 'search_query' for matching, 'search_document' for indexing
+ * @returns {Promise<number[][]>} Array of embedding vectors (one per input text)
+ */
+async function embedTextBatch(modelId, texts, region = 'us-east-1', inputType = 'search_document') {
+  if (!texts || texts.length === 0) return [];
+
+  const client = getClient(region);
+
+  const body = JSON.stringify({
+    texts,
+    input_type: inputType,
+    embedding_types: ['float'],
+  });
+
+  const command = new InvokeModelCommand({
+    modelId,
+    body,
+    accept: '*/*',
+    contentType: 'application/json',
+  });
+
+  const response = await client.send(command);
+  const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+
+  const embeddings = responseBody.embeddings?.float;
+  if (!embeddings || embeddings.length !== texts.length) {
+    throw new Error(
+      `Cohere Embed v4 batch: expected ${texts.length} embeddings, got ${embeddings ? embeddings.length : 0}`
+    );
+  }
+
+  return embeddings;
+}
+
 module.exports = {
   getClient,
   extractJson,
   converseStream,
   invokeModelJson,
   embedText,
+  embedTextBatch,
 };

@@ -814,11 +814,13 @@ def cache_key_questions(
             logger.error(f"Failed to cache empty question list in DynamoDB: {e}")
         return []
 
-    # 3. Compute embeddings for each question, skip failures
+    # 3. Compute embeddings in a single batch call (Cohere Embed v4 supports up to 96 texts)
+    #    This avoids hitting Bedrock rate limits that occur when making 14+ sequential calls.
     cached_questions = []
-    for q in questions:
-        try:
-            embedding = embeddings_model.embed_query(q["question_text"])
+    try:
+        question_texts = [q["question_text"] for q in questions]
+        embeddings = embeddings_model.embed_documents(question_texts)
+        for q, embedding in zip(questions, embeddings):
             cached_questions.append({
                 "question_id": q["question_id"],
                 "question_text": q["question_text"],
@@ -827,8 +829,22 @@ def cache_key_questions(
                 "weight": q["weight"],
                 "embedding": embedding,
             })
-        except Exception as e:
-            logger.error(f"Failed to compute embedding for question {q['question_id']}: {e}")
+    except Exception as e:
+        logger.error(f"Failed to batch-compute embeddings for key questions: {e}")
+        # Fall back to one-at-a-time if batch fails
+        for q in questions:
+            try:
+                embedding = embeddings_model.embed_query(q["question_text"])
+                cached_questions.append({
+                    "question_id": q["question_id"],
+                    "question_text": q["question_text"],
+                    "evaluation_criteria": q["evaluation_criteria"],
+                    "is_mandatory": q["is_mandatory"],
+                    "weight": q["weight"],
+                    "embedding": embedding,
+                })
+            except Exception as inner_e:
+                logger.error(f"Failed to compute embedding for question {q['question_id']}: {inner_e}")
 
     # 4. Store in DynamoDB
     try:

@@ -21,7 +21,7 @@
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
 const { DynamoDBDocumentClient, GetCommand, PutCommand } = require('@aws-sdk/lib-dynamodb');
 const { getPool } = require('./db');
-const { embedText } = require('./bedrock');
+const { embedText, embedTextBatch } = require('./bedrock');
 
 const logger = {
   info: (...args) => console.log(JSON.stringify({ level: 'INFO', message: args.join(' ') })),
@@ -120,21 +120,39 @@ async function cacheKeyQuestions(
     return [];
   }
 
-  // 3. Compute embeddings for each question, skip failures
+  // 3. Compute embeddings in a single batch call (Cohere Embed v4 supports up to 96 texts)
+  //    This avoids hitting Bedrock rate limits that occur with 14+ sequential calls.
   const cachedQuestions = [];
-  for (const q of questions) {
-    try {
-      const embedding = await embedText(embeddingModelId, q.question_text, embeddingRegion);
+  try {
+    const questionTexts = questions.map((q) => q.question_text);
+    const embeddings = await embedTextBatch(embeddingModelId, questionTexts, embeddingRegion, 'search_document');
+    for (let i = 0; i < questions.length; i++) {
       cachedQuestions.push({
-        question_id: q.question_id,
-        question_text: q.question_text,
-        evaluation_criteria: q.evaluation_criteria,
-        is_mandatory: q.is_mandatory,
-        weight: q.weight,
-        embedding,
+        question_id: questions[i].question_id,
+        question_text: questions[i].question_text,
+        evaluation_criteria: questions[i].evaluation_criteria,
+        is_mandatory: questions[i].is_mandatory,
+        weight: questions[i].weight,
+        embedding: embeddings[i],
       });
-    } catch (err) {
-      logger.error(`Failed to compute embedding for question ${q.question_id}: ${err.message}`);
+    }
+  } catch (batchErr) {
+    logger.error(`Batch embedding failed, falling back to one-at-a-time: ${batchErr.message}`);
+    // Fall back to one-at-a-time if batch fails
+    for (const q of questions) {
+      try {
+        const embedding = await embedText(embeddingModelId, q.question_text, embeddingRegion);
+        cachedQuestions.push({
+          question_id: q.question_id,
+          question_text: q.question_text,
+          evaluation_criteria: q.evaluation_criteria,
+          is_mandatory: q.is_mandatory,
+          weight: q.weight,
+          embedding,
+        });
+      } catch (err) {
+        logger.error(`Failed to compute embedding for question ${q.question_id}: ${err.message}`);
+      }
     }
   }
 
