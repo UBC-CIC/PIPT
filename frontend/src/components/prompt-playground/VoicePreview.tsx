@@ -8,22 +8,59 @@ import { io, type Socket } from 'socket.io-client';
 import { appConfig } from '@/config/aws-config';
 
 // ---------------------------------------------------------------------------
-// Available Nova Sonic voices
+// Available Nova Sonic voices (grouped by language)
 // ---------------------------------------------------------------------------
 
 interface VoiceOption {
   id: string;
   name: string;
   gender: 'Feminine' | 'Masculine';
+  locale: string;
 }
 
-const VOICES: VoiceOption[] = [
-  { id: 'amy', name: 'Amy', gender: 'Feminine' },
-  { id: 'tiffany', name: 'Tiffany', gender: 'Feminine' },
-  { id: 'lupe', name: 'Lupe', gender: 'Feminine' },
-  { id: 'matthew', name: 'Matthew', gender: 'Masculine' },
-  { id: 'carlos', name: 'Carlos', gender: 'Masculine' },
+interface VoiceGroup {
+  language: string;
+  voices: VoiceOption[];
+}
+
+const VOICE_GROUPS: VoiceGroup[] = [
+  {
+    language: 'English (US)',
+    voices: [
+      { id: 'tiffany', name: 'Tiffany', gender: 'Feminine', locale: 'en-US' },
+      { id: 'matthew', name: 'Matthew', gender: 'Masculine', locale: 'en-US' },
+    ],
+  },
+  {
+    language: 'English (UK)',
+    voices: [
+      { id: 'amy', name: 'Amy', gender: 'Feminine', locale: 'en-GB' },
+    ],
+  },
+  {
+    language: 'English (Australia)',
+    voices: [
+      { id: 'olivia', name: 'Olivia', gender: 'Feminine', locale: 'en-AU' },
+    ],
+  },
+  {
+    language: 'English (Indian)',
+    voices: [
+      { id: 'kiara', name: 'Kiara', gender: 'Feminine', locale: 'en-IN' },
+      { id: 'arjun', name: 'Arjun', gender: 'Masculine', locale: 'en-IN' },
+    ],
+  },
 ];
+
+// Flat list for lookups
+const ALL_VOICES = VOICE_GROUPS.flatMap((g) =>
+  g.voices.map((v) => ({ ...v, language: g.language }))
+);
+
+// Unique key per voice entry (id can repeat across locales, e.g. kiara)
+function vKey(id: string, locale: string) {
+  return `${id}-${locale}`;
+}
 
 type PreviewState = 'idle' | 'connecting' | 'ready' | 'recording' | 'playing' | 'error';
 
@@ -32,26 +69,26 @@ type PreviewState = 'idle' | 'connecting' | 'ready' | 'recording' | 'playing' | 
 // ---------------------------------------------------------------------------
 
 export default function VoicePreview() {
-  const [selectedVoice, setSelectedVoice] = useState<string>('amy');
+  const [selectedKey, setSelectedKey] = useState('tiffany-en-US');
   const [previewState, setPreviewState] = useState<PreviewState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const selected = ALL_VOICES.find((v) => vKey(v.id, v.locale) === selectedKey) ?? ALL_VOICES[0];
+  const canChangeVoice = previewState === 'idle' || previewState === 'error';
 
   // Refs for cleanup
   const socketRef = useRef<Socket | null>(null);
   const playbackCtxRef = useRef<AudioContext | null>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
-  const workletNodeRef = useRef<AudioWorkletNode | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
   const micCtxRef = useRef<AudioContext | null>(null);
   const nextPlayTimeRef = useRef(0);
   const autoStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /**
-   * Stop mic recording and release resources.
-   */
   const stopMic = useCallback(() => {
-    if (workletNodeRef.current) {
-      workletNodeRef.current.disconnect();
-      workletNodeRef.current = null;
+    if (processorRef.current) {
+      processorRef.current.disconnect();
+      processorRef.current = null;
     }
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((t) => t.stop());
@@ -63,9 +100,6 @@ export default function VoicePreview() {
     }
   }, []);
 
-  /**
-   * Full cleanup — socket, audio contexts, mic.
-   */
   const cleanup = useCallback(() => {
     if (autoStopTimerRef.current) {
       clearTimeout(autoStopTimerRef.current);
@@ -84,12 +118,8 @@ export default function VoicePreview() {
     nextPlayTimeRef.current = 0;
   }, [stopMic]);
 
-  // Cleanup on unmount
   useEffect(() => cleanup, [cleanup]);
 
-  /**
-   * Play a base64-encoded 24kHz PCM audio chunk through the AudioContext.
-   */
   const playAudioChunk = useCallback((base64Data: string) => {
     const ctx = playbackCtxRef.current;
     if (!ctx) return;
@@ -115,17 +145,13 @@ export default function VoicePreview() {
     nextPlayTimeRef.current = startAt + buffer.duration;
   }, []);
 
-  /**
-   * Connect to the socket server and start a voice preview session.
-   * The session stays open so the instructor can tap the mic to speak.
-   */
+  // ── Connect ───────────────────────────────────────────────────────────────
   const handleConnect = useCallback(async () => {
     cleanup();
     setPreviewState('connecting');
     setErrorMessage(null);
 
     try {
-      // Create playback context within user gesture
       playbackCtxRef.current = new AudioContext({ sampleRate: 24000 });
       if (playbackCtxRef.current.state === 'suspended') {
         await playbackCtxRef.current.resume();
@@ -148,19 +174,15 @@ export default function VoicePreview() {
         setPreviewState('playing');
         playAudioChunk(data.data);
 
-        // Auto-return to ready state 2s after last audio chunk
         if (autoStopTimerRef.current) clearTimeout(autoStopTimerRef.current);
         autoStopTimerRef.current = setTimeout(() => {
           setPreviewState('ready');
         }, 2000);
       });
 
-      socket.on('voice-preview-ready', () => {
-        setPreviewState('ready');
-      });
+      socket.on('voice-preview-ready', () => setPreviewState('ready'));
 
       socket.on('voice-preview-done', () => {
-        // Session ended (one exchange complete) — go back to idle
         setPreviewState('idle');
         cleanup();
       });
@@ -177,7 +199,7 @@ export default function VoicePreview() {
         cleanup();
       });
 
-      socket.emit('voice-preview', { voice_id: selectedVoice });
+      socket.emit('voice-preview', { voice_id: selected.id });
 
       // Safety timeout — 60s max session
       autoStopTimerRef.current = setTimeout(() => {
@@ -189,217 +211,121 @@ export default function VoicePreview() {
       setPreviewState('error');
       cleanup();
     }
-  }, [selectedVoice, cleanup, playAudioChunk]);
+  }, [selected, cleanup, playAudioChunk]);
 
-  /**
-   * Start recording from the mic and streaming audio to the server.
-   */
+  // ── Record ────────────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
     const socket = socketRef.current;
     if (!socket) return;
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true,
-        },
+        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
       });
       micStreamRef.current = stream;
 
-      // Create an AudioContext at 16kHz for mic capture
       const micCtx = new AudioContext({ sampleRate: 16000 });
       micCtxRef.current = micCtx;
 
-      // Use a ScriptProcessor as a simple fallback for PCM capture
       const source = micCtx.createMediaStreamSource(stream);
       const processor = micCtx.createScriptProcessor(4096, 1, 1);
 
-      // Tell the server we're starting audio
       socket.emit('voice-preview-start-audio');
       setPreviewState('recording');
 
       processor.onaudioprocess = (e) => {
-        const float32 = e.inputBuffer.getChannelData(0);
-        // Convert float32 to 16-bit PCM
-        const int16 = new Int16Array(float32.length);
-        for (let i = 0; i < float32.length; i++) {
-          const s = Math.max(-1, Math.min(1, float32[i]));
-          int16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        const f32 = e.inputBuffer.getChannelData(0);
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) {
+          const s = Math.max(-1, Math.min(1, f32[i]));
+          i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         }
-        const base64 = btoa(
-          String.fromCharCode(...new Uint8Array(int16.buffer))
-        );
-        socket.emit('voice-preview-audio', { data: base64 });
+        socket.emit('voice-preview-audio', {
+          data: btoa(String.fromCharCode(...new Uint8Array(i16.buffer))),
+        });
       };
 
       source.connect(processor);
       processor.connect(micCtx.destination);
-
-      // Store processor ref for cleanup (reuse workletNodeRef)
-      workletNodeRef.current = processor as unknown as AudioWorkletNode;
+      processorRef.current = processor;
     } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : 'Microphone access denied'
-      );
+      setErrorMessage(err instanceof Error ? err.message : 'Microphone access denied');
       setPreviewState('error');
     }
   }, []);
 
-  /**
-   * Stop recording and wait for the model's response.
-   */
   const handleStopRecording = useCallback(() => {
-    const socket = socketRef.current;
-    if (socket) {
-      socket.emit('voice-preview-end-audio');
-    }
+    socketRef.current?.emit('voice-preview-end-audio');
     stopMic();
     setPreviewState('ready');
   }, [stopMic]);
 
-  /**
-   * Disconnect the session entirely.
-   */
   const handleDisconnect = useCallback(() => {
     cleanup();
     setPreviewState('idle');
   }, [cleanup]);
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-4xl space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold mb-2" style={{ color: UI_COLORS.text.heading }}>
-          Voice Preview
-        </h2>
-        <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-          Select a voice, connect, then tap the mic and say hello to hear how it sounds.
-        </p>
-      </div>
-
-      {/* Voice Selection Grid */}
-      <div>
-        <label className="text-sm font-medium mb-3 block" style={{ color: UI_COLORS.text.heading }}>
-          Select Voice
-        </label>
-        <div className="grid grid-cols-3 gap-3">
-          {VOICES.map((voice) => {
-            const isSelected = selectedVoice === voice.id;
-            return (
-              <button
-                key={voice.id}
-                onClick={() => {
-                  if (previewState === 'idle' || previewState === 'error') {
-                    setSelectedVoice(voice.id);
-                  }
-                }}
-                disabled={previewState !== 'idle' && previewState !== 'error'}
-                className="rounded-lg p-4 text-left transition-all"
-                style={{
-                  backgroundColor: isSelected ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
-                  borderWidth: '2px',
-                  borderStyle: 'solid',
-                  borderColor: isSelected ? UI_COLORS.button.primary : UI_COLORS.border.default,
-                  cursor: previewState === 'idle' || previewState === 'error' ? 'pointer' : 'default',
-                  opacity: previewState !== 'idle' && previewState !== 'error' && !isSelected ? 0.5 : 1,
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                    style={{
-                      backgroundColor: isSelected ? UI_COLORS.button.primary : UI_COLORS.border.light,
-                    }}
-                  >
-                    <Volume2
-                      className="w-5 h-5"
-                      style={{ color: isSelected ? '#fff' : UI_COLORS.text.muted }}
-                    />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
-                      {voice.name}
-                    </p>
-                    <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
-                      {voice.gender}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+    <div className="max-w-4xl space-y-6">
+      {/* Header + Controls side by side */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold mb-1" style={{ color: UI_COLORS.text.heading }}>
+            Voice Preview
+          </h2>
+          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+            Select a voice, connect, then tap the mic and say hello to hear how it sounds.
+          </p>
         </div>
-      </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-4">
-        {previewState === 'idle' || previewState === 'error' ? (
-          <Button
-            onClick={handleConnect}
-            className="px-6 gap-2 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-          >
-            <Volume2 className="w-4 h-4" />
-            Connect
-          </Button>
-        ) : previewState === 'connecting' ? (
-          <LoadingIndicator size="sm" message="Connecting to voice server..." />
-        ) : previewState === 'ready' ? (
-          <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-shrink-0 pt-1">
+          {previewState === 'idle' || previewState === 'error' ? (
             <Button
-              onClick={handleStartRecording}
+              onClick={handleConnect}
               className="px-6 gap-2 transition-colors"
               style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
             >
-              <Mic className="w-4 h-4" />
-              Hold to Speak
+              <Volume2 className="w-4 h-4" />
+              Connect
             </Button>
-            <Button
-              onClick={handleDisconnect}
-              variant="outline"
-              className="px-4 gap-2"
-              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
-            >
-              <Square className="w-4 h-4" />
-              Disconnect
-            </Button>
-            <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-              Say hello and listen to the response
-            </span>
-          </div>
-        ) : previewState === 'recording' ? (
-          <div className="flex items-center gap-4">
+          ) : previewState === 'connecting' ? (
+            <LoadingIndicator size="sm" message="Connecting..." />
+          ) : previewState === 'ready' ? (
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={handleStartRecording}
+                className="px-6 gap-2 transition-colors"
+                style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+              >
+                <Mic className="w-4 h-4" />
+                Tap to Speak
+              </Button>
+              <Button
+                onClick={handleDisconnect}
+                variant="outline"
+                className="px-4 gap-2"
+                style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+              >
+                <Square className="w-4 h-4" />
+                Disconnect
+              </Button>
+            </div>
+          ) : previewState === 'recording' ? (
             <Button
               onClick={handleStopRecording}
               className="px-6 gap-2 transition-colors animate-pulse"
               style={{ backgroundColor: UI_COLORS.status.error, color: '#fff' }}
             >
               <Mic className="w-4 h-4" />
-              Recording — Click to Stop
+              Click to Stop
             </Button>
-            <div className="flex items-end gap-1">
-              {[14, 22, 16, 26, 18].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-1 rounded-full"
-                  style={{
-                    backgroundColor: UI_COLORS.status.error,
-                    height: `${h}px`,
-                    animation: `loadingPulse 1.2s ease-in-out ${i * 0.15}s infinite`,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        ) : previewState === 'playing' ? (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-3">
+          ) : previewState === 'playing' ? (
+            <div className="flex items-center gap-2">
               <div className="flex items-end gap-1">
                 {[14, 22, 16, 26, 18].map((h, i) => (
                   <div
@@ -414,15 +340,95 @@ export default function VoicePreview() {
                 ))}
               </div>
               <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
-                Playing — {VOICES.find((v) => v.id === selectedVoice)?.name}
+                {selected.name} ({selected.language})
               </span>
             </div>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </div>
 
-      {/* Error message */}
+      {previewState === 'recording' && (
+        <div className="flex items-center gap-2">
+          <div className="flex items-end gap-1">
+            {[14, 22, 16, 26, 18].map((h, i) => (
+              <div
+                key={i}
+                className="w-1 rounded-full"
+                style={{
+                  backgroundColor: UI_COLORS.status.error,
+                  height: `${h}px`,
+                  animation: `loadingPulse 1.2s ease-in-out ${i * 0.15}s infinite`,
+                }}
+              />
+            ))}
+          </div>
+          <span className="text-sm" style={{ color: UI_COLORS.status.error }}>Listening...</span>
+        </div>
+      )}
+
       {errorMessage && (
+        <p className="text-sm" style={{ color: UI_COLORS.status.error }}>
+          {errorMessage}
+        </p>
+      )}
+
+      {/* Voice Selection — grouped by accent */}
+      <div className="space-y-4">
+        {VOICE_GROUPS.map((group) => (
+          <div key={group.language}>
+            <label className="text-sm font-medium mb-2 block" style={{ color: UI_COLORS.text.heading }}>
+              {group.language}
+            </label>
+            <div className="flex flex-wrap gap-3">
+              {group.voices.map((voice) => {
+                const key = vKey(voice.id, voice.locale);
+                const isSelected = selectedKey === key;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => canChangeVoice && setSelectedKey(key)}
+                    disabled={!canChangeVoice}
+                    className="rounded-lg p-3 text-left transition-all"
+                    style={{
+                      backgroundColor: isSelected ? UI_COLORS.background.tableHeader : UI_COLORS.background.white,
+                      borderWidth: '2px',
+                      borderStyle: 'solid',
+                      borderColor: isSelected ? UI_COLORS.button.primary : UI_COLORS.border.default,
+                      cursor: canChangeVoice ? 'pointer' : 'default',
+                      opacity: !canChangeVoice && !isSelected ? 0.5 : 1,
+                      minWidth: '140px',
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                        style={{
+                          backgroundColor: isSelected ? UI_COLORS.button.primary : UI_COLORS.border.light,
+                        }}
+                      >
+                        <Volume2
+                          className="w-4 h-4"
+                          style={{ color: isSelected ? '#fff' : UI_COLORS.text.muted }}
+                        />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-sm" style={{ color: UI_COLORS.text.heading }}>
+                          {voice.name}
+                        </p>
+                        <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+                          {voice.gender}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {errorMessage && previewState !== 'idle' && (
         <p className="text-sm" style={{ color: UI_COLORS.status.error }}>
           {errorMessage}
         </p>
