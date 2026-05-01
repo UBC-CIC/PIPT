@@ -1534,54 +1534,14 @@ exports.handler = async (event, context) => {
               }
             }
 
-            // Step 5: Invoke the text generation Lambda asynchronously for debrief generation
-            // The text gen Lambda will read the chat messages + recommendation from the DB
-            const { LambdaClient, InvokeCommand } = require("@aws-sdk/client-lambda");
-            const lambdaClient = new LambdaClient();
-
-            const textGenFunctionName = process.env.TEXT_GEN_FUNCTION_NAME;
-
-            if (textGenFunctionName) {
-              const debriefPayload = {
-                queryStringParameters: {
-                  simulation_group_id: simulationGroupId,
-                  session_id: sessionId,
-                  patient_id: patientId,
-                  mode: "debrief",
-                },
-                headers: event.headers,
-                requestContext: event.requestContext,
-                body: JSON.stringify({ recommendation }),
-              };
-
-              const invokeCommand = new InvokeCommand({
-                FunctionName: textGenFunctionName,
-                InvocationType: "Event", // Async invocation — fire and forget
-                Payload: JSON.stringify(debriefPayload),
-              });
-
-              try {
-                await lambdaClient.send(invokeCommand);
-                logger.info("Debrief generation Lambda invoked asynchronously", {
-                  sessionId,
-                  textGenFunctionName,
-                });
-              } catch (invokeErr) {
-                // Log but don't fail the conclude request — debrief can be retried
-                logger.error("Failed to invoke debrief generation Lambda", {
-                  error: invokeErr.message,
-                  stack: invokeErr.stack,
-                });
-              }
-            } else {
-              logger.warn("TEXT_GEN_FUNCTION_NAME not set — skipping debrief generation");
-            }
+            // Debrief generation is now triggered by the frontend via the socket server.
+            // The async Lambda invocation has been removed as part of the WebSocket migration.
 
             response.statusCode = 200;
             response.body = JSON.stringify({
               message: "Interaction concluded successfully.",
               chat: updatedChat[0],
-              debrief_triggered: !!textGenFunctionName,
+              debrief_triggered: false,
             });
           } catch (err) {
             response.statusCode = 500;
