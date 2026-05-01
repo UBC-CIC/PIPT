@@ -118,6 +118,9 @@ function StudentChatPage() {
   // Session ID — set by createSession (new chat) or from route (existing chat)
   const [sessionId, setSessionId] = useState<string | null>(null);
 
+  // Whether the AI is currently streaming a text response (used to disable input controls)
+  const [isAiResponding, setIsAiResponding] = useState(false);
+
   /**
    * Clean up voice session and Socket.IO connection.
    */
@@ -143,7 +146,7 @@ function StudentChatPage() {
    * Start a voice session when the mic button is clicked.
    */
   const handleStartVoiceMode = useCallback(() => {
-    if (sessionCompleted) return;
+    if (sessionCompleted || isAiResponding) return;
     setIsVoiceModeActive(true);
     setVoiceError(null);
     setVoiceSessionState('connecting');
@@ -316,7 +319,7 @@ function StudentChatPage() {
       setVoiceSessionState('error');
     });
     } // end startAudioClient
-  }, [patient, routeChatId, patientId, groupId, sessionId]);
+  }, [patient, routeChatId, patientId, groupId, sessionId, isAiResponding]);
 
   /**
    * Stop the voice session when the X button is clicked.
@@ -384,7 +387,6 @@ function StudentChatPage() {
   // State for chat
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState('');
-  const [isAiResponding, setIsAiResponding] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
@@ -1264,13 +1266,13 @@ function StudentChatPage() {
                   {patient.voice_enabled !== false && (
                   <button
                     onClick={handleStartVoiceMode}
-                    disabled={!sessionId || !patient?.name || patient.name === 'Loading...'}
+                    disabled={!sessionId || !patient?.name || patient.name === 'Loading...' || isAiResponding}
                     className="p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
                     onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
                     onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
                     aria-label="Voice input"
-                    title={!sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : 'Start voice mode'}
+                    title={!sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : isAiResponding ? 'Waiting for AI response...' : 'Start voice mode'}
                   >
                     <Mic className="w-5 h-5" />
                   </button>

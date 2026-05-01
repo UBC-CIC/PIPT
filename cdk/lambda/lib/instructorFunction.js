@@ -519,36 +519,26 @@ exports.handler = async (event, context) => {
             feminine_voices = [
               "tiffany",
               "amy",
-              "ambre",
-              "beatrice",
-              "greta",
-              "lupe",
+              "olivia",
+              "kiara",
             ];
             masculine_voices = [
               "matthew",
-              "florian",
-              "lorenzo",
-              "lennart",
-              "carlos",
+              "arjun",
             ];
 
-            function getRandomVoice(voices) {
-              return voices[Math.floor(Math.random() * voices.length)];
-            }
-
-            // If a voice_id is provided and valid against gender set, use it; else random
+            // Voice ID must be explicitly provided by the frontend
+            const allVoices = [...feminine_voices, ...masculine_voices];
             let voice_id;
-            if (provided_voice_id) {
-              const allVoices = [...feminine_voices, ...masculine_voices];
-              if (allVoices.includes(provided_voice_id)) {
-                voice_id = provided_voice_id;
-              }
+            if (provided_voice_id && allVoices.includes(provided_voice_id)) {
+              voice_id = provided_voice_id;
             }
             if (!voice_id) {
-              voice_id =
-                persona_gender.toLowerCase() === "female"
-                  ? getRandomVoice(feminine_voices)
-                  : getRandomVoice(masculine_voices);
+              response.statusCode = 400;
+              response.body = JSON.stringify({
+                error: "A valid voice_id is required. Choose from: " + allVoices.join(", "),
+              });
+              break;
             }
 
             // Insert new patient into the "personas" table with age and gender
@@ -699,7 +689,7 @@ exports.handler = async (event, context) => {
         ) {
           const { persona_id, instructor_email, simulation_group_id } =
             event.queryStringParameters;
-          const { persona_name, persona_age, persona_gender, persona_prompt, voice_enabled } =
+          const { persona_name, persona_age, persona_gender, persona_prompt, voice_enabled, voice_id } =
             JSON.parse(event.body || "{}");
 
           if (
@@ -733,7 +723,8 @@ exports.handler = async (event, context) => {
                             persona_age = ${persona_age}, 
                             persona_gender = ${persona_gender}, 
                             persona_prompt = ${persona_prompt},
-                            voice_enabled = ${voice_enabled !== undefined ? voice_enabled : true}
+                            voice_enabled = ${voice_enabled !== undefined ? voice_enabled : true},
+                            voice_id = ${voice_id || 'tiffany'}
                         WHERE persona_id = ${persona_id};
                     `;
 
@@ -972,7 +963,7 @@ exports.handler = async (event, context) => {
           try {
             // Query to get all patients for the given simulation group
             const simulationPatients = await sqlConnection`
-                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled
+                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id
                     FROM "personas" p
                     WHERE p.simulation_group_id = ${simulation_group_id}
                     ORDER BY p.persona_name ASC;

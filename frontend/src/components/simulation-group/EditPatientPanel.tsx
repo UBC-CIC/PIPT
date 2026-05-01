@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import UserAvatar from '@/components/UserAvatar';
+import VoiceSelector from '@/components/simulation-group/VoiceSelector';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import type { UsePatientEditorReturn } from '@/hooks/usePatientEditor';
 import { instructorService, type OrganizationLabels, type GlobalRubricQuestion, type CaseMaterial, type UploadedFileInfo } from '@/services/instructorService';
@@ -267,6 +268,17 @@ function InfoTab({
             borderColor: UI_COLORS.border.default,
             backgroundColor: UI_COLORS.background.white
           }}
+        />
+      </div>
+
+      {/* Voice */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+          Voice
+        </label>
+        <VoiceSelector
+          value={patientEditor.editPatientVoiceId}
+          onChange={(voiceId) => patientEditor.setEditPatientVoiceId(voiceId)}
         />
       </div>
 

@@ -6,12 +6,13 @@ import { authService } from '@/lib/auth';
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { io, type Socket } from 'socket.io-client';
 import { appConfig } from '@/config/aws-config';
+import { getVoicesByAccent } from '@/lib/voice-constants';
 
 // ---------------------------------------------------------------------------
-// Available Nova Sonic voices (grouped by language)
+// Build grouped voice data from shared constants (preserving locale for keys)
 // ---------------------------------------------------------------------------
 
-interface VoiceOption {
+interface VoiceOptionWithLocale {
   id: string;
   name: string;
   gender: 'Feminine' | 'Masculine';
@@ -20,37 +21,23 @@ interface VoiceOption {
 
 interface VoiceGroup {
   language: string;
-  voices: VoiceOption[];
+  voices: VoiceOptionWithLocale[];
 }
 
-const VOICE_GROUPS: VoiceGroup[] = [
-  {
-    language: 'English (US)',
-    voices: [
-      { id: 'tiffany', name: 'Tiffany', gender: 'Feminine', locale: 'en-US' },
-      { id: 'matthew', name: 'Matthew', gender: 'Masculine', locale: 'en-US' },
-    ],
-  },
-  {
-    language: 'English (UK)',
-    voices: [
-      { id: 'amy', name: 'Amy', gender: 'Feminine', locale: 'en-GB' },
-    ],
-  },
-  {
-    language: 'English (Australia)',
-    voices: [
-      { id: 'olivia', name: 'Olivia', gender: 'Feminine', locale: 'en-AU' },
-    ],
-  },
-  {
-    language: 'English (Indian)',
-    voices: [
-      { id: 'kiara', name: 'Kiara', gender: 'Feminine', locale: 'en-IN' },
-      { id: 'arjun', name: 'Arjun', gender: 'Masculine', locale: 'en-IN' },
-    ],
-  },
-];
+const ACCENT_TO_LOCALE: Record<string, string> = {
+  'English (US)': 'en-US',
+  'English (UK)': 'en-GB',
+  'English (AU)': 'en-AU',
+  'English (IN)': 'en-IN',
+};
+
+const VOICE_GROUPS: VoiceGroup[] = getVoicesByAccent().map((g) => ({
+  language: g.accent,
+  voices: g.voices.map((v) => ({
+    ...v,
+    locale: ACCENT_TO_LOCALE[v.accent] || 'en-US',
+  })),
+}));
 
 // Flat list for lookups
 const ALL_VOICES = VOICE_GROUPS.flatMap((g) =>

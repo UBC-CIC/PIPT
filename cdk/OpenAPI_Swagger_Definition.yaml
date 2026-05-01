@@ -3709,6 +3709,12 @@ paths:
                   type: string
                 patient_prompt:
                   type: string
+                voice_id:
+                  type: string
+                  description: Voice ID for TTS (e.g. tiffany, matthew, amy, olivia, kiara, arjun)
+                voice_enabled:
+                  type: boolean
+                  description: Whether voice mode is enabled for this patient
               required:
                 - patient_name
                 - patient_age

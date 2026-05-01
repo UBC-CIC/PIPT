@@ -784,6 +784,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
         persona_gender: patientData.patient_gender,
         persona_prompt: patientData.patient_prompt,
         voice_enabled: patientData.voice_enabled,
+        voice_id: patientData.voice_id,
       },
     });
 
