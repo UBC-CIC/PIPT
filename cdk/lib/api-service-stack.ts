@@ -1056,8 +1056,19 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnTextGenDockerFunc.overrideLogicalId("TextGenLambdaDockerFunc");
 
-    // Add the permission to the Lambda function's policy to allow API Gateway access
-    textGenLambdaDockerFunc.addPermission("AllowApiGatewayInvoke", {
+    // Create alias with provisioned concurrency to eliminate cold starts
+    const textGenAlias = new lambda.Alias(this, `${id}-TextGenLiveAlias`, {
+      aliasName: 'live',
+      version: textGenLambdaDockerFunc.currentVersion,
+      provisionedConcurrentExecutions: 1,
+    });
+
+    // Override the Logical ID of the alias so the OpenAPI spec can reference it
+    const cfnTextGenAlias = textGenAlias.node.defaultChild as lambda.CfnAlias;
+    cfnTextGenAlias.overrideLogicalId("TextGenLambdaDockerFuncLiveAlias");
+
+    // Add the permission to the alias to allow API Gateway access
+    textGenAlias.addPermission("AllowApiGatewayInvokeAlias", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/student*`,
