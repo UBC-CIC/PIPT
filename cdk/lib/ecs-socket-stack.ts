@@ -193,7 +193,7 @@ export class EcsSocketStack extends Stack {
     const service = new ecs.FargateService(this, "SocketService", {
       cluster,
       taskDefinition: taskDef,
-      desiredCount: 2, // Fixed count — no auto-scaling policy. Add Application Auto Scaling for production traffic.
+      desiredCount: 1, // Single task — textStreamSockets map is in-memory, requires all traffic on one container
       assignPublicIp: true,
       vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
     });
