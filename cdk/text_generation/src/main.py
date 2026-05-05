@@ -1,4 +1,4 @@
-# Force CodePipeline rebuild - multi-prompt debrief refactor
+# Force CodePipeline rebuild - cohere embed v4 region fix
 import os
 import json
 import boto3
