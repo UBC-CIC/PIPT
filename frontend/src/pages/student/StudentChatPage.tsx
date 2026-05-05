@@ -443,6 +443,7 @@ function StudentChatPage() {
   }, [groupId, patientId, routeChatId]);
 
   // Establish Socket.IO connection on mount for text streaming (and voice reuse)
+  const [socketConnected, setSocketConnected] = useState(false);
   useEffect(() => {
     if (socketRef.current?.connected) return;
 
@@ -456,6 +457,10 @@ function StudentChatPage() {
         auth: { token: token || '' },
       });
       socketRef.current = socket;
+
+      socket.on('connect', () => {
+        if (!cancelled) setSocketConnected(true);
+      });
 
       socket.on('connect_error', (err) => {
         console.warn('Socket.IO connection error:', err.message);
@@ -504,6 +509,7 @@ function StudentChatPage() {
   // Trigger AI greeting when a new session is created (not a resumed chat)
   useEffect(() => {
     if (!sessionId || !groupId || !patientId || routeChatId || greetingTriggeredRef.current) return;
+    if (!socketConnected) return; // Wait for socket to be ready
     greetingTriggeredRef.current = true;
 
     setIsAiResponding(true);
@@ -580,7 +586,7 @@ function StudentChatPage() {
       }]);
       setIsAiResponding(false);
     });
-  }, [sessionId]);
+  }, [sessionId, socketConnected]);
 
   /**
    * Handle sign out event
