@@ -20,7 +20,6 @@ def set_stream_callback_url(url: str | None):
     _stream_callback_url = url
 
 from langchain_aws import ChatBedrock
-from langchain_aws import BedrockLLM
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
 from langchain_classic.chains import create_retrieval_chain
@@ -767,30 +766,25 @@ def update_session_name(table_name: str, session_id: str, bedrock_llm_id: str) -
     student_message = human_messages[0].get('M', {}).get('data', {}).get('M', {}).get('content', {}).get('S', "")
     llm_message = ai_messages[0].get('M', {}).get('data', {}).get('M', {}).get('content', {}).get('S', "")
     
-    llm = BedrockLLM(model_id = bedrock_llm_id)
+    llm = ChatBedrock(
+        model_id=bedrock_llm_id,
+        model_kwargs=dict(temperature=0),
+        region_name='us-east-1'
+    )
     
-    system_prompt = """
-        You are given the first message from an AI and the first message from a student in a conversation. 
-        Based on these two messages, come up with a name that describes the conversation. 
-        The name should be less than 30 characters. ONLY OUTPUT THE NAME YOU GENERATED. NO OTHER TEXT.
-    """
+    system_prompt = """You are given the first message from an AI and the first message from a student in a conversation. 
+Based on these two messages, come up with a name that describes the conversation. 
+The name should be less than 30 characters. ONLY OUTPUT THE NAME YOU GENERATED. NO OTHER TEXT."""
+
+    from langchain_core.messages import SystemMessage, HumanMessage
+    messages = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=f"AI Message: {llm_message}\n\nStudent Message: {student_message}"),
+    ]
     
-    prompt = f"""
-        <|begin_of_text|>
-        <|start_header_id|>system<|end_header_id|>
-        {system_prompt}
-        <|eot_id|>
-        <|start_header_id|>AI Message<|end_header_id|>
-        {llm_message}
-        <|eot_id|>
-        <|start_header_id|>Student Message<|end_header_id|>
-        {student_message}
-        <|eot_id|>
-        <|start_header_id|>assistant<|end_header_id|>
-    """
-    
-    session_name = llm.invoke(prompt)
-    return session_name
+    response = llm.invoke(messages)
+    session_name = response.content if hasattr(response, 'content') else str(response)
+    return session_name.strip()
 
 
 # =============================================================================
