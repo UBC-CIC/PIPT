@@ -237,6 +237,7 @@ def handler(event, context):
     # When the ECS socket server calls us, it passes its own URL so we can
     # POST streaming chunks there instead of going through AppSync.
     stream_callback_url = query_params.get("stream_callback_url", "")
+    logger.info(f"🔗 stream_callback_url received: '{stream_callback_url}' | All query params: {list(query_params.keys())}")
     set_stream_callback_url(stream_callback_url or None)
 
     if not simulation_group_id or not session_id or not persona_id:
