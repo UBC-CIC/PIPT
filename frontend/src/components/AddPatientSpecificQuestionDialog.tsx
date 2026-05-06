@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS } from '@/lib/colors';
+import { useNotification } from '@/components/notifications';
 
 interface Patient {
   id: string;
@@ -29,6 +30,7 @@ export function AddPatientSpecificQuestionDialog({
   patients,
   onSave 
 }: AddPatientSpecificQuestionDialogProps) {
+  const { showNotification } = useNotification();
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [title, setTitle] = useState('');
   const [keyQuestion, setKeyQuestion] = useState('');
@@ -38,12 +40,12 @@ export function AddPatientSpecificQuestionDialog({
 
   const handleSave = () => {
     if (!selectedPatientId) {
-      alert('Please select a patient.');
+      showNotification({ message: 'Please select a patient.', type: 'warning' });
       return;
     }
     
     if (!title.trim() || !keyQuestion.trim()) {
-      alert('Please fill in at least the Title and Key Question fields.');
+      showNotification({ message: 'Please fill in at least the Title and Key Question fields.', type: 'warning' });
       return;
     }
 

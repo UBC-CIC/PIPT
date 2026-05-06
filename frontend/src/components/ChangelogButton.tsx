@@ -35,7 +35,7 @@ const changelog: ChangelogEntry[] = [
       { feature: 'Prompt playground for admins', status: 'working', note: 'can simulate interactions with the Persona for both debrief and chat before saving it' },
       { feature: 'Ability to rename patient documents', status: 'working', note: 'display name for patient information is used in student view instead of the raw filename' },
       { feature: 'Report issue dialog', status: 'not-working', note: 'UI exists but reports are not saved to the backend yet' },
-      { feature: 'Custom toast notifications', status: 'not-working', note: 'still using browser alert() dialogs — toast system not built yet' },
+      { feature: 'Custom toast notifications', status: 'working', note: 'replaced all browser alert() dialogs with a custom toast notification system' },
       ],
   },
   {

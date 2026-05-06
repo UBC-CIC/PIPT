@@ -6,6 +6,7 @@ import {
   type ManageablePatient,
   type UploadedFileInfo,
 } from '@/services/instructorService';
+import { useNotification } from '@/components/notifications';
 
 export interface UsePatientEditorParams {
   groupId: string | undefined;
@@ -71,6 +72,7 @@ export function usePatientEditor({
   setProfilePictures,
   reloadPatients: _reloadPatients,
 }: UsePatientEditorParams): UsePatientEditorReturn {
+  const { showNotification } = useNotification();
   // Form state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
   const [editPatientTab, setEditPatientTab] = useState<'info' | 'questions' | 'materials'>('info');
@@ -213,7 +215,7 @@ export function usePatientEditor({
   const autoSaveNewPatient = async (): Promise<string | null> => {
     if (selectedPatientForEdit !== 'new' || !groupId) return selectedPatientForEdit;
     if (!editPatientName.trim()) {
-      alert('Please enter a patient name before proceeding.');
+      showNotification({ message: 'Please enter a patient name before proceeding.', type: 'warning' });
       return null;
     }
     try {
@@ -229,7 +231,7 @@ export function usePatientEditor({
       return newPersonaId;
     } catch (error) {
       console.error('Failed to auto-save new patient:', error);
-      alert('Failed to save patient. Please try again.');
+      showNotification({ message: 'Failed to save patient. Please try again.', type: 'error' });
       return null;
     }
   };

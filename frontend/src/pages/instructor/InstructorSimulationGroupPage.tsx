@@ -26,6 +26,7 @@ import { QuestionBankSection } from '@/components/simulation-group/QuestionBankS
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import AIDebriefDialog from '../../components/AIDebriefDialog';
+import { useNotification } from '@/components/notifications';
 
 type ActiveSection = 'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent';
 
@@ -39,6 +40,7 @@ function InstructorSimulationGroupPage() {
   const { groupId } = useParams();
   const [searchParams] = useSearchParams();
   const adminReturnUrl = searchParams.get('returnUrl');
+  const { showNotification } = useNotification();
 
   // Section navigation
   const [activeSection, setActiveSection] = useState<ActiveSection>('analytics');
@@ -152,7 +154,7 @@ function InstructorSimulationGroupPage() {
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
       const result = await studentService.joinGroup(accessCode);
       if (result?.success) { navigate(`/patients/${groupId}`, { state: { adminReturnUrl: instructorReturnUrl } }); return; }
-      window.alert('Unable to join this simulation group as a student. Redirecting to your student dashboard.');
+      showNotification({ message: 'Unable to join this simulation group as a student. Redirecting to your student dashboard.', type: 'warning' });
     }
     navigate('/student');
   };
@@ -200,8 +202,8 @@ function InstructorSimulationGroupPage() {
   // ── Rubric handlers ──
   const handleSaveQuestion = async () => {
     if (!selectedQuestion) return;
-    try { await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion); alert('Question saved successfully.'); }
-    catch { alert('Failed to save question. Please try again.'); }
+    try { await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion); showNotification({ message: 'Question saved successfully.', type: 'success' }); }
+    catch { showNotification({ message: 'Failed to save question. Please try again.', type: 'error' }); }
   };
   const handleUpdateQuestionField = (field: keyof GlobalRubricQuestion, value: string | boolean) => {
     if (!selectedQuestionId) return;
