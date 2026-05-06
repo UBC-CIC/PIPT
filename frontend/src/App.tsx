@@ -2,6 +2,7 @@
 import '@/config/aws-config';
 
 import LoadingIndicator from '@/components/LoadingIndicator';
+import { NotificationProvider } from '@/components/notifications';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import LoginPage from './pages/LoginPage';
@@ -129,9 +130,11 @@ function AppRoutes() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <NotificationProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </NotificationProvider>
   );
 }
 

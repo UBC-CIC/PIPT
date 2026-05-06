@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS } from '@/lib/colors';
+import { useNotification } from '@/components/notifications';
 
 interface AddQuestionDialogProps {
   open: boolean;
@@ -20,6 +21,7 @@ interface AddQuestionDialogProps {
 }
 
 export function AddQuestionDialog({ open, onOpenChange, questionType, existingTags = [], onSave }: AddQuestionDialogProps) {
+  const { showNotification } = useNotification();
   const [title, setTitle] = useState('');
   const [keyQuestion, setKeyQuestion] = useState('');
   const [clinicalIntent, setClinicalIntent] = useState('');
@@ -65,7 +67,7 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, existingTa
 
   const handleSave = () => {
     if (!title.trim() || !keyQuestion.trim()) {
-      alert('Please fill in at least the Title and Key Question fields.');
+      showNotification({ message: 'Please fill in at least the Title and Key Question fields.', type: 'warning' });
       return;
     }
 
