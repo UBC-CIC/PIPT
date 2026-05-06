@@ -299,7 +299,7 @@ function SystemPromptPlayground({ simulationGroupId, currentSystemPrompt }: Syst
                       backgroundColor: UI_COLORS.background.input,
                       color: UI_COLORS.text.body,
                     }}
-                    placeholder="Enter the patient-specific prompt here..."
+                    placeholder="Patient-specific details: personality, symptoms, backstory, condition..."
                   />
                   {hasPatientPromptChanges && (
                     <button
