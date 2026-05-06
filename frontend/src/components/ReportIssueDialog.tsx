@@ -212,6 +212,7 @@ function ReportIssueDialog({ isOpen, onClose, simulationGroupId, patientId, chat
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder="Describe what happened..."
                 rows={4}
+                maxLength={1000}
                 className="w-full px-4 py-3 rounded-lg resize-none focus:outline-none focus:ring-2"
                 style={{
                   borderWidth: '1px',
