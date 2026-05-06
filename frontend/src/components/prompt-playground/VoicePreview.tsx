@@ -55,10 +55,40 @@ type PreviewState = 'idle' | 'connecting' | 'ready' | 'recording' | 'playing' | 
 // Component
 // ---------------------------------------------------------------------------
 
-export default function VoicePreview() {
-  const [selectedKey, setSelectedKey] = useState('tiffany-en-US');
+interface VoicePreviewProps {
+  /** Currently selected voice ID (e.g. "tiffany"). When provided, the component acts as a controlled selector. */
+  value?: string;
+  /** Called when the user selects a different voice. Receives the voice id (e.g. "tiffany"). */
+  onChange?: (voiceId: string) => void;
+}
+
+export default function VoicePreview({ value, onChange }: VoicePreviewProps = {}) {
+  // Derive initial key from controlled value prop, or fall back to default
+  const getKeyFromId = (id: string | undefined) => {
+    if (!id) return 'tiffany-en-US';
+    const match = ALL_VOICES.find((v) => v.id === id);
+    return match ? vKey(match.id, match.locale) : 'tiffany-en-US';
+  };
+
+  const [selectedKey, setSelectedKey] = useState(() => getKeyFromId(value));
   const [previewState, setPreviewState] = useState<PreviewState>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Sync internal state when controlled value changes externally
+  useEffect(() => {
+    if (value !== undefined) {
+      setSelectedKey(getKeyFromId(value));
+    }
+  }, [value]);
+
+  const handleVoiceSelect = useCallback((key: string) => {
+    setSelectedKey(key);
+    // Extract voice id from the composite key and notify parent
+    const voice = ALL_VOICES.find((v) => vKey(v.id, v.locale) === key);
+    if (voice && onChange) {
+      onChange(voice.id);
+    }
+  }, [onChange]);
 
   const selected = ALL_VOICES.find((v) => vKey(v.id, v.locale) === selectedKey) ?? ALL_VOICES[0];
   const canChangeVoice = previewState === 'idle' || previewState === 'error';
@@ -258,7 +288,7 @@ export default function VoicePreview() {
       {/* Header + Controls side by side */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold mb-1" style={{ color: UI_COLORS.text.heading }}>
+          <h2 className="text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>
             Voice Preview
           </h2>
           <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
@@ -373,7 +403,7 @@ export default function VoicePreview() {
                 return (
                   <button
                     key={key}
-                    onClick={() => canChangeVoice && setSelectedKey(key)}
+                    onClick={() => canChangeVoice && handleVoiceSelect(key)}
                     disabled={!canChangeVoice}
                     className="rounded-lg p-3 text-left transition-all"
                     style={{
