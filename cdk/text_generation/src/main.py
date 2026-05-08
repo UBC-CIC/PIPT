@@ -103,24 +103,40 @@ def initialize_constants():
 
 def connect_to_db():
     global connection
-    if connection is None or connection.closed:
+    if connection is not None and not connection.closed:
+        # Verify the connection is still alive (RDS Proxy may have dropped it)
         try:
-            secret = get_secret(DB_SECRET_NAME)
-            connection = psycopg.connect(
-                host=RDS_PROXY_ENDPOINT,
-                port=secret["port"],
-                dbname=secret["dbname"],
-                user=secret["username"],
-                password=secret["password"],
-                autocommit=False,
-            )
-            logger.info("Connected to the database!")
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            if connection:
+            connection.execute("SELECT 1")
+            return connection
+        except Exception:
+            logger.warning("Stale DB connection detected, reconnecting...")
+            try:
+                connection.close()
+            except Exception:
+                pass
+            connection = None
+
+    try:
+        secret = get_secret(DB_SECRET_NAME)
+        connection = psycopg.connect(
+            host=RDS_PROXY_ENDPOINT,
+            port=secret["port"],
+            dbname=secret["dbname"],
+            user=secret["username"],
+            password=secret["password"],
+            autocommit=False,
+        )
+        logger.info("Connected to the database!")
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+        if connection:
+            try:
                 connection.rollback()
                 connection.close()
-            raise
+            except Exception:
+                pass
+            connection = None
+        raise
     return connection
 
 def get_system_prompt(simulation_group_id):
@@ -158,9 +174,15 @@ def get_system_prompt(simulation_group_id):
 
     except Exception as e:
         logger.error(f"Error fetching system prompt: {e}")
-        if cur:
-            cur.close()
-        connection.rollback()
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            connection.rollback()
+        except Exception:
+            pass
         return None
 
 
@@ -201,9 +223,15 @@ def get_persona_details(persona_id):
 
     except Exception as e:
         logger.error(f"Error fetching persona details: {e}")
-        if cur:
-            cur.close()
-        connection.rollback()
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            connection.rollback()
+        except Exception:
+            pass
         return None, None, None, None
 
 
@@ -613,27 +641,12 @@ def handler(event, context):
         _vectorstore_cache[persona_id] = vs
         return vs
 
-    def _cache_key_questions_task():
-        if is_initial_prompt:
-            try:
-                cache_key_questions(
-                    session_id=session_id,
-                    simulation_group_id=simulation_group_id,
-                    persona_id=persona_id,
-                    embeddings_model=embeddings,
-                    table_name=TABLE_NAME,
-                )
-            except Exception as e:
-                logger.error(f"Failed to cache key questions: {e}")
-
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         # DB queries share a connection so they run together in one thread
         future_db_data = executor.submit(_fetch_db_data)
         # These are independent network calls that can run in parallel
         future_guardrail = executor.submit(_run_guardrail)
         future_vectorstore = executor.submit(_get_cached_vectorstore)
-        # Cache key questions in parallel on first message
-        future_cache_kq = executor.submit(_cache_key_questions_task) if is_initial_prompt else None
 
         system_prompt, persona_result = future_db_data.result()
         patient_name, patient_age, patient_prompt, llm_completion = persona_result
@@ -652,8 +665,6 @@ def handler(event, context):
                 },
                 'body': json.dumps('Error initializing vectorstore')
             }
-        if future_cache_kq:
-            future_cache_kq.result()  # Wait for key questions cache to complete
 
     # Check guardrail result
     if not guardrail_result[0]:
@@ -809,6 +820,20 @@ def handler(event, context):
     except Exception as e:
         logger.error(f"Error updating session name: {e}")
         session_name = "New Chat"
+
+    # Cache key questions AFTER the response is sent (first message only).
+    # This avoids competing with the RAG chain for Bedrock embedding rate limits.
+    if is_initial_prompt:
+        try:
+            cache_key_questions(
+                session_id=session_id,
+                simulation_group_id=simulation_group_id,
+                persona_id=persona_id,
+                embeddings_model=embeddings,
+                table_name=TABLE_NAME,
+            )
+        except Exception as e:
+            logger.error(f"Failed to cache key questions: {e}")
     
 
 
