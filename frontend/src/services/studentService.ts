@@ -846,15 +846,17 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
 /**
  * Join a simulation group by access code
  */
-async function joinGroup(accessCode: string): Promise<{ success: boolean }> {
+async function joinGroup(accessCode: string, enrollmentType?: string): Promise<{ success: boolean }> {
   try {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    await apiClient.request(
-      `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`,
-      { method: 'POST' }
-    );
+    let url = `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`;
+    if (enrollmentType) {
+      url += `&enrollment_type=${encodeURIComponent(enrollmentType)}`;
+    }
+
+    await apiClient.request(url, { method: 'POST' });
     return { success: true };
   } catch (error) {
     console.error('Failed to join group:', error);

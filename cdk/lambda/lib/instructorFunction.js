@@ -301,6 +301,7 @@ exports.handler = async (event, context) => {
                         JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
                         JOIN "users" u ON e.user_id = u.user_id
                         WHERE 'student' = ANY(u.roles)
+                        AND e.enrollment_type != 'preview'
                         ${dateFilterMessagesStr}
                         GROUP BY sp.persona_id
                     ) sub ON sub.persona_id = p.persona_id
@@ -319,6 +320,7 @@ exports.handler = async (event, context) => {
                         JOIN "users" u ON e.user_id = u.user_id
                         WHERE uel.engagement_type = 'patient access'
                         AND 'student' = ANY(u.roles)
+                        AND e.enrollment_type != 'preview'
                         ${dateFilterLogsStr}
                         GROUP BY uel.persona_id
                     ) sub ON sub.persona_id = p.persona_id
@@ -340,6 +342,7 @@ exports.handler = async (event, context) => {
                         JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
                         JOIN "users" u ON e.user_id = u.user_id
                         WHERE 'student' = ANY(u.roles)
+                        AND e.enrollment_type != 'preview'
                         ${dateFilterInteractionsStr}
                         GROUP BY sp.persona_id
                     ) sub ON sub.persona_id = p.persona_id
@@ -361,6 +364,7 @@ exports.handler = async (event, context) => {
                         JOIN "enrollments" e ON sp.enrollment_id = e.enrollment_id
                         JOIN "users" u ON e.user_id = u.user_id
                         WHERE 'student' = ANY(u.roles)
+                        AND e.enrollment_type != 'preview'
                         ${dateFilterInteractionsStr}
                         GROUP BY sp.persona_id
                     ) sub ON sub.persona_id = p.persona_id

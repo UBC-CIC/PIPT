@@ -244,7 +244,7 @@ function AdminSimulationGroupPage() {
     const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
       try {
-        const result = await studentService.joinGroup(accessCode);
+        const result = await studentService.joinGroup(accessCode, 'preview');
         if (result?.success) { navigate(`/patients/${groupId}`, { state: { adminReturnUrl } }); return; }
         window.alert('Unable to enroll in this simulation group. Taking you to the student dashboard instead.');
       } catch (error) {
