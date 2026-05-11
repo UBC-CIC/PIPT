@@ -218,9 +218,7 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-tzdata==2026.2
-    # via psycopg
-urllib3==2.6.3
+urllib3==2.7.0
     # via
     #   botocore
     #   requests
