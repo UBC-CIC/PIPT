@@ -1488,25 +1488,27 @@ def build_rewrite_prompt(
 {evaluation_criteria if evaluation_criteria else "(No specific evaluation criteria provided)"}
 
 ## Your Task
-The student's message above was matched to the question shown, but with only moderate confidence — meaning the student partially addressed the topic but could have been more direct or thorough.
+The student's message above was matched to the question shown, but with low confidence — meaning the student touched on the topic but didn't fully address it.
 
-Rewrite the student's message so it more clearly and completely addresses the matched question. Keep the student's original intent and conversational tone, but make the question more specific and targeted.
+Suggest a gentle alternative phrasing that the student could have used to more naturally cover this topic in conversation. Preserve the student's conversational style and intent — this is a suggestion, not a correction. The goal is to show one way they might bring up the topic more directly next time.
 
 Example:
 - Original: "Have you had any troubles with it?"
 - Question: "How often do you take gingko / do you take gingko regularly?"
-- Rewrite: "How often do you take gingko biloba? Is it something you take every day, or just occasionally?"
+- Suggestion: "How often do you usually take the gingko? Is it every day or more as-needed?"
 
 Return a JSON object with EXACTLY one key:
 
 {{
-  "suggested_rewrite": "The improved version of the student's message."
+  "suggested_rewrite": "A gentle alternative phrasing the student could consider."
 }}
 
 RULES:
-- The "suggested_rewrite" value MUST be a non-empty string containing the full rewritten message.
-- Do NOT return an empty string — always provide a concrete, actionable rewrite.
-- The rewrite should be a complete sentence or question the student could actually say to the patient.
+- The "suggested_rewrite" value MUST be a non-empty string containing the full suggested message.
+- Do NOT return an empty string — always provide a concrete suggestion.
+- Keep it conversational and natural — something a student would actually say to a patient.
+- This is a helpful suggestion, not a strict correction. The student's original message was not wrong.
+- If the student's message reasonably addresses the question in a conversational clinical context, the rewrite should only be a minor refinement, not a complete restructuring.
 
 CRITICAL JSON OUTPUT RULES:
 - Your ENTIRE response must be a single valid JSON object. Nothing else.
