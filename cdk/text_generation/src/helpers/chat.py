@@ -1728,7 +1728,7 @@ The following key questions were NOT detected by the automated matcher. IMPORTAN
 ## Student's Recommendation
 {recommendation_text}
 
-## Moderate-Confidence Matches Requiring Suggested Rewrites
+## Low-Confidence Matches Requiring Suggested Rewrites
 For ONLY the following low-confidence matches (score 0.45-0.59), generate a suggested rewrite that would better address the matched question. Do NOT generate rewrites for high-confidence or moderate-confidence matches.
 {rewrite_section}
 
