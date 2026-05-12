@@ -123,6 +123,7 @@ function NotesDialog({ isOpen, onClose }: NotesDialogProps) {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             placeholder="Write your notes here..."
+            maxLength={500}
             className="flex-1 p-4 rounded-lg resize-none focus:outline-none focus:ring-2"
             style={{ 
               color: UI_COLORS.text.heading,
@@ -132,6 +133,11 @@ function NotesDialog({ isOpen, onClose }: NotesDialogProps) {
               outlineColor: UI_COLORS.border.medium
             }}
           />
+          <div className="flex justify-end">
+            <span className="text-xs" style={{ color: notes.length >= 450 ? UI_COLORS.status.error : UI_COLORS.text.muted }}>
+              {notes.length}/500
+            </span>
+          </div>
           
           <button
             onClick={handleSave}

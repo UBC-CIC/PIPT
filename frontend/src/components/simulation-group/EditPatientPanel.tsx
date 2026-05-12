@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import UserAvatar from '@/components/UserAvatar';
-import VoiceSelector from '@/components/simulation-group/VoiceSelector';
+import VoicePreview from '@/components/prompt-playground/VoicePreview';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import type { UsePatientEditorReturn } from '@/hooks/usePatientEditor';
 import { instructorService, type OrganizationLabels, type GlobalRubricQuestion, type CaseMaterial, type UploadedFileInfo } from '@/services/instructorService';
@@ -212,6 +212,7 @@ function InfoTab({
         <Input
           value={patientEditor.editPatientName}
           onChange={(e) => patientEditor.setEditPatientName(e.target.value)}
+          maxLength={100}
           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
           style={{
             borderWidth: '1px',
@@ -261,6 +262,7 @@ function InfoTab({
         <Input
           value={patientEditor.editPatientGender}
           onChange={(e) => patientEditor.setEditPatientGender(e.target.value)}
+          maxLength={50}
           className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
           style={{
             borderWidth: '1px',
@@ -273,10 +275,7 @@ function InfoTab({
 
       {/* Voice */}
       <div>
-        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-          Voice
-        </label>
-        <VoiceSelector
+        <VoicePreview
           value={patientEditor.editPatientVoiceId}
           onChange={(voiceId) => patientEditor.setEditPatientVoiceId(voiceId)}
         />
@@ -600,6 +599,7 @@ function QuestionsTab({
                         patientEditor.setCaseSpecificQuestions(updatedQuestions);
                       }}
                       placeholder="Chest Pain Characterization"
+                      maxLength={150}
                       className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
                       style={{
                         borderWidth: '1px',
@@ -624,6 +624,7 @@ function QuestionsTab({
                         patientEditor.setCaseSpecificQuestions(updatedQuestions);
                       }}
                       placeholder="Assess the characteristics of the patient's chest pain..."
+                      maxLength={500}
                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
                       style={{
                         borderWidth: '1px',
@@ -649,6 +650,7 @@ function QuestionsTab({
                         patientEditor.setCaseSpecificQuestions(updatedQuestions);
                       }}
                       placeholder="This question evaluates the student's ability..."
+                      maxLength={500}
                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
                       style={{
                         borderWidth: '1px',
@@ -674,6 +676,7 @@ function QuestionsTab({
                         patientEditor.setCaseSpecificQuestions(updatedQuestions);
                       }}
                       placeholder="The student attempts to identify at least 3-4 of the following..."
+                      maxLength={500}
                       className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
                       style={{
                         borderWidth: '1px',

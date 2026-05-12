@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon, MessageCircle } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState, useEffect } from 'react';
@@ -235,6 +235,41 @@ function PatientDashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-8 py-6">
+        {/* Empty state CTA - shown prominently when no chats exist */}
+        {!hasChats && (
+          <div
+            className="flex flex-col items-center justify-center text-center py-10 px-6 mb-8 rounded-xl"
+            style={{
+              backgroundColor: UI_COLORS.background.tableHeader,
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: UI_COLORS.border.default,
+            }}
+          >
+            <div
+              className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+              style={{ backgroundColor: UI_COLORS.button.secondary }}
+            >
+              <MessageCircle className="w-7 h-7" style={{ color: UI_COLORS.button.text }} />
+            </div>
+            <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+              No attempts yet
+            </h2>
+            <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+              Start your first chat with {patient.name} to begin the simulation.
+            </p>
+            <Button
+              onClick={handleStartNewChat}
+              className="px-8 py-3 text-base font-medium transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+            >
+              + Start New Chat
+            </Button>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-6">
           {/* Left Column - Patient Overview */}
           <div className="pr-6 overflow-y-auto" style={{ borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default }}>
@@ -487,44 +522,6 @@ function PatientDashboardPage() {
               )}
             </div>
 
-            {/* Chat History - Show in left column when no chats - REMOVE THIS ENTIRELY */}
-            {!hasChats && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
-                  <Button
-                    onClick={handleStartNewChat}
-                    variant="default"
-                    className="px-6 transition-colors"
-                    style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-                  >
-                    + Start New Chat
-                  </Button>
-                </div>
-                <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
-                  Click on an in-progress chat to continue your diagnosis.<br />
-                  Click on a completed chat to view the AI debrief.
-                </p>
-
-                {/* Empty State */}
-                <div 
-                  className="rounded-lg mb-4 flex items-center justify-center"
-                  style={{ 
-                    backgroundColor: UI_COLORS.background.input,
-                    borderWidth: '1px',
-                    borderStyle: 'solid',
-                    borderColor: UI_COLORS.border.light,
-                    padding: '3rem'
-                  }}
-                >
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    No chat history yet
-                  </p>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Right Column - Chat History (only when there are chats) */}

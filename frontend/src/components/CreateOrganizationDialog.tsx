@@ -85,6 +85,7 @@ function CreateOrganizationDialog({
               placeholder="Academic Advising"
               value={name}
               onChange={(e) => setName(e.target.value)}
+              maxLength={100}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 
@@ -108,6 +109,7 @@ function CreateOrganizationDialog({
               placeholder="Simulating interactions between students and academic advisors"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              maxLength={250}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 
@@ -131,6 +133,7 @@ function CreateOrganizationDialog({
               placeholder="Student"
               value={aiPersonaTitle}
               onChange={(e) => setAiPersonaTitle(e.target.value)}
+              maxLength={50}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 
@@ -154,6 +157,7 @@ function CreateOrganizationDialog({
               placeholder="Academic Advisor"
               value={userRoleTitle}
               onChange={(e) => setUserRoleTitle(e.target.value)}
+              maxLength={50}
               className="text-base focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 

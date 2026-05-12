@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,10 +28,10 @@ import { QuestionBankSection } from '@/components/simulation-group/QuestionBankS
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import { AddInstructorDialog } from '@/components/AddInstructorDialog';
+import { useNotification } from '@/components/notifications';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import PromptPlayground from '@/components/prompt-playground/PromptPlayground';
 import SystemPromptPlayground from '@/components/prompt-playground/SystemPromptPlayground';
-import VoicePreview from '@/components/prompt-playground/VoicePreview';
 
 import { IssuesFeedbackSection } from '@/components/simulation-group/IssuesFeedbackSection';
 import type { IssueReport, DebriefFeedback } from '@/services/adminApiService';
@@ -48,6 +48,7 @@ function AdminSimulationGroupPage() {
   const navigate = useNavigate();
   const { organizationId, groupId } = useParams();
   const { user: authUser } = useAuth();
+  const { showNotification } = useNotification();
 
   // Section navigation
   const [activeSection, setActiveSection] = useState<ActiveSection>('analytics');
@@ -95,8 +96,8 @@ function AdminSimulationGroupPage() {
   const [organization, setOrganization] = useState<adminApi.AdminOrganization | null>(null);
 
   // Admin-specific state: prompts
-  const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation' | 'voice'>('system');
-  const [systemPromptText, setSystemPromptText] = useState('You are role-playing as a patient in a clinical training simulation. Keep responses brief (1-3 sentences). Speak in plain, everyday language. Only answer what is directly asked. Do not volunteer extra symptoms or details.');
+  const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'evaluation'>('system');
+  const [systemPromptText, setSystemPromptText] = useState('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
   const [evaluationPromptText, setEvaluationPromptText] = useState('');
   const [, setIsPromptUnsaved] = useState(false);
   const [promptHistory, setPromptHistory] = useState<Array<{id: string; text: string; saved_at: string; modified_by_email: string | null; modified_by_first_name: string | null; modified_by_last_name: string | null}>>([]);
@@ -107,6 +108,9 @@ function AdminSimulationGroupPage() {
 
   // Global rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>([]);
+
+  // Mapping from question bank ID → group_question_id (assignment record ID) for unassign
+  const questionIdToGroupQuestionId = useRef<Map<string, string>>(new Map());
 
   // Issues & Feedback state
   const [issueReports, setIssueReports] = useState<IssueReport[]>([]);
@@ -223,6 +227,12 @@ function AdminSimulationGroupPage() {
           }));
           setGlobalRubricQuestions(rubricQuestions);
           if (activeSection !== 'editPatient') setIncludedQuestionIds(new Set(globalAssigned.map((q: any) => q.question_id)));
+          // Build questionId → groupQuestionId mapping
+          const map = new Map<string, string>();
+          for (const q of assigned) {
+            if (q.question_id && q.group_question_id) map.set(q.question_id, q.group_question_id);
+          }
+          questionIdToGroupQuestionId.current = map;
           if (rubricQuestions.length > 0 && !selectedQuestionId) setSelectedQuestionId(rubricQuestions[0].id);
         })
         .catch((err: any) => console.error('Failed to load assigned questions:', err));
@@ -236,12 +246,12 @@ function AdminSimulationGroupPage() {
     const adminReturnUrl = `/admin/organization/${organizationId}/group/${groupId}`;
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
       try {
-        const result = await studentService.joinGroup(accessCode);
+        const result = await studentService.joinGroup(accessCode, 'preview');
         if (result?.success) { navigate(`/patients/${groupId}`, { state: { adminReturnUrl } }); return; }
-        window.alert('Unable to enroll in this simulation group. Taking you to the student dashboard instead.');
+        showNotification({ message: 'Unable to enroll in this simulation group. Taking you to the student dashboard instead.', type: 'warning' });
       } catch (error) {
         console.error('Unexpected error while enrolling as student:', error);
-        window.alert('An unexpected error occurred while enrolling in this simulation group. Taking you to the student dashboard instead.');
+        showNotification({ message: 'An unexpected error occurred while enrolling in this simulation group. Taking you to the student dashboard instead.', type: 'error' });
       }
     }
     navigate('/student');
@@ -279,7 +289,12 @@ function AdminSimulationGroupPage() {
     patientEditor.startEditing(patientId);
     if (groupId) {
       instructorService.getSimulationGroupQuestions(groupId, patientId)
-        .then((assigned: any[]) => setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id))))
+        .then((assigned: any[]) => {
+          setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          for (const q of assigned) {
+            if (q.question_id && q.group_question_id) questionIdToGroupQuestionId.current.set(q.question_id, q.group_question_id);
+          }
+        })
         .catch(() => setIncludedQuestionIds(new Set()));
     }
     setActiveSection('editPatient');
@@ -332,8 +347,11 @@ function AdminSimulationGroupPage() {
 
   // ── Prompt handlers ──
   const handleLoadDefaultPrompt = async () => {
-    if (selectedPromptType === 'system') { setSystemPromptText(await instructorService.getEvaluationPrompt(groupId || '1')); }
-    else { setEvaluationPromptText(await instructorService.getDefaultDebriefPrompt()); }
+    if (selectedPromptType === 'system') {
+      setSystemPromptText('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
+    } else {
+      setEvaluationPromptText(await instructorService.getDefaultDebriefPrompt());
+    }
     setIsPromptUnsaved(true);
   };
   const handleSavePrompt = async () => {
@@ -345,8 +363,8 @@ function AdminSimulationGroupPage() {
       setIsPromptUnsaved(false);
       const type = selectedPromptType === 'system' ? 'system' : 'debrief';
       setPromptHistory(await instructorService.getPromptHistory(groupId, type));
-      alert('Prompt saved successfully!');
-    } catch (error) { console.error('Failed to save prompt:', error); alert('Failed to save prompt. Please try again.'); }
+      showNotification({ message: 'Prompt saved successfully!', type: 'success' });
+    } catch (error) { console.error('Failed to save prompt:', error); showNotification({ message: 'Failed to save prompt. Please try again.', type: 'error' }); }
   };
   const handleRestorePromptVersion = (versionText: string) => {
     if (confirm('Are you sure you want to restore this version?')) {
@@ -436,14 +454,26 @@ function AdminSimulationGroupPage() {
     try {
       if (isChecked) {
         newSet.add(questionId);
-        await instructorService.assignQuestionToGroup(groupId || '1', questionId, personaId || undefined);
+        const result = await instructorService.assignQuestionToGroup(groupId || '1', questionId, personaId || undefined);
+        // Store the new group_question_id in the mapping
+        if (result?.group_question_id) {
+          questionIdToGroupQuestionId.current.set(questionId, result.group_question_id);
+        } else if (Array.isArray(result) && result[0]?.group_question_id) {
+          questionIdToGroupQuestionId.current.set(questionId, result[0].group_question_id);
+        }
         if (isGlobal && !globalRubricQuestions.find(q => q.id === questionId)) {
           instructorService.addGlobalRubricQuestion(groupId || '1', { id: questionId, title: bankQuestion.title, keyQuestion: bankQuestion.questionText, clinicalIntent: bankQuestion.clinicalIntent, evaluationCriteria: bankQuestion.evaluationCriteria, required: bankQuestion.isMandatory });
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
       } else {
         newSet.delete(questionId);
-        await instructorService.unassignQuestion(questionId);
+        const groupQuestionId = questionIdToGroupQuestionId.current.get(questionId);
+        if (!groupQuestionId) {
+          console.error('No group_question_id found for question:', questionId);
+          return;
+        }
+        await instructorService.unassignQuestion(groupQuestionId);
+        questionIdToGroupQuestionId.current.delete(questionId);
         if (isGlobal) {
           instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
@@ -583,12 +613,22 @@ function AdminSimulationGroupPage() {
               onGlobalTabClick={() => { setIncludedQuestionIds(new Set(instructorService.getGlobalRubricQuestions(groupId || '1').map(q => q.id))); }}
               onPatientSpecificTabClick={() => {
                 if (selectedPatientForQuestionBank && groupId) {
-                  instructorService.getSimulationGroupQuestions(groupId, selectedPatientForQuestionBank).then((assigned: any[]) => setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)))).catch(() => setIncludedQuestionIds(new Set()));
+                  instructorService.getSimulationGroupQuestions(groupId, selectedPatientForQuestionBank).then((assigned: any[]) => {
+                    setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+                    for (const q of assigned) {
+                      if (q.question_id && q.group_question_id) questionIdToGroupQuestionId.current.set(q.question_id, q.group_question_id);
+                    }
+                  }).catch(() => setIncludedQuestionIds(new Set()));
                 } else { setIncludedQuestionIds(new Set()); }
               }}
               onPatientSelect={(patientId) => {
                 if (patientId && groupId) {
-                  instructorService.getSimulationGroupQuestions(groupId, patientId).then((assigned: any[]) => setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)))).catch(() => setIncludedQuestionIds(new Set()));
+                  instructorService.getSimulationGroupQuestions(groupId, patientId).then((assigned: any[]) => {
+                    setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+                    for (const q of assigned) {
+                      if (q.question_id && q.group_question_id) questionIdToGroupQuestionId.current.set(q.question_id, q.group_question_id);
+                    }
+                  }).catch(() => setIncludedQuestionIds(new Set()));
                 } else { setIncludedQuestionIds(new Set()); }
               }}
             />
@@ -624,18 +664,15 @@ function AdminSimulationGroupPage() {
                 <div className="p-6">
                   <h3 className="text-sm font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>Prompt Type</h3>
                   <div className="space-y-2">
-                    {(['system', 'evaluation', 'voice'] as const).map(type => (
+                    {(['system', 'evaluation'] as const).map(type => (
                       <Button key={type} onClick={() => setSelectedPromptType(type)} variant="ghost" className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium" style={{ backgroundColor: selectedPromptType === type ? UI_COLORS.background.tableHeader : 'transparent', color: UI_COLORS.text.heading }}>
-                        {type === 'system' ? 'System Prompt' : type === 'evaluation' ? 'Debrief Prompt' : 'Voice Preview'}
+                        {type === 'system' ? 'System Prompt' : 'Debrief Prompt'}
                       </Button>
                     ))}
                   </div>
                 </div>
               </aside>
               <div className="flex-1 overflow-y-auto p-8">
-                {selectedPromptType === 'voice' ? (
-                  <VoicePreview />
-                ) : (
                 <div className="max-w-4xl space-y-8">
                   <div>
                     <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>{selectedPromptType === 'system' ? 'System Prompt' : 'Debrief Prompt'}</h2>
@@ -679,7 +716,6 @@ function AdminSimulationGroupPage() {
                     />
                   )}
                 </div>
-                )}
               </div>
             </div>
           )}

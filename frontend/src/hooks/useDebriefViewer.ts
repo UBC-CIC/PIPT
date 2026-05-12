@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from 'react';
 import { instructorService } from '@/services/instructorService';
 import { type AIDebriefData } from '@/services/studentService';
 import { downloadChatPdf } from '@/lib/download-chat-pdf';
+import { useNotification } from '@/components/notifications';
 
 interface UseDebriefViewerParams {
   groupId: string | undefined;
@@ -25,6 +26,7 @@ interface UseDebriefViewerReturn {
  * Shared between InstructorSimulationGroupPage and AdminSimulationGroupPage.
  */
 export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebriefViewerReturn {
+  const { showNotification } = useNotification();
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
   const [selectedDebriefData, setSelectedDebriefData] = useState<AIDebriefData | null>(null);
   const [isFetchingDebrief, setIsFetchingDebrief] = useState<string | null>(null);
@@ -39,11 +41,11 @@ export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebrie
         setSelectedDebriefData(data);
         setIsAIDebriefOpen(true);
       } else {
-        alert('Debrief is still generating or not available for this session.');
+        showNotification({ message: 'Debrief is still generating or not available for this session.', type: 'warning' });
       }
     } catch (error) {
       console.error('Failed to fetch AI debrief:', error);
-      alert('Failed to load AI Debrief. Please try again.');
+      showNotification({ message: 'Failed to load AI Debrief. Please try again.', type: 'error' });
     } finally {
       setIsFetchingDebrief(null);
     }

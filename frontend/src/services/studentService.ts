@@ -754,9 +754,17 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
       `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
+    // Deduplicate by persona_id (backend may return multiple rows from different enrollments)
+    const seen = new Set<string>();
+    const uniqueData = data.filter((p) => {
+      if (seen.has(p.persona_id)) return false;
+      seen.add(p.persona_id);
+      return true;
+    });
+
     // Fetch profile picture URLs in parallel using the same get_all_files endpoint
     // that works on the patient dashboard page
-    const profilePicPromises = data.map(async (p) => {
+    const profilePicPromises = uniqueData.map(async (p) => {
       try {
         const filesData = await apiClient.request<{
           profile_picture_url?: string | null;
@@ -771,7 +779,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     const profilePicUrls = await Promise.all(profilePicPromises);
 
     // Fetch chat history per patient in parallel to get attempt count + best coverage
-    const chatStatsPromises = data.map(async (p) => {
+    const chatStatsPromises = uniqueData.map(async (p) => {
       try {
         const chats = await apiClient.request<Array<{
           chat_id: string;
@@ -807,7 +815,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     });
     const chatStats = await Promise.all(chatStatsPromises);
 
-    return data.map((p, i) => {
+    return uniqueData.map((p, i) => {
       const stats = chatStats[i];
       let debriefStatus: Patient['debrief_status'];
       if (p.is_completed) {
@@ -838,15 +846,17 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
 /**
  * Join a simulation group by access code
  */
-async function joinGroup(accessCode: string): Promise<{ success: boolean }> {
+async function joinGroup(accessCode: string, enrollmentType?: string): Promise<{ success: boolean }> {
   try {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    await apiClient.request(
-      `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`,
-      { method: 'POST' }
-    );
+    let url = `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`;
+    if (enrollmentType) {
+      url += `&enrollment_type=${encodeURIComponent(enrollmentType)}`;
+    }
+
+    await apiClient.request(url, { method: 'POST' });
     return { success: true };
   } catch (error) {
     console.error('Failed to join group:', error);

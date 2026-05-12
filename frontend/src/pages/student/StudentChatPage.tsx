@@ -946,6 +946,7 @@ function StudentChatPage() {
               value={noteText}
               onChange={handleNoteChange}
               placeholder="Type your notes here..."
+              maxLength={500}
               className="w-full px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-2 flex-1"
               style={{ 
                 borderWidth: '1px', 
@@ -955,6 +956,11 @@ function StudentChatPage() {
                 minHeight: '80px',
               }}
             />
+            <div className="flex justify-end px-1">
+              <span className="text-xs" style={{ color: noteText.length >= 450 ? UI_COLORS.status.error : UI_COLORS.text.muted }}>
+                {noteText.length}/500
+              </span>
+            </div>
           </div>
 
           {/* Sidebar Buttons - always visible at bottom */}

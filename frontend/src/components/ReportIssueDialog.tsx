@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { Button } from '@/components/ui/button';
 import { studentService } from '@/services/studentService';
+import { useNotification } from '@/components/notifications';
 
 interface ReportIssueDialogProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface ReportIssueDialogProps {
 }
 
 function ReportIssueDialog({ isOpen, onClose, simulationGroupId, patientId, chatId }: ReportIssueDialogProps) {
+  const { showNotification } = useNotification();
   const [position, setPosition] = useState({ x: 100, y: 100 });
   const [size, setSize] = useState({ width: 500, height: 450 });
   const [isDragging, setIsDragging] = useState(false);
@@ -114,7 +116,7 @@ function ReportIssueDialog({ isOpen, onClose, simulationGroupId, patientId, chat
 
   const handleSubmit = async () => {
     if (selectedIssues.length === 0) {
-      alert('Please select at least one issue.');
+      showNotification({ message: 'Please select at least one issue.', type: 'warning' });
       return;
     }
 
@@ -212,6 +214,7 @@ function ReportIssueDialog({ isOpen, onClose, simulationGroupId, patientId, chat
                 onChange={(e) => setDetails(e.target.value)}
                 placeholder="Describe what happened..."
                 rows={4}
+                maxLength={1000}
                 className="w-full px-4 py-3 rounded-lg resize-none focus:outline-none focus:ring-2"
                 style={{
                   borderWidth: '1px',

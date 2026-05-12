@@ -167,6 +167,26 @@ function getIceServers(userId) {
   return iceServers;
 }
 
+// ─── Voice Preview Rate Limiting ──────────────────────────────────────────────
+const voicePreviewTimestamps = new Map(); // socket.id → number[]
+const RATE_LIMIT_MAX = 3;
+const RATE_LIMIT_WINDOW_MS = 60000;
+const TTS_TIMEOUT_MS = 90000;
+
+function isRateLimited(socketId) {
+  const now = Date.now();
+  const timestamps = voicePreviewTimestamps.get(socketId) || [];
+  const recent = timestamps.filter(t => now - t < RATE_LIMIT_WINDOW_MS);
+  voicePreviewTimestamps.set(socketId, recent);
+  return recent.length >= RATE_LIMIT_MAX;
+}
+
+function recordVoicePreview(socketId) {
+  const timestamps = voicePreviewTimestamps.get(socketId) || [];
+  timestamps.push(Date.now());
+  voicePreviewTimestamps.set(socketId, timestamps);
+}
+
 // ─── Socket.IO Connection ─────────────────────────────────────────────────────
 io.use(async (socket, next) => {
   try {
@@ -624,16 +644,28 @@ io.on("connection", (socket) => {
   // ─── Voice Preview (mic-based — no agent, no DB) ─────────────────────────
   let ttsProcess = null;
   let ttsReady = false;
+  let ttsTimeout = null;
 
   socket.on("voice-preview", (config = {}) => {
     console.log("🎙️ Voice preview requested:", config.voice_id);
 
+    // Rate limit check
+    if (isRateLimited(socket.id)) {
+      console.log("⚠️ Voice preview rate limited for:", socket.id);
+      socket.emit("nova-error", { error: "Rate limit exceeded. Please wait before starting another voice preview." });
+      return;
+    }
+
     // Kill any previous TTS process for this socket
     if (ttsProcess) {
+      if (ttsTimeout) { clearTimeout(ttsTimeout); ttsTimeout = null; }
       ttsProcess.kill();
       ttsProcess = null;
     }
     ttsReady = false;
+
+    // Record this voice preview request for rate limiting
+    recordVoicePreview(socket.id);
 
     const pythonCmd = process.env.PYTHON_CMD || "python3";
 
@@ -654,6 +686,18 @@ io.on("connection", (socket) => {
     ttsProcess.stdin.write(
       JSON.stringify({ voice_id: config.voice_id || "amy" }) + "\n",
     );
+
+    // Start 90s session timeout
+    ttsTimeout = setTimeout(() => {
+      if (ttsProcess) {
+        ttsProcess.kill();
+        ttsProcess = null;
+        ttsReady = false;
+        socket.emit("voice-preview-done", {});
+        console.log("⏰ Voice preview TTS process killed by 90s timeout");
+      }
+      ttsTimeout = null;
+    }, TTS_TIMEOUT_MS);
 
     // Read JSON lines from stdout
     ttsProcess.stdout.on("data", (data) => {
@@ -686,6 +730,7 @@ io.on("connection", (socket) => {
     });
 
     ttsProcess.on("close", (code) => {
+      if (ttsTimeout) { clearTimeout(ttsTimeout); ttsTimeout = null; }
       console.log("🎙️ TTS process exited with code:", code);
       ttsProcess = null;
       ttsReady = false;
@@ -714,6 +759,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("stop-voice-preview", () => {
+    if (ttsTimeout) { clearTimeout(ttsTimeout); ttsTimeout = null; }
     if (ttsProcess) {
       ttsProcess.kill();
       ttsProcess = null;
@@ -749,10 +795,14 @@ io.on("connection", (socket) => {
     console.log("🔌 CLIENT DISCONNECTED:", socket.id);
 
     // Clean up TTS preview process if present
+    if (ttsTimeout) { clearTimeout(ttsTimeout); ttsTimeout = null; }
     if (ttsProcess) {
       ttsProcess.kill();
       ttsProcess = null;
     }
+
+    // Clean up rate limit state for this connection
+    voicePreviewTimestamps.delete(socket.id);
 
     // Clean up AgentCore WebSocket session if present
     if (socket.agentWs) {

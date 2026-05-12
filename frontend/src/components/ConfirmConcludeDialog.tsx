@@ -57,6 +57,7 @@ function ConfirmConcludeDialog({ isOpen, onCancel, onConfirm }: ConfirmConcludeD
                   value={recommendations}
                   onChange={(e) => setRecommendations(e.target.value)}
                   placeholder="Enter your recommendations here..."
+                  maxLength={1000}
                   className="w-full p-4 min-h-[400px] resize-none focus:outline-none"
                   style={{ 
                     color: UI_COLORS.text.body,
@@ -64,6 +65,11 @@ function ConfirmConcludeDialog({ isOpen, onCancel, onConfirm }: ConfirmConcludeD
                     fontFamily: 'system-ui, -apple-system, sans-serif'
                   }}
                 />
+              </div>
+              <div className="flex justify-end mt-1">
+                <span className="text-xs" style={{ color: recommendations.length > 500 ? UI_COLORS.status.error : UI_COLORS.text.muted }}>
+                  {recommendations.length}/1000
+                </span>
               </div>
             </div>
             

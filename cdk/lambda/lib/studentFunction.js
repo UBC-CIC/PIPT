@@ -838,6 +838,12 @@ exports.handler = async (event, context) => {
           const { student_email, group_access_code } =
             event.queryStringParameters;
 
+          // Read optional enrollment_type, default to 'student'
+          const VALID_ENROLLMENT_TYPES = ['student', 'preview'];
+          const enrollment_type = VALID_ENROLLMENT_TYPES.includes(event.queryStringParameters.enrollment_type)
+            ? event.queryStringParameters.enrollment_type
+            : 'student';
+
           try {
             // Step 1: Retrieve the user ID using the student_email
             const userResult = await sqlConnection`
@@ -877,40 +883,90 @@ exports.handler = async (event, context) => {
             const simulation_group_id = groupResult[0].simulation_group_id;
 
             // Step 3: Insert enrollment into enrollments table
-            const enrollmentResult = await sqlConnection`
+            // For preview enrollments: do NOT overwrite existing enrollment_type (preserves 'instructor').
+            // Instead, insert with DO NOTHING on conflict, then always SELECT the enrollment_id.
+            // For normal student enrollments: keep DO NOTHING to avoid overwriting existing enrollments.
+            if (enrollment_type === 'preview') {
+              // Try to insert as 'preview'; if already enrolled (as instructor/student/preview), leave it as-is
+              await sqlConnection`
                   INSERT INTO "enrollments" (enrollment_id, user_id, simulation_group_id, enrollment_type, time_enrolled)
-                  VALUES (uuid_generate_v4(), ${user_id}, ${simulation_group_id}, 'student', CURRENT_TIMESTAMP)
+                  VALUES (uuid_generate_v4(), ${user_id}, ${simulation_group_id}, 'preview', CURRENT_TIMESTAMP)
+                  ON CONFLICT (simulation_group_id, user_id) DO NOTHING;
+              `;
+
+              // Always fetch the enrollment_id (whether newly inserted or pre-existing)
+              const existingEnrollment = await sqlConnection`
+                  SELECT enrollment_id
+                  FROM "enrollments"
+                  WHERE simulation_group_id = ${simulation_group_id} AND user_id = ${user_id}
+                  LIMIT 1;
+              `;
+
+              const enrollment_id = existingEnrollment[0]?.enrollment_id;
+
+              if (enrollment_id) {
+                // Create student_interactions only for personas that don't already have one for this enrollment
+                const patientsResult = await sqlConnection`
+                    SELECT persona_id
+                    FROM "personas"
+                    WHERE simulation_group_id = ${simulation_group_id}
+                    AND persona_id NOT IN (
+                      SELECT persona_id FROM "student_interactions" WHERE enrollment_id = ${enrollment_id}
+                    );
+                `;
+
+                if (patientsResult.length > 0) {
+                  const studentPatientInsertions = patientsResult.map((patient) => {
+                    return sqlConnection`
+                        INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
+                        VALUES (uuid_generate_v4(), ${patient.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE)
+                        ON CONFLICT (persona_id, enrollment_id) DO NOTHING;
+                    `;
+                  });
+                  await Promise.all(studentPatientInsertions);
+                }
+              }
+
+              response.statusCode = 201;
+              response.body = JSON.stringify({
+                message: "Preview enrollment processed successfully.",
+              });
+            } else {
+              // Normal student enrollment flow
+              const enrollmentResult = await sqlConnection`
+                  INSERT INTO "enrollments" (enrollment_id, user_id, simulation_group_id, enrollment_type, time_enrolled)
+                  VALUES (uuid_generate_v4(), ${user_id}, ${simulation_group_id}, ${enrollment_type}, CURRENT_TIMESTAMP)
                   ON CONFLICT (simulation_group_id, user_id) DO NOTHING
                   RETURNING enrollment_id;
               `;
 
-            const enrollment_id = enrollmentResult[0]?.enrollment_id;
+              const enrollment_id = enrollmentResult[0]?.enrollment_id;
 
-            if (enrollment_id) {
-              // Step 4: Retrieve all patient IDs for the simulation group
-              const patientsResult = await sqlConnection`
+              if (enrollment_id) {
+                // Step 4: Retrieve all patient IDs for the simulation group
+                const patientsResult = await sqlConnection`
                     SELECT persona_id
                     FROM "personas"
                     WHERE simulation_group_id = ${simulation_group_id};
                 `;
 
-              // Step 5: Insert a record into student_interactions for each patient
-              const studentPatientInsertions = patientsResult.map((patient) => {
-                return sqlConnection`
+                // Step 5: Insert a record into student_interactions for each patient
+                const studentPatientInsertions = patientsResult.map((patient) => {
+                  return sqlConnection`
                       INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
                       VALUES (uuid_generate_v4(), ${patient.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
                   `;
+                });
+
+                // Execute all insertions
+                await Promise.all(studentPatientInsertions);
+              }
+
+              response.statusCode = 201;
+              response.body = JSON.stringify({
+                message: "Student enrolled and patient records created successfully.",
               });
-
-              // Execute all insertions
-              await Promise.all(studentPatientInsertions);
             }
-
-            response.statusCode = 201; // Set status to 201 on successful enrollment
-            response.body = JSON.stringify({
-              message:
-                "Student enrolled and patient records created successfully.",
-            });
           } catch (err) {
             response.statusCode = 500;
             logger.error("Operation failed", { error: err.message, stack: err.stack });

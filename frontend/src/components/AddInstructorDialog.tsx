@@ -75,6 +75,7 @@ export function AddInstructorDialog({ open, onOpenChange, onAddInstructor }: Add
                 setEmail(e.target.value);
                 setError('');
               }}
+              maxLength={254}
               className="w-full focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 
@@ -97,6 +98,7 @@ export function AddInstructorDialog({ open, onOpenChange, onAddInstructor }: Add
                 setName(e.target.value);
                 setError('');
               }}
+              maxLength={100}
               className="w-full focus-visible:ring-0 focus-visible:ring-offset-0"
               style={{ 
                 borderWidth: '1px', 

@@ -1,5 +1,5 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Menu, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -26,6 +26,7 @@ import { QuestionBankSection } from '@/components/simulation-group/QuestionBankS
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import AIDebriefDialog from '../../components/AIDebriefDialog';
+import { useNotification } from '@/components/notifications';
 
 type ActiveSection = 'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent';
 
@@ -39,6 +40,7 @@ function InstructorSimulationGroupPage() {
   const { groupId } = useParams();
   const [searchParams] = useSearchParams();
   const adminReturnUrl = searchParams.get('returnUrl');
+  const { showNotification } = useNotification();
 
   // Section navigation
   const [activeSection, setActiveSection] = useState<ActiveSection>('analytics');
@@ -66,6 +68,8 @@ function InstructorSimulationGroupPage() {
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() =>
     instructorService.getGlobalRubricQuestions(groupId || '1')
   );
+  // Mapping from question bank ID → group_question_id (assignment record ID) for unassign
+  const questionIdToGroupQuestionId = useRef<Map<string, string>>(new Map());
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(() => {
     const questions = instructorService.getGlobalRubricQuestions(groupId || '1');
     return questions[0]?.id || null;
@@ -138,6 +142,12 @@ function InstructorSimulationGroupPage() {
           setGlobalRubricQuestions(rubricQuestions);
           setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
           setPendingQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          // Build questionId → groupQuestionId mapping
+          const map = new Map<string, string>();
+          for (const q of assigned) {
+            if (q.question_id && q.group_question_id) map.set(q.question_id, q.group_question_id);
+          }
+          questionIdToGroupQuestionId.current = map;
           if (rubricQuestions.length > 0 && !selectedQuestionId) setSelectedQuestionId(rubricQuestions[0].id);
         })
         .catch((err: any) => console.error('Failed to load assigned questions:', err));
@@ -150,9 +160,9 @@ function InstructorSimulationGroupPage() {
   const handleStudentView = async () => {
     const instructorReturnUrl = `/instructor/group/${groupId}`;
     if (groupId && accessCode && accessCode !== 'XXXX-XXXX-XXXX-XXXX') {
-      const result = await studentService.joinGroup(accessCode);
+      const result = await studentService.joinGroup(accessCode, 'preview');
       if (result?.success) { navigate(`/patients/${groupId}`, { state: { adminReturnUrl: instructorReturnUrl } }); return; }
-      window.alert('Unable to join this simulation group as a student. Redirecting to your student dashboard.');
+      showNotification({ message: 'Unable to join this simulation group as a student. Redirecting to your student dashboard.', type: 'warning' });
     }
     navigate('/student');
   };
@@ -200,8 +210,8 @@ function InstructorSimulationGroupPage() {
   // ── Rubric handlers ──
   const handleSaveQuestion = async () => {
     if (!selectedQuestion) return;
-    try { await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion); alert('Question saved successfully.'); }
-    catch { alert('Failed to save question. Please try again.'); }
+    try { await instructorService.updateGlobalRubricQuestion(groupId || '1', selectedQuestion); showNotification({ message: 'Question saved successfully.', type: 'success' }); }
+    catch { showNotification({ message: 'Failed to save question. Please try again.', type: 'error' }); }
   };
   const handleUpdateQuestionField = (field: keyof GlobalRubricQuestion, value: string | boolean) => {
     if (!selectedQuestionId) return;
@@ -230,7 +240,13 @@ function InstructorSimulationGroupPage() {
       if (isChecked) {
         newSet.add(questionId);
         if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          await instructorService.assignQuestionToGroup(groupId || '1', questionId);
+          const result = await instructorService.assignQuestionToGroup(groupId || '1', questionId);
+          // Store the new group_question_id in the mapping
+          if (result?.group_question_id) {
+            questionIdToGroupQuestionId.current.set(questionId, result.group_question_id);
+          } else if (Array.isArray(result) && result[0]?.group_question_id) {
+            questionIdToGroupQuestionId.current.set(questionId, result[0].group_question_id);
+          }
           if (!globalRubricQuestions.find(q => q.id === questionId)) {
             instructorService.addGlobalRubricQuestion(groupId || '1', { id: questionId, title: bankQuestion.title, keyQuestion: bankQuestion.questionText, clinicalIntent: bankQuestion.clinicalIntent, evaluationCriteria: bankQuestion.evaluationCriteria, required: bankQuestion.isMandatory });
             setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
@@ -239,7 +255,13 @@ function InstructorSimulationGroupPage() {
       } else {
         newSet.delete(questionId);
         if (questionBankTab === 'global' || questionId.startsWith('bank-global-')) {
-          await instructorService.unassignQuestion(questionId);
+          const groupQuestionId = questionIdToGroupQuestionId.current.get(questionId);
+          if (!groupQuestionId) {
+            console.error('No group_question_id found for question:', questionId);
+            return;
+          }
+          await instructorService.unassignQuestion(groupQuestionId);
+          questionIdToGroupQuestionId.current.delete(questionId);
           instructorService.deleteGlobalRubricQuestion(groupId || '1', questionId);
           setGlobalRubricQuestions(instructorService.getGlobalRubricQuestions(groupId || '1'));
         }
@@ -255,7 +277,14 @@ function InstructorSimulationGroupPage() {
         const idsToAdd = Array.from(pendingQuestionIds).filter(id => !includedQuestionIds.has(id));
         const idsToRemove = Array.from(includedQuestionIds).filter(id => !pendingQuestionIds.has(id));
         if (idsToAdd.length > 0) {
-          await instructorService.assignQuestionToGroup(groupId || '1', idsToAdd);
+          const result = await instructorService.assignQuestionToGroup(groupId || '1', idsToAdd);
+          // Populate questionId → groupQuestionId mapping from the response
+          const assignments = Array.isArray(result) ? result : (result ? [result] : []);
+          for (const a of assignments) {
+            if (a?.question_id && a?.group_question_id) {
+              questionIdToGroupQuestionId.current.set(a.question_id, a.group_question_id);
+            }
+          }
           for (const id of idsToAdd) {
             const bankQ = allBankQuestions.find(q => q.id === id);
             if (bankQ && !globalRubricQuestions.find(q => q.id === id)) {

@@ -293,6 +293,7 @@ function LoginPage() {
                 placeholder="Email Address"
                 value={email}
                 onChange={handleEmailChange}
+                maxLength={254}
                 className="w-full h-12 px-4 rounded-lg"
                 style={{ 
                   backgroundColor: UI_COLORS.background.input, 

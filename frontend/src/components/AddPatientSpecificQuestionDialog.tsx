@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS } from '@/lib/colors';
+import { useNotification } from '@/components/notifications';
 
 interface Patient {
   id: string;
@@ -29,6 +30,7 @@ export function AddPatientSpecificQuestionDialog({
   patients,
   onSave 
 }: AddPatientSpecificQuestionDialogProps) {
+  const { showNotification } = useNotification();
   const [selectedPatientId, setSelectedPatientId] = useState('');
   const [title, setTitle] = useState('');
   const [keyQuestion, setKeyQuestion] = useState('');
@@ -38,12 +40,12 @@ export function AddPatientSpecificQuestionDialog({
 
   const handleSave = () => {
     if (!selectedPatientId) {
-      alert('Please select a patient.');
+      showNotification({ message: 'Please select a patient.', type: 'warning' });
       return;
     }
     
     if (!title.trim() || !keyQuestion.trim()) {
-      alert('Please fill in at least the Title and Key Question fields.');
+      showNotification({ message: 'Please fill in at least the Title and Key Question fields.', type: 'warning' });
       return;
     }
 
@@ -120,6 +122,7 @@ export function AddPatientSpecificQuestionDialog({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g., Chest Pain Characterization"
+              maxLength={150}
               className="w-full"
               style={{
                 borderColor: UI_COLORS.border.default,
@@ -139,6 +142,7 @@ export function AddPatientSpecificQuestionDialog({
               placeholder="e.g., Assess the characteristics of the patient's chest pain, including onset, duration, severity, quality and radiation."
               className="w-full px-3 py-2 rounded-md border resize-none"
               rows={3}
+              maxLength={500}
               style={{
                 borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
@@ -158,6 +162,7 @@ export function AddPatientSpecificQuestionDialog({
               placeholder="e.g., This question evaluates the student's ability to gather essential details about the chest pain..."
               className="w-full px-3 py-2 rounded-md border resize-none"
               rows={4}
+              maxLength={500}
               style={{
                 borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
@@ -177,6 +182,7 @@ export function AddPatientSpecificQuestionDialog({
               placeholder="e.g., The student attempts to identify at least 3-4 of the following core characteristics..."
               className="w-full px-3 py-2 rounded-md border resize-none"
               rows={5}
+              maxLength={500}
               style={{
                 borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,

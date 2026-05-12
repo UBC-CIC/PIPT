@@ -86,6 +86,7 @@ function JoinGroupDialog({
             placeholder="Access Code"
             value={accessCode}
             onChange={(e) => setAccessCode(e.target.value)}
+            maxLength={20}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 handleJoin();

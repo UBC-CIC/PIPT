@@ -174,6 +174,7 @@ function SignUpPage() {
                 placeholder="Verification Code"
                 value={confirmationCode}
                 onChange={(e) => setConfirmationCode(e.target.value)}
+                maxLength={10}
                 className="w-full h-12 px-4 rounded-lg text-center text-lg tracking-widest"
                 style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
@@ -236,6 +237,7 @@ function SignUpPage() {
                 placeholder="First Name"
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
+                maxLength={50}
                 className="flex-1 h-12 px-4 rounded-lg"
                 style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
@@ -246,6 +248,7 @@ function SignUpPage() {
                 placeholder="Last Name"
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
+                maxLength={50}
                 className="flex-1 h-12 px-4 rounded-lg"
                 style={{ backgroundColor: UI_COLORS.background.input, borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.light }}
                 required
@@ -259,6 +262,7 @@ function SignUpPage() {
                 placeholder="Email Address"
                 value={email}
                 onChange={handleEmailChange}
+                maxLength={254}
                 className="w-full h-12 px-4 rounded-lg"
                 style={{ 
                   backgroundColor: UI_COLORS.background.input, 
