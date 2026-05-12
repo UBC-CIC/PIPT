@@ -118,7 +118,7 @@ function InstructorDashboardPage() {
           onJoinGroup={handleCreateGroup}
           onContinueTraining={handleViewAnalytics}
           joinButtonText="+ Create New Group"
-          actionButtonText="View Analytics"
+          actionButtonText="Manage Group"
           descriptionText="Create simulation groups and view analytics."
           showCounts={true}
           countLabels={{
