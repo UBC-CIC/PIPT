@@ -1468,11 +1468,11 @@ def build_rewrite_prompt(
     evaluation_criteria: str,
 ) -> str:
     """
-    Build a focused prompt that asks the LLM to generate a single suggested
-    rewrite for a student message that only partially addressed a question.
+    Build a focused prompt that asks the LLM to suggest a gentler alternative
+    phrasing for a student message that only partially addressed a question.
 
-    Called only for moderate-confidence matches (similarity < 0.85).  The
-    threshold enforcement is NOT in this function — it is applied in
+    Called only for low-confidence matches (similarity < REWRITE_THRESHOLD).
+    The threshold enforcement is NOT in this function — it is applied in
     ``generate_debrief()`` when deciding whether to call this function.
 
     Target output: ~100-200 tokens (a single JSON object with one key).

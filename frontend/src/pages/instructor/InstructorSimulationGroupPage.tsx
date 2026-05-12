@@ -277,7 +277,14 @@ function InstructorSimulationGroupPage() {
         const idsToAdd = Array.from(pendingQuestionIds).filter(id => !includedQuestionIds.has(id));
         const idsToRemove = Array.from(includedQuestionIds).filter(id => !pendingQuestionIds.has(id));
         if (idsToAdd.length > 0) {
-          await instructorService.assignQuestionToGroup(groupId || '1', idsToAdd);
+          const result = await instructorService.assignQuestionToGroup(groupId || '1', idsToAdd);
+          // Populate questionId → groupQuestionId mapping from the response
+          const assignments = Array.isArray(result) ? result : (result ? [result] : []);
+          for (const a of assignments) {
+            if (a?.question_id && a?.group_question_id) {
+              questionIdToGroupQuestionId.current.set(a.question_id, a.group_question_id);
+            }
+          }
           for (const id of idsToAdd) {
             const bankQ = allBankQuestions.find(q => q.id === id);
             if (bankQ && !globalRubricQuestions.find(q => q.id === id)) {

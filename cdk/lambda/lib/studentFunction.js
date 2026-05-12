@@ -919,7 +919,8 @@ exports.handler = async (event, context) => {
                   const studentPatientInsertions = patientsResult.map((patient) => {
                     return sqlConnection`
                         INSERT INTO "student_interactions" (student_interaction_id, persona_id, enrollment_id, persona_score, last_accessed, persona_context_embedding, is_completed)
-                        VALUES (uuid_generate_v4(), ${patient.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE);
+                        VALUES (uuid_generate_v4(), ${patient.persona_id}, ${enrollment_id}, 0, CURRENT_TIMESTAMP, NULL, FALSE)
+                        ON CONFLICT (persona_id, enrollment_id) DO NOTHING;
                     `;
                   });
                   await Promise.all(studentPatientInsertions);
