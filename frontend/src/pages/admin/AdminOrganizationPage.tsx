@@ -231,7 +231,7 @@ function AdminOrganizationPage() {
           onJoinGroup={handleCreateGroup}
           onContinueTraining={handleViewAnalytics}
           joinButtonText="+ Create New Group"
-          actionButtonText="View Analytics"
+          actionButtonText="Manage Group"
           descriptionText="Edit simulation groups and view analytics."
           sectionTitle={organization ? `${organization.name} Simulation Groups` : 'Simulation Groups'}
           showCounts={true}
