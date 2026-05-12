@@ -51,7 +51,17 @@ export class ApiClient {
         window.location.href = '/login';
         throw new Error('Session expired. Please sign in again.');
       }
-      throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      // Try to extract error message from response body
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`;
+      try {
+        const errorBody = await response.json();
+        if (errorBody?.error) {
+          errorMessage = errorBody.error;
+        }
+      } catch {
+        // Response body wasn't JSON, use default message
+      }
+      throw new Error(errorMessage);
     }
 
     return response.json();

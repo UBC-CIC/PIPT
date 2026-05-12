@@ -11,6 +11,7 @@ import { getSimulationGroupColor, UI_COLORS } from '@/lib/colors';
 import { useAuth } from '@/App';
 import * as adminApi from '@/services/adminApiService';
 import LoadingIndicator from '@/components/LoadingIndicator';
+import { useNotification } from '@/components/notifications';
 
 /**
  * AdminOrganizationPage Component
@@ -21,6 +22,7 @@ function AdminOrganizationPage() {
   const navigate = useNavigate();
   const { signOut } = useAuth();
   const { organizationId } = useParams<{ organizationId: string }>();
+  const { showNotification } = useNotification();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [groups, setGroups] = useState<InstructorSimulationGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +119,8 @@ function AdminOrganizationPage() {
         try {
           await adminApi.addInstructorToGroup(created.simulation_group_id, email);
         } catch (err) {
-          console.error(`Failed to enroll instructor ${email}:`, err);
+          const message = err instanceof Error ? err.message : `Failed to enroll instructor ${email}.`;
+          showNotification({ message, type: 'error' });
         }
       }
 

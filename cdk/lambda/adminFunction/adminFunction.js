@@ -1,7 +1,10 @@
 const { initializeConnection } = require("./libadmin.js");
 const logger = require("./logger");
+const { CognitoIdentityProviderClient, AdminGetUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
 
-let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
+let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT, USER_POOL_ID } = process.env;
+
+const cognitoClient = new CognitoIdentityProviderClient();
 
 const DEFAULT_DEBRIEF_PROMPT = `
 You are an expert clinical education evaluator. You will be given:
@@ -550,7 +553,24 @@ exports.handler = async (event, context) => {
           const instructorEmail = event.queryStringParameters.email;
 
           try {
-            // Check if the user exists
+            // Verify the user exists in Cognito (i.e., they signed up through the proper channel)
+            try {
+              await cognitoClient.send(new AdminGetUserCommand({
+                UserPoolId: USER_POOL_ID,
+                Username: instructorEmail,
+              }));
+            } catch (cognitoErr) {
+              if (cognitoErr.name === "UserNotFoundException") {
+                response.statusCode = 400;
+                response.body = JSON.stringify({
+                  error: "User has not registered an account. Only registered users can be elevated to instructor.",
+                });
+                break;
+              }
+              throw cognitoErr;
+            }
+
+            // Check if the user exists in the DB
             const existingUser = await sqlConnectionTableCreator`
                           SELECT * FROM "users"
                           WHERE user_email = ${instructorEmail};
@@ -591,15 +611,10 @@ exports.handler = async (event, context) => {
                 break;
               }
             } else {
-              // Create a new user with the role 'instructor'
-              await sqlConnectionTableCreator`
-                              INSERT INTO "users" (user_email, roles)
-                              VALUES (${instructorEmail}, ARRAY['instructor']);
-                          `;
-
-              response.statusCode = 201;
+              // User exists in Cognito but not in DB (edge case: post-confirmation trigger may not have fired yet)
+              response.statusCode = 400;
               response.body = JSON.stringify({
-                message: "New user created and elevated to instructor.",
+                error: "User has registered but their account setup is not complete. Please ask them to sign in first.",
               });
             }
           } catch (err) {

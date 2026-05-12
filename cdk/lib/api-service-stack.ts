@@ -481,6 +481,15 @@ export class ApiServiceStack extends cdk.Stack {
       })
     );
 
+    // Grant access to Cognito AdminGetUser (used by admin function to validate users before elevation)
+    lambdaRole.addToPolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["cognito-idp:AdminGetUser"],
+        resources: [this.userPool.userPoolArn],
+      })
+    );
+
     // Attach roles to the identity pool
     new cognito.CfnIdentityPoolRoleAttachment(this, `${id}-IdentityPoolRoles`, {
       identityPoolId: this.identityPool.ref,
@@ -566,6 +575,7 @@ export class ApiServiceStack extends cdk.Stack {
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
+          USER_POOL_ID: this.userPool.userPoolId,
         },
         functionName: `${id}-adminFunction`,
         memorySize: 256,

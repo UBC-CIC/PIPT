@@ -132,7 +132,7 @@ function PatientDashboardPage() {
    * Handle start new chat
    */
   const handleStartNewChat = () => {
-    navigate(`/patients/${groupId}/${patientId}/chat`);
+    navigate(`/patients/${groupId}/${patientId}/chat`, { state: { adminReturnUrl } });
   };
 
   /**
@@ -141,10 +141,10 @@ function PatientDashboardPage() {
   const handleChatClick = (chatId: string, completionStatus: string) => {
     if (completionStatus === 'Complete') {
       // Navigate to read-only chat history page
-      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}/history`);
+      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}/history`, { state: { adminReturnUrl } });
     } else {
       // Navigate to active chat page with existing session ID
-      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}`);
+      navigate(`/patients/${groupId}/${patientId}/chat/${chatId}`, { state: { adminReturnUrl } });
     }
   };
 

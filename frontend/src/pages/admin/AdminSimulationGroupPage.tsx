@@ -329,10 +329,10 @@ function AdminSimulationGroupPage() {
     try {
       await adminApi.addInstructorToGroup(groupId, email);
       setInstructors(await adminApi.getGroupInstructors(groupId));
+      showNotification({ message: `${email} added as instructor.`, type: 'success' });
     } catch (err) {
-      console.error('Failed to add instructor via API, adding locally:', err);
-      const [first_name, ...rest] = name.split(' ');
-      setInstructors(prev => [...prev, { user_email: email, first_name, last_name: rest.join(' ') || '' }]);
+      const message = err instanceof Error ? err.message : 'Failed to add instructor.';
+      showNotification({ message, type: 'error' });
     }
   };
   const handleRemoveInstructor = async (instructorEmail: string) => {
