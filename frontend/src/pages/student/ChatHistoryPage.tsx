@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
@@ -22,6 +22,8 @@ import ResizeHandle from '@/components/ResizeHandle';
 function ChatHistoryPage() {
   const navigate = useNavigate();
   const { groupId, patientId, chatId } = useParams();
+  const location = useLocation();
+  const adminReturnUrl = (location.state as any)?.adminReturnUrl as string | undefined;
   
   // Load user data from auth context
   const { user: authUser } = useAuth();
@@ -135,7 +137,7 @@ function ChatHistoryPage() {
    * Handle back to patient dashboard
    */
   const handleBackToPatientDashboard = () => {
-    navigate(`/patients/${groupId}/${patientId}`);
+    navigate(`/patients/${groupId}/${patientId}`, { state: { adminReturnUrl } });
   };
 
   /**
@@ -212,7 +214,19 @@ function ChatHistoryPage() {
           </div>
         </div>
 
-        <div className="flex items-center">
+        <div className="flex items-center gap-3">
+          {adminReturnUrl && (
+            <Button
+              variant="default"
+              onClick={() => navigate(adminReturnUrl)}
+              className="px-6 transition-colors"
+              style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+            >
+              Back to Admin View
+            </Button>
+          )}
           <Button
             variant="default"
             onClick={handleSignOut}
