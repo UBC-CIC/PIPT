@@ -122,7 +122,7 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, 
         {/* Content */}
         <div className="p-6 space-y-6">
           <p className="text-base" style={{ color: UI_COLORS.text.body }}>
-            Summary and feedback on your clinical interview.
+            AI generated summary and feedback on your clinical interview. Remember, this is AI generated and should be considered as suggestions. This system will always provide feedback, and it may be incorrect, so you must use your judgement when considering this feedback. If you have questions about the feedback provided to you in this debrief, please reach out to your instructor.
           </p>
 
           {/* Interview Summary */}
@@ -187,9 +187,15 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, 
               </h3>
             </div>
             {debriefData.missedQuestionsGuidance && (
-              <p className="text-sm pl-7" style={{ color: UI_COLORS.text.body }}>
-                {debriefData.missedQuestionsGuidance}
-              </p>
+              <ul className="text-sm pl-7 space-y-2 list-disc list-inside" style={{ color: UI_COLORS.text.body }}>
+                {debriefData.missedQuestionsGuidance
+                  .split(/\n|\\n/)
+                  .map(line => line.replace(/^[\s•\-*\d.)+]+/, '').trim())
+                  .filter(line => line.length > 0)
+                  .map((line, index) => (
+                    <li key={index}>{line}</li>
+                  ))}
+              </ul>
             )}
           </div>
 
@@ -201,6 +207,9 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, 
                 Suggested Question Rewrites
               </h3>
             </div>
+            <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+              These are AI-generated suggestions and may not perfectly reflect the ideal phrasing for every clinical context.
+            </p>
             {debriefData.suggestedRewrites.length > 0 ? (
               <div className="pl-7 space-y-3">
                 {debriefData.suggestedRewrites.map((rewrite, index) => (

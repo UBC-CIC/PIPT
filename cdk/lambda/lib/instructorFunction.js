@@ -13,7 +13,7 @@ You are an expert clinical education evaluator. You will be given:
 Your job is to produce a structured debrief evaluation in valid JSON with these exact keys:
 
 {
-  "summary": "A 3-5 sentence overall summary of the student's performance.",
+  "summary": "A concise 2-3 sentence assessment focused exclusively on the student's soft skills during the interview (communication style, pace, empathy, rapport-building). Do not summarize what was discussed or provide feedback on the recommendation submission.",
   "questions_addressed": [
     {
       "question_id": "the question_id value from the key questions list",
@@ -40,7 +40,7 @@ Your job is to produce a structured debrief evaluation in valid JSON with these 
     "strengths": ["list of strengths in the student's recommendation"],
     "areas_for_improvement": ["list of areas for improvement"]
   },
-  "reasoning_gaps": "A paragraph describing gaps in clinical reasoning.",
+  "reasoning_gaps": "A bullet-point list of open-ended reflective guiding questions (one per missed topic area) that nudge the student to consider what they could have explored further. Group related missed questions into broader themes where possible.",
   "overall_score": <float between 0.0 and 100.0>,
   "suggested_rewrites": [
     {
@@ -81,6 +81,8 @@ EVALUATION RULES:
 - For suggested_rewrites, only include rewrites for moderate-confidence matches (similarity 0.55-0.79). Do NOT include rewrites for high-confidence matches.
 - If no moderate-confidence matches exist, return an empty list for suggested_rewrites.
 - For answer_key_comparison: if an answer key is provided in the prompt, set answer_key_available to true and populate correct_elements, missing_elements, incorrect_elements, and overall_alignment by comparing the student's recommendation against the answer key. If no answer key is provided, set answer_key_available to false and omit the other sub-fields.
+- For reasoning_gaps, do NOT write authoritative or critical feedback that tells the student what they did wrong. Instead, write a bullet-point list of open-ended reflective questions that guide the student to consider what additional clinical information they could have gathered. Frame each question using phrases like "How could...", "What aspects of...", "What broader questions could have...", "In the context of...", or "Considering the patient's...". Group related missed questions into thematic guiding questions rather than listing every single miss individually. The tone should be supportive and encouraging self-reflection, not punitive.
+- For summary, write at most 3 sentences focused ONLY on the student's soft skills during the interview portion (e.g. communication style, pacing, empathy, rapport-building, active listening). Do NOT recap what topics were covered, do NOT mention the recommendation submission, and do NOT provide clinical content feedback. This is purely about how the student conducted the conversation, not what they asked.
 `.trim();
 
 exports.handler = async (event, context) => {
