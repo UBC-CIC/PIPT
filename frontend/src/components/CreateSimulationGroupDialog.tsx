@@ -283,9 +283,12 @@ function CreateSimulationGroupDialog({
               >
                 System Prompt
               </label>
+              <p className="text-xs mb-1" style={{ color: UI_COLORS.text.muted }}>
+                Defines HOW the AI should behave across all patients in this group (tone, response length, rules).
+              </p>
               <textarea
                 id="group-system-prompt"
-                placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient."
+                placeholder="You are role-playing as a patient in a clinical training simulation. Keep responses brief (1-3 sentences). Speak in plain, everyday language. Only answer what is directly asked."
                 value={systemPrompt}
                 onChange={(e) => setSystemPrompt(e.target.value)}
                 rows={4}

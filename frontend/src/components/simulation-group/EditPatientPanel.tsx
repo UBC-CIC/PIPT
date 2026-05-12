@@ -286,6 +286,9 @@ function InfoTab({
         <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
           Patient Prompt
         </label>
+        <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
+          Defines WHO this patient is — their personality, symptoms, backstory, and condition details. This is unique per patient.
+        </p>
         <textarea
           value={patientEditor.editPatientPrompt}
           onChange={(e) => patientEditor.setEditPatientPrompt(e.target.value)}
@@ -297,7 +300,7 @@ function InfoTab({
             outlineColor: UI_COLORS.border.medium,
             minHeight: '120px',
           }}
-          placeholder="Pretend to be a patient with the context you are given. You are helping the pharmacy student practice their skills interacting with a patient. Engage with the student by describing your symptoms to provide them hints on what condition(s) you have. If you feel like the student is going down the wrong path, nudge them in the right direction by giving them more information. This is to help the student identify the proper diagnosis of the patient you are pretending to be."
+          placeholder="You are a 45-year-old patient who has been experiencing persistent headaches for the past 2 weeks. You also have mild nausea in the mornings. You take ibuprofen occasionally but it only helps temporarily. You are worried it might be something serious."
         />
       </div>
 

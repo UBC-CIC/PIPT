@@ -176,9 +176,12 @@ function CreateOrganizationDialog({
             >
               System Prompt
             </label>
+            <p className="text-xs mb-1" style={{ color: UI_COLORS.text.muted }}>
+              Defines HOW the AI should behave across all personas in this organization (tone, response length, rules).
+            </p>
             <textarea
               id="system-prompt"
-              placeholder="You are acting as a university student seeking guidance from an Academic Advisor. Your goal is to help the user practice their advising skills, including degree planning, crisis management, and interpersonal communication."
+              placeholder="You are role-playing as a patient in a clinical training simulation. Keep responses brief (1-3 sentences). Speak in plain, everyday language. Only answer what is directly asked."
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               rows={4}
