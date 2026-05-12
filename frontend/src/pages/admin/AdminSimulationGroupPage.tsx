@@ -324,7 +324,7 @@ function AdminSimulationGroupPage() {
 
   // ── Instructor handlers ──
   const handleAddNewInstructor = () => setIsAddInstructorDialogOpen(true);
-  const handleAddInstructorSubmit = async (email: string, name: string) => {
+  const handleAddInstructorSubmit = async (email: string, _name: string) => {
     if (!groupId) return;
     try {
       await adminApi.addInstructorToGroup(groupId, email);
