@@ -84,6 +84,20 @@ export function useSimulationGroupData({
     }
   };
 
+  // Reset all group-specific state when navigating to a different group
+  useEffect(() => {
+    setSimulationGroup(undefined);
+    setPatientAnalytics([]);
+    setStudents([]);
+    setManageablePatients([]);
+    setProfilePictures({});
+    setKeyQuestionCoverage([]);
+    setKeyQuestionAnalytics([]);
+    setStudentProgress([]);
+    setSelectedPatientId('overview');
+    setLoading(true);
+  }, [groupId]);
+
   // Load initial data
   useEffect(() => {
     const loadData = async () => {

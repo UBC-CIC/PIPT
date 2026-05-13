@@ -126,6 +126,18 @@ function AdminSimulationGroupPage() {
     return fullName.includes(instructorSearchQuery.toLowerCase()) || i.user_email.toLowerCase().includes(instructorSearchQuery.toLowerCase());
   });
 
+  // ── Reset admin-specific state when group changes ──
+  useEffect(() => {
+    setInstructors([]);
+    setPromptHistory([]);
+    setIssueReports([]);
+    setDebriefFeedbackList([]);
+    setGlobalRubricQuestions([]);
+    setMaxMessagesPerChat(null);
+    setMaxMessagesInput('');
+    setSelectedQuestionId(null);
+  }, [groupId]);
+
   // ── Admin-specific data loading ──
   useEffect(() => {
     const loadAdminData = async () => {

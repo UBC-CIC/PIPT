@@ -385,10 +385,12 @@ export function usePatientEditor({
     };
     try {
       const created = await instructorService.addCaseMaterial(selectedPatientForEdit, newMaterial);
-      setCaseMaterials(prev => [...prev, created]);
+      setCaseMaterials(prev => [created, ...prev]);
       setSelectedMaterialId(created.id);
+      showNotification({ message: 'Material added successfully', type: 'success' });
     } catch (error) {
       console.error('Failed to add case material:', error);
+      showNotification({ message: 'Failed to add material', type: 'error' });
     }
   };
 
@@ -401,8 +403,10 @@ export function usePatientEditor({
     try {
       const updated = await instructorService.updateCaseMaterial(selectedPatientForEdit, selectedMaterial);
       setCaseMaterials(prev => prev.map(m => m.id === updated.id ? updated : m));
+      showNotification({ message: 'Material saved successfully', type: 'success' });
     } catch (error) {
       console.error('Failed to save case material:', error);
+      showNotification({ message: 'Failed to save material', type: 'error' });
     }
   };
 

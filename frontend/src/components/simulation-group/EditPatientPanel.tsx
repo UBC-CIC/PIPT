@@ -8,6 +8,7 @@ import VoicePreview from '@/components/prompt-playground/VoicePreview';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import type { UsePatientEditorReturn } from '@/hooks/usePatientEditor';
 import { instructorService, type OrganizationLabels, type GlobalRubricQuestion, type CaseMaterial, type UploadedFileInfo } from '@/services/instructorService';
+import { useNotification } from '@/components/notifications';
 
 export interface EditPatientPanelProps {
   patientEditor: UsePatientEditorReturn;
@@ -32,6 +33,7 @@ export function EditPatientPanel({
   onSaveCaseQuestion,
   onDeleteCaseQuestion,
 }: EditPatientPanelProps) {
+  const { showNotification } = useNotification();
   const [caseQuestionSearchQuery, setCaseQuestionSearchQuery] = useState('');
   const [globalRubricSearchQuery, setGlobalRubricSearchQuery] = useState('');
   const [materialSearchQuery, setMaterialSearchQuery] = useState('');
@@ -1121,8 +1123,10 @@ function MaterialsTab({
                           try {
                             await instructorService.deleteCaseMaterial(patientEditor.selectedPatientForEdit, material.id);
                             patientEditor.setCaseMaterials(patientEditor.caseMaterials.filter(m => m.id !== material.id));
+                            showNotification({ message: 'Material deleted successfully', type: 'success' });
                           } catch (error) {
                             console.error('Failed to delete material:', error);
+                            showNotification({ message: 'Failed to delete material', type: 'error' });
                           }
                         }
                       }}

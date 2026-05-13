@@ -265,7 +265,7 @@ function PatientDashboardPage() {
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
             >
-              + Start New Chat
+              + Start New Interaction
             </Button>
           </div>
         )}
@@ -537,12 +537,13 @@ function PatientDashboardPage() {
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
                 >
-                  + Start New Chat
+                  + Start New Interaction
                 </Button>
               </div>
               <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
                 Click on an in-progress chat to continue your diagnosis.<br />
-                Click on a completed chat to view the AI debrief.
+                Click on a completed chat to view the AI debrief.<br />
+                Each interaction starts fresh, there is no memory carried over between sessions.
               </p>
 
               {/* Chat History Table */}
