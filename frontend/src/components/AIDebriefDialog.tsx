@@ -1,14 +1,16 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
+import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2, CheckCircle2, AlertCircle, Circle } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState, useEffect } from 'react';
 import { studentService, type AIDebriefData } from '@/services/studentService';
+import type { UpdatedDebriefData } from '@/services/studentService';
 
 interface AIDebriefDialogProps {
   isOpen: boolean;
   onClose: () => void;
   data?: AIDebriefData | null;
+  updatedDebriefData?: UpdatedDebriefData;
   simulationGroupId?: string;
   patientId?: string;
   chatId?: string;
@@ -22,7 +24,7 @@ interface AIDebriefDialogProps {
  * Includes interview summary, key questions addressed/missed, clinical reasoning feedback,
  * and suggested question rewrites.
  */
-function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, chatId, showAnswerKey = false }: AIDebriefDialogProps) {
+function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulationGroupId, patientId, chatId, showAnswerKey = false }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -125,7 +127,223 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, 
             AI generated summary and feedback on your clinical interview. Remember, this is AI generated and should be considered as suggestions. This system will always provide feedback, and it may be incorrect, so you must use your judgement when considering this feedback. If you have questions about the feedback provided to you in this debrief, please reach out to your instructor.
           </p>
 
-          {/* Interview Summary */}
+          {/* Two-Chunk Layout (when updatedDebriefData is provided) */}
+          {updatedDebriefData ? (
+            <>
+              {/* ─── Chunk 1: Interview Summary & Key Questions ─── */}
+              {/* Interview Summary */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                  <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                    Interview Summary
+                  </h3>
+                </div>
+                <p className="text-sm leading-relaxed pl-7" style={{ color: UI_COLORS.text.body }}>
+                  {updatedDebriefData.chunk1.summary}
+                </p>
+              </div>
+
+              {/* Key Questions Addressed */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                  <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                    Key Questions Addressed ({updatedDebriefData.chunk1.questionsAddressedCount})
+                  </h3>
+                </div>
+                {updatedDebriefData.chunk1.questionsAddressed.length > 0 ? (
+                  <ul className="space-y-2 pl-7">
+                    {updatedDebriefData.chunk1.questionsAddressed.map((question, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                        <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
+                        <span>{question}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                    No key questions were identified as addressed.
+                  </p>
+                )}
+              </div>
+
+              {/* Key Questions Missed */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                  <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                    Key Questions Missed ({updatedDebriefData.chunk1.questionsMissedCount})
+                  </h3>
+                </div>
+                {updatedDebriefData.chunk1.questionsMissed.length > 0 ? (
+                  <ul className="space-y-2 pl-7">
+                    {updatedDebriefData.chunk1.questionsMissed.map((question, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                        <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ef4444' }} />
+                        <span>{question}</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                    No key questions were missed.
+                  </p>
+                )}
+              </div>
+
+              {/* ─── Chunk 2: DTP Comparison & Recommendations Feedback ─── */}
+              {updatedDebriefData.chunk2 === null ? (
+                /* Chunk 2 Loading State */
+                <div className="flex items-center gap-3 py-8 justify-center">
+                  <Loader2 className="w-5 h-5 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+                  <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+                    Processing your submissions...
+                  </span>
+                </div>
+              ) : (
+                <>
+                  {/* DTP Comparison Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                      <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                        DTP Comparison
+                      </h3>
+                    </div>
+                    <div className="pl-7 space-y-4">
+                      {/* Overview */}
+                      {updatedDebriefData.chunk2.dtpComparison.overview && (
+                        <p className="text-sm leading-relaxed" style={{ color: UI_COLORS.text.body }}>
+                          {updatedDebriefData.chunk2.dtpComparison.overview}
+                        </p>
+                      )}
+                      {/* Matched DTPs */}
+                      {updatedDebriefData.chunk2.dtpComparison.matched.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Matched:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.dtpComparison.matched.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
+                                <span>{item.dtpText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Missed DTPs */}
+                      {updatedDebriefData.chunk2.dtpComparison.missed.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Missed:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.dtpComparison.missed.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ef4444' }} />
+                                <span>{item.dtpText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Unmatched DTPs */}
+                      {updatedDebriefData.chunk2.dtpComparison.unmatched.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Unmatched:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.dtpComparison.unmatched.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <Circle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
+                                <span>{item.dtpText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Recommendations Comparison Section */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                      <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                        Recommendations Comparison
+                      </h3>
+                    </div>
+                    <div className="pl-7 space-y-4">
+                      {/* Overview */}
+                      {updatedDebriefData.chunk2.recommendationsComparison.overview && (
+                        <p className="text-sm leading-relaxed" style={{ color: UI_COLORS.text.body }}>
+                          {updatedDebriefData.chunk2.recommendationsComparison.overview}
+                        </p>
+                      )}
+                      {/* Matched Recommendations */}
+                      {updatedDebriefData.chunk2.recommendationsComparison.matched.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Matched:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.recommendationsComparison.matched.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#22c55e' }} />
+                                <span>{item.recommendationText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Missed Recommendations */}
+                      {updatedDebriefData.chunk2.recommendationsComparison.missed.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Missed:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.recommendationsComparison.missed.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#ef4444' }} />
+                                <span>{item.recommendationText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Unmatched Recommendations */}
+                      {updatedDebriefData.chunk2.recommendationsComparison.unmatched.length > 0 && (
+                        <div>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                            Unmatched:
+                          </h4>
+                          <ul className="space-y-1">
+                            {updatedDebriefData.chunk2.recommendationsComparison.unmatched.map((item, index) => (
+                              <li key={index} className="flex items-start gap-2 text-sm" style={{ color: UI_COLORS.text.body }}>
+                                <Circle className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#f59e0b' }} />
+                                <span>{item.recommendationText}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+          {/* Original/Legacy Layout (when debriefData is used) */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
@@ -436,6 +654,9 @@ function AIDebriefDialog({ isOpen, onClose, data, simulationGroupId, patientId, 
                 )}
               </div>
             </div>
+          )}
+
+          </>
           )}
 
           {/* Feedback Section */}

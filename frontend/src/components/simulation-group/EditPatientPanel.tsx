@@ -310,7 +310,8 @@ function InfoTab({
         {([
           { label: 'LLM Upload', type: 'llm' as const, description: 'Document used by the AI to roleplay as this patient.' },
           { label: 'Patient Information', type: 'patientInfo' as const, description: 'Medical record for this patient. This document is visible to students.' },
-          { label: 'Answer Key', type: 'answerKey' as const, description: 'Reference answers for debrief evaluation.' },
+          // Answer key file upload disabled — replaced by DTP/Recommendations Bank approach
+          /* { label: 'Answer Key', type: 'answerKey' as const, description: 'Reference answers for debrief evaluation.' }, */
         ]).map(({ label, type, description }) => (
           <div key={type} className="p-4 border rounded-lg space-y-3" style={{ borderColor: UI_COLORS.border.default }}>
             {/* Header row: label + status + upload button */}
@@ -425,9 +426,10 @@ function FileDisplayNameRow({
   onPreview,
 }: {
   file: import('@/services/instructorService').UploadedFileInfo;
-  fileType: 'llm' | 'patientInfo' | 'answerKey';
-  onSaveDisplayName: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => Promise<void>;
-  onDelete: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string) => Promise<void>;
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  fileType: 'llm' | 'patientInfo' /* | 'answerKey' */;
+  onSaveDisplayName: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string, displayName: string) => Promise<void>;
+  onDelete: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => Promise<void>;
   onPreview: (file: import('@/services/instructorService').UploadedFileInfo) => void;
 }) {
   const [localName, setLocalName] = useState(file.displayName || '');

@@ -13,6 +13,8 @@ import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
 import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
+import { ConcludeModal } from '@/components/ConcludeModal';
+import type { UpdatedDebriefData } from '@/services/studentService';
 import { useAuth } from '@/App';
 import { authService } from '@/lib/auth';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
@@ -59,12 +61,14 @@ function StudentChatPage() {
 
   // State for dialogs
   const [isConfirmConcludeOpen, setIsConfirmConcludeOpen] = useState(false);
+  const [isConcludeModalOpen, setIsConcludeModalOpen] = useState(false);
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
 
   // Session lifecycle status
   const [sessionStatus, setSessionStatus] = useState<'active' | 'generating_debrief' | 'concluded'>('active');
   const [debriefData, setDebriefData] = useState<AIDebriefData | null>(null);
+  const [updatedDebriefData, setUpdatedDebriefData] = useState<UpdatedDebriefData | undefined>(undefined);
 
   // Session completed — patient ended the conversation, student must conclude
   const [sessionCompleted, setSessionCompleted] = useState(false);
@@ -698,6 +702,27 @@ function StudentChatPage() {
     }
   };
 
+  /**
+   * Handle the new two-step conclude modal completion.
+   * Called after ConcludeModal successfully submits DTP + Recommendation data.
+   */
+  const handleConcludeWithSubmissions = async () => {
+    if (!groupId || !patientId || !sessionId) return;
+
+    setSessionStatus('generating_debrief');
+
+    try {
+      // Fetch the two-chunk debrief — chunk1 comes immediately, chunk2 after ~2s delay
+      const debrief = await studentService.fetchUpdatedDebrief(sessionId);
+      setUpdatedDebriefData(debrief);
+      setSessionStatus('concluded');
+      setIsAIDebriefOpen(true);
+    } catch (err) {
+      console.error('Failed to fetch updated debrief:', err);
+      setSessionStatus('concluded');
+    }
+  };
+
   // Ref to hold the cancel function for an in-flight streaming request
   const cancelStreamRef = useRef<(() => void) | null>(null);
 
@@ -814,11 +839,21 @@ function StudentChatPage() {
 
   return (
     <PageContainer>
-      {/* Confirm Conclude Dialog */}
+      {/* Confirm Conclude Dialog (legacy) */}
       <ConfirmConcludeDialog
         isOpen={isConfirmConcludeOpen}
         onCancel={() => setIsConfirmConcludeOpen(false)}
         onConfirm={handleConcludeInteraction}
+      />
+
+      {/* New Two-Step Conclude Modal */}
+      <ConcludeModal
+        open={isConcludeModalOpen}
+        onOpenChange={setIsConcludeModalOpen}
+        sessionId={sessionId || ''}
+        simulationGroupId={groupId || ''}
+        patientId={patientId || ''}
+        onConcluded={handleConcludeWithSubmissions}
       />
 
       {/* Report Issue Dialog */}
@@ -835,6 +870,7 @@ function StudentChatPage() {
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
         data={debriefData}
+        updatedDebriefData={updatedDebriefData}
         simulationGroupId={groupId}
         patientId={patientId}
         chatId={sessionId || routeChatId}
@@ -1006,7 +1042,7 @@ function StudentChatPage() {
                 variant="outline"
                 className="w-full justify-start text-white hover:opacity-90 border-0 whitespace-nowrap"
                 style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[1] }}
-                onClick={() => setIsConfirmConcludeOpen(true)}
+                onClick={() => setIsConcludeModalOpen(true)}
               >
                 <CheckCircle className="w-5 h-5 mr-2" />
                 Conclude Interaction
