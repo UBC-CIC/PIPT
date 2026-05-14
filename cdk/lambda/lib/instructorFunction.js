@@ -2738,6 +2738,422 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      // ── DTP Assignments ────────────────────────────────────────────────
+      case "GET /instructor/simulation_group_dtps":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const persona_id = event.queryStringParameters.persona_id || null;
+
+          try {
+            let data;
+            if (persona_id) {
+              data = await sqlConnection`
+                SELECT sgd.*, db.title, db.expected_dtp_text, db.clinical_intent,
+                       db.evaluation_criteria, db.tags, db.is_required, db.is_active
+                FROM "simulation_group_dtps" sgd
+                JOIN "dtp_bank" db ON sgd.dtp_id = db.dtp_id
+                WHERE sgd.simulation_group_id = ${simulation_group_id}
+                  AND sgd.persona_id = ${persona_id}
+                ORDER BY sgd.sort_order ASC, sgd.added_at ASC;
+              `;
+            } else {
+              data = await sqlConnection`
+                SELECT sgd.*, db.title, db.expected_dtp_text, db.clinical_intent,
+                       db.evaluation_criteria, db.tags, db.is_required, db.is_active
+                FROM "simulation_group_dtps" sgd
+                JOIN "dtp_bank" db ON sgd.dtp_id = db.dtp_id
+                WHERE sgd.simulation_group_id = ${simulation_group_id}
+                ORDER BY sgd.sort_order ASC, sgd.added_at ASC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "POST /instructor/simulation_group_dtps":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.body
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+
+          // Support both: dtp_id as a single string OR as an array of strings
+          const rawId = body.dtp_id;
+          const dtpIds = Array.isArray(rawId) ? rawId : (rawId ? [rawId] : []);
+          const persona_id = body.persona_id || null;
+
+          if (dtpIds.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "dtp_id is required in request body" });
+            break;
+          }
+
+          try {
+            // Resolve the instructor's user_id for added_by
+            const userResult = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${userEmailAttribute} LIMIT 1;
+            `;
+            const addedBy = userResult.length > 0 ? userResult[0].user_id : null;
+
+            // Get current max sort_order for this group/persona
+            const maxOrderResult = await sqlConnection`
+              SELECT COALESCE(MAX(sort_order), -1) AS max_order
+              FROM "simulation_group_dtps"
+              WHERE simulation_group_id = ${simulation_group_id}
+                AND ${persona_id ? sqlConnection`persona_id = ${persona_id}` : sqlConnection`persona_id IS NULL`};
+            `;
+            let nextOrder = (maxOrderResult[0]?.max_order ?? -1) + 1;
+
+            const results = [];
+            for (const dId of dtpIds) {
+              const data = await sqlConnection`
+                INSERT INTO "simulation_group_dtps" (
+                  group_dtp_id,
+                  simulation_group_id,
+                  dtp_id,
+                  persona_id,
+                  sort_order,
+                  added_by,
+                  added_at
+                )
+                VALUES (
+                  uuid_generate_v4(),
+                  ${simulation_group_id},
+                  ${dId},
+                  ${persona_id},
+                  ${nextOrder},
+                  ${addedBy},
+                  CURRENT_TIMESTAMP
+                )
+                RETURNING *;
+              `;
+              results.push(data[0]);
+              nextOrder++;
+            }
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(results.length === 1 ? results[0] : results);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id query parameter and request body with dtp_id are required",
+          });
+        }
+        break;
+      case "PUT /instructor/simulation_group_dtps":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.body
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+          const orderArray = body.order;
+
+          if (!Array.isArray(orderArray) || orderArray.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "order array is required in request body" });
+            break;
+          }
+
+          try {
+            // Update sort_order for each assignment in a transaction
+            const results = [];
+            for (const item of orderArray) {
+              const data = await sqlConnection`
+                UPDATE "simulation_group_dtps"
+                SET sort_order = ${item.sort_order}
+                WHERE group_dtp_id = ${item.group_dtp_id}
+                  AND simulation_group_id = ${simulation_group_id}
+                RETURNING *;
+              `;
+              if (data.length > 0) results.push(data[0]);
+            }
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(results);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and order array are required",
+          });
+        }
+        break;
+      case "DELETE /instructor/simulation_group_dtps":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.group_dtp_id
+        ) {
+          const { group_dtp_id } = event.queryStringParameters;
+
+          try {
+            const existing = await sqlConnection`
+              SELECT group_dtp_id FROM "simulation_group_dtps"
+              WHERE group_dtp_id = ${group_dtp_id};
+            `;
+
+            if (existing.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Assignment not found",
+              });
+              break;
+            }
+
+            await sqlConnection`
+              DELETE FROM "simulation_group_dtps"
+              WHERE group_dtp_id = ${group_dtp_id};
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify({
+              message: "DTP unassigned successfully",
+            });
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "group_dtp_id is required",
+          });
+        }
+        break;
+      // ── Recommendation Assignments ────────────────────────────────────────
+      case "GET /instructor/simulation_group_recommendations":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const persona_id = event.queryStringParameters.persona_id || null;
+
+          try {
+            let data;
+            if (persona_id) {
+              data = await sqlConnection`
+                SELECT sgr.*, rb.title, rb.recommendation_text,
+                       rb.evaluation_criteria, rb.rationale, rb.is_active
+                FROM "simulation_group_recommendations" sgr
+                JOIN "recommendations_bank" rb ON sgr.recommendation_id = rb.recommendation_id
+                WHERE sgr.simulation_group_id = ${simulation_group_id}
+                  AND sgr.persona_id = ${persona_id}
+                ORDER BY sgr.sort_order ASC, sgr.added_at ASC;
+              `;
+            } else {
+              data = await sqlConnection`
+                SELECT sgr.*, rb.title, rb.recommendation_text,
+                       rb.evaluation_criteria, rb.rationale, rb.is_active
+                FROM "simulation_group_recommendations" sgr
+                JOIN "recommendations_bank" rb ON sgr.recommendation_id = rb.recommendation_id
+                WHERE sgr.simulation_group_id = ${simulation_group_id}
+                ORDER BY sgr.sort_order ASC, sgr.added_at ASC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "POST /instructor/simulation_group_recommendations":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.body
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+
+          // Support both: recommendation_id as a single string OR as an array of strings
+          const rawId = body.recommendation_id;
+          const recIds = Array.isArray(rawId) ? rawId : (rawId ? [rawId] : []);
+          const persona_id = body.persona_id || null;
+
+          if (recIds.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "recommendation_id is required in request body" });
+            break;
+          }
+
+          try {
+            // Resolve the instructor's user_id for added_by
+            const userResult = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${userEmailAttribute} LIMIT 1;
+            `;
+            const addedBy = userResult.length > 0 ? userResult[0].user_id : null;
+
+            // Get current max sort_order for this group/persona
+            const maxOrderResult = await sqlConnection`
+              SELECT COALESCE(MAX(sort_order), -1) AS max_order
+              FROM "simulation_group_recommendations"
+              WHERE simulation_group_id = ${simulation_group_id}
+                AND ${persona_id ? sqlConnection`persona_id = ${persona_id}` : sqlConnection`persona_id IS NULL`};
+            `;
+            let nextOrder = (maxOrderResult[0]?.max_order ?? -1) + 1;
+
+            const results = [];
+            for (const rId of recIds) {
+              const data = await sqlConnection`
+                INSERT INTO "simulation_group_recommendations" (
+                  group_recommendation_id,
+                  simulation_group_id,
+                  recommendation_id,
+                  persona_id,
+                  sort_order,
+                  added_by,
+                  added_at
+                )
+                VALUES (
+                  uuid_generate_v4(),
+                  ${simulation_group_id},
+                  ${rId},
+                  ${persona_id},
+                  ${nextOrder},
+                  ${addedBy},
+                  CURRENT_TIMESTAMP
+                )
+                RETURNING *;
+              `;
+              results.push(data[0]);
+              nextOrder++;
+            }
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(results.length === 1 ? results[0] : results);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id query parameter and request body with recommendation_id are required",
+          });
+        }
+        break;
+      case "PUT /instructor/simulation_group_recommendations":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.body
+        ) {
+          const { simulation_group_id } = event.queryStringParameters;
+          const body = JSON.parse(event.body);
+          const orderArray = body.order;
+
+          if (!Array.isArray(orderArray) || orderArray.length === 0) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "order array is required in request body" });
+            break;
+          }
+
+          try {
+            // Update sort_order for each assignment
+            const results = [];
+            for (const item of orderArray) {
+              const data = await sqlConnection`
+                UPDATE "simulation_group_recommendations"
+                SET sort_order = ${item.sort_order}
+                WHERE group_recommendation_id = ${item.group_recommendation_id}
+                  AND simulation_group_id = ${simulation_group_id}
+                RETURNING *;
+              `;
+              if (data.length > 0) results.push(data[0]);
+            }
+
+            response.statusCode = 200;
+            response.body = JSON.stringify(results);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and order array are required",
+          });
+        }
+        break;
+      case "DELETE /instructor/simulation_group_recommendations":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.group_recommendation_id
+        ) {
+          const { group_recommendation_id } = event.queryStringParameters;
+
+          try {
+            const existing = await sqlConnection`
+              SELECT group_recommendation_id FROM "simulation_group_recommendations"
+              WHERE group_recommendation_id = ${group_recommendation_id};
+            `;
+
+            if (existing.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({
+                error: "Assignment not found",
+              });
+              break;
+            }
+
+            await sqlConnection`
+              DELETE FROM "simulation_group_recommendations"
+              WHERE group_recommendation_id = ${group_recommendation_id};
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify({
+              message: "Recommendation unassigned successfully",
+            });
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "group_recommendation_id is required",
+          });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

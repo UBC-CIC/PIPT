@@ -8,6 +8,7 @@ import { filterByTitle, paginate } from '@/lib/bankUtils';
 
 export interface RecommendationsBankSectionProps {
   groupId: string;
+  organizationId: string;
   patients: Array<{ id?: string; patient_id?: string; name?: string; patient_name?: string }>;
   /** Set of Recommendation item IDs currently assigned to the group/patient */
   includedRecommendationIds: Set<string>;
@@ -27,6 +28,7 @@ export interface RecommendationsBankSectionProps {
  */
 export function RecommendationsBankSection({
   groupId: _groupId,
+  organizationId,
   patients,
   includedRecommendationIds,
   onToggleRecommendationInclusion,
@@ -41,11 +43,11 @@ export function RecommendationsBankSection({
 
   useEffect(() => {
     setLoading(true);
-    listRecommendationItems('org-001').then((items) => {
+    listRecommendationItems(organizationId).then((items) => {
       setRecommendationItems(items);
       setLoading(false);
     });
-  }, []);
+  }, [organizationId]);
 
   const filteredItems = filterByTitle(recommendationItems, searchQuery);
   const { items: paginatedItems, totalPages, currentPage: page } = paginate(filteredItems, currentPage, pageSize);

@@ -1478,6 +1478,307 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "feedback_id is required" });
         }
         break;
+      // ── DTP Bank CRUD ──────────────────────────────────────────────────
+      case "GET /admin/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const dtpItems = await sqlConnectionTableCreator`
+              SELECT * FROM "dtp_bank"
+              WHERE organization_id = ${organization_id}
+              ORDER BY created_at DESC;
+            `;
+            response.body = JSON.stringify(dtpItems);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to fetch DTP bank", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "POST /admin/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            // Resolve created_by from authenticated email
+            const authEmail = event.requestContext?.authorizer?.email;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnectionTableCreator`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { title, expected_dtp_text, clinical_intent, evaluation_criteria, tags, is_required } = JSON.parse(event.body);
+
+            if (!title || !expected_dtp_text) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "title and expected_dtp_text are required" });
+              break;
+            }
+
+            const safeTags = Array.isArray(tags) ? tags : [];
+
+            const newDtp = await sqlConnectionTableCreator`
+              INSERT INTO "dtp_bank" (
+                organization_id, created_by, title, expected_dtp_text,
+                clinical_intent, evaluation_criteria, tags, is_required
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${title}, ${expected_dtp_text},
+                ${clinical_intent || null}, ${evaluation_criteria || null},
+                ${safeTags}, ${is_required !== undefined ? is_required : false}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newDtp[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create DTP item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "PUT /admin/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.dtp_id &&
+          event.body
+        ) {
+          try {
+            const { dtp_id } = event.queryStringParameters;
+            const { title, expected_dtp_text, clinical_intent, evaluation_criteria, tags, is_required, is_active } = JSON.parse(event.body);
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "dtp_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                expected_dtp_text = COALESCE(${expected_dtp_text || null}, expected_dtp_text),
+                clinical_intent = COALESCE(${clinical_intent !== undefined ? clinical_intent : null}, clinical_intent),
+                evaluation_criteria = COALESCE(${evaluation_criteria !== undefined ? evaluation_criteria : null}, evaluation_criteria),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags),
+                is_required = COALESCE(${is_required !== undefined ? is_required : null}, is_required),
+                is_active = COALESCE(${is_active !== undefined ? is_active : null}, is_active)
+              WHERE dtp_id = ${dtp_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "DTP item not found" });
+            } else {
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update DTP item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "dtp_id and request body are required" });
+        }
+        break;
+      case "DELETE /admin/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.dtp_id
+        ) {
+          try {
+            const { dtp_id } = event.queryStringParameters;
+
+            const deleted = await sqlConnectionTableCreator`
+              DELETE FROM "dtp_bank"
+              WHERE dtp_id = ${dtp_id}
+              RETURNING dtp_id;
+            `;
+
+            if (deleted.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "DTP item not found" });
+            } else {
+              response.body = JSON.stringify({ message: "DTP item deleted successfully." });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to delete DTP item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "dtp_id is required" });
+        }
+        break;
+      // ── Recommendations Bank CRUD ─────────────────────────────────────────
+      case "GET /admin/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const recItems = await sqlConnectionTableCreator`
+              SELECT * FROM "recommendations_bank"
+              WHERE organization_id = ${organization_id}
+              ORDER BY created_at DESC;
+            `;
+            response.body = JSON.stringify(recItems);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to fetch recommendations bank", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "POST /admin/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            // Resolve created_by from authenticated email
+            const authEmail = event.requestContext?.authorizer?.email;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnectionTableCreator`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { title, recommendation_text, evaluation_criteria, rationale } = JSON.parse(event.body);
+
+            if (!title || !recommendation_text) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "title and recommendation_text are required" });
+              break;
+            }
+
+            const newRec = await sqlConnectionTableCreator`
+              INSERT INTO "recommendations_bank" (
+                organization_id, created_by, title, recommendation_text,
+                evaluation_criteria, rationale
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${title}, ${recommendation_text},
+                ${evaluation_criteria || null}, ${rationale || null}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newRec[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create recommendation item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "PUT /admin/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.recommendation_id &&
+          event.body
+        ) {
+          try {
+            const { recommendation_id } = event.queryStringParameters;
+            const { title, recommendation_text, evaluation_criteria, rationale, is_active } = JSON.parse(event.body);
+
+            const updated = await sqlConnectionTableCreator`
+              UPDATE "recommendations_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                recommendation_text = COALESCE(${recommendation_text || null}, recommendation_text),
+                evaluation_criteria = COALESCE(${evaluation_criteria !== undefined ? evaluation_criteria : null}, evaluation_criteria),
+                rationale = COALESCE(${rationale !== undefined ? rationale : null}, rationale),
+                is_active = COALESCE(${is_active !== undefined ? is_active : null}, is_active)
+              WHERE recommendation_id = ${recommendation_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Recommendation item not found" });
+            } else {
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update recommendation item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "recommendation_id and request body are required" });
+        }
+        break;
+      case "DELETE /admin/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.recommendation_id
+        ) {
+          try {
+            const { recommendation_id } = event.queryStringParameters;
+
+            const deleted = await sqlConnectionTableCreator`
+              DELETE FROM "recommendations_bank"
+              WHERE recommendation_id = ${recommendation_id}
+              RETURNING recommendation_id;
+            `;
+
+            if (deleted.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Recommendation item not found" });
+            } else {
+              response.body = JSON.stringify({ message: "Recommendation item deleted successfully." });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to delete recommendation item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "recommendation_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

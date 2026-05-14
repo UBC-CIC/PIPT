@@ -1,10 +1,11 @@
 /**
- * DTP Bank Service (Mocked)
+ * DTP Bank Service
  *
- * In-memory CRUD and assignment operations for Drug Therapy Problem items.
- * All functions return Promises to simulate async behavior, making it easy
- * to swap for real API calls later.
+ * CRUD and assignment operations for Drug Therapy Problem items.
+ * Calls real backend API endpoints via apiClient.
  */
+
+import { apiClient } from '@/lib/api-client';
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
@@ -17,99 +18,78 @@ export interface DTPItem {
   evaluationCriteria: string;    // How to evaluate student's identification
   tags: string[];                // Filtering tags
   isRequired: boolean;           // Required vs optional for case completion
+  isActive: boolean;             // Whether the item is active
   createdAt: string;             // ISO timestamp
 }
 
 export interface DTPAssignment {
-  dtpItemId: string;
+  groupDtpId: string;
+  dtpId: string;
   simulationGroupId: string;
-  patientId?: string;            // If assigned to specific patient (undefined = group-level)
-  assignedAt: string;            // ISO timestamp
+  personaId?: string;
+  sortOrder: number;
+  addedAt: string;
+  // Joined fields from dtp_bank
+  title?: string;
+  expectedDTPText?: string;
+  clinicalIntent?: string;
+  evaluationCriteria?: string;
+  tags?: string[];
+  isRequired?: boolean;
+  isActive?: boolean;
 }
 
-// ─── In-Memory Data Store ────────────────────────────────────────────────────
+// ─── Mapping Functions ───────────────────────────────────────────────────────
 
-const DEFAULT_ORG_ID = 'org-001';
+/**
+ * Maps a backend snake_case row to the camelCase DTPItem interface.
+ */
+export function mapBackendToDTPItem(row: Record<string, unknown>): DTPItem {
+  return {
+    id: row.dtp_id as string,
+    organizationId: row.organization_id as string,
+    title: row.title as string,
+    expectedDTPText: row.expected_dtp_text as string,
+    clinicalIntent: (row.clinical_intent as string) || '',
+    evaluationCriteria: (row.evaluation_criteria as string) || '',
+    tags: (row.tags as string[]) || [],
+    isRequired: (row.is_required as boolean) || false,
+    isActive: row.is_active !== false,
+    createdAt: row.created_at as string,
+  };
+}
 
-let dtpItems: DTPItem[] = [
-  {
-    id: 'dtp-001',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Untreated Hypertension',
-    expectedDTPText: 'Patient has elevated blood pressure readings (>140/90 mmHg) on multiple visits without current antihypertensive therapy.',
-    clinicalIntent: 'Identify uncontrolled hypertension requiring pharmacological intervention to reduce cardiovascular risk.',
-    evaluationCriteria: 'Student should identify the lack of antihypertensive therapy and recommend initiating treatment based on current guidelines.',
-    tags: ['cardiovascular', 'hypertension', 'untreated condition'],
-    isRequired: true,
-    createdAt: '2024-11-01T10:00:00.000Z',
-  },
-  {
-    id: 'dtp-002',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Drug Interaction: Warfarin and NSAIDs',
-    expectedDTPText: 'Patient is concurrently taking warfarin and ibuprofen, increasing the risk of gastrointestinal bleeding.',
-    clinicalIntent: 'Recognize the clinically significant interaction between anticoagulants and NSAIDs that elevates bleeding risk.',
-    evaluationCriteria: 'Student should identify the interaction, explain the mechanism, and suggest an alternative analgesic such as acetaminophen.',
-    tags: ['drug interaction', 'anticoagulant', 'NSAID', 'bleeding risk'],
-    isRequired: true,
-    createdAt: '2024-11-02T14:30:00.000Z',
-  },
-  {
-    id: 'dtp-003',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Subtherapeutic Metformin Dose',
-    expectedDTPText: 'Patient with Type 2 diabetes is on metformin 500mg once daily with HbA1c of 8.2%, indicating subtherapeutic dosing.',
-    clinicalIntent: 'Identify inadequate glycemic control due to suboptimal metformin dosing that requires titration.',
-    evaluationCriteria: 'Student should recognize the elevated HbA1c, correlate with current dose, and recommend dose titration toward 1000-2000mg daily.',
-    tags: ['diabetes', 'dose optimization', 'metformin'],
-    isRequired: true,
-    createdAt: '2024-11-05T09:15:00.000Z',
-  },
-  {
-    id: 'dtp-004',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Unnecessary Duplicate Therapy',
-    expectedDTPText: 'Patient is taking both omeprazole and pantoprazole, representing unnecessary therapeutic duplication of proton pump inhibitors.',
-    clinicalIntent: 'Identify duplicate therapy within the same drug class that provides no additional benefit and increases cost/risk.',
-    evaluationCriteria: 'Student should identify both PPIs, explain why duplication is unnecessary, and recommend discontinuing one.',
-    tags: ['duplicate therapy', 'PPI', 'medication reconciliation'],
-    isRequired: false,
-    createdAt: '2024-11-08T11:45:00.000Z',
-  },
-  {
-    id: 'dtp-005',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Adverse Drug Reaction: Statin-Induced Myalgia',
-    expectedDTPText: 'Patient reports new-onset muscle pain and weakness since starting atorvastatin 80mg, consistent with statin-induced myalgia.',
-    clinicalIntent: 'Recognize a common adverse drug reaction that may require dose reduction or switching to an alternative statin.',
-    evaluationCriteria: 'Student should correlate symptoms with statin initiation, check CK levels, and recommend dose adjustment or alternative therapy.',
-    tags: ['adverse reaction', 'statin', 'myalgia', 'monitoring'],
-    isRequired: true,
-    createdAt: '2024-11-10T16:00:00.000Z',
-  },
-  {
-    id: 'dtp-006',
-    organizationId: DEFAULT_ORG_ID,
-    title: 'Non-Adherence to Inhaler Therapy',
-    expectedDTPText: 'Patient with persistent asthma reports using rescue inhaler daily but admits to not using prescribed maintenance inhaler (fluticasone).',
-    clinicalIntent: 'Identify medication non-adherence as a drug therapy problem contributing to uncontrolled asthma symptoms.',
-    evaluationCriteria: 'Student should identify non-adherence pattern, explore barriers, and provide patient education on the importance of maintenance therapy.',
-    tags: ['adherence', 'asthma', 'inhaler', 'patient education'],
-    isRequired: false,
-    createdAt: '2024-11-12T08:30:00.000Z',
-  },
-];
-
-let dtpAssignments: DTPAssignment[] = [];
+/**
+ * Maps a backend snake_case assignment row to the camelCase DTPAssignment interface.
+ */
+function mapBackendToDTPAssignment(row: Record<string, unknown>): DTPAssignment {
+  return {
+    groupDtpId: row.group_dtp_id as string,
+    dtpId: row.dtp_id as string,
+    simulationGroupId: row.simulation_group_id as string,
+    personaId: row.persona_id as string | undefined,
+    sortOrder: (row.sort_order as number) || 0,
+    addedAt: row.added_at as string,
+    title: row.title as string | undefined,
+    expectedDTPText: row.expected_dtp_text as string | undefined,
+    clinicalIntent: row.clinical_intent as string | undefined,
+    evaluationCriteria: row.evaluation_criteria as string | undefined,
+    tags: row.tags as string[] | undefined,
+    isRequired: row.is_required as boolean | undefined,
+    isActive: row.is_active as boolean | undefined,
+  };
+}
 
 // ─── Service Functions ───────────────────────────────────────────────────────
 
 /**
  * List all DTP items for a given organization.
- * In mock mode, returns all items regardless of organizationId for development convenience.
  */
-export async function listDTPItems(_organizationId: string): Promise<DTPItem[]> {
-  return dtpItems;
+export async function listDTPItems(organizationId: string): Promise<DTPItem[]> {
+  const rows = await apiClient.request<Record<string, unknown>[]>(
+    `admin/dtp_bank?organization_id=${organizationId}`
+  );
+  return rows.map(mapBackendToDTPItem);
 }
 
 /**
@@ -117,152 +97,99 @@ export async function listDTPItems(_organizationId: string): Promise<DTPItem[]> 
  */
 export async function createDTPItem(
   organizationId: string,
-  data: Omit<DTPItem, 'id' | 'organizationId' | 'createdAt'>
+  data: Omit<DTPItem, 'id' | 'organizationId' | 'createdAt' | 'isActive'>
 ): Promise<DTPItem> {
-  const newItem: DTPItem = {
-    id: crypto.randomUUID(),
-    organizationId,
-    createdAt: new Date().toISOString(),
-    ...data,
-  };
-  dtpItems.push(newItem);
-  return newItem;
+  const row = await apiClient.request<Record<string, unknown>>(
+    `admin/dtp_bank?organization_id=${organizationId}`,
+    {
+      method: 'POST',
+      body: {
+        title: data.title,
+        expected_dtp_text: data.expectedDTPText,
+        clinical_intent: data.clinicalIntent || null,
+        evaluation_criteria: data.evaluationCriteria || null,
+        tags: data.tags || [],
+        is_required: data.isRequired || false,
+      },
+    }
+  );
+  return mapBackendToDTPItem(row);
 }
 
 /**
  * Delete a DTP item by ID.
  */
 export async function deleteDTPItem(itemId: string): Promise<void> {
-  dtpItems = dtpItems.filter((item) => item.id !== itemId);
-  // Also remove any assignments referencing this item
-  dtpAssignments = dtpAssignments.filter((a) => a.dtpItemId !== itemId);
+  await apiClient.request(`admin/dtp_bank?dtp_id=${itemId}`, {
+    method: 'DELETE',
+  });
 }
 
 /**
  * Assign a DTP item to an entire simulation group (group-level assignment).
  */
 export async function assignDTPToGroup(
-  dtpItemId: string,
+  dtpId: string,
   simulationGroupId: string
 ): Promise<DTPAssignment> {
-  const assignment: DTPAssignment = {
-    dtpItemId,
-    simulationGroupId,
-    assignedAt: new Date().toISOString(),
-  };
-  dtpAssignments.push(assignment);
-  return assignment;
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/simulation_group_dtps?simulation_group_id=${simulationGroupId}`,
+    {
+      method: 'POST',
+      body: { dtp_id: dtpId },
+    }
+  );
+  return mapBackendToDTPAssignment(row);
 }
 
 /**
  * Assign a DTP item to a specific patient within a simulation group.
  */
 export async function assignDTPToPatient(
-  dtpItemId: string,
+  dtpId: string,
   simulationGroupId: string,
   patientId: string
 ): Promise<DTPAssignment> {
-  const assignment: DTPAssignment = {
-    dtpItemId,
-    simulationGroupId,
-    patientId,
-    assignedAt: new Date().toISOString(),
-  };
-  dtpAssignments.push(assignment);
-  return assignment;
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/simulation_group_dtps?simulation_group_id=${simulationGroupId}`,
+    {
+      method: 'POST',
+      body: { dtp_id: dtpId, persona_id: patientId },
+    }
+  );
+  return mapBackendToDTPAssignment(row);
 }
 
 /**
- * Retrieve DTP assignments for a simulation group, optionally filtered by patient.
- * If patientId is provided, returns both group-level assignments (no patientId)
- * and patient-specific assignments for that patient.
- * If patientId is omitted, returns only group-level assignments.
+ * Retrieve DTP assignments for a simulation group, optionally filtered by persona.
+ * Returns items in sort order.
  */
 export async function getAssignedDTPs(
   simulationGroupId: string,
   patientId?: string
 ): Promise<DTPAssignment[]> {
-  return dtpAssignments.filter((a) => {
-    if (a.simulationGroupId !== simulationGroupId) return false;
-    if (patientId) {
-      // Return group-level (no patientId) and patient-specific assignments
-      return a.patientId === undefined || a.patientId === patientId;
-    }
-    // No patientId filter — return only group-level assignments
-    return a.patientId === undefined;
-  });
+  let endpoint = `instructor/simulation_group_dtps?simulation_group_id=${simulationGroupId}`;
+  if (patientId) {
+    endpoint += `&persona_id=${patientId}`;
+  }
+  const rows = await apiClient.request<Record<string, unknown>[]>(endpoint);
+  return rows.map(mapBackendToDTPAssignment);
 }
 
-// ─── Test Helpers (for resetting state in tests) ─────────────────────────────
-
-export function _resetStore() {
-  dtpItems = [
+/**
+ * Reorder DTP assignments within a simulation group.
+ * Accepts an array of {group_dtp_id, sort_order} pairs.
+ */
+export async function reorderDTPs(
+  simulationGroupId: string,
+  order: Array<{ group_dtp_id: string; sort_order: number }>
+): Promise<DTPAssignment[]> {
+  const rows = await apiClient.request<Record<string, unknown>[]>(
+    `instructor/simulation_group_dtps?simulation_group_id=${simulationGroupId}`,
     {
-      id: 'dtp-001',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Untreated Hypertension',
-      expectedDTPText: 'Patient has elevated blood pressure readings (>140/90 mmHg) on multiple visits without current antihypertensive therapy.',
-      clinicalIntent: 'Identify uncontrolled hypertension requiring pharmacological intervention to reduce cardiovascular risk.',
-      evaluationCriteria: 'Student should identify the lack of antihypertensive therapy and recommend initiating treatment based on current guidelines.',
-      tags: ['cardiovascular', 'hypertension', 'untreated condition'],
-      isRequired: true,
-      createdAt: '2024-11-01T10:00:00.000Z',
-    },
-    {
-      id: 'dtp-002',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Drug Interaction: Warfarin and NSAIDs',
-      expectedDTPText: 'Patient is concurrently taking warfarin and ibuprofen, increasing the risk of gastrointestinal bleeding.',
-      clinicalIntent: 'Recognize the clinically significant interaction between anticoagulants and NSAIDs that elevates bleeding risk.',
-      evaluationCriteria: 'Student should identify the interaction, explain the mechanism, and suggest an alternative analgesic such as acetaminophen.',
-      tags: ['drug interaction', 'anticoagulant', 'NSAID', 'bleeding risk'],
-      isRequired: true,
-      createdAt: '2024-11-02T14:30:00.000Z',
-    },
-    {
-      id: 'dtp-003',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Subtherapeutic Metformin Dose',
-      expectedDTPText: 'Patient with Type 2 diabetes is on metformin 500mg once daily with HbA1c of 8.2%, indicating subtherapeutic dosing.',
-      clinicalIntent: 'Identify inadequate glycemic control due to suboptimal metformin dosing that requires titration.',
-      evaluationCriteria: 'Student should recognize the elevated HbA1c, correlate with current dose, and recommend dose titration toward 1000-2000mg daily.',
-      tags: ['diabetes', 'dose optimization', 'metformin'],
-      isRequired: true,
-      createdAt: '2024-11-05T09:15:00.000Z',
-    },
-    {
-      id: 'dtp-004',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Unnecessary Duplicate Therapy',
-      expectedDTPText: 'Patient is taking both omeprazole and pantoprazole, representing unnecessary therapeutic duplication of proton pump inhibitors.',
-      clinicalIntent: 'Identify duplicate therapy within the same drug class that provides no additional benefit and increases cost/risk.',
-      evaluationCriteria: 'Student should identify both PPIs, explain why duplication is unnecessary, and recommend discontinuing one.',
-      tags: ['duplicate therapy', 'PPI', 'medication reconciliation'],
-      isRequired: false,
-      createdAt: '2024-11-08T11:45:00.000Z',
-    },
-    {
-      id: 'dtp-005',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Adverse Drug Reaction: Statin-Induced Myalgia',
-      expectedDTPText: 'Patient reports new-onset muscle pain and weakness since starting atorvastatin 80mg, consistent with statin-induced myalgia.',
-      clinicalIntent: 'Recognize a common adverse drug reaction that may require dose reduction or switching to an alternative statin.',
-      evaluationCriteria: 'Student should correlate symptoms with statin initiation, check CK levels, and recommend dose adjustment or alternative therapy.',
-      tags: ['adverse reaction', 'statin', 'myalgia', 'monitoring'],
-      isRequired: true,
-      createdAt: '2024-11-10T16:00:00.000Z',
-    },
-    {
-      id: 'dtp-006',
-      organizationId: DEFAULT_ORG_ID,
-      title: 'Non-Adherence to Inhaler Therapy',
-      expectedDTPText: 'Patient with persistent asthma reports using rescue inhaler daily but admits to not using prescribed maintenance inhaler (fluticasone).',
-      clinicalIntent: 'Identify medication non-adherence as a drug therapy problem contributing to uncontrolled asthma symptoms.',
-      evaluationCriteria: 'Student should identify non-adherence pattern, explore barriers, and provide patient education on the importance of maintenance therapy.',
-      tags: ['adherence', 'asthma', 'inhaler', 'patient education'],
-      isRequired: false,
-      createdAt: '2024-11-12T08:30:00.000Z',
-    },
-  ];
-  dtpAssignments = [];
+      method: 'PUT',
+      body: { order },
+    }
+  );
+  return rows.map(mapBackendToDTPAssignment);
 }

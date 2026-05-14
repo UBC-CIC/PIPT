@@ -84,7 +84,7 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle style={{ color: UI_COLORS.text.heading }}>
             Add New Recommendation Item

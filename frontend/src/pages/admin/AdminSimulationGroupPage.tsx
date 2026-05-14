@@ -533,7 +533,7 @@ function AdminSimulationGroupPage() {
     // Reload assignments for the new patient selection
     if (!groupId) return;
     getAssignedDTPs(groupId, patientId || undefined).then((assignments) => {
-      setIncludedDTPIds(new Set(assignments.map(a => a.dtpItemId)));
+      setIncludedDTPIds(new Set(assignments.map(a => a.dtpId)));
     }).catch(() => setIncludedDTPIds(new Set()));
   };
 
@@ -561,7 +561,7 @@ function AdminSimulationGroupPage() {
     // Reload assignments for the new patient selection
     if (!groupId) return;
     getAssignedRecommendations(groupId, patientId || undefined).then((assignments) => {
-      setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationItemId)));
+      setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationId)));
     }).catch(() => setIncludedRecommendationIds(new Set()));
   };
 
@@ -721,6 +721,7 @@ function AdminSimulationGroupPage() {
           {activeSection === 'dtpBank' && (
             <DTPBankSection
               groupId={groupId || ''}
+              organizationId={organizationId || ''}
               patients={manageablePatients}
               includedDTPIds={includedDTPIds}
               onToggleDTPInclusion={handleToggleDTPInclusion}
@@ -732,6 +733,7 @@ function AdminSimulationGroupPage() {
           {activeSection === 'recommendationsBank' && (
             <RecommendationsBankSection
               groupId={groupId || ''}
+              organizationId={organizationId || ''}
               patients={manageablePatients}
               includedRecommendationIds={includedRecommendationIds}
               onToggleRecommendationInclusion={handleToggleRecommendationInclusion}

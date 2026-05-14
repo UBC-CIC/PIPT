@@ -8,6 +8,7 @@ import { filterByTitle, paginate } from '@/lib/bankUtils';
 
 export interface DTPBankSectionProps {
   groupId: string;
+  organizationId: string;
   patients: Array<{ id?: string; patient_id?: string; name?: string; patient_name?: string }>;
   /** Set of DTP item IDs currently assigned to the group/patient */
   includedDTPIds: Set<string>;
@@ -27,6 +28,7 @@ export interface DTPBankSectionProps {
  */
 export function DTPBankSection({
   groupId: _groupId,
+  organizationId,
   patients,
   includedDTPIds,
   onToggleDTPInclusion,
@@ -41,11 +43,11 @@ export function DTPBankSection({
 
   useEffect(() => {
     setLoading(true);
-    listDTPItems('org-001').then((items) => {
+    listDTPItems(organizationId).then((items) => {
       setDtpItems(items);
       setLoading(false);
     });
-  }, []);
+  }, [organizationId]);
 
   const filteredItems = filterByTitle(dtpItems, searchQuery);
   const { items: paginatedItems, totalPages, currentPage: page } = paginate(filteredItems, currentPage, pageSize);
