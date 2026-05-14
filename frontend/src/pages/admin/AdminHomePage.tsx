@@ -5,10 +5,12 @@ import DashboardHeader from '@/components/DashboardHeader';
 import OrganizationCard from '@/components/OrganizationCard';
 import CreateOrganizationDialog from '@/components/CreateOrganizationDialog';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { mockAdminDataService, mockOrganizations } from '@/services/adminService';
 import { getSimulationGroupColor, UI_COLORS } from '@/lib/colors';
 import * as adminApi from '@/services/adminApiService';
 import LoadingIndicator from '@/components/LoadingIndicator';
+import { useNotification } from '@/components/notifications';
 
 /**
  * AdminHomePage Component
@@ -18,9 +20,13 @@ import LoadingIndicator from '@/components/LoadingIndicator';
  */
 function AdminHomePage() {
   const navigate = useNavigate();
+  const { showNotification } = useNotification();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [organizations, setOrganizations] = useState<adminApi.AdminOrganization[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; orgId: string; orgName: string }>({
+    open: false, orgId: '', orgName: ''
+  });
 
   // Load user data from mock data service with error handling
   let user = mockAdminDataService.getCurrentUser();
@@ -82,8 +88,10 @@ function AdminHomePage() {
         system_prompt: data.systemPrompt || undefined,
       });
       setOrganizations(prev => [...prev, created]);
+      showNotification({ message: `Organization "${data.name}" created successfully.`, type: 'success' });
     } catch (error) {
       console.error('Error creating organization via API, adding locally:', error);
+      showNotification({ message: 'Failed to create organization. Please try again.', type: 'error' });
       // Fallback: add to local state so the UI still works
       const fallbackOrg: adminApi.AdminOrganization = {
         organization_id: `org-${Date.now()}`,
@@ -98,6 +106,18 @@ function AdminHomePage() {
       };
       setOrganizations(prev => [...prev, fallbackOrg]);
     }
+  };
+
+  const handleDeleteOrganization = async () => {
+    try {
+      await adminApi.deleteOrganization(deleteConfirm.orgId);
+      setOrganizations(prev => prev.filter(o => o.organization_id !== deleteConfirm.orgId));
+      showNotification({ message: `Organization "${deleteConfirm.orgName}" deleted successfully.`, type: 'success' });
+    } catch (error) {
+      console.error('Error deleting organization:', error);
+      showNotification({ message: 'Failed to delete organization. Please try again.', type: 'error' });
+    }
+    setDeleteConfirm({ open: false, orgId: '', orgName: '' });
   };
 
   return (
@@ -143,6 +163,7 @@ function AdminHomePage() {
                 icon="building"
                 iconColor={org.icon_color || getSimulationGroupColor(index)}
                 onUseOrganisation={() => handleUseOrganisation(org.organization_id)}
+                onDelete={() => setDeleteConfirm({ open: true, orgId: org.organization_id, orgName: org.name })}
               />
             ))}
           </div>
@@ -153,6 +174,39 @@ function AdminHomePage() {
         onOpenChange={setIsCreateDialogOpen}
         onCreate={handleCreateOrganizationSubmit}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md" onInteractOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Delete Organization
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "<span className="font-medium">{deleteConfirm.orgName}</span>"? This will permanently remove all simulation groups, patients, and data within this organization. This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleDeleteOrganization}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }

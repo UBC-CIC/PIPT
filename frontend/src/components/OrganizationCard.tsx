@@ -1,4 +1,4 @@
-import { Building2 } from 'lucide-react';
+import { Building2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface OrganizationCardProps {
@@ -8,6 +8,7 @@ interface OrganizationCardProps {
   icon: 'building';
   iconColor: string;
   onUseOrganisation: () => void;
+  onDelete?: () => void;
 }
 
 /**
@@ -21,9 +22,24 @@ function OrganizationCard({
   userRole,
   iconColor,
   onUseOrganisation,
+  onDelete,
 }: OrganizationCardProps) {
   return (
-    <div className="border border-gray-300 rounded-lg p-6 bg-white hover:shadow-md transition-shadow">
+    <div className="border border-gray-300 rounded-lg p-6 bg-white hover:shadow-md transition-shadow relative">
+      {/* Delete button */}
+      {onDelete && (
+        <button
+          onClick={onDelete}
+          className="absolute top-3 right-3 p-1.5 rounded transition-colors hover:bg-red-50"
+          style={{ color: '#9ca3af' }}
+          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+          onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
+          aria-label={`Delete organization: ${name}`}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Header with title */}
       <div className="flex items-center gap-3 mb-4">
         <div
