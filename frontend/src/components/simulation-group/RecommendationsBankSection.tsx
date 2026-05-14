@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, ChevronDown, ChevronRight } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { listRecommendationItems } from '@/services/recommendationsBankService';
@@ -25,6 +25,7 @@ export interface RecommendationsBankSectionProps {
  * Renders the Recommendations Bank assignment UI within a simulation group page.
  * Shows all available Recommendation items from the org-level bank with checkboxes
  * to assign/unassign them to the group or a specific patient.
+ * Each item can be expanded to preview its full content.
  */
 export function RecommendationsBankSection({
   groupId: _groupId,
@@ -39,6 +40,7 @@ export function RecommendationsBankSection({
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const pageSize = 10;
 
   useEffect(() => {
@@ -51,6 +53,10 @@ export function RecommendationsBankSection({
 
   const filteredItems = filterByTitle(recommendationItems, searchQuery);
   const { items: paginatedItems, totalPages, currentPage: page } = paginate(filteredItems, currentPage, pageSize);
+
+  const toggleExpand = (itemId: string) => {
+    setExpandedItemId(prev => prev === itemId ? null : itemId);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -123,7 +129,9 @@ export function RecommendationsBankSection({
                 key={item.id}
                 item={item}
                 isChecked={includedRecommendationIds.has(item.id)}
+                isExpanded={expandedItemId === item.id}
                 onToggle={(checked) => onToggleRecommendationInclusion(item.id, item, checked)}
+                onToggleExpand={() => toggleExpand(item.id)}
               />
             ))}
           </div>
@@ -161,40 +169,87 @@ export function RecommendationsBankSection({
 function RecommendationCardItem({
   item,
   isChecked,
+  isExpanded,
   onToggle,
+  onToggleExpand,
 }: {
   item: RecommendationItem;
   isChecked: boolean;
+  isExpanded: boolean;
   onToggle: (checked: boolean) => void;
+  onToggleExpand: () => void;
 }) {
   return (
     <div
-      className="flex items-center justify-between p-4 rounded-lg border transition-colors"
+      className="rounded-lg border transition-colors"
       style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
     >
-      <div className="flex-1 min-w-0 mr-3">
-        <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>
-          {item.title}
-        </span>
-        <span className="text-xs block mt-0.5" style={{ color: UI_COLORS.text.muted }}>
-          {item.recommendationText.length > 120 ? item.recommendationText.slice(0, 120) + '...' : item.recommendationText}
-        </span>
-        {item.rationale && (
-          <span className="text-xs block mt-0.5 italic" style={{ color: UI_COLORS.text.muted }}>
-            Rationale: {item.rationale.length > 80 ? item.rationale.slice(0, 80) + '...' : item.rationale}
-          </span>
-        )}
+      {/* Header row */}
+      <div className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0 mr-3">
+          <button
+            onClick={onToggleExpand}
+            className="p-0.5 rounded transition-colors hover:bg-gray-100 flex-shrink-0"
+            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+          >
+            {isExpanded ? (
+              <ChevronDown className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+            ) : (
+              <ChevronRight className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+            )}
+          </button>
+          <div className="flex-1 min-w-0 cursor-pointer" onClick={onToggleExpand}>
+            <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>
+              {item.title}
+            </span>
+            {!isExpanded && (
+              <span className="text-xs block mt-0.5" style={{ color: UI_COLORS.text.muted }}>
+                {item.recommendationText.length > 120 ? item.recommendationText.slice(0, 120) + '...' : item.recommendationText}
+              </span>
+            )}
+          </div>
+        </div>
+        <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
+          <input
+            type="checkbox"
+            checked={isChecked}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="w-5 h-5 rounded cursor-pointer"
+            style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
+          />
+          <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Include</span>
+        </label>
       </div>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="w-5 h-5 rounded cursor-pointer"
-          style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
-        />
-        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Include</span>
-      </label>
+
+      {/* Expanded preview */}
+      {isExpanded && (
+        <div className="px-4 pb-4 pt-0 ml-7 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+          <div className="space-y-3 pt-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Recommendation Text</label>
+              <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                {item.recommendationText || '—'}
+              </p>
+            </div>
+            {item.evaluationCriteria && (
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                  {item.evaluationCriteria}
+                </p>
+              </div>
+            )}
+            {item.rationale && (
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Rationale</label>
+                <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                  {item.rationale}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

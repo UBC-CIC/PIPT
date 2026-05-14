@@ -117,6 +117,31 @@ export async function createDTPItem(
 }
 
 /**
+ * Update an existing DTP item.
+ */
+export async function updateDTPItem(
+  itemId: string,
+  data: Partial<Pick<DTPItem, 'title' | 'expectedDTPText' | 'clinicalIntent' | 'evaluationCriteria' | 'tags' | 'isRequired' | 'isActive'>>
+): Promise<DTPItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `admin/dtp_bank?dtp_id=${itemId}`,
+    {
+      method: 'PUT',
+      body: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.expectedDTPText !== undefined && { expected_dtp_text: data.expectedDTPText }),
+        ...(data.clinicalIntent !== undefined && { clinical_intent: data.clinicalIntent }),
+        ...(data.evaluationCriteria !== undefined && { evaluation_criteria: data.evaluationCriteria }),
+        ...(data.tags !== undefined && { tags: data.tags }),
+        ...(data.isRequired !== undefined && { is_required: data.isRequired }),
+        ...(data.isActive !== undefined && { is_active: data.isActive }),
+      },
+    }
+  );
+  return mapBackendToDTPItem(row);
+}
+
+/**
  * Delete a DTP item by ID.
  */
 export async function deleteDTPItem(itemId: string): Promise<void> {

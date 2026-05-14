@@ -1,33 +1,48 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Trash2, Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import { AddDTPDialog } from '@/components/AddDTPDialog';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { listDTPItems, deleteDTPItem } from '@/services/dtpBankService';
+import { listDTPItems, deleteDTPItem, updateDTPItem } from '@/services/dtpBankService';
 import type { DTPItem } from '@/services/dtpBankService';
 import { filterByTitle, paginate } from '@/lib/bankUtils';
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { UI_COLORS } from '@/lib/colors';
+import { useNotification } from '@/components/notifications';
 
 /**
  * AdminDTPBankPage Component
  *
  * Organization-level DTP (Drug Therapy Problem) bank management for admins.
- * Follows the same pattern as AdminQuestionBankPage.
+ * Each item is expandable to preview content, with an inline edit mode.
  */
 function AdminDTPBankPage() {
   const navigate = useNavigate();
   const { organizationId } = useParams<{ organizationId: string }>();
+  const { showNotification } = useNotification();
 
   // DTP items state
   const [dtpItems, setDtpItems] = useState<DTPItem[]>([]);
   const [isAddDTPDialogOpen, setIsAddDTPDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Expand/edit state
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    expectedDTPText: string;
+    clinicalIntent: string;
+    evaluationCriteria: string;
+    isRequired: boolean;
+    tags: string[];
+  }>({ title: '', expectedDTPText: '', clinicalIntent: '', evaluationCriteria: '', isRequired: false, tags: [] });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; itemId: string; itemTitle: string }>({
@@ -44,7 +59,7 @@ function AdminDTPBankPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User data (will come from auth later)
+  // User data
   const user = { name: 'Admin', avatarUrl: undefined };
 
   // Load data on mount
@@ -97,15 +112,84 @@ function AdminDTPBankPage() {
       setError(null);
       await deleteDTPItem(deleteConfirm.itemId);
       setDtpItems(prev => prev.filter(item => item.id !== deleteConfirm.itemId));
+      if (expandedItemId === deleteConfirm.itemId) setExpandedItemId(null);
+      if (editingItemId === deleteConfirm.itemId) setEditingItemId(null);
+      showNotification({ message: `"${deleteConfirm.itemTitle}" deleted successfully.`, type: 'success' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete DTP item');
+      const msg = err instanceof Error ? err.message : 'Failed to delete DTP item';
+      setError(msg);
+      showNotification({ message: msg, type: 'error' });
     }
     setDeleteConfirm({ open: false, itemId: '', itemTitle: '' });
   };
 
   const handleSaveNewDTP = () => {
-    // Reload data after successful creation
     loadData();
+  };
+
+  // ─── Expand/Edit Handlers ─────────────────────────────────────────────────
+
+  const toggleExpand = (itemId: string) => {
+    if (editingItemId === itemId) return; // Don't collapse while editing
+    setExpandedItemId(prev => prev === itemId ? null : itemId);
+  };
+
+  const startEditing = (item: DTPItem) => {
+    setExpandedItemId(item.id);
+    setEditingItemId(item.id);
+    setEditForm({
+      title: item.title,
+      expectedDTPText: item.expectedDTPText,
+      clinicalIntent: item.clinicalIntent,
+      evaluationCriteria: item.evaluationCriteria,
+      isRequired: item.isRequired,
+      tags: item.tags || [],
+    });
+    setEditError(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingItemId(null);
+    setEditError(null);
+  };
+
+  const saveEditing = async () => {
+    if (!editingItemId) return;
+    if (!editForm.title.trim()) {
+      setEditError('Title is required.');
+      return;
+    }
+    if (!editForm.expectedDTPText.trim()) {
+      setEditError('Expected DTP text is required.');
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const updated = await updateDTPItem(editingItemId, {
+        title: editForm.title.trim(),
+        expectedDTPText: editForm.expectedDTPText.trim(),
+        clinicalIntent: editForm.clinicalIntent.trim(),
+        evaluationCriteria: editForm.evaluationCriteria.trim(),
+        isRequired: editForm.isRequired,
+        tags: editForm.tags,
+      });
+      setDtpItems(prev => prev.map(item => item.id === editingItemId ? updated : item));
+      setEditingItemId(null);
+      showNotification({ message: 'DTP item updated successfully.', type: 'success' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save changes.';
+      setEditError(msg);
+      showNotification({ message: msg, type: 'error' });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleTagInput = (value: string) => {
+    const tags = value.split(',').map(t => t.trim()).filter(Boolean);
+    setEditForm(prev => ({ ...prev, tags }));
   };
 
   return (
@@ -214,47 +298,72 @@ function AdminDTPBankPage() {
                   </div>
                 )}
 
-                {/* DTP Items Accordion */}
-                <Accordion type="single" collapsible className="space-y-2">
-                  {paginatedItems.map((item) => (
-                    <AccordionItem
-                      key={item.id}
-                      value={item.id}
-                      style={{
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor: UI_COLORS.border.default,
-                        borderRadius: '0.5rem',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      <AccordionTrigger
-                        className="px-4 hover:no-underline"
+                {/* DTP Items */}
+                <div className="space-y-2">
+                  {paginatedItems.map((item) => {
+                    const isExpanded = expandedItemId === item.id;
+                    const isEditing = editingItemId === item.id;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border"
                         style={{
+                          borderColor: UI_COLORS.border.default,
                           backgroundColor: UI_COLORS.background.white,
-                          color: UI_COLORS.text.heading
                         }}
                       >
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <span className="font-medium text-sm">
+                        {/* Header row — always visible */}
+                        <div
+                          className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+                          onClick={() => toggleExpand(item.id)}
+                        >
+                          {/* Chevron */}
+                          <span className="flex-shrink-0">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                            )}
+                          </span>
+
+                          {/* Title */}
+                          <span className="flex-1 font-medium text-sm truncate" style={{ color: UI_COLORS.text.heading }}>
                             {item.title}
                           </span>
-                          <div className="flex items-center gap-3">
-                            <span
-                              className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-                              style={{
-                                backgroundColor: item.isRequired ? '#dcfce7' : '#f3f4f6',
-                                color: item.isRequired ? '#166534' : '#6b7280'
+
+                          {/* Required/Optional badge */}
+                          <span
+                            className="inline-block text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0"
+                            style={{
+                              backgroundColor: item.isRequired ? '#dcfce7' : '#f3f4f6',
+                              color: item.isRequired ? '#166534' : '#6b7280'
+                            }}
+                          >
+                            {item.isRequired ? 'Required' : 'Optional'}
+                          </span>
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditing(item);
                               }}
+                              className="p-1.5 rounded transition-colors hover:bg-blue-50"
+                              style={{ color: UI_COLORS.text.muted }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#3b82f6'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                              aria-label={`Edit DTP item: ${item.title}`}
                             >
-                              {item.isRequired ? 'Required' : 'Optional'}
-                            </span>
+                              <Pencil className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDeleteConfirm({ open: true, itemId: item.id, itemTitle: item.title });
                               }}
-                              className="p-1 rounded transition-colors hover:bg-red-50"
+                              className="p-1.5 rounded transition-colors hover:bg-red-50"
                               style={{ color: UI_COLORS.text.muted }}
                               onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
                               onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
@@ -264,63 +373,179 @@ function AdminDTPBankPage() {
                             </button>
                           </div>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent
-                        className="px-4 pb-4"
-                        style={{ backgroundColor: UI_COLORS.background.white }}
-                      >
-                        <div className="space-y-3 pt-3">
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Expected DTP Text</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.expectedDTPText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.expectedDTPText || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.clinicalIntent ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.clinicalIntent || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.evaluationCriteria || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Requirement</label>
-                            <span
-                              className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-                              style={{
-                                backgroundColor: item.isRequired ? '#dcfce7' : '#f3f4f6',
-                                color: item.isRequired ? '#166534' : '#6b7280'
-                              }}
-                            >
-                              {item.isRequired ? 'Required' : 'Optional'}
-                            </span>
-                          </div>
-                          {item.tags && item.tags.length > 0 && (
-                            <div>
-                              <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
-                              <div className="flex flex-wrap gap-1">
-                                {item.tags.map(tag => (
-                                  <span
-                                    key={tag}
-                                    className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-                                    style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+
+                        {/* Expanded content */}
+                        {isExpanded && (
+                          <div className="border-t px-4 pb-4" style={{ borderColor: UI_COLORS.border.default }}>
+                            {isEditing ? (
+                              /* ─── Edit Mode ─── */
+                              <div className="space-y-4 pt-4">
+                                {editError && (
+                                  <p className="text-sm" style={{ color: '#dc2626' }}>{editError}</p>
+                                )}
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                  <Input
+                                    value={editForm.title}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                                    placeholder="DTP title"
+                                    style={{ borderColor: UI_COLORS.border.default }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Expected DTP Text</label>
+                                  <textarea
+                                    value={editForm.expectedDTPText}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, expectedDTPText: e.target.value }))}
+                                    placeholder="The expected drug therapy problem text..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={3}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                  <textarea
+                                    value={editForm.clinicalIntent}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, clinicalIntent: e.target.value }))}
+                                    placeholder="Why this DTP matters clinically..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={2}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                  <textarea
+                                    value={editForm.evaluationCriteria}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, evaluationCriteria: e.target.value }))}
+                                    placeholder="How to evaluate the student's identification..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={2}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags (comma-separated)</label>
+                                  <Input
+                                    value={editForm.tags.join(', ')}
+                                    onChange={(e) => handleTagInput(e.target.value)}
+                                    placeholder="e.g. cardiology, dosing, interaction"
+                                    style={{ borderColor: UI_COLORS.border.default }}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <label className="text-xs font-semibold" style={{ color: UI_COLORS.text.muted }}>Requirement:</label>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditForm(prev => ({ ...prev, isRequired: !prev.isRequired }))}
+                                    className="relative inline-flex h-5 w-9 items-center rounded-full transition-colors"
+                                    style={{ backgroundColor: editForm.isRequired ? '#22c55e' : '#d1d5db' }}
+                                    aria-label="Toggle required"
                                   >
-                                    {tag}
+                                    <span
+                                      className="inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform"
+                                      style={{ transform: editForm.isRequired ? 'translateX(18px)' : 'translateX(3px)' }}
+                                    />
+                                  </button>
+                                  <span
+                                    className="text-xs font-medium px-2 py-0.5 rounded-full"
+                                    style={{
+                                      backgroundColor: editForm.isRequired ? '#dcfce7' : '#f3f4f6',
+                                      color: editForm.isRequired ? '#166534' : '#6b7280'
+                                    }}
+                                  >
+                                    {editForm.isRequired ? 'Required' : 'Optional'}
                                   </span>
-                                ))}
+                                </div>
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                                  <Button
+                                    onClick={saveEditing}
+                                    disabled={editSaving}
+                                    className="gap-1.5"
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.primary,
+                                      color: UI_COLORS.button.text,
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                                  >
+                                    <Check className="w-4 h-4" />
+                                    {editSaving ? 'Saving...' : 'Save'}
+                                  </Button>
+                                  <Button
+                                    onClick={cancelEditing}
+                                    variant="outline"
+                                    className="gap-1.5"
+                                    style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+                                  >
+                                    <X className="w-4 h-4" />
+                                    Cancel
+                                  </Button>
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                            ) : (
+                              /* ─── Preview Mode ─── */
+                              <div className="space-y-3 pt-4">
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Expected DTP Text</label>
+                                  <p className="text-sm whitespace-pre-line" style={{ color: item.expectedDTPText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
+                                    {item.expectedDTPText || '—'}
+                                  </p>
+                                </div>
+                                {item.clinicalIntent && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                                      {item.clinicalIntent}
+                                    </p>
+                                  </div>
+                                )}
+                                {item.evaluationCriteria && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                                      {item.evaluationCriteria}
+                                    </p>
+                                  </div>
+                                )}
+                                {item.tags && item.tags.length > 0 && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
+                                    <div className="flex flex-wrap gap-1">
+                                      {item.tags.map(tag => (
+                                        <span
+                                          key={tag}
+                                          className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                          style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 {/* Empty state */}
                 {filteredItems.length === 0 && !error && (

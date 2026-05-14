@@ -107,6 +107,29 @@ export async function createRecommendationItem(
 }
 
 /**
+ * Update an existing Recommendation item.
+ */
+export async function updateRecommendationItem(
+  itemId: string,
+  data: Partial<Pick<RecommendationItem, 'title' | 'recommendationText' | 'evaluationCriteria' | 'rationale' | 'isActive'>>
+): Promise<RecommendationItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `admin/recommendations_bank?recommendation_id=${itemId}`,
+    {
+      method: 'PUT',
+      body: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.recommendationText !== undefined && { recommendation_text: data.recommendationText }),
+        ...(data.evaluationCriteria !== undefined && { evaluation_criteria: data.evaluationCriteria }),
+        ...(data.rationale !== undefined && { rationale: data.rationale }),
+        ...(data.isActive !== undefined && { is_active: data.isActive }),
+      },
+    }
+  );
+  return mapBackendToRecommendationItem(row);
+}
+
+/**
  * Delete a Recommendation item by ID.
  */
 export async function deleteRecommendationItem(itemId: string): Promise<void> {

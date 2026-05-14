@@ -1,33 +1,46 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, Link } from 'react-router-dom';
-import { ArrowLeft, Plus, Search, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Search, Trash2, Pencil, Check, X, ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import { AddRecommendationDialog } from '@/components/AddRecommendationDialog';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { listRecommendationItems, deleteRecommendationItem } from '@/services/recommendationsBankService';
+import { listRecommendationItems, deleteRecommendationItem, updateRecommendationItem } from '@/services/recommendationsBankService';
 import type { RecommendationItem } from '@/services/recommendationsBankService';
 import { filterByTitle, paginate } from '@/lib/bankUtils';
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { UI_COLORS } from '@/lib/colors';
+import { useNotification } from '@/components/notifications';
 
 /**
  * AdminRecommendationsBankPage Component
  *
  * Organization-level Recommendations bank management for admins.
- * Follows the same pattern as AdminDTPBankPage.
+ * Each item is expandable to preview content, with an inline edit mode.
  */
 function AdminRecommendationsBankPage() {
   const navigate = useNavigate();
   const { organizationId } = useParams<{ organizationId: string }>();
+  const { showNotification } = useNotification();
 
   // Recommendation items state
   const [recommendationItems, setRecommendationItems] = useState<RecommendationItem[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Expand/edit state
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<{
+    title: string;
+    recommendationText: string;
+    evaluationCriteria: string;
+    rationale: string;
+  }>({ title: '', recommendationText: '', evaluationCriteria: '', rationale: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
 
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; itemId: string; itemTitle: string }>({
@@ -44,7 +57,7 @@ function AdminRecommendationsBankPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User data (will come from auth later)
+  // User data
   const user = { name: 'Admin', avatarUrl: undefined };
 
   // Load data on mount
@@ -92,15 +105,75 @@ function AdminRecommendationsBankPage() {
       setError(null);
       await deleteRecommendationItem(deleteConfirm.itemId);
       setRecommendationItems(prev => prev.filter(item => item.id !== deleteConfirm.itemId));
+      if (expandedItemId === deleteConfirm.itemId) setExpandedItemId(null);
+      if (editingItemId === deleteConfirm.itemId) setEditingItemId(null);
+      showNotification({ message: `"${deleteConfirm.itemTitle}" deleted successfully.`, type: 'success' });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete recommendation item');
+      const msg = err instanceof Error ? err.message : 'Failed to delete recommendation item';
+      setError(msg);
+      showNotification({ message: msg, type: 'error' });
     }
     setDeleteConfirm({ open: false, itemId: '', itemTitle: '' });
   };
 
   const handleSaveNewRecommendation = () => {
-    // Reload data after successful creation
     loadData();
+  };
+
+  // ─── Expand/Edit Handlers ─────────────────────────────────────────────────
+
+  const toggleExpand = (itemId: string) => {
+    if (editingItemId === itemId) return; // Don't collapse while editing
+    setExpandedItemId(prev => prev === itemId ? null : itemId);
+  };
+
+  const startEditing = (item: RecommendationItem) => {
+    setExpandedItemId(item.id);
+    setEditingItemId(item.id);
+    setEditForm({
+      title: item.title,
+      recommendationText: item.recommendationText,
+      evaluationCriteria: item.evaluationCriteria,
+      rationale: item.rationale,
+    });
+    setEditError(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingItemId(null);
+    setEditError(null);
+  };
+
+  const saveEditing = async () => {
+    if (!editingItemId) return;
+    if (!editForm.title.trim()) {
+      setEditError('Title is required.');
+      return;
+    }
+    if (!editForm.recommendationText.trim()) {
+      setEditError('Recommendation text is required.');
+      return;
+    }
+
+    setEditSaving(true);
+    setEditError(null);
+    try {
+      const updated = await updateRecommendationItem(editingItemId, {
+        title: editForm.title.trim(),
+        recommendationText: editForm.recommendationText.trim(),
+        evaluationCriteria: editForm.evaluationCriteria.trim(),
+        rationale: editForm.rationale.trim(),
+      });
+      setRecommendationItems(prev => prev.map(item => item.id === editingItemId ? updated : item));
+      setEditingItemId(null);
+      showNotification({ message: 'Recommendation item updated successfully.', type: 'success' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to save changes.';
+      setEditError(msg);
+      showNotification({ message: msg, type: 'error' });
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   return (
@@ -209,38 +282,61 @@ function AdminRecommendationsBankPage() {
                   </div>
                 )}
 
-                {/* Recommendation Items Accordion */}
-                <Accordion type="single" collapsible className="space-y-2">
-                  {paginatedItems.map((item) => (
-                    <AccordionItem
-                      key={item.id}
-                      value={item.id}
-                      style={{
-                        borderWidth: '1px',
-                        borderStyle: 'solid',
-                        borderColor: UI_COLORS.border.default,
-                        borderRadius: '0.5rem',
-                        overflow: 'hidden'
-                      }}
-                    >
-                      <AccordionTrigger
-                        className="px-4 hover:no-underline"
+                {/* Recommendation Items */}
+                <div className="space-y-2">
+                  {paginatedItems.map((item) => {
+                    const isExpanded = expandedItemId === item.id;
+                    const isEditing = editingItemId === item.id;
+
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border"
                         style={{
+                          borderColor: UI_COLORS.border.default,
                           backgroundColor: UI_COLORS.background.white,
-                          color: UI_COLORS.text.heading
                         }}
                       >
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <span className="font-medium text-sm">
+                        {/* Header row — always visible */}
+                        <div
+                          className="flex items-center gap-3 px-4 py-3 cursor-pointer select-none"
+                          onClick={() => toggleExpand(item.id)}
+                        >
+                          {/* Chevron */}
+                          <span className="flex-shrink-0">
+                            {isExpanded ? (
+                              <ChevronDown className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+                            )}
+                          </span>
+
+                          {/* Title */}
+                          <span className="flex-1 font-medium text-sm truncate" style={{ color: UI_COLORS.text.heading }}>
                             {item.title}
                           </span>
-                          <div className="flex items-center gap-3">
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-1 flex-shrink-0">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                startEditing(item);
+                              }}
+                              className="p-1.5 rounded transition-colors hover:bg-blue-50"
+                              style={{ color: UI_COLORS.text.muted }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#3b82f6'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+                              aria-label={`Edit recommendation item: ${item.title}`}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
                                 setDeleteConfirm({ open: true, itemId: item.id, itemTitle: item.title });
                               }}
-                              className="p-1 rounded transition-colors hover:bg-red-50"
+                              className="p-1.5 rounded transition-colors hover:bg-red-50"
                               style={{ color: UI_COLORS.text.muted }}
                               onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
                               onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
@@ -250,35 +346,130 @@ function AdminRecommendationsBankPage() {
                             </button>
                           </div>
                         </div>
-                      </AccordionTrigger>
-                      <AccordionContent
-                        className="px-4 pb-4"
-                        style={{ backgroundColor: UI_COLORS.background.white }}
-                      >
-                        <div className="space-y-3 pt-3">
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Recommendation Text</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.recommendationText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.recommendationText || '—'}
-                            </p>
+
+                        {/* Expanded content */}
+                        {isExpanded && (
+                          <div className="border-t px-4 pb-4" style={{ borderColor: UI_COLORS.border.default }}>
+                            {isEditing ? (
+                              /* ─── Edit Mode ─── */
+                              <div className="space-y-4 pt-4">
+                                {editError && (
+                                  <p className="text-sm" style={{ color: '#dc2626' }}>{editError}</p>
+                                )}
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Title</label>
+                                  <Input
+                                    value={editForm.title}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, title: e.target.value }))}
+                                    placeholder="Recommendation title"
+                                    style={{ borderColor: UI_COLORS.border.default }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Recommendation Text</label>
+                                  <textarea
+                                    value={editForm.recommendationText}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, recommendationText: e.target.value }))}
+                                    placeholder="The expected recommendation text..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={3}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                  <textarea
+                                    value={editForm.evaluationCriteria}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, evaluationCriteria: e.target.value }))}
+                                    placeholder="How to evaluate the student's recommendation..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={2}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Rationale</label>
+                                  <textarea
+                                    value={editForm.rationale}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, rationale: e.target.value }))}
+                                    placeholder="Clinical rationale for this recommendation..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={2}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                {/* Action buttons */}
+                                <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+                                  <Button
+                                    onClick={saveEditing}
+                                    disabled={editSaving}
+                                    className="gap-1.5"
+                                    style={{
+                                      backgroundColor: UI_COLORS.button.primary,
+                                      color: UI_COLORS.button.text,
+                                    }}
+                                    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                                    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                                  >
+                                    <Check className="w-4 h-4" />
+                                    {editSaving ? 'Saving...' : 'Save'}
+                                  </Button>
+                                  <Button
+                                    onClick={cancelEditing}
+                                    variant="outline"
+                                    className="gap-1.5"
+                                    style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+                                  >
+                                    <X className="w-4 h-4" />
+                                    Cancel
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              /* ─── Preview Mode ─── */
+                              <div className="space-y-3 pt-4">
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Recommendation Text</label>
+                                  <p className="text-sm whitespace-pre-line" style={{ color: item.recommendationText ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
+                                    {item.recommendationText || '—'}
+                                  </p>
+                                </div>
+                                {item.evaluationCriteria && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                                      {item.evaluationCriteria}
+                                    </p>
+                                  </div>
+                                )}
+                                {item.rationale && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Rationale</label>
+                                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                                      {item.rationale}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.evaluationCriteria ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.evaluationCriteria || '—'}
-                            </p>
-                          </div>
-                          <div>
-                            <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Rationale</label>
-                            <p className="text-sm whitespace-pre-line" style={{ color: item.rationale ? UI_COLORS.text.body : UI_COLORS.text.muted }}>
-                              {item.rationale || '—'}
-                            </p>
-                          </div>
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
 
                 {/* Empty state */}
                 {filteredItems.length === 0 && !error && (
