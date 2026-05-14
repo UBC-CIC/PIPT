@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle, AlertTriangle, Pill, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -35,10 +35,16 @@ import SystemPromptPlayground from '@/components/prompt-playground/SystemPromptP
 
 import { IssuesFeedbackSection } from '@/components/simulation-group/IssuesFeedbackSection';
 import type { IssueReport, DebriefFeedback } from '@/services/adminApiService';
+import { DTPBankSection } from '@/components/simulation-group/DTPBankSection';
+import { RecommendationsBankSection } from '@/components/simulation-group/RecommendationsBankSection';
+import { assignDTPToGroup, assignDTPToPatient, getAssignedDTPs } from '@/services/dtpBankService';
+import type { DTPItem } from '@/services/dtpBankService';
+import { assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations } from '@/services/recommendationsBankService';
+import type { RecommendationItem } from '@/services/recommendationsBankService';
 
 import LoadingIndicator from '@/components/LoadingIndicator';
 
-type ActiveSection = 'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'editPatient' | 'viewStudent' | 'issuesFeedback';
+type ActiveSection = 'analytics' | 'patients' | 'students' | 'instructors' | 'prompts' | 'rubric' | 'questionBank' | 'dtpBank' | 'recommendationsBank' | 'editPatient' | 'viewStudent' | 'issuesFeedback';
 
 /**
  * AdminSimulationGroupPage — thin shell composing shared hooks and components.
@@ -119,6 +125,14 @@ function AdminSimulationGroupPage() {
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [rubricSearchQuery, setRubricSearchQuery] = useState('');
   const [isAccessCodeDialogOpen, setIsAccessCodeDialogOpen] = useState(false);
+
+  // DTP Bank assignment state
+  const [includedDTPIds, setIncludedDTPIds] = useState<Set<string>>(new Set());
+  const [selectedPatientForDTP, setSelectedPatientForDTP] = useState<string | null>(null);
+
+  // Recommendations Bank assignment state
+  const [includedRecommendationIds, setIncludedRecommendationIds] = useState<Set<string>>(new Set());
+  const [selectedPatientForRecommendations, setSelectedPatientForRecommendations] = useState<string | null>(null);
 
   const selectedQuestion = globalRubricQuestions.find(q => q.id === selectedQuestionId);
   const filteredInstructors = instructors.filter(i => {
@@ -495,6 +509,62 @@ function AdminSimulationGroupPage() {
     } catch (err) { console.error('Failed to update question assignment:', err); }
   };
 
+  // ── DTP Bank assignment handlers ──
+  const handleToggleDTPInclusion = async (dtpItemId: string, _dtpItem: DTPItem, isChecked: boolean) => {
+    const newSet = new Set(includedDTPIds);
+    try {
+      if (isChecked) {
+        newSet.add(dtpItemId);
+        if (selectedPatientForDTP) {
+          await assignDTPToPatient(dtpItemId, groupId || '', selectedPatientForDTP);
+        } else {
+          await assignDTPToGroup(dtpItemId, groupId || '');
+        }
+      } else {
+        newSet.delete(dtpItemId);
+        // In mock mode, we just remove from the set — real API would call unassign
+      }
+      setIncludedDTPIds(newSet);
+    } catch (err) { console.error('Failed to update DTP assignment:', err); }
+  };
+
+  const handleDTPPatientSelect = (patientId: string | null) => {
+    setSelectedPatientForDTP(patientId);
+    // Reload assignments for the new patient selection
+    if (!groupId) return;
+    getAssignedDTPs(groupId, patientId || undefined).then((assignments) => {
+      setIncludedDTPIds(new Set(assignments.map(a => a.dtpItemId)));
+    }).catch(() => setIncludedDTPIds(new Set()));
+  };
+
+  // ── Recommendations Bank assignment handlers ──
+  const handleToggleRecommendationInclusion = async (itemId: string, _item: RecommendationItem, isChecked: boolean) => {
+    const newSet = new Set(includedRecommendationIds);
+    try {
+      if (isChecked) {
+        newSet.add(itemId);
+        if (selectedPatientForRecommendations) {
+          await assignRecommendationToPatient(itemId, groupId || '', selectedPatientForRecommendations);
+        } else {
+          await assignRecommendationToGroup(itemId, groupId || '');
+        }
+      } else {
+        newSet.delete(itemId);
+        // In mock mode, we just remove from the set — real API would call unassign
+      }
+      setIncludedRecommendationIds(newSet);
+    } catch (err) { console.error('Failed to update Recommendation assignment:', err); }
+  };
+
+  const handleRecommendationsPatientSelect = (patientId: string | null) => {
+    setSelectedPatientForRecommendations(patientId);
+    // Reload assignments for the new patient selection
+    if (!groupId) return;
+    getAssignedRecommendations(groupId, patientId || undefined).then((assignments) => {
+      setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationItemId)));
+    }).catch(() => setIncludedRecommendationIds(new Set()));
+  };
+
   // ── Loading state ──
   if (loading) {
     return (
@@ -540,6 +610,8 @@ function AdminSimulationGroupPage() {
             { id: 'instructors', label: 'Manage Instructors', icon: <UserPlus className="w-5 h-5" /> },
             { id: 'rubric', label: 'Global Key Questions', icon: <FileText className="w-5 h-5" /> },
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" /> },
+            { id: 'dtpBank', label: 'DTP Bank', icon: <Pill className="w-5 h-5" /> },
+            { id: 'recommendationsBank', label: 'Recommendations Bank', icon: <ClipboardList className="w-5 h-5" /> },
             { id: 'issuesFeedback', label: 'Issues and Feedback', icon: <AlertTriangle className="w-5 h-5" /> },
             { id: 'prompts', label: 'Manage Prompts', icon: <FileCode className="w-5 h-5" /> },
           ]}
@@ -550,7 +622,7 @@ function AdminSimulationGroupPage() {
           onToggleVisibility={() => setIsMainSidebarVisible(!isMainSidebarVisible)}
         />
 
-        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'prompts', 'editPatient', 'viewStudent', 'issuesFeedback'].includes(activeSection) ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'prompts', 'editPatient', 'viewStudent', 'issuesFeedback'].includes(activeSection) ? '0' : '2rem' }}>
           {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
 
           {activeSection === 'patients' && (
@@ -643,6 +715,28 @@ function AdminSimulationGroupPage() {
                   }).catch(() => setIncludedQuestionIds(new Set()));
                 } else { setIncludedQuestionIds(new Set()); }
               }}
+            />
+          )}
+
+          {activeSection === 'dtpBank' && (
+            <DTPBankSection
+              groupId={groupId || ''}
+              patients={manageablePatients}
+              includedDTPIds={includedDTPIds}
+              onToggleDTPInclusion={handleToggleDTPInclusion}
+              selectedPatientId={selectedPatientForDTP}
+              onPatientSelect={handleDTPPatientSelect}
+            />
+          )}
+
+          {activeSection === 'recommendationsBank' && (
+            <RecommendationsBankSection
+              groupId={groupId || ''}
+              patients={manageablePatients}
+              includedRecommendationIds={includedRecommendationIds}
+              onToggleRecommendationInclusion={handleToggleRecommendationInclusion}
+              selectedPatientId={selectedPatientForRecommendations}
+              onPatientSelect={handleRecommendationsPatientSelect}
             />
           )}
 

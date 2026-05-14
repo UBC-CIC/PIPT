@@ -28,7 +28,8 @@ export interface UsePatientEditorReturn {
   editPatientPrompt: string;
   editPatientVoiceId: string;
   uploadStatus: Record<string, 'idle' | 'uploading' | 'success' | 'error'>;
-  uploadedFiles: Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>;
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  uploadedFiles: Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>;
   editPatientProfilePicUrl: string | null;
   caseMaterials: CaseMaterial[];
   selectedMaterialId: string;
@@ -52,9 +53,10 @@ export interface UsePatientEditorReturn {
   savePatient: () => Promise<void>;
   autoSaveNewPatient: () => Promise<string | null>;
   handleEditPatientTabSwitch: (tab: 'info' | 'questions' | 'materials') => Promise<void>;
-  handleFileUpload: (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
-  handleFileDelete: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string) => Promise<void>;
-  handleDisplayNameSave: (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => Promise<void>;
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  handleFileUpload: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
+  handleFileDelete: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => Promise<void>;
+  handleDisplayNameSave: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string, displayName: string) => Promise<void>;
   handlePhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   handlePhotoDelete: () => Promise<void>;
 
@@ -82,7 +84,8 @@ export function usePatientEditor({
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
   const [editPatientVoiceId, setEditPatientVoiceId] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
-  const [uploadedFiles, setUploadedFiles] = useState<Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>>({ llm: [], patientInfo: [], answerKey: [] });
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  const [uploadedFiles, setUploadedFiles] = useState<Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>>({ llm: [], patientInfo: [] /* , answerKey: [] */ });
   const [editPatientProfilePicUrl, setEditPatientProfilePicUrl] = useState<string | null>(null);
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -119,16 +122,19 @@ export function usePatientEditor({
    */
   const loadUploadedFiles = async (patientId: string) => {
     if (!groupId || patientId === 'new') {
-      setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+      // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+      setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
       setEditPatientProfilePicUrl(null);
       return;
     }
     try {
       const result = await instructorService.fetchPatientUploadedFiles(groupId, patientId);
-      setUploadedFiles(result.files);
+      // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+      const { llm, patientInfo } = result.files;
+      setUploadedFiles({ llm, patientInfo });
       setEditPatientProfilePicUrl(result.profilePictureUrl);
     } catch {
-      setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+      setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
       setEditPatientProfilePicUrl(null);
     }
   };
@@ -193,7 +199,8 @@ export function usePatientEditor({
     setCaseMaterials([]);
     setSelectedMaterialId('');
     setCaseSpecificQuestions([]);
-    setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+    // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+    setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
     setEditPatientProfilePicUrl(null);
   };
 
@@ -203,7 +210,8 @@ export function usePatientEditor({
   const stopEditing = () => {
     setSelectedPatientForEdit(null);
     setUploadStatus({});
-    setUploadedFiles({ llm: [], patientInfo: [], answerKey: [] });
+    // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+    setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
     setEditPatientProfilePicUrl(null);
     Object.values(uploadTimers.current).forEach(clearTimeout);
     uploadTimers.current = {};
@@ -317,9 +325,10 @@ export function usePatientEditor({
   };
 
   /**
-   * Handle file upload (LLM documents, patient info, answer key)
+   * Handle file upload (LLM documents, patient info)
    */
-  const handleFileUpload = async (fileType: 'llm' | 'patientInfo' | 'answerKey', e: React.ChangeEvent<HTMLInputElement>) => {
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  const handleFileUpload = async (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && selectedPatientForEdit && groupId) {
       let patientId = selectedPatientForEdit;
@@ -328,7 +337,10 @@ export function usePatientEditor({
         if (!savedId) return;
         patientId = savedId;
       }
+      const folderType = fileType === 'llm' ? 'documents' : 'info' as const;
+      /* Answer key folder mapping disabled:
       const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
+      */
       if (uploadTimers.current[fileType]) clearTimeout(uploadTimers.current[fileType]);
       setUploadStatus(prev => ({ ...prev, [fileType]: 'uploading' }));
       try {
@@ -349,14 +361,18 @@ export function usePatientEditor({
   /**
    * Handle file delete (remove file from S3, embeddings, and persona_data)
    */
-  const handleFileDelete = async (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string) => {
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  const handleFileDelete = async (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => {
     if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
     if (!confirm(`Are you sure you want to delete "${filename}"? This will also remove its embeddings.`)) return;
 
     const lastDot = filename.lastIndexOf('.');
     const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;
     const ext = lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : '';
+    const folderType = fileType === 'llm' ? 'documents' : 'info' as const;
+    /* Answer key folder mapping disabled:
     const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
+    */
 
     try {
       await instructorService.deletePatientFile(groupId, selectedPatientForEdit, baseName, ext, folderType);
@@ -413,7 +429,8 @@ export function usePatientEditor({
   /**
    * Save a display name for an uploaded file (auto-saves on blur)
    */
-  const handleDisplayNameSave = async (fileType: 'llm' | 'patientInfo' | 'answerKey', filename: string, displayName: string) => {
+  // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  const handleDisplayNameSave = async (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string, displayName: string) => {
     if (!selectedPatientForEdit || selectedPatientForEdit === 'new') return;
     const lastDot = filename.lastIndexOf('.');
     const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;

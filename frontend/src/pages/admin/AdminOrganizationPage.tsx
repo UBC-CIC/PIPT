@@ -191,6 +191,22 @@ function AdminOrganizationPage() {
     }
   };
 
+  const handleManageDTPBank = () => {
+    try {
+      navigate(`/admin/organization/${organizationId}/dtp-bank`);
+    } catch (error) {
+      console.error('Error navigating to DTP bank:', error);
+    }
+  };
+
+  const handleManageRecommendationsBank = () => {
+    try {
+      navigate(`/admin/organization/${organizationId}/recommendations-bank`);
+    } catch (error) {
+      console.error('Error navigating to recommendations bank:', error);
+    }
+  };
+
   if (loading) {
     return (
       <PageContainer>
@@ -213,6 +229,10 @@ function AdminOrganizationPage() {
         onStudentView={() => navigate('/student')}
         showManageQuestionBankButton={true}
         onManageQuestionBank={handleManageQuestionBank}
+        showManageDTPBankButton={true}
+        onManageDTPBank={handleManageDTPBank}
+        showManageRecommendationsBankButton={true}
+        onManageRecommendationsBank={handleManageRecommendationsBank}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Back to All Organizations button */}

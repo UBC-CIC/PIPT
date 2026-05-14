@@ -15,6 +15,10 @@ interface DashboardHeaderProps {
   showInstructorViewButton?: boolean;
   onManageQuestionBank?: () => void;
   showManageQuestionBankButton?: boolean;
+  onManageDTPBank?: () => void;
+  showManageDTPBankButton?: boolean;
+  onManageRecommendationsBank?: () => void;
+  showManageRecommendationsBankButton?: boolean;
   onAdminView?: () => void;
   showAdminViewButton?: boolean;
 }
@@ -31,6 +35,10 @@ function DashboardHeader({
   showInstructorViewButton = false,
   onManageQuestionBank,
   showManageQuestionBankButton = false,
+  onManageDTPBank,
+  showManageDTPBankButton = false,
+  onManageRecommendationsBank,
+  showManageRecommendationsBankButton = false,
   onAdminView,
   showAdminViewButton = false
 }: DashboardHeaderProps) {
@@ -71,6 +79,30 @@ function DashboardHeader({
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
             Manage Question Bank
+          </Button>
+        )}
+        {showManageDTPBankButton && onManageDTPBank && (
+          <Button
+            variant="default"
+            onClick={onManageDTPBank}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+          >
+            DTP Bank
+          </Button>
+        )}
+        {showManageRecommendationsBankButton && onManageRecommendationsBank && (
+          <Button
+            variant="default"
+            onClick={onManageRecommendationsBank}
+            className="px-6 transition-colors"
+            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+          >
+            Recommendations Bank
           </Button>
         )}
         {showStudentViewButton && onStudentView && (
