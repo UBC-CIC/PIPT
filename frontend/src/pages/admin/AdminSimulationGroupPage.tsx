@@ -721,6 +721,7 @@ function AdminSimulationGroupPage() {
           {activeSection === 'dtpBank' && (
             <DTPBankSection
               groupId={groupId || ''}
+              organizationId={organizationId || ''}
               patients={manageablePatients}
               includedDTPIds={includedDTPIds}
               onToggleDTPInclusion={handleToggleDTPInclusion}
@@ -732,6 +733,7 @@ function AdminSimulationGroupPage() {
           {activeSection === 'recommendationsBank' && (
             <RecommendationsBankSection
               groupId={groupId || ''}
+              organizationId={organizationId || ''}
               patients={manageablePatients}
               includedRecommendationIds={includedRecommendationIds}
               onToggleRecommendationInclusion={handleToggleRecommendationInclusion}
