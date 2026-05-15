@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { studentService, type StudentChatMessage as Message, type PatientDetail, type PatientFile, type AIDebriefData, type PersonaMedia } from '@/services/studentService';
+import { studentService, type StudentChatMessage as Message, type PatientDetail, type PatientFile, type AIDebriefData, type PersonaMedia, type UpdatedDebriefData } from '@/services/studentService';
 import { ArrowLeft, FileText, User, Stethoscope, Flag, Eye, Menu, ChevronRight, ChevronLeft, ArrowLeftIcon } from 'lucide-react';
 import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
@@ -52,6 +52,7 @@ function ChatHistoryPage() {
   const [isReportIssueOpen, setIsReportIssueOpen] = useState(false);
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
   const [debriefData, setDebriefData] = useState<AIDebriefData | null>(null);
+  const [updatedDebriefData, setUpdatedDebriefData] = useState<UpdatedDebriefData | undefined>(undefined);
 
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
@@ -116,6 +117,11 @@ function ChatHistoryPage() {
     studentService.fetchDebrief(chatId).then((data) => {
       if (!cancelled) setDebriefData(data);
     });
+    studentService.fetchUpdatedDebrief(chatId).then((data) => {
+      if (!cancelled) setUpdatedDebriefData(data);
+    }).catch(() => {
+      // Non-fatal — updatedDebriefData stays undefined, dialog falls back to legacy layout
+    });
     return () => { cancelled = true; };
   }, [chatId]);
 
@@ -171,10 +177,12 @@ function ChatHistoryPage() {
         isOpen={isAIDebriefOpen}
         onClose={() => setIsAIDebriefOpen(false)}
         data={debriefData}
+        updatedDebriefData={updatedDebriefData}
         simulationGroupId={groupId}
         patientId={patientId}
         chatId={chatId}
         showAnswerKey={false}
+        patientMode={updatedDebriefData?.chunk2 ? 'full_assessment' : 'interview_practice'}
       />
 
       {/* Header */}

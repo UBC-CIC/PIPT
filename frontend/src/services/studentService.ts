@@ -1162,6 +1162,7 @@ export interface DebriefChunk1 {
   questionsAddressedCount: number;
   questionsMissed: string[];
   questionsMissedCount: number;
+  suggestedRewrites: { original: string; suggested: string }[];
 }
 
 /**
@@ -1313,6 +1314,12 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
       questionsAddressedCount: questionsAddressed.length,
       questionsMissed,
       questionsMissedCount: questionsMissed.length,
+      suggestedRewrites: (debrief.suggested_rewrites || []).map(
+        (r: { original_message?: string; suggested_rewrite?: string }) => ({
+          original: r.original_message || '',
+          suggested: r.suggested_rewrite || '',
+        })
+      ),
     };
 
     // Build chunk2 from DTP/Rec comparison data (null if not present)

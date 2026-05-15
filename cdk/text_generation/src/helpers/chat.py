@@ -1422,8 +1422,11 @@ def get_cached_instructor_recs(
 # =============================================================================
 
 # Similarity threshold for considering a student submission as matching an
-# instructor-defined item. Pairs below this score are not considered matches.
-SUBMISSION_MATCH_THRESHOLD = 0.70
+# instructor-defined item. Cohere Embed v4 scores run lower than expected for
+# semantically equivalent but differently-worded clinical text, so 0.55 is the
+# sweet spot: same clinical concept with different phrasing reliably scores
+# above this, while unrelated items fall below.
+SUBMISSION_MATCH_THRESHOLD = 0.55
 
 
 def batch_embed_texts(texts: list[str], embeddings_model) -> list[list[float]]:
@@ -2897,13 +2900,22 @@ def generate_debrief(
         summary_data = _invoke_llm_json(summary_prompt)
         logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
 
-        # Step d: Generate rewrites for moderate-confidence matches
-        REWRITE_THRESHOLD = 0.55
+        # Step d: Generate rewrites for borderline-addressed questions
+        # Only suggest rewrites for MODERATE confidence matches (0.60–0.74) that
+        # fall below the rewrite threshold. These are questions the student DID
+        # address (counted as "addressed" in the debrief) but phrased indirectly
+        # enough that a more targeted phrasing would strengthen their interview.
+        #
+        # We intentionally SKIP low-confidence matches (0.45–0.59) — those are
+        # too weak a semantic match to warrant a rewrite suggestion and would
+        # result in the system "flaming" nearly every student message.
+        REWRITE_UPPER_BOUND = 0.70  # Above this, the student's phrasing is strong enough — no rewrite needed
+        REWRITE_LOWER_BOUND = 0.60  # Below this, the match is too weak to be a meaningful rewrite candidate
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
 
-        # Collect low-confidence matches from tagged messages
-        low_confidence_matches: list[dict] = []
+        # Collect moderate-confidence matches that are below the upper bound
+        rewrite_candidates: list[dict] = []
         for msg in tagged_messages:
             matches_raw = msg.get("matched_question_ids", [])
             if isinstance(matches_raw, str):
@@ -2913,17 +2925,29 @@ def generate_debrief(
                     matches_raw = []
             for match in matches_raw:
                 confidence = match.get("confidence", "")
-                if confidence == "low":
-                    low_confidence_matches.append({
+                similarity_score = match.get("similarity_score", 0.0)
+                # Only moderate matches in the borderline range get rewrites
+                if confidence == "moderate" and REWRITE_LOWER_BOUND <= similarity_score < REWRITE_UPPER_BOUND:
+                    rewrite_candidates.append({
                         "message_content": msg.get("message_content", ""),
                         "question_id": match.get("question_id", ""),
-                        "similarity_score": match.get("similarity_score", 0.0),
+                        "similarity_score": similarity_score,
                     })
 
-        for lc_match in low_confidence_matches:
-            q = question_map.get(lc_match["question_id"], {})
+        # Deduplicate: only generate one rewrite per unique student message.
+        # A single message can match multiple key questions, but we only want
+        # one rewrite suggestion per original message (use the highest-scoring match).
+        seen_messages: dict[str, dict] = {}
+        for candidate in rewrite_candidates:
+            msg = candidate["message_content"]
+            if msg not in seen_messages or candidate["similarity_score"] > seen_messages[msg]["similarity_score"]:
+                seen_messages[msg] = candidate
+        rewrite_candidates = list(seen_messages.values())
+
+        for candidate in rewrite_candidates:
+            q = question_map.get(candidate["question_id"], {})
             rewrite_prompt = build_rewrite_prompt(
-                lc_match["message_content"],
+                candidate["message_content"],
                 q.get("question_text", ""),
                 q.get("evaluation_criteria", ""),
             )
@@ -2931,12 +2955,12 @@ def generate_debrief(
             rewrite_text = rewrite_data.get("suggested_rewrite", "").strip()
             if rewrite_text:
                 suggested_rewrites.append({
-                    "original_message": lc_match["message_content"],
-                    "matched_question_id": lc_match["question_id"],
-                    "similarity_score": lc_match["similarity_score"],
+                    "original_message": candidate["message_content"],
+                    "matched_question_id": candidate["question_id"],
+                    "similarity_score": candidate["similarity_score"],
                     "suggested_rewrite": rewrite_text,
                 })
-        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites")
+        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites from {len(rewrite_candidates)} candidates")
 
         # Step e: Answer key comparison
         if answer_key_text:
@@ -3307,12 +3331,17 @@ def generate_test_debrief(
         summary_data = _invoke_llm_json(summary_prompt)
         logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
 
-        # Step d: Generate rewrites for moderate-confidence matches
-        REWRITE_THRESHOLD = 0.55
+        # Step d: Generate rewrites for borderline-addressed questions
+        # Only suggest rewrites for MODERATE confidence matches (0.60–0.74) that
+        # fall below the rewrite threshold. These are questions the student DID
+        # address but phrased indirectly enough that a more targeted phrasing
+        # would strengthen their interview.
+        REWRITE_UPPER_BOUND = 0.70  # Above this, the student's phrasing is strong enough — no rewrite needed
+        REWRITE_LOWER_BOUND = 0.60  # Below this, the match is too weak to be a meaningful rewrite candidate
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
 
-        low_confidence_matches: list[dict] = []
+        rewrite_candidates: list[dict] = []
         for msg in tagged_messages:
             matches_raw = msg.get("matched_question_ids", [])
             if isinstance(matches_raw, str):
@@ -3322,17 +3351,26 @@ def generate_test_debrief(
                     matches_raw = []
             for match in matches_raw:
                 confidence = match.get("confidence", "")
-                if confidence == "low":
-                    low_confidence_matches.append({
+                similarity_score = match.get("similarity_score", 0.0)
+                if confidence == "moderate" and REWRITE_LOWER_BOUND <= similarity_score < REWRITE_UPPER_BOUND:
+                    rewrite_candidates.append({
                         "message_content": msg.get("message_content", ""),
                         "question_id": match.get("question_id", ""),
-                        "similarity_score": match.get("similarity_score", 0.0),
+                        "similarity_score": similarity_score,
                     })
 
-        for lc_match in low_confidence_matches:
-            q = question_map.get(lc_match["question_id"], {})
+        # Deduplicate: only generate one rewrite per unique student message.
+        seen_messages: dict[str, dict] = {}
+        for candidate in rewrite_candidates:
+            msg = candidate["message_content"]
+            if msg not in seen_messages or candidate["similarity_score"] > seen_messages[msg]["similarity_score"]:
+                seen_messages[msg] = candidate
+        rewrite_candidates = list(seen_messages.values())
+
+        for candidate in rewrite_candidates:
+            q = question_map.get(candidate["question_id"], {})
             rewrite_prompt = build_rewrite_prompt(
-                lc_match["message_content"],
+                candidate["message_content"],
                 q.get("question_text", ""),
                 q.get("evaluation_criteria", ""),
             )
@@ -3340,12 +3378,12 @@ def generate_test_debrief(
             rewrite_text = rewrite_data.get("suggested_rewrite", "").strip()
             if rewrite_text:
                 suggested_rewrites.append({
-                    "original_message": lc_match["message_content"],
-                    "matched_question_id": lc_match["question_id"],
-                    "similarity_score": lc_match["similarity_score"],
+                    "original_message": candidate["message_content"],
+                    "matched_question_id": candidate["question_id"],
+                    "similarity_score": candidate["similarity_score"],
                     "suggested_rewrite": rewrite_text,
                 })
-        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites")
+        logger.info(f"📋 Generated {len(suggested_rewrites)} suggested rewrites from {len(rewrite_candidates)} candidates")
 
         # Step e: Answer key comparison
         if answer_key_text:

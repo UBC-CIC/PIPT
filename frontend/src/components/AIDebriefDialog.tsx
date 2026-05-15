@@ -193,6 +193,33 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                 )}
               </div>
 
+              {/* Suggested Question Rewrites */}
+              {updatedDebriefData.chunk1.suggestedRewrites.length > 0 && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                    <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                      Suggested Question Rewrites
+                    </h3>
+                  </div>
+                  <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
+                    These are AI-generated suggestions for questions you addressed but could phrase more directly.
+                  </p>
+                  <div className="pl-7 space-y-3">
+                    {updatedDebriefData.chunk1.suggestedRewrites.map((rewrite, index) => (
+                      <div key={index} className="space-y-1">
+                        <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                          <span className="font-medium">Instead of:</span> &ldquo;{rewrite.original}&rdquo;
+                        </p>
+                        <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                          <span className="font-medium">Try:</span> &ldquo;{rewrite.suggested}&rdquo;
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* ─── Chunk 2: DTP Comparison & Recommendations Feedback ─── */}
               {updatedDebriefData.chunk2 === null && patientMode === 'full_assessment' ? (
                 /* Chunk 2 Loading State — only for full_assessment patients */
