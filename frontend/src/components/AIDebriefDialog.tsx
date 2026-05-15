@@ -15,6 +15,7 @@ interface AIDebriefDialogProps {
   patientId?: string;
   chatId?: string;
   showAnswerKey?: boolean;
+  patientMode?: 'interview_practice' | 'full_assessment';
 }
 
 /**
@@ -24,7 +25,7 @@ interface AIDebriefDialogProps {
  * Includes interview summary, key questions addressed/missed, clinical reasoning feedback,
  * and suggested question rewrites.
  */
-function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulationGroupId, patientId, chatId, showAnswerKey = false }: AIDebriefDialogProps) {
+function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulationGroupId, patientId, chatId, showAnswerKey = false, patientMode = 'full_assessment' }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
@@ -193,15 +194,15 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
               </div>
 
               {/* ─── Chunk 2: DTP Comparison & Recommendations Feedback ─── */}
-              {updatedDebriefData.chunk2 === null ? (
-                /* Chunk 2 Loading State */
+              {updatedDebriefData.chunk2 === null && patientMode === 'full_assessment' ? (
+                /* Chunk 2 Loading State — only for full_assessment patients */
                 <div className="flex items-center gap-3 py-8 justify-center">
                   <Loader2 className="w-5 h-5 animate-spin" style={{ color: UI_COLORS.text.muted }} />
                   <span className="text-sm" style={{ color: UI_COLORS.text.muted }}>
                     Processing your submissions...
                   </span>
                 </div>
-              ) : (
+              ) : updatedDebriefData.chunk2 !== null && patientMode === 'full_assessment' ? (
                 <>
                   {/* DTP Comparison Section */}
                   <div className="space-y-3">
@@ -339,7 +340,7 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                     </div>
                   </div>
                 </>
-              )}
+              ) : null}
             </>
           ) : (
             <>

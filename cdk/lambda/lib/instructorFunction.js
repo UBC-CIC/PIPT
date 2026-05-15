@@ -967,16 +967,30 @@ exports.handler = async (event, context) => {
           const { simulation_group_id } = event.queryStringParameters;
 
           try {
-            // Query to get all patients for the given simulation group
+            // Query to get all patients for the given simulation group, including mode info
             const simulationPatients = await sqlConnection`
-                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id
+                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id,
+                      (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
+                        WHERE sgd.simulation_group_id = ${simulation_group_id}
+                        AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,
+                      (SELECT COUNT(*) > 0 FROM simulation_group_recommendations sgr
+                        WHERE sgr.simulation_group_id = ${simulation_group_id}
+                        AND (sgr.persona_id = p.persona_id OR sgr.persona_id IS NULL)) AS has_recommendations
                     FROM "personas" p
                     WHERE p.simulation_group_id = ${simulation_group_id}
                     ORDER BY p.persona_name ASC;
                 `;
 
+            // Enrich with computed mode
+            const enrichedPatients = simulationPatients.map(patient => ({
+              ...patient,
+              mode: (!patient.has_dtps && !patient.has_recommendations)
+                ? 'interview_practice'
+                : 'full_assessment',
+            }));
+
             response.statusCode = 200;
-            response.body = JSON.stringify(simulationPatients);
+            response.body = JSON.stringify(enrichedPatients);
           } catch (err) {
             response.statusCode = 500;
             logger.error("Operation failed", { error: err.message, stack: err.stack });

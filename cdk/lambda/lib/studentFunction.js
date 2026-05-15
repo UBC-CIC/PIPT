@@ -262,7 +262,13 @@ exports.handler = async (event, context) => {
                   sp.persona_score,
                   sp.last_accessed,
                   sp.persona_context_embedding,
-                  sp.is_completed
+                  sp.is_completed,
+                  (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
+                    WHERE sgd.simulation_group_id = ${simulationGroupId}
+                    AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,
+                  (SELECT COUNT(*) > 0 FROM simulation_group_recommendations sgr
+                    WHERE sgr.simulation_group_id = ${simulationGroupId}
+                    AND (sgr.persona_id = p.persona_id OR sgr.persona_id IS NULL)) AS has_recommendations
                 FROM
                   "personas" p
                 LEFT JOIN
@@ -287,7 +293,15 @@ exports.handler = async (event, context) => {
                 `;
             }
 
-            response.body = JSON.stringify(data);
+            // Enrich each persona with the computed mode
+            const enrichedData = data.map(persona => ({
+              ...persona,
+              mode: (!persona.has_dtps && !persona.has_recommendations)
+                ? 'interview_practice'
+                : 'full_assessment',
+            }));
+
+            response.body = JSON.stringify(enrichedData);
           } catch (err) {
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
@@ -1507,22 +1521,38 @@ exports.handler = async (event, context) => {
           event.queryStringParameters != null &&
           event.queryStringParameters.session_id &&
           event.queryStringParameters.simulation_group_id &&
-          event.queryStringParameters.patient_id &&
-          event.body
+          event.queryStringParameters.patient_id
         ) {
           const sessionId = event.queryStringParameters.session_id;
           const simulationGroupId = event.queryStringParameters.simulation_group_id;
           const patientId = event.queryStringParameters.patient_id;
-          const { recommendation } = JSON.parse(event.body);
-
-          if (!recommendation || !recommendation.trim()) {
-            response.statusCode = 400;
-            response.body = JSON.stringify({ error: "recommendation is required in the request body" });
-            break;
-          }
+          const body = event.body ? JSON.parse(event.body) : {};
+          const recommendation = body.recommendation || null;
 
           try {
-            // Step 1: Save recommendation and mark the chat as ended
+            // Step 0: Determine patient mode by checking DTP/Recommendation assignments
+            const [dtpCount] = await sqlConnection`
+              SELECT COUNT(*)::int AS count FROM simulation_group_dtps
+              WHERE simulation_group_id = ${simulationGroupId}
+                AND (persona_id = ${patientId} OR persona_id IS NULL);
+            `;
+            const [recCount] = await sqlConnection`
+              SELECT COUNT(*)::int AS count FROM simulation_group_recommendations
+              WHERE simulation_group_id = ${simulationGroupId}
+                AND (persona_id = ${patientId} OR persona_id IS NULL);
+            `;
+            const patientMode = (dtpCount.count === 0 && recCount.count === 0)
+              ? 'interview_practice'
+              : 'full_assessment';
+
+            // Validate: full_assessment patients require a recommendation
+            if (patientMode === 'full_assessment' && (!recommendation || !recommendation.trim())) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "recommendation is required in the request body" });
+              break;
+            }
+
+            // Step 1: Save recommendation (may be null for interview_practice) and mark the chat as ended
             const updatedChat = await sqlConnection`
               UPDATE "chats"
               SET recommendation = ${recommendation},
@@ -1604,6 +1634,7 @@ exports.handler = async (event, context) => {
                   session_id: sessionId,
                   patient_id: patientId,
                   mode: "debrief",
+                  patient_mode: patientMode,
                 },
                 headers: event.headers,
                 requestContext: event.requestContext,
@@ -1621,6 +1652,7 @@ exports.handler = async (event, context) => {
                 logger.info("Debrief generation Lambda invoked asynchronously", {
                   sessionId,
                   textGenFunctionName,
+                  patientMode,
                 });
               } catch (invokeErr) {
                 // Log but don't fail the conclude request — debrief can be retried
@@ -1638,6 +1670,7 @@ exports.handler = async (event, context) => {
               message: "Interaction concluded successfully.",
               chat: updatedChat[0],
               debrief_triggered: !!textGenFunctionName,
+              patient_mode: patientMode,
             });
           } catch (err) {
             response.statusCode = 500;
@@ -1647,7 +1680,7 @@ exports.handler = async (event, context) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "session_id, simulation_group_id, patient_id, and recommendation body are required",
+            error: "session_id, simulation_group_id, and patient_id are required",
           });
         }
         break;

@@ -95,6 +95,10 @@ export const UI_COLORS = {
     notWorkingText: '#991B1B',  // red-800
     pulseDot: '#FDE047',        // yellow-300
   },
+  badge: {
+    interviewPracticeBg: '#DBEAFE',  // blue-100
+    interviewPracticeText: '#1E40AF', // blue-800
+  },
 } as const;
 
 /**

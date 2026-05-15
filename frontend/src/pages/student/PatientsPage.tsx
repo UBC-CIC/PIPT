@@ -233,6 +233,14 @@ function PatientsPage() {
                     <span className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
                       {patient.patient_name}
                     </span>
+                    {patient.mode === 'interview_practice' && (
+                      <span
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                        style={{ backgroundColor: UI_COLORS.badge.interviewPracticeBg, color: UI_COLORS.badge.interviewPracticeText }}
+                      >
+                        Interview Practice
+                      </span>
+                    )}
                     {renderStatusBadge(patient.debrief_status)}
                   </div>
                 </div>

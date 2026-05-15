@@ -45,6 +45,7 @@ export interface Patient {
   best_coverage: number | null;  // Best key question coverage % across completed chats
   attempt_count: number;         // Total number of chat sessions
   last_accessed: string | null;  // Last time the student interacted with this patient
+  mode: 'interview_practice' | 'full_assessment'; // Derived from DTP/Recommendation assignments
 }
 
 
@@ -98,6 +99,7 @@ export interface PatientDetail {
   sex?: string;
   primaryComplaint?: string;
   avatarUrl?: string;
+  mode?: 'interview_practice' | 'full_assessment';
 }
 
 /**
@@ -220,6 +222,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       persona_age: number;
       persona_gender: string;
       voice_enabled?: boolean;
+      mode?: 'interview_practice' | 'full_assessment';
     }>>(
       `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
@@ -234,6 +237,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
         voice_enabled: persona.voice_enabled !== false,
         imageUrl: profilePictureUrl,
         avatarUrl: profilePictureUrl,
+        mode: persona.mode || 'full_assessment',
       };
     }
   } catch (error) {
@@ -835,6 +839,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
         best_coverage: stats.bestCoverage != null ? Math.round(stats.bestCoverage) : null,
         attempt_count: stats.attemptCount,
         last_accessed: stats.lastChatAccessed,
+        mode: p.mode || 'full_assessment',
       };
     });
   } catch (error) {
@@ -981,22 +986,23 @@ async function sendMessageStreaming(
 /**
  * Conclude a student interaction session.
  * Saves the recommendation, marks the session as concluded, and triggers debrief generation.
+ * For interview_practice patients, recommendation can be null.
  */
 async function concludeInteraction(
   simulationGroupId: string,
   patientId: string,
   sessionId: string,
-  recommendation: string
-): Promise<{ success: boolean; debrief_triggered?: boolean }> {
+  recommendation: string | null
+): Promise<{ success: boolean; debrief_triggered?: boolean; patient_mode?: string }> {
   try {
-    const result = await apiClient.request<{ message: string; chat: any; debrief_triggered: boolean }>(
+    const result = await apiClient.request<{ message: string; chat: any; debrief_triggered: boolean; patient_mode: string }>(
       `student/conclude_interaction?session_id=${encodeURIComponent(sessionId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`,
       {
         method: 'POST',
-        body: { recommendation },
+        body: recommendation ? { recommendation } : {},
       }
     );
-    return { success: true, debrief_triggered: result.debrief_triggered };
+    return { success: true, debrief_triggered: result.debrief_triggered, patient_mode: result.patient_mode };
   } catch (error) {
     console.error('Failed to conclude interaction:', error);
     return { success: false };

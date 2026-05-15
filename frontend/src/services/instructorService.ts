@@ -156,6 +156,7 @@ export interface ManageablePatient {
   interaction_mode?: string;            // Interaction mode (interaction_mode in DB)
   llm_completion: boolean;              // Whether LLM evaluation is enabled (derived from settings)
   photo_url?: string;                   // Optional patient photo URL (stored separately or in media)
+  mode?: 'interview_practice' | 'full_assessment'; // Derived from DTP/Recommendation assignments
 }
 
 /**
@@ -711,6 +712,7 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
       llmEvaluationEnabled: patient.llm_completion || false,
       llm_completion: patient.llm_completion || false,
       photo_url: patient.photo_url,
+      mode: patient.mode || 'full_assessment',
     }));
   } catch (error) {
     console.error('Failed to fetch manageable patients:', error);

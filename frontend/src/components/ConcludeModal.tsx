@@ -20,6 +20,7 @@ interface ConcludeModalProps {
   simulationGroupId: string;
   patientId: string;
   onConcluded: () => void;
+  mode?: 'interview_practice' | 'full_assessment';
 }
 
 export function ConcludeModal({
@@ -29,6 +30,7 @@ export function ConcludeModal({
   simulationGroupId,
   patientId,
   onConcluded,
+  mode = 'full_assessment',
 }: ConcludeModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [dtpEntries, setDtpEntries] = useState<string[]>(['']);
@@ -131,6 +133,24 @@ export function ConcludeModal({
     }
   };
 
+  const handleInterviewPracticeConclude = async () => {
+    setSubmitting(true);
+    try {
+      const result = await studentService.concludeInteraction(simulationGroupId, patientId, sessionId, null);
+      if (!result.success) {
+        setRecValidationError('Failed to conclude. Please try again.');
+        return;
+      }
+      resetState();
+      onOpenChange(false);
+      onConcluded();
+    } catch {
+      setRecValidationError('Failed to conclude. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
@@ -138,12 +158,50 @@ export function ConcludeModal({
           <DialogTitle style={{ color: UI_COLORS.text.heading }}>
             Conclude Interaction
           </DialogTitle>
-          <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-            Step {step} of 2
-          </p>
+          {mode === 'full_assessment' && (
+            <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
+              Step {step} of 2
+            </p>
+          )}
         </DialogHeader>
 
-        {step === 1 && (
+        {mode === 'interview_practice' && (
+          <div className="space-y-4 py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to conclude this interview? Your session will be marked as complete and an AI debrief will be generated based on your conversation.
+            </p>
+
+            {recValidationError && (
+              <p className="text-sm" style={{ color: UI_COLORS.status.error }}>
+                {recValidationError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+              <Button
+                onClick={() => handleOpenChange(false)}
+                variant="outline"
+                style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleInterviewPracticeConclude}
+                disabled={submitting}
+                style={{
+                  backgroundColor: UI_COLORS.button.primary,
+                  color: UI_COLORS.button.text,
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+              >
+                {submitting ? 'Concluding...' : 'Conclude Interview'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {mode === 'full_assessment' && step === 1 && (
           <div className="space-y-4 py-4">
             <div>
               <h3 className="text-base font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>
@@ -216,7 +274,7 @@ export function ConcludeModal({
           </div>
         )}
 
-        {step === 2 && (
+        {mode === 'full_assessment' && step === 2 && (
           <div className="space-y-4 py-4">
             <div>
               <h3 className="text-base font-medium mb-1" style={{ color: UI_COLORS.text.heading }}>

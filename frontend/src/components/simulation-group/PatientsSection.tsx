@@ -89,8 +89,16 @@ export function PatientsSection({
             className="grid grid-cols-[2fr_80px_100px_80px_2fr] gap-4 px-6 py-4 border-t items-center"
             style={{ borderColor: UI_COLORS.border.default }}
           >
-            <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
+            <div className="text-base flex items-center gap-2" style={{ color: UI_COLORS.text.heading }}>
               {patient.name || patient.patient_name}
+              {patient.mode === 'interview_practice' && (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  style={{ backgroundColor: UI_COLORS.badge.interviewPracticeBg, color: UI_COLORS.badge.interviewPracticeText }}
+                >
+                  Interview Practice
+                </span>
+              )}
             </div>
             <div className="text-base" style={{ color: UI_COLORS.text.heading }}>
               {patient.age || patient.patient_age}

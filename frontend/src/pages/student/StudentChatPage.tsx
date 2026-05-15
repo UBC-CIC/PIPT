@@ -854,6 +854,7 @@ function StudentChatPage() {
         simulationGroupId={groupId || ''}
         patientId={patientId || ''}
         onConcluded={handleConcludeWithSubmissions}
+        mode={patient.mode || 'full_assessment'}
       />
 
       {/* Report Issue Dialog */}
@@ -875,6 +876,7 @@ function StudentChatPage() {
         patientId={patientId}
         chatId={sessionId || routeChatId}
         showAnswerKey={false}
+        patientMode={patient.mode || 'full_assessment'}
       />
 
       {/* Full-screen generating debrief overlay */}
