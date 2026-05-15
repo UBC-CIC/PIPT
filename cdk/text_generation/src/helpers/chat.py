@@ -2794,6 +2794,7 @@ def generate_debrief(
     llm: ChatBedrock,
     embeddings_model=None,
     ddb_table_name: str = None,
+    patient_mode: str = "interview_practice",
 ) -> dict:
     """
     Orchestrates the full debrief generation flow:
@@ -2801,8 +2802,9 @@ def generate_debrief(
     2. Check for tagged messages — if present, use enhanced prompt; otherwise fall back to full transcript
     3. Build prompt and call LLM
     4. Parse structured JSON response
-    5. Write to debriefs + question_interactions tables
-    6. Optionally publish result via AppSync
+    5. Match DTP/Rec submissions against instructor items (full_assessment only)
+    6. Write to debriefs + question_interactions tables
+    7. Optionally publish result via AppSync
     Returns the parsed debrief dict.
     """
     logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
@@ -3099,6 +3101,63 @@ The following is the instructor's answer key for this simulation case. Compare t
 
     addressed_ids = _extract_ids(questions_addressed)
     missed_ids = _extract_ids(questions_missed)
+
+    # 4c. DTP & Recommendation matching (full_assessment patients only)
+    if patient_mode == "full_assessment" and embeddings_model and ddb_table_name:
+        try:
+            # Fetch student submissions from the chats table
+            submissions = fetch_student_submissions(session_id)
+
+            if submissions["dtp_entries"] or submissions["rec_entries"]:
+                # Get pre-cached instructor DTP embeddings (lazy-cache on first use)
+                cached_dtps = get_cached_instructor_dtps(simulation_group_id, persona_id, ddb_table_name)
+                if cached_dtps is None:
+                    cached_dtps = cache_instructor_dtp_embeddings(
+                        simulation_group_id, persona_id, embeddings_model, ddb_table_name
+                    )
+
+                # Get pre-cached instructor Recommendation embeddings (lazy-cache on first use)
+                cached_recs = get_cached_instructor_recs(simulation_group_id, persona_id, ddb_table_name)
+                if cached_recs is None:
+                    cached_recs = cache_instructor_rec_embeddings(
+                        simulation_group_id, persona_id, embeddings_model, ddb_table_name
+                    )
+
+                # Match DTPs
+                if submissions["dtp_entries"] and cached_dtps:
+                    dtp_comparison = match_submissions(
+                        student_texts=submissions["dtp_entries"],
+                        instructor_items=cached_dtps,
+                        embeddings_model=embeddings_model,
+                        text_key="expected_dtp_text",
+                        id_key="dtp_id",
+                    )
+                    debrief_data["dtp_comparison"] = dtp_comparison
+                    logger.info(f"📋 DTP matching: {len(dtp_comparison['matched'])} matched, "
+                                f"{len(dtp_comparison['missed'])} missed, {len(dtp_comparison['additional'])} additional")
+
+                # Match Recommendations (on recommendation text only, rationale ignored for matching)
+                if submissions["rec_entries"] and cached_recs:
+                    student_rec_texts = [
+                        e["recommendation"] for e in submissions["rec_entries"]
+                        if isinstance(e, dict) and e.get("recommendation")
+                    ]
+                    if student_rec_texts:
+                        rec_comparison = match_submissions(
+                            student_texts=student_rec_texts,
+                            instructor_items=cached_recs,
+                            embeddings_model=embeddings_model,
+                            text_key="recommendation_text",
+                            id_key="recommendation_id",
+                        )
+                        debrief_data["recommendations_comparison"] = rec_comparison
+                        logger.info(f"📋 Recommendation matching: {len(rec_comparison['matched'])} matched, "
+                                    f"{len(rec_comparison['missed'])} missed, {len(rec_comparison['additional'])} additional")
+            else:
+                logger.info(f"📋 No DTP/Rec submissions found for session={session_id}, skipping matching")
+        except Exception as e:
+            logger.error(f"DTP/Rec matching failed for session={session_id}: {e}")
+            # Non-fatal — debrief still gets saved without DTP/Rec comparison
 
     # 5. Write to debriefs table
     # TODO(refactor): Extract debrief persistence (save_debrief_to_db + save_question_interactions) into a helper function

@@ -1224,16 +1224,40 @@ export interface ConcludeInteractionRequest {
 /** In-memory store for conclude submissions, keyed by sessionId */
 const concludeSubmissionsStore = new Map<string, ConcludeInteractionRequest>();
 
-// ─── Answer Key Debrief Comparison: Mock Functions ───────────────────────────
+// ─── Conclude With Submissions ───────────────────────────────────────────────
 
 /**
  * Conclude an interaction with DTP and Recommendation submissions.
- * Stores the submission in memory and returns success.
+ * Sends submissions to the backend where they are persisted and used for
+ * embedding-based matching during debrief generation.
  */
 async function concludeWithSubmissions(
   request: ConcludeInteractionRequest
 ): Promise<{ success: true }> {
+  // Keep local store for potential frontend use (e.g., optimistic UI)
   concludeSubmissionsStore.set(request.sessionId, request);
+
+  // Build a combined recommendation text from the structured entries for backward compat
+  const recommendationText = request.recommendationSubmission.entries
+    .filter((e) => e.recommendation.trim().length > 0)
+    .map((e, i) => {
+      const recLine = `${i + 1}. ${e.recommendation}`;
+      return e.rationale ? `${recLine}\n   Rationale: ${e.rationale}` : recLine;
+    })
+    .join('\n');
+
+  await apiClient.request<{ message: string; chat: any; debrief_triggered: boolean; patient_mode: string }>(
+    `student/conclude_interaction?session_id=${encodeURIComponent(request.sessionId)}&simulation_group_id=${encodeURIComponent(request.simulationGroupId)}&patient_id=${encodeURIComponent(request.patientId)}`,
+    {
+      method: 'POST',
+      body: {
+        recommendation: recommendationText,
+        dtpSubmission: request.dtpSubmission,
+        recommendationSubmission: request.recommendationSubmission,
+      },
+    }
+  );
+
   return { success: true };
 }
 

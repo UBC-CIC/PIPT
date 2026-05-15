@@ -263,6 +263,7 @@ def handler(event, context):
         # TODO(refactor): Extract debrief mode handling into a helper function
         logger.info(f"📋 DEBRIEF MODE — generating debrief for session={session_id}")
         from helpers.chat import generate_debrief
+        patient_mode = query_params.get("patient_mode", "interview_practice")
         try:
             llm = get_bedrock_llm(bedrock_llm_id=BEDROCK_LLM_ID, streaming=False)
             debrief_result = generate_debrief(
@@ -272,6 +273,7 @@ def handler(event, context):
                 llm=llm,
                 embeddings_model=embeddings,
                 ddb_table_name=TABLE_NAME,
+                patient_mode=patient_mode,
             )
             return {
                 "statusCode": 200,
