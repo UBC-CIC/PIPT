@@ -218,3 +218,13 @@ export async function reorderDTPs(
   );
   return rows.map(mapBackendToDTPAssignment);
 }
+
+/**
+ * Unassign a DTP from a simulation group by its assignment record ID.
+ */
+export async function unassignDTP(groupDtpId: string): Promise<void> {
+  await apiClient.request(
+    `instructor/simulation_group_dtps?group_dtp_id=${encodeURIComponent(groupDtpId)}`,
+    { method: 'DELETE' }
+  );
+}

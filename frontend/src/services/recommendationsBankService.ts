@@ -206,3 +206,13 @@ export async function reorderRecommendations(
   );
   return rows.map(mapBackendToRecommendationAssignment);
 }
+
+/**
+ * Unassign a Recommendation from a simulation group by its assignment record ID.
+ */
+export async function unassignRecommendation(groupRecommendationId: string): Promise<void> {
+  await apiClient.request(
+    `instructor/simulation_group_recommendations?group_recommendation_id=${encodeURIComponent(groupRecommendationId)}`,
+    { method: 'DELETE' }
+  );
+}

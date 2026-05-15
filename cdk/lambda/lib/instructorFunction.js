@@ -972,10 +972,10 @@ exports.handler = async (event, context) => {
                     SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id,
                       (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
                         WHERE sgd.simulation_group_id = ${simulation_group_id}
-                        AND sgd.persona_id = p.persona_id) AS has_dtps,
+                        AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,
                       (SELECT COUNT(*) > 0 FROM simulation_group_recommendations sgr
                         WHERE sgr.simulation_group_id = ${simulation_group_id}
-                        AND sgr.persona_id = p.persona_id) AS has_recommendations
+                        AND (sgr.persona_id = p.persona_id OR sgr.persona_id IS NULL)) AS has_recommendations
                     FROM "personas" p
                     WHERE p.simulation_group_id = ${simulation_group_id}
                     ORDER BY p.persona_name ASC;

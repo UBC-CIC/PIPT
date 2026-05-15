@@ -265,10 +265,10 @@ exports.handler = async (event, context) => {
                   sp.is_completed,
                   (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
                     WHERE sgd.simulation_group_id = ${simulationGroupId}
-                    AND sgd.persona_id = p.persona_id) AS has_dtps,
+                    AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,
                   (SELECT COUNT(*) > 0 FROM simulation_group_recommendations sgr
                     WHERE sgr.simulation_group_id = ${simulationGroupId}
-                    AND sgr.persona_id = p.persona_id) AS has_recommendations
+                    AND (sgr.persona_id = p.persona_id OR sgr.persona_id IS NULL)) AS has_recommendations
                 FROM
                   "personas" p
                 LEFT JOIN
@@ -1533,11 +1533,13 @@ exports.handler = async (event, context) => {
             // Step 0: Determine patient mode by checking DTP/Recommendation assignments
             const [dtpCount] = await sqlConnection`
               SELECT COUNT(*)::int AS count FROM simulation_group_dtps
-              WHERE simulation_group_id = ${simulationGroupId} AND persona_id = ${patientId};
+              WHERE simulation_group_id = ${simulationGroupId}
+                AND (persona_id = ${patientId} OR persona_id IS NULL);
             `;
             const [recCount] = await sqlConnection`
               SELECT COUNT(*)::int AS count FROM simulation_group_recommendations
-              WHERE simulation_group_id = ${simulationGroupId} AND persona_id = ${patientId};
+              WHERE simulation_group_id = ${simulationGroupId}
+                AND (persona_id = ${patientId} OR persona_id IS NULL);
             `;
             const patientMode = (dtpCount.count === 0 && recCount.count === 0)
               ? 'interview_practice'

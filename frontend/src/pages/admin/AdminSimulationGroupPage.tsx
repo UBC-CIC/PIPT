@@ -37,9 +37,9 @@ import { IssuesFeedbackSection } from '@/components/simulation-group/IssuesFeedb
 import type { IssueReport, DebriefFeedback } from '@/services/adminApiService';
 import { DTPBankSection } from '@/components/simulation-group/DTPBankSection';
 import { RecommendationsBankSection } from '@/components/simulation-group/RecommendationsBankSection';
-import { assignDTPToGroup, assignDTPToPatient, getAssignedDTPs } from '@/services/dtpBankService';
+import { assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP } from '@/services/dtpBankService';
 import type { DTPItem } from '@/services/dtpBankService';
-import { assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations } from '@/services/recommendationsBankService';
+import { assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation } from '@/services/recommendationsBankService';
 import type { RecommendationItem } from '@/services/recommendationsBankService';
 
 import LoadingIndicator from '@/components/LoadingIndicator';
@@ -117,6 +117,12 @@ function AdminSimulationGroupPage() {
 
   // Mapping from question bank ID → group_question_id (assignment record ID) for unassign
   const questionIdToGroupQuestionId = useRef<Map<string, string>>(new Map());
+
+  // Mapping from DTP item ID → group_dtp_id (assignment record ID) for unassign
+  const dtpIdToGroupDtpId = useRef<Map<string, string>>(new Map());
+
+  // Mapping from Recommendation item ID → group_recommendation_id (assignment record ID) for unassign
+  const recIdToGroupRecId = useRef<Map<string, string>>(new Map());
 
   // Issues & Feedback state
   const [issueReports, setIssueReports] = useState<IssueReport[]>([]);
@@ -262,6 +268,32 @@ function AdminSimulationGroupPage() {
           if (rubricQuestions.length > 0 && !selectedQuestionId) setSelectedQuestionId(rubricQuestions[0].id);
         })
         .catch((err: any) => console.error('Failed to load assigned questions:', err));
+    }
+  }, [activeSection, groupId]);
+
+  // ── Load assigned DTPs when DTP bank section becomes active ──
+  useEffect(() => {
+    if (activeSection === 'dtpBank' && groupId) {
+      getAssignedDTPs(groupId, selectedPatientForDTP || undefined).then((assignments) => {
+        setIncludedDTPIds(new Set(assignments.map(a => a.dtpId)));
+        dtpIdToGroupDtpId.current.clear();
+        for (const a of assignments) {
+          dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+        }
+      }).catch(() => setIncludedDTPIds(new Set()));
+    }
+  }, [activeSection, groupId]);
+
+  // ── Load assigned Recommendations when Recommendations bank section becomes active ──
+  useEffect(() => {
+    if (activeSection === 'recommendationsBank' && groupId) {
+      getAssignedRecommendations(groupId, selectedPatientForRecommendations || undefined).then((assignments) => {
+        setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationId)));
+        recIdToGroupRecId.current.clear();
+        for (const a of assignments) {
+          recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+        }
+      }).catch(() => setIncludedRecommendationIds(new Set()));
     }
   }, [activeSection, groupId]);
 
@@ -515,17 +547,31 @@ function AdminSimulationGroupPage() {
     try {
       if (isChecked) {
         newSet.add(dtpItemId);
+        let result;
         if (selectedPatientForDTP) {
-          await assignDTPToPatient(dtpItemId, groupId || '', selectedPatientForDTP);
+          result = await assignDTPToPatient(dtpItemId, groupId || '', selectedPatientForDTP);
         } else {
-          await assignDTPToGroup(dtpItemId, groupId || '');
+          result = await assignDTPToGroup(dtpItemId, groupId || '');
         }
+        if (result?.groupDtpId) {
+          dtpIdToGroupDtpId.current.set(dtpItemId, result.groupDtpId);
+        }
+        showNotification({ message: selectedPatientForDTP ? 'DTP assigned to patient.' : 'DTP assigned to all patients.', type: 'success' });
       } else {
         newSet.delete(dtpItemId);
-        // In mock mode, we just remove from the set — real API would call unassign
+        const groupDtpId = dtpIdToGroupDtpId.current.get(dtpItemId);
+        if (groupDtpId) {
+          await unassignDTP(groupDtpId);
+          dtpIdToGroupDtpId.current.delete(dtpItemId);
+        }
+        showNotification({ message: selectedPatientForDTP ? 'DTP unassigned from patient.' : 'DTP unassigned from all patients.', type: 'success' });
       }
       setIncludedDTPIds(newSet);
-    } catch (err) { console.error('Failed to update DTP assignment:', err); }
+      groupData.reloadPatients();
+    } catch (err) {
+      console.error('Failed to update DTP assignment:', err);
+      showNotification({ message: 'Failed to update DTP assignment.', type: 'error' });
+    }
   };
 
   const handleDTPPatientSelect = (patientId: string | null) => {
@@ -534,6 +580,11 @@ function AdminSimulationGroupPage() {
     if (!groupId) return;
     getAssignedDTPs(groupId, patientId || undefined).then((assignments) => {
       setIncludedDTPIds(new Set(assignments.map(a => a.dtpId)));
+      // Populate the ID mapping for unassign
+      dtpIdToGroupDtpId.current.clear();
+      for (const a of assignments) {
+        dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+      }
     }).catch(() => setIncludedDTPIds(new Set()));
   };
 
@@ -543,17 +594,31 @@ function AdminSimulationGroupPage() {
     try {
       if (isChecked) {
         newSet.add(itemId);
+        let result;
         if (selectedPatientForRecommendations) {
-          await assignRecommendationToPatient(itemId, groupId || '', selectedPatientForRecommendations);
+          result = await assignRecommendationToPatient(itemId, groupId || '', selectedPatientForRecommendations);
         } else {
-          await assignRecommendationToGroup(itemId, groupId || '');
+          result = await assignRecommendationToGroup(itemId, groupId || '');
         }
+        if (result?.groupRecommendationId) {
+          recIdToGroupRecId.current.set(itemId, result.groupRecommendationId);
+        }
+        showNotification({ message: selectedPatientForRecommendations ? 'Recommendation assigned to patient.' : 'Recommendation assigned to all patients.', type: 'success' });
       } else {
         newSet.delete(itemId);
-        // In mock mode, we just remove from the set — real API would call unassign
+        const groupRecId = recIdToGroupRecId.current.get(itemId);
+        if (groupRecId) {
+          await unassignRecommendation(groupRecId);
+          recIdToGroupRecId.current.delete(itemId);
+        }
+        showNotification({ message: selectedPatientForRecommendations ? 'Recommendation unassigned from patient.' : 'Recommendation unassigned from all patients.', type: 'success' });
       }
       setIncludedRecommendationIds(newSet);
-    } catch (err) { console.error('Failed to update Recommendation assignment:', err); }
+      groupData.reloadPatients();
+    } catch (err) {
+      console.error('Failed to update Recommendation assignment:', err);
+      showNotification({ message: 'Failed to update Recommendation assignment.', type: 'error' });
+    }
   };
 
   const handleRecommendationsPatientSelect = (patientId: string | null) => {
@@ -562,6 +627,11 @@ function AdminSimulationGroupPage() {
     if (!groupId) return;
     getAssignedRecommendations(groupId, patientId || undefined).then((assignments) => {
       setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationId)));
+      // Populate the ID mapping for unassign
+      recIdToGroupRecId.current.clear();
+      for (const a of assignments) {
+        recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+      }
     }).catch(() => setIncludedRecommendationIds(new Set()));
   };
 
