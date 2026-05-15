@@ -917,6 +917,60 @@ def fetch_recommendation(session_id: str) -> str:
         return ""
 
 
+def fetch_student_submissions(session_id: str) -> dict:
+    """
+    Fetch DTP and recommendation submissions from the chats table.
+
+    Returns:
+        {
+            'dtp_entries': list[str],
+            'rec_entries': list[dict]  — each dict has 'recommendation' and 'rationale' keys
+        }
+
+    Returns empty lists if no submissions exist (e.g., interview_practice mode).
+    """
+    try:
+        conn = _get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT dtp_submission, recommendation_submission FROM "chats" WHERE chat_id = %s',
+            (session_id,)
+        )
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if not result:
+            logger.warning(f"No chat found for session_id={session_id} when fetching submissions")
+            return {"dtp_entries": [], "rec_entries": []}
+
+        dtp_raw = result[0]
+        rec_raw = result[1]
+
+        # Parse JSONB — psycopg2 auto-deserializes jsonb to Python objects,
+        # but handle string case defensively
+        if isinstance(dtp_raw, str):
+            dtp_entries = json.loads(dtp_raw)
+        elif isinstance(dtp_raw, list):
+            dtp_entries = dtp_raw
+        else:
+            dtp_entries = []
+
+        if isinstance(rec_raw, str):
+            rec_entries = json.loads(rec_raw)
+        elif isinstance(rec_raw, list):
+            rec_entries = rec_raw
+        else:
+            rec_entries = []
+
+        logger.info(f"Fetched submissions for session={session_id}: {len(dtp_entries)} DTPs, {len(rec_entries)} recommendations")
+        return {"dtp_entries": dtp_entries, "rec_entries": rec_entries}
+
+    except Exception as e:
+        logger.error(f"Error fetching student submissions for session={session_id}: {e}")
+        return {"dtp_entries": [], "rec_entries": []}
+
+
 def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]:
     """Fetch key questions assigned to this persona/group from simulation_group_questions + question_bank."""
     try:
@@ -1361,6 +1415,200 @@ def get_cached_instructor_recs(
     except Exception as e:
         logger.warning(f"Failed to read cached instructor recommendations from DynamoDB: {e}")
         return None
+
+
+# =============================================================================
+# DTP / RECOMMENDATION SUBMISSION MATCHING
+# =============================================================================
+
+# Similarity threshold for considering a student submission as matching an
+# instructor-defined item. Pairs below this score are not considered matches.
+SUBMISSION_MATCH_THRESHOLD = 0.70
+
+
+def batch_embed_texts(texts: list[str], embeddings_model) -> list[list[float]]:
+    """
+    Batch-embed a list of texts in one Cohere Embed v4 API call.
+
+    Uses embed_documents() (input_type="search_document") to stay in the same
+    embedding space as the pre-cached instructor embeddings.
+
+    Args:
+        texts: List of strings to embed.
+        embeddings_model: CohereBedrockEmbeddings instance.
+
+    Returns:
+        List of embedding vectors (one per input text).
+
+    Raises:
+        ValueError: If the embedding call returns no results.
+    """
+    if not texts:
+        return []
+    return embeddings_model.embed_documents(texts)
+
+
+def greedy_match_assignment(
+    similarity_pairs: list[tuple[int, int, float]],
+    num_students: int,
+    num_instructors: int,
+    threshold: float = SUBMISSION_MATCH_THRESHOLD,
+) -> tuple[list[tuple[int, int, float]], set[int], set[int]]:
+    """
+    Greedy one-to-one assignment based on similarity scores.
+
+    Algorithm:
+        1. Sort all (student_idx, instructor_idx, score) pairs descending by score
+        2. For each pair, if score >= threshold and neither side is already assigned,
+           mark as matched
+        3. Return matched pairs, unassigned instructor indices (missed),
+           and unassigned student indices (additional)
+
+    Args:
+        similarity_pairs: List of (student_idx, instructor_idx, score) tuples.
+        num_students: Total number of student submissions.
+        num_instructors: Total number of instructor items.
+        threshold: Minimum similarity score to consider a match.
+
+    Returns:
+        Tuple of (matched_pairs, missed_instructor_indices, additional_student_indices)
+    """
+    # Sort by score descending — highest confidence matches first
+    sorted_pairs = sorted(similarity_pairs, key=lambda x: x[2], reverse=True)
+
+    assigned_students: set[int] = set()
+    assigned_instructors: set[int] = set()
+    matched_pairs: list[tuple[int, int, float]] = []
+
+    for student_idx, instructor_idx, score in sorted_pairs:
+        if score < threshold:
+            break  # All remaining pairs are below threshold (sorted desc)
+        if student_idx in assigned_students:
+            continue
+        if instructor_idx in assigned_instructors:
+            continue
+        matched_pairs.append((student_idx, instructor_idx, score))
+        assigned_students.add(student_idx)
+        assigned_instructors.add(instructor_idx)
+
+    missed_instructors = set(range(num_instructors)) - assigned_instructors
+    additional_students = set(range(num_students)) - assigned_students
+
+    return matched_pairs, missed_instructors, additional_students
+
+
+def match_submissions(
+    student_texts: list[str],
+    instructor_items: list[dict],
+    embeddings_model,
+    threshold: float = SUBMISSION_MATCH_THRESHOLD,
+    text_key: str = "expected_dtp_text",
+    id_key: str = "dtp_id",
+) -> dict:
+    """
+    Match student submissions against pre-cached instructor items using
+    embedding cosine similarity with greedy one-to-one assignment.
+
+    Flow:
+        1. Batch-embed student texts (one Cohere v4 API call)
+        2. Use pre-cached instructor embeddings (no API call)
+        3. Compute NxM cosine similarity matrix (pure math)
+        4. Greedy assignment with threshold
+        5. Categorize results into matched/missed/additional
+
+    Args:
+        student_texts: List of student-submitted text strings.
+        instructor_items: List of dicts, each with pre-cached 'embedding',
+                          a text field (keyed by text_key), and an ID field (keyed by id_key).
+        embeddings_model: CohereBedrockEmbeddings instance for batch embedding.
+        threshold: Minimum cosine similarity to consider a match.
+        text_key: Key in instructor_items for the expected text (e.g., 'expected_dtp_text'
+                  or 'recommendation_text').
+        id_key: Key in instructor_items for the unique ID (e.g., 'dtp_id'
+                or 'recommendation_id').
+
+    Returns:
+        {
+            "matched": [{ "student_text", "instructor_text", "instructor_id", "score" }],
+            "missed": [{ "instructor_text", "instructor_id" }],
+            "additional": [{ "student_text" }]
+        }
+    """
+    # Handle edge cases
+    if not student_texts and not instructor_items:
+        return {"matched": [], "missed": [], "additional": []}
+    if not student_texts:
+        return {
+            "matched": [],
+            "missed": [{"instructor_text": item[text_key], "instructor_id": item[id_key]} for item in instructor_items],
+            "additional": [],
+        }
+    if not instructor_items:
+        return {
+            "matched": [],
+            "missed": [],
+            "additional": [{"student_text": text} for text in student_texts],
+        }
+
+    # Step 1: Batch-embed student texts (one API call)
+    try:
+        student_embeddings = batch_embed_texts(student_texts, embeddings_model)
+    except Exception as e:
+        logger.error(f"Failed to batch-embed student submissions: {e}")
+        # Fallback: can't match without embeddings — treat all as additional/missed
+        return {
+            "matched": [],
+            "missed": [{"instructor_text": item[text_key], "instructor_id": item[id_key]} for item in instructor_items],
+            "additional": [{"student_text": text} for text in student_texts],
+        }
+
+    # Step 2: Extract pre-cached instructor embeddings
+    instructor_embeddings = [item["embedding"] for item in instructor_items]
+
+    # Step 3: Compute NxM cosine similarity matrix
+    similarity_pairs: list[tuple[int, int, float]] = []
+    for s_idx, s_emb in enumerate(student_embeddings):
+        for i_idx, i_emb in enumerate(instructor_embeddings):
+            score = compute_cosine_similarity(s_emb, i_emb)
+            similarity_pairs.append((s_idx, i_idx, score))
+
+    # Step 4: Greedy assignment
+    matched_pairs, missed_indices, additional_indices = greedy_match_assignment(
+        similarity_pairs=similarity_pairs,
+        num_students=len(student_texts),
+        num_instructors=len(instructor_items),
+        threshold=threshold,
+    )
+
+    # Step 5: Build result dicts
+    matched = []
+    for s_idx, i_idx, score in matched_pairs:
+        matched.append({
+            "student_text": student_texts[s_idx],
+            "instructor_text": instructor_items[i_idx][text_key],
+            "instructor_id": instructor_items[i_idx][id_key],
+            "score": round(score, 4),
+        })
+
+    missed = []
+    for i_idx in sorted(missed_indices):
+        missed.append({
+            "instructor_text": instructor_items[i_idx][text_key],
+            "instructor_id": instructor_items[i_idx][id_key],
+        })
+
+    additional = []
+    for s_idx in sorted(additional_indices):
+        additional.append({
+            "student_text": student_texts[s_idx],
+        })
+
+    logger.info(
+        f"Submission matching complete: {len(matched)} matched, "
+        f"{len(missed)} missed, {len(additional)} additional"
+    )
+
+    return {"matched": matched, "missed": missed, "additional": additional}
 
 
 def compute_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:

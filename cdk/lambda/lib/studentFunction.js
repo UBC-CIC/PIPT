@@ -1528,6 +1528,8 @@ exports.handler = async (event, context) => {
           const patientId = event.queryStringParameters.patient_id;
           const body = event.body ? JSON.parse(event.body) : {};
           const recommendation = body.recommendation || null;
+          const dtpSubmission = body.dtpSubmission || null;
+          const recommendationSubmission = body.recommendationSubmission || null;
 
           try {
             // Step 0: Determine patient mode by checking DTP/Recommendation assignments
@@ -1552,10 +1554,12 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // Step 1: Save recommendation (may be null for interview_practice) and mark the chat as ended
+            // Step 1: Save recommendation + submissions (may be null for interview_practice) and mark the chat as ended
             const updatedChat = await sqlConnection`
               UPDATE "chats"
               SET recommendation = ${recommendation},
+                  dtp_submission = ${dtpSubmission ? JSON.stringify(dtpSubmission.entries || []) : null},
+                  recommendation_submission = ${recommendationSubmission ? JSON.stringify(recommendationSubmission.entries || []) : null},
                   ended_at = CURRENT_TIMESTAMP,
                   status = 'concluded',
                   last_accessed = CURRENT_TIMESTAMP
