@@ -17,6 +17,17 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'May 15, 2026',
+    items: [
+      { feature: 'Interview Practice mode for patients', status: 'working', note: 'patients with no DTPs & Recommendations assigned are automatically marked as "Interview Practice" — no extra setup needed' },
+      { feature: 'Interview Practice badge visible to all roles', status: 'working', note: 'students, instructors, and admins can see which patients are interview-only vs regular (full assessment)' },
+      { feature: 'Conclude interaction is mode-aware', status: 'working', note: 'interview practice patients get a simple confirmation, full assessment patients go through the DTP + Recommendations steps' },
+      { feature: 'Debrief Dialog hides DTP/Rec comparison for interview practice', status: 'working', note: 'interview practice debriefs only show the interview summary and key questions feedback (STILL MOCK DATA)' },
+      { feature: 'DTP & Recommendation assign/unassign fully wired', status: 'working', note: 'toggling assignments on/off now persists to the backend with success/error notifications' },
+      { feature: 'Patient list refreshes after assignment changes', status: 'working', note: 'the Interview Practice badge updates immediately without a page reload' },
+    ],
+  },
+  {
     date: 'May 14, 2026',
     items: [
       { feature: 'Organization create & delete fully functional', status: 'working', note: 'admins can now create and delete organizations end-to-end (no longer mock)' },
