@@ -129,7 +129,7 @@ function AdminQuestionBankPage() {
   };
   
   const handleBackToOrganization = () => {
-    navigate(`/admin/organization/${organizationId}`);
+    navigate(`/admin/organization/${organizationId}/banks`);
   };
   
   const handleGlobalPageChange = (newPage: number) => {
@@ -253,7 +253,7 @@ function AdminQuestionBankPage() {
                 onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
               >
                 <ArrowLeft className="w-4 h-4" />
-                Back to {organization?.name || 'Organization'}
+                Back to Manage Banks
               </button>
             </div>
             

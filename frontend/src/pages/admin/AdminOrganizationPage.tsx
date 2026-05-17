@@ -181,29 +181,11 @@ function AdminOrganizationPage() {
     setGroups(prevGroups => prevGroups.filter(g => g.simulation_group_id !== groupId));
   };
 
-  const handleManageQuestionBank = () => {
+  const handleManageBanks = () => {
     try {
-      console.log('Navigate to question bank management');
-      // Navigate to question bank page for this organization
-      navigate(`/admin/organization/${organizationId}/question-bank`);
+      navigate(`/admin/organization/${organizationId}/banks`);
     } catch (error) {
-      console.error('Error navigating to question bank:', error);
-    }
-  };
-
-  const handleManageDTPBank = () => {
-    try {
-      navigate(`/admin/organization/${organizationId}/dtp-bank`);
-    } catch (error) {
-      console.error('Error navigating to DTP bank:', error);
-    }
-  };
-
-  const handleManageRecommendationsBank = () => {
-    try {
-      navigate(`/admin/organization/${organizationId}/recommendations-bank`);
-    } catch (error) {
-      console.error('Error navigating to recommendations bank:', error);
+      console.error('Error navigating to manage banks:', error);
     }
   };
 
@@ -227,12 +209,8 @@ function AdminOrganizationPage() {
         onSignOut={handleSignOut}
         showStudentViewButton={false}
         onStudentView={() => navigate('/student')}
-        showManageQuestionBankButton={true}
-        onManageQuestionBank={handleManageQuestionBank}
-        showManageDTPBankButton={true}
-        onManageDTPBank={handleManageDTPBank}
-        showManageRecommendationsBankButton={true}
-        onManageRecommendationsBank={handleManageRecommendationsBank}
+        showManageBanksButton={true}
+        onManageBanks={handleManageBanks}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         {/* Back to All Organizations button */}

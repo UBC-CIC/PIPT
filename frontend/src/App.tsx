@@ -16,6 +16,7 @@ import AdminSimulationGroupPage from './pages/admin/AdminSimulationGroupPage';
 import AdminQuestionBankPage from './pages/admin/AdminQuestionBankPage';
 import AdminDTPBankPage from '@/pages/admin/AdminDTPBankPage';
 import AdminRecommendationsBankPage from '@/pages/admin/AdminRecommendationsBankPage';
+import AdminManageBanksPage from '@/pages/admin/AdminManageBanksPage';
 import PatientsPage from './pages/student/PatientsPage';
 import PatientDashboardPage from './pages/student/PatientDashboardPage';
 import StudentChatPage from './pages/student/StudentChatPage';
@@ -117,6 +118,7 @@ function AppRoutes() {
         <Route path="/instructor/group/:groupId" element={<ProtectedRoute><InstructorSimulationGroupPage /></ProtectedRoute>} />
         <Route path="/admin" element={<ProtectedRoute><AdminHomePage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId" element={<ProtectedRoute><AdminOrganizationPage /></ProtectedRoute>} />
+        <Route path="/admin/organization/:organizationId/banks" element={<ProtectedRoute><AdminManageBanksPage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId/question-bank" element={<ProtectedRoute><AdminQuestionBankPage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId/dtp-bank" element={<ProtectedRoute><AdminDTPBankPage /></ProtectedRoute>} />
         <Route path="/admin/organization/:organizationId/recommendations-bank" element={<ProtectedRoute><AdminRecommendationsBankPage /></ProtectedRoute>} />

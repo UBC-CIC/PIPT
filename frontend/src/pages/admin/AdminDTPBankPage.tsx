@@ -233,14 +233,14 @@ function AdminDTPBankPage() {
               {/* Back button */}
               <div className="mb-6">
                 <Link
-                  to={`/admin/organization/${organizationId}`}
+                  to={`/admin/organization/${organizationId}/banks`}
                   className="font-normal text-sm flex items-center gap-1 no-underline transition-colors"
                   style={{ color: UI_COLORS.text.body }}
                   onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
                   onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back to Organization
+                  Back to Manage Banks
                 </Link>
               </div>
 

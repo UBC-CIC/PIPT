@@ -13,12 +13,8 @@ interface DashboardHeaderProps {
   onInstructorView?: () => void;
   showStudentViewButton?: boolean;
   showInstructorViewButton?: boolean;
-  onManageQuestionBank?: () => void;
-  showManageQuestionBankButton?: boolean;
-  onManageDTPBank?: () => void;
-  showManageDTPBankButton?: boolean;
-  onManageRecommendationsBank?: () => void;
-  showManageRecommendationsBankButton?: boolean;
+  onManageBanks?: () => void;
+  showManageBanksButton?: boolean;
   onAdminView?: () => void;
   showAdminViewButton?: boolean;
 }
@@ -33,12 +29,8 @@ function DashboardHeader({
   onInstructorView,
   showStudentViewButton = false,
   showInstructorViewButton = false,
-  onManageQuestionBank,
-  showManageQuestionBankButton = false,
-  onManageDTPBank,
-  showManageDTPBankButton = false,
-  onManageRecommendationsBank,
-  showManageRecommendationsBankButton = false,
+  onManageBanks,
+  showManageBanksButton = false,
   onAdminView,
   showAdminViewButton = false
 }: DashboardHeaderProps) {
@@ -69,40 +61,16 @@ function DashboardHeader({
       </div>
 
       <div className="flex items-center gap-3">
-        {showManageQuestionBankButton && onManageQuestionBank && (
+        {showManageBanksButton && onManageBanks && (
           <Button
             variant="default"
-            onClick={onManageQuestionBank}
+            onClick={onManageBanks}
             className="px-6 transition-colors"
             style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            Manage Question Bank
-          </Button>
-        )}
-        {showManageDTPBankButton && onManageDTPBank && (
-          <Button
-            variant="default"
-            onClick={onManageDTPBank}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-          >
-            DTP Bank
-          </Button>
-        )}
-        {showManageRecommendationsBankButton && onManageRecommendationsBank && (
-          <Button
-            variant="default"
-            onClick={onManageRecommendationsBank}
-            className="px-6 transition-colors"
-            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-          >
-            Recommendations Bank
+            Manage Banks
           </Button>
         )}
         {showStudentViewButton && onStudentView && (
