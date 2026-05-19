@@ -54,10 +54,15 @@ export class CICDStack extends cdk.Stack {
           "lambda:GetFunction",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
+          "lambda:PublishVersion",
+          "lambda:GetAlias",
+          "lambda:UpdateAlias",
         ],
         resources: [
           `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction:*`,
           `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestLambdaDockerFunction`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestLambdaDockerFunction:*`,
         ],
       })
     );
@@ -294,6 +299,34 @@ export class CICDStack extends cdk.Stack {
                       aws lambda update-function-code \
                         --function-name $LAMBDA_FUNCTION_NAME \
                         --image-uri $REPOSITORY_URI:latest
+
+                      echo "Waiting for function update to complete..."
+                      aws lambda wait function-updated --function-name $LAMBDA_FUNCTION_NAME
+
+                      echo "Publishing new version..."
+                      NEW_VERSION=$(aws lambda publish-version \
+                        --function-name $LAMBDA_FUNCTION_NAME \
+                        --query "Version" --output text)
+                      echo "Published version: $NEW_VERSION"
+
+                      # Check if a live alias exists and update it
+                      if aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name live &>/dev/null; then
+                        PREV_VERSION=$(aws lambda get-alias \
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --name live \
+                          --query "FunctionVersion" --output text)
+                        echo "Previous alias version: $PREV_VERSION"
+
+                        echo "Updating live alias to version $NEW_VERSION..."
+                        aws lambda update-alias \
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --name live \
+                          --function-version $NEW_VERSION
+
+                        echo "Rollback command if needed: aws lambda update-alias --function-name $LAMBDA_FUNCTION_NAME --name live --function-version $PREV_VERSION"
+                      else
+                        echo "No live alias found. Skipping alias update."
+                      fi
                     else
                       echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist yet. Skipping update."
                     fi
