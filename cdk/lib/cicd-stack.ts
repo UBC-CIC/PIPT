@@ -52,6 +52,7 @@ export class CICDStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: [
           "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
           "lambda:PublishVersion",
@@ -280,6 +281,11 @@ export class CICDStack extends cdk.Stack {
                       NEW_VERSION=$(aws lambda publish-version \
                         --function-name $LAMBDA_FUNCTION_NAME \
                         --query "Version" --output text)
+
+                      if [ -z "$NEW_VERSION" ]; then
+                        echo "ERROR: Failed to publish version. Skipping alias update."
+                        exit 0
+                      fi
                       echo "Published version: $NEW_VERSION"
 
                       # Check if a live alias exists and update it
@@ -294,7 +300,7 @@ export class CICDStack extends cdk.Stack {
                         aws lambda update-alias \
                           --function-name $LAMBDA_FUNCTION_NAME \
                           --name live \
-                          --function-version $NEW_VERSION
+                          --function-version "$NEW_VERSION"
 
                         echo "Rollback command if needed: aws lambda update-alias --function-name $LAMBDA_FUNCTION_NAME --name live --function-version $PREV_VERSION"
                       else
