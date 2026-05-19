@@ -607,6 +607,23 @@ io.on("connection", (socket) => {
       );
 
       if (!response.ok) {
+        // Try to parse the error body for specific error messages
+        let errorBody = null;
+        try {
+          errorBody = await response.json();
+        } catch (e) {
+          // Body not parseable as JSON
+        }
+
+        if (response.status === 403 && errorBody && errorBody.error === "Message limit reached") {
+          socket.emit("text-stream", {
+            type: "error",
+            content: errorBody.message || "Message limit reached",
+            code: "MESSAGE_LIMIT_REACHED",
+          });
+          return; // Don't throw — we've handled this error specifically
+        }
+
         throw new Error(`HTTP ${response.status}`);
       }
 

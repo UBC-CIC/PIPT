@@ -73,6 +73,9 @@ function StudentChatPage() {
   // Session completed — patient ended the conversation, student must conclude
   const [sessionCompleted, setSessionCompleted] = useState(false);
 
+  // Message limit reached — student has hit the max messages for this conversation
+  const [messageLimitReached, setMessageLimitReached] = useState(false);
+
   // State for content sidebar (physical assessment only)
   const [contentSidebarType, setContentSidebarType] = useState<'physical-assessment' | null>(null);
   const [personaMedia, setPersonaMedia] = useState<PersonaMedia[]>([]);
@@ -968,7 +971,7 @@ function StudentChatPage() {
    * Handle sending a message — uses AppSync streaming for real-time chunks
    */
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || !groupId || !patientId || !sessionId || isAiResponding || sessionCompleted) return;
+    if (!inputMessage.trim() || !groupId || !patientId || !sessionId || isAiResponding || sessionCompleted || messageLimitReached) return;
 
     // Create student message
     const studentMessage: Message = {
@@ -1023,13 +1026,24 @@ function StudentChatPage() {
           },
           onError: (error) => {
             console.error('Streaming error:', error);
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.message_id === aiMessageId
-                  ? { ...m, message_content: m.message_content || 'Sorry, something went wrong. Please try again.' }
-                  : m
-              )
-            );
+            const errorMsg = error.message || '';
+            const isLimitError = errorMsg.toLowerCase().includes('limit') || 
+                                 errorMsg.toLowerCase().includes('maximum') ||
+                                 errorMsg.includes('MESSAGE_LIMIT_REACHED');
+            
+            if (isLimitError) {
+              // Remove the placeholder AI message and show limit notification
+              setMessages((prev) => prev.filter((m) => m.message_id !== aiMessageId));
+              setMessageLimitReached(true);
+            } else {
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.message_id === aiMessageId
+                    ? { ...m, message_content: m.message_content || 'Sorry, something went wrong. Please try again.' }
+                    : m
+                )
+              );
+            }
             setIsAiResponding(false);
             cancelStreamRef.current = null;
           },
@@ -1595,7 +1609,7 @@ function StudentChatPage() {
                   {patient.voice_enabled !== false && (
                   <button
                     onClick={handleStartVoiceMode}
-                    disabled={!sessionId || !patient?.name || patient.name === 'Loading...' || isAiResponding}
+                    disabled={!sessionId || !patient?.name || patient.name === 'Loading...' || isAiResponding || messageLimitReached}
                     className="p-3 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
                     onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
@@ -1607,6 +1621,13 @@ function StudentChatPage() {
                   </button>
                   )}
                   
+                  {messageLimitReached && (
+                    <div className="flex-1 px-4 py-3 text-center text-sm rounded-lg" style={{ color: UI_COLORS.text.muted, backgroundColor: UI_COLORS.background.subtle }}>
+                      You have reached the maximum number of messages for this conversation.
+                    </div>
+                  )}
+
+                  {!messageLimitReached && (
                   <div className="flex-1 relative">
                     <input
                       type="text"
@@ -1614,6 +1635,7 @@ function StudentChatPage() {
                       onChange={(e) => setInputMessage(e.target.value)}
                       onKeyPress={handleKeyPress}
                       placeholder="Type your message..."
+                      disabled={messageLimitReached}
                       className="w-full px-4 py-3 pr-12 rounded-lg focus:outline-none focus:ring-2"
                       style={{ 
                         borderWidth: '1px', 
@@ -1629,11 +1651,12 @@ function StudentChatPage() {
                       onMouseEnter={(e) => !inputMessage.trim() ? null : e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
                       aria-label="Send message"
-                      disabled={!inputMessage.trim() || isAiResponding || !sessionId}
+                      disabled={!inputMessage.trim() || isAiResponding || !sessionId || messageLimitReached}
                     >
                       <Send className="w-4 h-4" />
                     </button>
                   </div>
+                  )}
                 </div>
               )}
             </div>

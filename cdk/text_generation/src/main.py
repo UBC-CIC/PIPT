@@ -598,8 +598,48 @@ def handler(event, context):
         is_initial_prompt = False
         
     logger.info(f"🔍 FINAL STUDENT QUERY: '{student_query}'")
-    
 
+    # ── Message Limit Check ──────────────────────────────────────────────
+    if not is_initial_prompt:
+        try:
+            conn = connect_to_db()
+            cur = conn.cursor()
+            cur.execute("""
+                SELECT max_messages_per_chat FROM "simulation_groups"
+                WHERE simulation_group_id = %s
+            """, (simulation_group_id,))
+            group_result = cur.fetchone()
+            max_messages = group_result[0] if group_result else None
+
+            if max_messages is not None:
+                cur.execute("""
+                    SELECT COUNT(*)::int AS count FROM "messages"
+                    WHERE chat_id = %s AND sender_type = 'student'
+                """, (session_id,))
+                count_result = cur.fetchone()
+                message_count = count_result[0] if count_result else 0
+
+                if message_count >= max_messages:
+                    logger.info(f"Message limit reached: {message_count}/{max_messages} for session {session_id}")
+                    cur.close()
+                    return {
+                        'statusCode': 403,
+                        "headers": {
+                            "Content-Type": "application/json",
+                            "Access-Control-Allow-Headers": "*",
+                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Methods": "*",
+                        },
+                        'body': json.dumps({
+                            "error": "Message limit reached",
+                            "message": f"You have reached the maximum of {max_messages} messages for this conversation.",
+                            "max_messages": max_messages,
+                        })
+                    }
+            cur.close()
+        except Exception as e:
+            logger.warning(f"Error checking message limit (failing open): {e}")
+            # Fail open — allow the message through if limit check fails
 
     # Check if streaming is requested
     query_params = event.get("queryStringParameters", {})
