@@ -180,9 +180,16 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                     Interview Summary
                   </h3>
                 </div>
-                <p className="text-sm leading-relaxed pl-7" style={{ color: UI_COLORS.text.body }}>
-                  {updatedDebriefData.chunk1.summary}
-                </p>
+                {updatedDebriefData.chunk1.summary ? (
+                  <p className="text-sm leading-relaxed pl-7" style={{ color: UI_COLORS.text.body }}>
+                    {updatedDebriefData.chunk1.summary}
+                  </p>
+                ) : (
+                  <p className="text-sm leading-relaxed pl-7 flex items-center gap-2" style={{ color: UI_COLORS.text.muted }}>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating interview summary...
+                  </p>
+                )}
               </div>
 
               {/* Key Questions Addressed */}
