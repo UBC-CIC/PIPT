@@ -249,7 +249,25 @@ export class CICDStack extends cdk.Stack {
                   "docker push $REPOSITORY_URI:$IMAGE_TAG",
                   "docker push $REPOSITORY_URI:latest",
                   'echo "Waiting for vulnerability scan to complete..."',
-                  "sleep 30",
+                  `bash -c '
+                    SCAN_COMPLETE=false
+                    for i in $(seq 1 20); do
+                      STATUS=$(aws ecr describe-image-scan-findings \
+                        --repository-name $REPO_NAME \
+                        --image-id imageTag=latest \
+                        --query "imageScanStatus.status" \
+                        --output text 2>/dev/null || echo "IN_PROGRESS")
+                      if [ "$STATUS" = "COMPLETE" ] || [ "$STATUS" = "ACTIVE" ]; then
+                        SCAN_COMPLETE=true
+                        break
+                      fi
+                      echo "Scan status: $STATUS. Waiting 15s... (attempt $i/20)"
+                      sleep 15
+                    done
+                    if [ "$SCAN_COMPLETE" = false ]; then
+                      echo "WARNING: Vulnerability scan did not complete within 5 minutes. Proceeding with caution."
+                    fi
+                  '`,
                   'echo "Checking vulnerability scan results..."',
                   `bash -c '
                     SCAN_RESULTS=$(aws ecr describe-image-scan-findings \
