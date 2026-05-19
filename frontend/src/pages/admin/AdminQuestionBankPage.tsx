@@ -56,7 +56,7 @@ function AdminQuestionBankPage() {
   const [patientSpecificBankQuestions, setPatientSpecificBankQuestions] = useState<QuestionBankItem[]>([]);
   
   // Organization details
-  const [organization, setOrganization] = useState<any>(null);
+  const [, setOrganization] = useState<any>(null);
   
   // User data (will come from auth later)
   const user = { name: 'Admin', avatarUrl: undefined };
