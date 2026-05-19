@@ -76,6 +76,7 @@ export const UI_COLORS = {
     tableHeader: '#F9FAFB', // gray-50
     hover: '#F9FAFB', // gray-50
     hoverLight: '#F3F4F6', // gray-100
+    subtle: '#F9FAFB', // gray-50
     overlay: 'rgba(0, 0, 0, 0.5)', // black/50
     transparent: 'transparent',
   },
