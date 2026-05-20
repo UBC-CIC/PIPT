@@ -147,7 +147,7 @@ Add the following environment variables:
 | `SM_DB_CREDENTIALS` | The Secrets Manager secret name for the RDS user credentials | Go to **Secrets Manager** in the console and find the secret created by the Database stack for the `readwrite` user. Copy the **secret name** (not the ARN). |
 | `RDS_PROXY_ENDPOINT` | The RDS Proxy endpoint for the user proxy | Found in the Database stack CloudFormation outputs, or in the **RDS** console under **Proxies**. It will look something like `{StackPrefix}-database-userproxy-....rds.amazonaws.com`. |
 
-These match the environment variables that the CDK-based `VoiceAgentStack` would pass (see `cdk/lib/voice-agent-stack.ts`). Without them, the voice agent will fail to connect to the database or reach Nova Sonic in the correct region.
+These match the environment variables that were previously defined in the now-removed `VoiceAgentStack`. Without them, the voice agent will fail to connect to the database or reach Nova Sonic in the correct region.
 
 ### 4.9 Host the Agent
 

@@ -52,12 +52,18 @@ export class CICDStack extends cdk.Stack {
         effect: iam.Effect.ALLOW,
         actions: [
           "lambda:GetFunction",
+          "lambda:GetFunctionConfiguration",
           "lambda:UpdateFunctionCode",
           "lambda:UpdateFunctionConfiguration",
+          "lambda:PublishVersion",
+          "lambda:GetAlias",
+          "lambda:UpdateAlias",
         ],
         resources: [
           `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:*-TextGenLambdaDockerFunction:*`,
           `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestLambdaDockerFunction`,
+          `arn:aws:lambda:${this.region}:${this.account}:function:*-DataIngestLambdaDockerFunction:*`,
         ],
       })
     );
@@ -178,6 +184,7 @@ export class CICDStack extends cdk.Stack {
         {
           projectName: `${id}-${lambdaConfig.name}Builder`,
           role: codeBuildRole,
+          cache: codebuild.Cache.local(codebuild.LocalCacheMode.DOCKER_LAYER),
           environment: {
             buildImage: lambdaConfig.name === "voiceAgent" 
                 ? codebuild.LinuxArmBuildImage.AMAZON_LINUX_2023_STANDARD_3_0
@@ -203,38 +210,11 @@ export class CICDStack extends cdk.Stack {
                 commands: [
                   "echo Logging in to Amazon ECR...",
                   "aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com",
-                  'echo "#!/bin/bash" > check_and_build.sh',
-                  'echo "set -e" >> check_and_build.sh',
-                  'echo "# Source is provided by CodePipeline via CodeStar Connection" >> check_and_build.sh',
-                  'echo "cd $CODEBUILD_SRC_DIR" >> check_and_build.sh',
-                  'echo "# Check if image exists in ECR" >> check_and_build.sh',
-                  'echo "if ! aws ecr describe-images --repository-name $REPO_NAME --image-ids imageTag=latest &>/dev/null; then" >> check_and_build.sh',
-                  'echo "  echo \\\"First deployment or image doesn\'t exist - building without path check\\\"" >> check_and_build.sh',
-                  'echo "  exit 0" >> check_and_build.sh',
-                  'echo "fi" >> check_and_build.sh',
-                  'echo "# Initialize git if needed (CodePipeline source may not have .git)" >> check_and_build.sh',
-                  'echo "if [ ! -d .git ]; then" >> check_and_build.sh',
-                  'echo "  echo \\\"No git history available - building to be safe\\\"" >> check_and_build.sh',
-                  'echo "  exit 0" >> check_and_build.sh',
-                  'echo "fi" >> check_and_build.sh',
-                  'echo "PREV_COMMIT=\\$(git rev-parse HEAD~1 || echo \\\"\\\")" >> check_and_build.sh',
-                  'echo "if [ -z \\\"\\$PREV_COMMIT\\\" ]; then" >> check_and_build.sh',
-                  'echo "  echo \\\"First commit - building\\\"" >> check_and_build.sh',
-                  'echo "  exit 0" >> check_and_build.sh',
-                  'echo "fi" >> check_and_build.sh',
-                  'echo "CHANGED_FILES=\\$(git diff --name-only \\$PREV_COMMIT HEAD)" >> check_and_build.sh',
-                  'echo "echo \\\"Changed files:\\\"" >> check_and_build.sh',
-                  'echo "echo \\\"\\$CHANGED_FILES\\\"" >> check_and_build.sh',
-                  'echo "if ! echo \\\"\\$CHANGED_FILES\\\" | grep -q \\\"^$PATH_FILTER/\\\"; then" >> check_and_build.sh',
-                  'echo "  echo \\\"No changes in $PATH_FILTER — skipping build.\\\"" >> check_and_build.sh',
-                  'echo "  exit 1" >> check_and_build.sh',
-                  'echo "fi" >> check_and_build.sh',
-                  'echo "exit 0" >> check_and_build.sh',
-                  "chmod +x check_and_build.sh",
                   "COMMIT_HASH=$(echo $CODEBUILD_RESOLVED_SOURCE_VERSION | cut -c 1-7)",
                   "IMAGE_TAG=${MODULE_NAME}-${ENVIRONMENT}-${COMMIT_HASH}",
                   "export DOCKER_HOST=unix:///var/run/docker.sock",
-                  './check_and_build.sh || { echo "Skipping build due to no changes"; exit 1; }',
+                  "chmod +x $CODEBUILD_SRC_DIR/cdk/scripts/check_and_build.sh",
+                  '$CODEBUILD_SRC_DIR/cdk/scripts/check_and_build.sh || { echo "Skipping build due to no changes"; exit 1; }',
                 ],
               },
               build: {
@@ -245,26 +225,47 @@ export class CICDStack extends cdk.Stack {
               },
               post_build: {
                 commands: [
-                  "docker tag $REPOSITORY_URI:$IMAGE_TAG $REPOSITORY_URI:latest",
+                  'echo "Pushing image with commit tag for scanning..."',
                   "docker push $REPOSITORY_URI:$IMAGE_TAG",
-                  "docker push $REPOSITORY_URI:latest",
                   'echo "Waiting for vulnerability scan to complete..."',
-                  "sleep 30",
+                  `bash -c '
+                    SCAN_COMPLETE=false
+                    for i in $(seq 1 20); do
+                      STATUS=$(aws ecr describe-image-scan-findings \
+                        --repository-name $REPO_NAME \
+                        --image-id imageTag=$IMAGE_TAG \
+                        --query "imageScanStatus.status" \
+                        --output text 2>/dev/null || echo "IN_PROGRESS")
+                      if [ "$STATUS" = "COMPLETE" ] || [ "$STATUS" = "ACTIVE" ]; then
+                        SCAN_COMPLETE=true
+                        break
+                      fi
+                      echo "Scan status: $STATUS. Waiting 15s... (attempt $i/20)"
+                      sleep 15
+                    done
+                    if [ "$SCAN_COMPLETE" = false ]; then
+                      echo "WARNING: Vulnerability scan did not complete within 5 minutes. Proceeding with caution."
+                    fi
+                  '`,
                   'echo "Checking vulnerability scan results..."',
                   `bash -c '
                     SCAN_RESULTS=$(aws ecr describe-image-scan-findings \
                       --repository-name $REPO_NAME \
-                      --image-id imageTag=latest \
+                      --image-id imageTag=$IMAGE_TAG \
                       --query "imageScanFindingsSummary.findingCounts.CRITICAL" \
                       --output text 2>/dev/null || echo "0")
                     
                     if [[ "$SCAN_RESULTS" != "0" && "$SCAN_RESULTS" != "None" ]]; then
                       echo "CRITICAL vulnerabilities found: $SCAN_RESULTS. Blocking deployment."
+                      echo "Image $REPOSITORY_URI:$IMAGE_TAG will NOT be promoted to latest."
                       exit 1
                     else
-                      echo "No critical vulnerabilities found. Proceeding with deployment."
+                      echo "No critical vulnerabilities found. Promoting to latest."
                     fi
                   '`,
+                  'echo "Scan passed. Tagging and pushing as latest..."',
+                  "docker tag $REPOSITORY_URI:$IMAGE_TAG $REPOSITORY_URI:latest",
+                  "docker push $REPOSITORY_URI:latest",
                   'echo "Checking if Lambda function exists before updating..."',
                   `bash -c '
                     if aws lambda get-function --function-name $LAMBDA_FUNCTION_NAME &>/dev/null; then
@@ -272,6 +273,39 @@ export class CICDStack extends cdk.Stack {
                       aws lambda update-function-code \
                         --function-name $LAMBDA_FUNCTION_NAME \
                         --image-uri $REPOSITORY_URI:latest
+
+                      echo "Waiting for function update to complete..."
+                      aws lambda wait function-updated --function-name $LAMBDA_FUNCTION_NAME
+
+                      echo "Publishing new version..."
+                      NEW_VERSION=$(aws lambda publish-version \
+                        --function-name $LAMBDA_FUNCTION_NAME \
+                        --query "Version" --output text)
+
+                      if [ -z "$NEW_VERSION" ]; then
+                        echo "ERROR: Failed to publish version. Skipping alias update."
+                        exit 0
+                      fi
+                      echo "Published version: $NEW_VERSION"
+
+                      # Check if a live alias exists and update it
+                      if aws lambda get-alias --function-name $LAMBDA_FUNCTION_NAME --name live &>/dev/null; then
+                        PREV_VERSION=$(aws lambda get-alias \
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --name live \
+                          --query "FunctionVersion" --output text)
+                        echo "Previous alias version: $PREV_VERSION"
+
+                        echo "Updating live alias to version $NEW_VERSION..."
+                        aws lambda update-alias \
+                          --function-name $LAMBDA_FUNCTION_NAME \
+                          --name live \
+                          --function-version "$NEW_VERSION"
+
+                        echo "Rollback command if needed: aws lambda update-alias --function-name $LAMBDA_FUNCTION_NAME --name live --function-version $PREV_VERSION"
+                      else
+                        echo "No live alias found. Skipping alias update."
+                      fi
                     else
                       echo "Lambda function $LAMBDA_FUNCTION_NAME does not exist yet. Skipping update."
                     fi

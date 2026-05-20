@@ -68,7 +68,7 @@ VpcStack (VPC, subnets, NAT, endpoints, flow logs)
     │       │
     │       └── TurnServerStack (STUN/TURN config — placeholder)
     │
-    └── VoiceAgentStack (ECS Fargate, Cloud Map — not wired in main app)
+    └── ~~VoiceAgentStack~~ (removed — voice agent now hosted on Bedrock AgentCore)
 ```
 
 ### Technology Choices
@@ -356,9 +356,9 @@ A Node.js Socket.io server that handles real-time WebSocket connections for chat
 
 ### 5.2 Voice Agent (`voice-agent/`)
 
-A Python agent using Bedrock AgentCore for voice interactions via Nova Sonic. Deployed on ECS Fargate with Cloud Map service discovery.
+A Python agent using Bedrock AgentCore for voice interactions via Nova Sonic. The Docker image is built and pushed to ECR by the CI/CD pipeline; AgentCore pulls it from there.
 
-**Assessment:** The VoiceAgentStack is well-structured with proper internal-only access (no public exposure). However, it's not wired into the main `bin/cdk.ts` — it appears to be deployed separately or is still in development.
+**Assessment:** The `VoiceAgentStack` (ECS Fargate + Cloud Map) has been removed — it was dead code. The voice agent is now deployed and managed entirely via Bedrock AgentCore.
 
 ### 5.3 Docker Build Configuration
 

@@ -25,12 +25,9 @@ ENV AWS_DEFAULT_REGION=us-east-1
 # Listen on HTTP port
 EXPOSE 80
 
-# Add container health check
+# Add container health check (uses Node.js already in the image — no extra dependencies)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --no-check-certificate -qO- http://localhost:80/health || exit 1
-
-# Install wget for healthcheck
-RUN apk add --no-cache wget
+  CMD node -e "require('http').get('http://localhost:80/health', r => { if (r.statusCode === 200) process.exit(0); else process.exit(1); }).on('error', () => process.exit(1));"
 
 # Launch your HTTP + WebSocket server
 CMD ["node", "server.js"]

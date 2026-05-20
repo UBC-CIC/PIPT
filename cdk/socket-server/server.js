@@ -634,7 +634,7 @@ io.on("connection", (socket) => {
       console.error("Text generation error:", error);
       socket.emit("text-stream", {
         type: "error",
-        content: "Failed to generate response",
+        content: error.message || "Failed to generate response",
       });
     } finally {
       textStreamSockets.delete(sessionId);

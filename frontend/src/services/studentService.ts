@@ -100,6 +100,7 @@ export interface PatientDetail {
   primaryComplaint?: string;
   avatarUrl?: string;
   mode?: 'interview_practice' | 'full_assessment';
+  max_messages_per_chat?: number | null;
 }
 
 /**
@@ -223,6 +224,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       persona_gender: string;
       voice_enabled?: boolean;
       mode?: 'interview_practice' | 'full_assessment';
+      max_messages_per_chat?: number | null;
     }>>(
       `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
@@ -238,6 +240,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
         imageUrl: profilePictureUrl,
         avatarUrl: profilePictureUrl,
         mode: persona.mode || 'full_assessment',
+        max_messages_per_chat: persona.max_messages_per_chat ?? null,
       };
     }
   } catch (error) {

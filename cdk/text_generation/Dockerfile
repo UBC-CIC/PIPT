@@ -11,6 +11,8 @@ RUN pip install -r requirements.txt --no-cache-dir --target /install
 # Stage 2: Runtime — slim image
 FROM public.ecr.aws/lambda/python:3.12
 
+ENV PYTHONUNBUFFERED=1
+
 # Install only runtime shared libraries
 RUN dnf -y install libpq && dnf clean all
 
