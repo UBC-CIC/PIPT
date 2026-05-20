@@ -233,11 +233,16 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                   <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
                     No key questions were missed.
                   </p>
+                ) : updatedDebriefData.chunk2 === null ? (
+                  <p className="text-sm pl-7 flex items-center gap-2" style={{ color: UI_COLORS.text.muted }}>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating reflection questions...
+                  </p>
                 ) : null}
               </div>
 
               {/* Suggested Question Rewrites */}
-              {updatedDebriefData.chunk1.suggestedRewrites.length > 0 && (
+              {updatedDebriefData.chunk1.suggestedRewrites.length > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
@@ -261,7 +266,20 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                     ))}
                   </div>
                 </div>
-              )}
+              ) : updatedDebriefData.chunk2 === null ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
+                    <h3 className="text-lg font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                      Suggested Question Rewrites
+                    </h3>
+                  </div>
+                  <p className="text-sm pl-7 flex items-center gap-2" style={{ color: UI_COLORS.text.muted }}>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating suggested rewrites...
+                  </p>
+                </div>
+              ) : null}
 
               {/* ─── Chunk 2: DTP Comparison & Recommendations Feedback ─── */}
               {updatedDebriefData.chunk2 === null && patientMode === 'full_assessment' ? (
