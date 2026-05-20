@@ -263,6 +263,7 @@ exports.handler = async (event, context) => {
                   sp.last_accessed,
                   sp.persona_context_embedding,
                   sp.is_completed,
+                  (SELECT max_messages_per_chat FROM "simulation_groups" WHERE simulation_group_id = ${simulationGroupId}) AS max_messages_per_chat,
                   (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
                     WHERE sgd.simulation_group_id = ${simulationGroupId}
                     AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,

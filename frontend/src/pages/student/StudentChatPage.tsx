@@ -402,6 +402,21 @@ function StudentChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatId = `chat-${groupId}-${patientId}`; // Mock chat ID
 
+  // Check message limit whenever messages change
+  useEffect(() => {
+    const maxMessages = patient?.max_messages_per_chat;
+    if (maxMessages == null || messageLimitReached) return;
+
+    const studentMessageCount = messages.filter(m => m.sender_type === 'student').length;
+    if (studentMessageCount >= maxMessages) {
+      setMessageLimitReached(true);
+      // If in voice mode, stop the session
+      if (voiceSessionState === 'active' || voiceSessionState === 'connecting') {
+        socketRef.current?.emit('stop-nova-sonic');
+      }
+    }
+  }, [messages, patient?.max_messages_per_chat, messageLimitReached, voiceSessionState]);
+
   // Guard to prevent duplicate session creation (React StrictMode double-mount)
   const sessionCreationRef = useRef(false);
   // Ref to track if AI greeting has been triggered
@@ -1029,7 +1044,8 @@ function StudentChatPage() {
             const errorMsg = error.message || '';
             const isLimitError = errorMsg.toLowerCase().includes('limit') || 
                                  errorMsg.toLowerCase().includes('maximum') ||
-                                 errorMsg.includes('MESSAGE_LIMIT_REACHED');
+                                 errorMsg.includes('MESSAGE_LIMIT_REACHED') ||
+                                 errorMsg.includes('403');
             
             if (isLimitError) {
               // Remove the placeholder AI message and show limit notification
