@@ -21,7 +21,7 @@
 
 ## 1. Overview
 
-The GenRx voice feature uses **Amazon Bedrock AgentCore** to host the voice agent container. Unlike the text-based chat (which runs entirely on Lambda + AppSync), the voice pipeline requires a long-lived bidirectional WebSocket connection to Nova Sonic 2.0. AgentCore provides the managed runtime for this: it hosts the container, handles health checks, and exposes a SigV4-authenticated WebSocket endpoint that the socket server connects to.
+The GenRx voice feature uses **Amazon Bedrock AgentCore** to host the voice agent container. Both text and voice chat flow through the ECS Socket.IO server — this unified WebSocket approach replaced the earlier Lambda + AppSync design for text chat, giving both modalities consistent low-latency streaming and a single connection point for the frontend. Voice additionally requires a connection from the socket server to the AgentCore runtime for bidirectional audio streaming with Nova Sonic 2.0. AgentCore provides the managed runtime for this: it hosts the container, handles health checks, and exposes a SigV4-authenticated WebSocket endpoint that the socket server connects to.
 
 The voice agent container itself is built and pushed to ECR by the CI/CD pipeline (`cdk/voice-agent/`), but the **AgentCore runtime** that hosts it must be created and configured in the AWS Console. The CDK deployment then references the AgentCore runtime ARN so the socket server knows where to route voice traffic.
 

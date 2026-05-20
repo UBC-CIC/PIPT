@@ -11,13 +11,15 @@ This guide walks you through deploying GenRx from scratch, including prerequisit
 - **AWS Account** with administrative access
 - **AWS CLI v2** installed and configured (`aws configure`)
 - **Node.js 22+** and npm
-- **Docker** installed and running (required for building Lambda container images)
 - **AWS CDK CLI** installed globally: `npm install -g aws-cdk`
 - **Git** installed
 - **GitHub account** with a fork of the GenRx repository
 
+> **Note:** Docker is **not** required locally. All Docker images are built in the cloud by CodePipeline/CodeBuild. Python is also not required locally — the Python Lambda functions and voice agent run in containers built remotely.
+
 ### Optional
 
+- **Docker** — Only needed if you want to manually build and push container images locally (not required for normal deployment).
 - **Custom domain** — If you want to use a custom domain for the Amplify-hosted frontend, configure it in the AWS Amplify console after deployment.
 - **Amazon SES** — For production email sending (verification emails). By default, Cognito uses its built-in email service (limited to 50 emails/day).
 
@@ -36,18 +38,17 @@ The CI/CD pipeline and Amplify app use a GitHub PAT to pull source code.
 
 ### 2.2 Enable Bedrock Models
 
-GenRx uses several Amazon Bedrock models. You must request access before deployment:
+GenRx uses several Amazon Bedrock models. You must request access before deployment.
 
 1. Open the [Amazon Bedrock console](https://console.aws.amazon.com/bedrock/)
 2. Navigate to **Model access** in the left sidebar
-3. Request access to the following models:
-   - **Meta Llama 3 70B Instruct** (`meta.llama3-70b-instruct-v1:0`) — primary LLM for text generation
-   - **Amazon Titan Text Embeddings V2** (`amazon.titan-embed-text-v2:0`) — document embeddings
-   - **Amazon Nova Sonic** (`amazon.nova-sonic-v1:0`) — voice interactions (us-east-1 only)
-   - **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) — voice preview (us-east-1 only)
-   - **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) — lightweight inference tasks
+3. Request access to the following models **in `us-east-1`**:
+   - **Anthropic Claude Sonnet 4.6** (`us.anthropic.claude-sonnet-4-6`) — primary LLM for text generation (cross-region inference profile)
+   - **Cohere Embed v4** (`cohere.embed-v4:0`) — document and query embeddings
+   - **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) — voice interactions
+   - **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) — lightweight inference tasks (diagnosis evaluation)
 
-> **Note:** Nova Sonic models are only available in `us-east-1`. The application handles cross-region calls automatically.
+> **Important:** All models above are called in `us-east-1` regardless of your deployment region. The application hardcodes `us-east-1` for LLM calls (Claude Sonnet 4.6), embedding calls (Cohere Embed v4), and voice calls (Nova Sonic). You must enable model access in `us-east-1` even if you deploy the CDK stacks to a different region.
 
 ---
 
@@ -67,7 +68,7 @@ Before deploying, you must create the following secrets and parameters in AWS. T
 
 #### Secret 1: GENRXSecrets
 
-Contains the RDS admin username. The database stack reads `DB_Username` from this secret.
+Contains the admin username for the RDS PostgreSQL instance. You choose this value — it will be the master username for your database. The database stack reads `DB_Username` from this secret at deploy time.
 
 <details>
 <summary>macOS / Linux</summary>
@@ -190,6 +191,57 @@ aws ssm put-parameter ^
 
 </details>
 
+#### Parameter 2: /GenRx/AllowedEmailDomains
+
+A comma-separated list of email domains allowed to sign up (e.g., `gmail.com,ubc.ca`). The Cognito pre-signup Lambda reads this parameter to block registrations from unauthorized domains. Stored as a `SecureString` since it controls access.
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws ssm put-parameter \
+  --name "/GenRx/AllowedEmailDomains" \
+  --value "<COMMA-SEPARATED-DOMAINS>" \
+  --type SecureString \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+aws ssm put-parameter `
+  --name "/GenRx/AllowedEmailDomains" `
+  --value "<COMMA-SEPARATED-DOMAINS>" `
+  --type SecureString `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws ssm put-parameter ^
+  --name "/GenRx/AllowedEmailDomains" ^
+  --value "<COMMA-SEPARATED-DOMAINS>" ^
+  --type SecureString ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+> **Example:** `--value "gmail.com,ubc.ca"` — only users with emails from these domains will be able to register. Add additional domains as needed, separated by commas.
+
+#### Parameter 3 (Post-Deployment): /{StackPrefix}/voiceAgentArn
+
+> **Skip this for now.** This parameter is created after the initial deployment as part of the voice agent setup (section 4.5). It's listed here for reference only.
+
+The EcsSocket stack reads this parameter to connect to the Bedrock AgentCore voice agent. You'll create it in section 4.5 after deploying the voice agent.
+
 #### Summary of Required Secrets/Parameters
 
 | Name | Type | Key/Value | Used By |
@@ -197,6 +249,8 @@ aws ssm put-parameter ^
 | `GENRXSecrets` | Secrets Manager | `{"DB_Username": "..."}` | Database stack (RDS admin credentials) |
 | `github-personal-access-token` | Secrets Manager | `{"my-github-token": "..."}` | CI/CD stack, Amplify stack |
 | `genrx-owner-name` | SSM Parameter (String) | GitHub username | CI/CD stack, Amplify stack |
+| `/GenRx/AllowedEmailDomains` | SSM Parameter (SecureString) | Comma-separated email domains | Cognito pre-signup Lambda |
+| `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | Voice agent ARN (created in section 4.5) | EcsSocket stack |
 
 ### 3.3 Bootstrap CDK
 
@@ -215,7 +269,7 @@ The CDK app requires two context variables at deploy time:
 | `StackPrefix` | Prefix for all stack and resource names (e.g., `GenRx`) | Yes |
 | `githubRepo` | Name of your GitHub repository (not the full URL) | Yes |
 | `githubBranch` | Branch to track for CI/CD (default: `main`) | No |
-| `voiceAgentArn` | ARN of a deployed Bedrock AgentCore voice agent | No |
+| `voiceAgentArn` | ARN of a deployed Bedrock AgentCore voice agent (not needed for first deploy — see section 4.5) | No |
 
 Choose one of the following deployment options:
 
@@ -246,9 +300,9 @@ npx cdk deploy GenRx-Api \
   -c githubRepo=genrx
 ```
 
-#### Option D: Deploy with Voice Agent
+#### Option D: Redeploy with Voice Agent
 
-If you have a Bedrock AgentCore voice agent deployed, pass its ARN:
+After completing the voice agent setup (section 4.5), you can pass the ARN explicitly on subsequent deploys. However, the recommended approach is to store it in SSM (done in section 4.5) so you don't need this flag.
 
 ```bash
 npx cdk deploy --all \
@@ -266,7 +320,7 @@ The CDK app creates the following stacks in dependency order:
 3. **`{StackPrefix}-Database`** — RDS PostgreSQL instance, RDS Proxy, secrets
 4. **`{StackPrefix}-Api`** — API Gateway, Lambda functions, Cognito, AppSync, S3
 5. **`{StackPrefix}-TurnServer`** — TURN server for WebRTC
-6. **`{StackPrefix}-EcsSocket`** — ECS Fargate service for Socket.IO and voice
+6. **`{StackPrefix}-EcsSocket`** — ECS Fargate service for Socket.IO
 7. **`{StackPrefix}-DBFlow`** — Database migration runner (triggers on deploy)
 8. **`{StackPrefix}-Amplify`** — Amplify hosting for the React frontend
 
@@ -286,18 +340,12 @@ After deployment, confirm that the text generation Lambda can reach Bedrock:
 
 ### 4.2 Push Initial Docker Images
 
-The CI/CD pipeline builds and pushes Docker images on code changes. For the first deployment, the ECR repositories are empty. Trigger the pipeline by pushing a commit to your tracked branch, or manually build and push:
+The CI/CD pipeline builds and pushes all Docker images (text generation, data ingestion, socket server, voice agent). For the first deployment, the ECR repositories are empty. Trigger the pipeline by either:
 
-```bash
-# Example: push the text generation image manually
-aws ecr get-login-password --region <YOUR-REGION> | docker login --username AWS --password-stdin <YOUR-ACCOUNT-ID>.dkr.ecr.<YOUR-REGION>.amazonaws.com
+- **Pushing a commit** to your tracked branch, or
+- **Clicking "Release change"** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline
 
-docker build -t genrx-textgen ./cdk/text_generation
-docker tag genrx-textgen:latest <YOUR-ACCOUNT-ID>.dkr.ecr.<YOUR-REGION>.amazonaws.com/<STACK-PREFIX-LOWERCASE>-cicd-textgeneration:latest
-docker push <YOUR-ACCOUNT-ID>.dkr.ecr.<YOUR-REGION>.amazonaws.com/<STACK-PREFIX-LOWERCASE>-cicd-textgeneration:latest
-```
-
-Repeat for `data_ingestion`, `socket-server`, and `voice-agent` as needed.
+Wait for the pipeline to complete successfully. Once done, the Lambda functions and ECS services will have images to run.
 
 ### 4.3 Request SES Production Access (Optional)
 
@@ -317,7 +365,83 @@ After the first deployment, Amplify needs to run its initial build:
 3. If the build hasn't triggered automatically, click **Run build** on the `main` branch
 4. Wait for the build to complete (typically 3–5 minutes)
 
-### 4.5 Visit the Web App
+### 4.5 Deploy the Voice Agent (Optional)
+
+The voice agent runs on **Amazon Bedrock AgentCore** and requires the CDK stacks to be deployed first (since the CI/CD pipeline builds and pushes the voice-agent Docker image to ECR). Follow this order of operations:
+
+#### Step 1: Complete the Initial CDK Deployment
+
+Deploy all stacks without a voice agent ARN (sections 3.3–3.4). This creates the ECR repository for the voice agent image.
+
+#### Step 2: Push the Voice Agent Image
+
+The CI/CD pipeline (CodePipeline) builds and pushes all Docker images, including the voice agent. Trigger it by either:
+
+- **Pushing a commit** to your tracked branch, or
+- **Clicking "Release change"** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline
+
+Wait for the pipeline to complete successfully before proceeding.
+
+#### Step 3: Set Up AgentCore and Deploy the Voice Agent
+
+Follow the detailed instructions in [AGENTCORE_VOICE_AGENT_SETUP.md](./AGENTCORE_VOICE_AGENT_SETUP.md) to configure Bedrock AgentCore and deploy the voice agent through the AWS console.
+
+Once complete, you will have a voice agent runtime ARN.
+
+#### Step 4: Store the ARN and Redeploy
+
+Store the ARN in SSM so the EcsSocket stack can connect to it:
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws ssm put-parameter \
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" \
+  --value "<YOUR-VOICE-AGENT-ARN>" \
+  --type String \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+aws ssm put-parameter `
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" `
+  --value "<YOUR-VOICE-AGENT-ARN>" `
+  --type String `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws ssm put-parameter ^
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" ^
+  --value "<YOUR-VOICE-AGENT-ARN>" ^
+  --type String ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+Then redeploy the EcsSocket stack to pick up the new value:
+
+```bash
+npx cdk deploy GenRx-EcsSocket \
+  -c StackPrefix=GenRx \
+  -c githubRepo=genrx
+```
+
+> **Note:** Voice features will not work until all four steps are complete. The ECS socket server uses the stored ARN to establish a SigV4-signed WebSocket connection to the AgentCore runtime.
+
+### 4.6 Visit the Web App
 
 Once the Amplify build completes, your app is live at the default Amplify domain:
 
@@ -423,8 +547,20 @@ aws secretsmanager update-secret \
 
 ### Voice features not working
 
-**Cause:** Nova Sonic models are only available in `us-east-1`. If your deployment region is different, the voice service makes cross-region calls.
+**Cause:** Nova Sonic models are only available in `us-east-1`. If your deployment region is different, the voice service makes cross-region calls. Additionally, the voice agent must be deployed to Bedrock AgentCore and its ARN configured.
 
 **Fix:**
 1. Ensure Bedrock model access is enabled in `us-east-1` for Nova Sonic models
 2. Verify the ECS task role has `bedrock:InvokeModelWithBidirectionalStream` permission in `us-east-1`
+3. Confirm the voice agent is deployed to Bedrock AgentCore (see section 4.5)
+4. Verify the `voiceAgentArn` is set — either via the `-c` context flag or the `/{StackPrefix}/voiceAgentArn` SSM parameter
+
+### Text generation or embeddings not working
+
+**Cause:** Claude Sonnet 4.6 and Cohere Embed v4 are called in `us-east-1` via cross-region inference, but model access was not enabled there.
+
+**Fix:**
+1. Open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/)
+2. Navigate to **Model access**
+3. Ensure access is granted for `anthropic.claude-sonnet-4-6` and `cohere.embed-v4:0`
+4. Check CloudWatch Logs for the `TextGenLambdaDockerFunction` for specific error messages

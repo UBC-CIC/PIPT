@@ -6,12 +6,11 @@ This document provides a high-level overview of the GenRx system architecture an
 
 ## Architecture
 
-<!-- TODO: Add architecture diagram screenshot -->
-<!-- ![Architecture Diagram](./media/architecture.png) -->
+![GenRx Architecture](./architecture-diagram.drawio.png)
 
 The GenRx platform is composed of the following layers:
 
-1. **Edge & Security** — AWS WAF (CloudFront + Regional) protects the frontend and API from common web exploits. AWS Shield provides DDoS protection. All traffic enters through HTTPS endpoints.
+1. **Edge & Security** — CloudFront sits in front of the Socket.IO server (NLB origin) to provide HTTPS termination and WebSocket proxying. All traffic enters through HTTPS endpoints. Cognito handles authentication and a Bedrock Guardrail screens user input/AI output for content safety.
 
 2. **Frontend Hosting** — A React SPA built with Vite is hosted on AWS Amplify. Amplify auto-builds from the `main` branch on push. The app uses Tailwind CSS, shadcn/ui components, and communicates with the backend via REST API and WebSocket connections.
 
@@ -19,15 +18,15 @@ The GenRx platform is composed of the following layers:
 
 4. **API Layer** — Amazon API Gateway (REST) routes requests to monolithic Lambda handlers per role: `studentFunction.js`, `instructorFunction.js`, and `adminFunction.js`. Each handler uses `httpMethod + resource` switch routing. An OpenAPI/Swagger definition drives the API Gateway configuration.
 
-5. **Real-time Streaming** — AWS AppSync (GraphQL) provides pub/sub subscriptions for text streaming. The `publishTextStream` mutation pushes AI-generated tokens to the frontend via `onTextStream` subscription.
+5. **Real-time Streaming** — Both text chat and voice flow through a Socket.IO server running on ECS Fargate. The frontend establishes a single WebSocket connection (via CloudFront → NLB → ECS) for all real-time communication. For text chat, the Socket.IO server invokes the Text Generation Lambda and streams response tokens back to the client. This unified WebSocket approach replaced an earlier AppSync-based design, providing consistent low-latency streaming and a single connection point for both modalities.
 
 6. **Data Persistence** — Amazon RDS PostgreSQL 16 (Multi-AZ, encrypted at rest) stores all application data. Three RDS Proxy instances (user, table creator, admin) pool connections. The `pgvector` extension enables semantic similarity search on document embeddings.
 
 7. **Object Storage** — Amazon S3 stores uploaded persona documents (PDFs) and generated embeddings. Pre-signed URLs provide secure, time-limited access for uploads and downloads.
 
-8. **AI Services** — Amazon Bedrock provides LLM inference (Meta Llama 3 70B), text embeddings (Titan Embed V2), and voice interactions (Nova Sonic). A Docker Lambda (`text_generation`) handles chat, debrief generation, and semantic question matching via LangChain. A separate Docker Lambda (`data_ingestion`) processes uploaded PDFs into vector embeddings.
+8. **AI Services** — Amazon Bedrock provides LLM inference (Claude Sonnet 4.6 via cross-region inference profile `us.anthropic.claude-sonnet-4-6`), text embeddings (Cohere Embed v4 `cohere.embed-v4:0`), content evaluation (Nova Lite), and voice interactions (Nova Sonic 2.0). All model calls are routed to `us-east-1` regardless of deployment region. A Docker Lambda (`text_generation`) handles chat, debrief generation, and semantic question matching via LangChain. A separate Docker Lambda (`data_ingestion`) processes uploaded PDFs into vector embeddings.
 
-9. **Real-time Voice & Socket** — An ECS Fargate service runs Express + Socket.IO for real-time text streaming and WebRTC voice. A TURN server assists with NAT traversal for WebRTC connections. Bedrock AgentCore with Nova Sonic powers voice interactions.
+9. **Voice Agent** — The voice pipeline uses Amazon Bedrock AgentCore to host a containerized voice agent (`cdk/voice-agent/bot.py`). The ECS Socket.IO server connects to AgentCore via a SigV4-authenticated WebSocket, relaying audio frames between the frontend and the voice agent. The voice agent container uses Nova Sonic 2.0's bidirectional streaming API for real-time speech-to-speech interaction. A TURN server stack exists in the CDK deployment but is effectively dead code — it was provisioned for a WebRTC-based approach that was superseded by the AgentCore design. It remains available if anyone wants to explore WebRTC in the future; see the [Voice Agent Deep Dive](./VOICE_AGENT_DEEP_DIVE.md) for design decision context.
 
 10. **CI/CD** — AWS CodePipeline triggers on GitHub pushes. CodeBuild projects build Docker images for each service module, push to ECR, run vulnerability scans, and update Lambda function code. Amplify handles frontend CI/CD independently.
 
@@ -230,6 +229,8 @@ Per-persona interaction session for a student within an enrollment.
 | persona_context_embedding | float[] | Vector embedding of interaction context |
 | is_completed | boolean | Whether the interaction is complete (default: false) |
 
+Constraints: UNIQUE(persona_id, enrollment_id)
+
 ---
 
 ##### chats
@@ -248,6 +249,8 @@ Individual chat sessions between a student and an AI persona.
 | ended_at | timestamptz | Session end time |
 | status | varchar | Session status: 'active', 'concluded', or 'expired' |
 | recommendation | text | Student's recommendation submitted on conclude |
+| dtp_submission | jsonb | Array of DTP strings submitted by the student |
+| recommendation_submission | jsonb | Array of {recommendation, rationale} objects submitted on conclude |
 
 ---
 
@@ -453,17 +456,95 @@ Student-submitted issue/bug reports during simulations.
 
 ---
 
+##### dtp_bank
+
+Organization-scoped Drug Therapy Problem repository.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| dtp_id | uuid (PK) | Unique identifier |
+| organization_id | uuid (FK → organizations) | Parent organization |
+| created_by | uuid (FK → users) | Creator |
+| title | varchar(255) | DTP title |
+| expected_dtp_text | text | Expected DTP text for matching |
+| clinical_intent | text | Clinical intent description |
+| evaluation_criteria | text | How to evaluate student responses |
+| tags | text[] | Categorization tags (default: '{}') |
+| is_required | boolean | Whether this DTP is required (default: false) |
+| is_active | boolean | Soft-delete flag (default: true) |
+| created_at | timestamp | Creation timestamp |
+
+---
+
+##### recommendations_bank
+
+Organization-scoped Recommendation repository.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| recommendation_id | uuid (PK) | Unique identifier |
+| organization_id | uuid (FK → organizations) | Parent organization |
+| created_by | uuid (FK → users) | Creator |
+| title | varchar(255) | Recommendation title |
+| recommendation_text | text | Expected recommendation text for matching |
+| evaluation_criteria | text | How to evaluate student responses |
+| rationale | text | Expected rationale for the recommendation |
+| is_active | boolean | Soft-delete flag (default: true) |
+| created_at | timestamp | Creation timestamp |
+
+---
+
+##### simulation_group_dtps
+
+Links DTP items from the bank to specific simulation groups, with optional persona-level specificity.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| group_dtp_id | uuid (PK) | Unique identifier |
+| simulation_group_id | uuid (FK → simulation_groups) | Target group |
+| persona_id | uuid (FK → personas) | Target persona (NULL = group-level) |
+| dtp_id | uuid (FK → dtp_bank) | DTP reference |
+| sort_order | integer | Display/evaluation order (default: 0) |
+| added_by | uuid (FK → users) | Who assigned the DTP |
+| added_at | timestamp | Assignment timestamp |
+
+Constraints: UNIQUE(simulation_group_id, persona_id, dtp_id)
+
+---
+
+##### simulation_group_recommendations
+
+Links Recommendation items from the bank to specific simulation groups, with optional persona-level specificity.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| group_recommendation_id | uuid (PK) | Unique identifier |
+| simulation_group_id | uuid (FK → simulation_groups) | Target group |
+| persona_id | uuid (FK → personas) | Target persona (NULL = group-level) |
+| recommendation_id | uuid (FK → recommendations_bank) | Recommendation reference |
+| sort_order | integer | Display/evaluation order (default: 0) |
+| added_by | uuid (FK → users) | Who assigned the recommendation |
+| added_at | timestamp | Assignment timestamp |
+
+Constraints: UNIQUE(simulation_group_id, persona_id, recommendation_id)
+
+---
+
 ## Entity Relationship Summary
 
 ```
 organizations (1) ──── (N) users
 organizations (1) ──── (N) simulation_groups
 organizations (1) ──── (N) question_bank
+organizations (1) ──── (N) dtp_bank
+organizations (1) ──── (N) recommendations_bank
 
 simulation_groups (1) ──── (N) personas
 simulation_groups (1) ──── (N) enrollments
 simulation_groups (1) ──── (N) group_instructors
 simulation_groups (1) ──── (N) simulation_group_questions
+simulation_groups (1) ──── (N) simulation_group_dtps
+simulation_groups (1) ──── (N) simulation_group_recommendations
 
 personas (1) ──── (N) persona_data
 personas (1) ──── (N) persona_media
@@ -476,4 +557,7 @@ chats (1) ──── (1) debriefs
 
 question_bank (1) ──── (N) simulation_group_questions
 question_bank (1) ──── (N) question_interactions
+
+dtp_bank (1) ──── (N) simulation_group_dtps
+recommendations_bank (1) ──── (N) simulation_group_recommendations
 ```

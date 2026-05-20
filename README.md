@@ -22,6 +22,14 @@ See the [Deployment Guide](docs/deploymentGuide.md) for full setup instructions.
 
 ---
 
+## High-Level Architecture
+
+The following architecture diagram illustrates the various AWS components utilized to deliver the solution. For an in-depth explanation of the frontend and backend stacks, see the [Architecture Deep Dive](docs/architectureDeepDive.md).
+
+![GenRx Architecture](docs/architecture-diagram.drawio.png)
+
+---
+
 ## Documentation
 
 | Document | Description |
