@@ -1,10 +1,14 @@
 import os
 import json
+import re
 import boto3
 import psycopg2
 from aws_lambda_powertools import Logger
 
 logger = Logger()
+
+# Allow alphanumeric, spaces, hyphens, underscores, dots, parentheses, commas
+SAFE_FILENAME = re.compile(r'^[a-zA-Z0-9_\-. (),]{1,200}$')
 
 s3 = boto3.client('s3')
 BUCKET = os.environ["BUCKET"]
@@ -190,6 +194,19 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Forbidden: You are not an instructor of this simulation group')
+        }
+
+    # Validate file_name to prevent path traversal and special character issues
+    if not SAFE_FILENAME.match(file_name):
+        return {
+            'statusCode': 400,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+            },
+            'body': json.dumps('Invalid file name')
         }
 
     try:

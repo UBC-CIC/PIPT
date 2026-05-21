@@ -87,6 +87,9 @@ export class ApiServiceStack extends cdk.Stack {
             allowedOrigins,
           },
         ],
+        lifecycleRules: [
+          { abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) },
+        ],
         // When deleting the stack, need to empty the Bucket and delete it manually
         removalPolicy: cdk.RemovalPolicy.RETAIN,
         enforceSSL: true,
@@ -1379,6 +1382,9 @@ export class ApiServiceStack extends cdk.Stack {
             ],
             allowedOrigins,
           },
+        ],
+        lifecycleRules: [
+          { abortIncompleteMultipartUploadAfter: cdk.Duration.days(1) },
         ],
         // When deleting the stack, need to empty the Bucket and delete it manually
         removalPolicy: cdk.RemovalPolicy.RETAIN,

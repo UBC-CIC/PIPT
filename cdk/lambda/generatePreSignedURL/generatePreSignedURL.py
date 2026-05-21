@@ -1,4 +1,4 @@
-import os, json
+import os, json, re
 import boto3
 import psycopg2
 from botocore.config import Config
@@ -8,6 +8,9 @@ BUCKET = os.environ["BUCKET"]
 REGION = os.environ["REGION"]
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+
+# Allow alphanumeric, spaces, hyphens, underscores, dots, parentheses, commas
+SAFE_FILENAME = re.compile(r'^[a-zA-Z0-9_\-. (),]{1,200}$')
 
 s3 = boto3.client(
     "s3",
@@ -115,6 +118,13 @@ def lambda_handler(event, context):
         return {
             'statusCode': 400,
             'body': json.dumps('Missing required parameter: file_name')
+        }
+
+    # Validate file_name to prevent path traversal and special character issues
+    if not SAFE_FILENAME.match(file_name):
+        return {
+            'statusCode': 400,
+            'body': json.dumps('Invalid file name. Only alphanumeric characters, spaces, hyphens, underscores, dots, parentheses, and commas are allowed (max 200 chars).')
         }
 
     # Verify the requesting instructor owns this simulation group
