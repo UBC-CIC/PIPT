@@ -120,6 +120,7 @@ function InstructorDashboardPage() {
           joinButtonText="+ Create New Group"
           actionButtonText="Manage Group"
           descriptionText="Create simulation groups and view analytics."
+          emptyStateText="You don't have any simulation groups yet. Create one to get started."
           showCounts={true}
           countLabels={{
             students: 'Students',

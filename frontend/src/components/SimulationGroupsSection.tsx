@@ -11,6 +11,7 @@ interface SimulationGroupsSectionProps {
   actionButtonText?: string;
   descriptionText?: string;
   sectionTitle?: string;
+  emptyStateText?: string;
   showCounts?: boolean;
   showDeleteButton?: boolean;
   onDeleteGroup?: (groupId: string) => void;
@@ -29,6 +30,7 @@ function SimulationGroupsSection({
   actionButtonText = 'Continue Training',
   descriptionText = 'Join simulation groups to practice patient interactions and develop your clinical diagnosis skills.',
   sectionTitle = 'Simulation Groups',
+  emptyStateText = 'Get started by joining a simulation group with an access code from your instructor.',
   showCounts = false,
   showDeleteButton = false,
   onDeleteGroup,
@@ -69,7 +71,7 @@ function SimulationGroupsSection({
           </div>
           <h3 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>No simulation groups yet</h3>
           <p className="text-sm text-center max-w-md mb-6" style={{ color: UI_COLORS.text.body }}>
-            Get started by joining a simulation group with an access code from your instructor.
+            {emptyStateText}
           </p>
           <Button
             onClick={onJoinGroup}
@@ -78,7 +80,7 @@ function SimulationGroupsSection({
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
           >
-            + Join Group
+            {joinButtonText}
           </Button>
         </div>
       ) : (

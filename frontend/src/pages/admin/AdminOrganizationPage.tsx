@@ -235,6 +235,7 @@ function AdminOrganizationPage() {
           actionButtonText="Manage Group"
           descriptionText="Edit simulation groups and view analytics."
           sectionTitle={organization ? `${organization.name} Simulation Groups` : 'Simulation Groups'}
+          emptyStateText="No simulation groups exist for this organization yet. Create one to get started."
           showCounts={true}
           showDeleteButton={true}
           onDeleteGroup={handleDeleteGroup}
