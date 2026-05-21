@@ -906,7 +906,7 @@ function AdminSimulationGroupPage() {
       <AIDebriefDialog isOpen={debriefViewer.isAIDebriefOpen} onClose={debriefViewer.closeDebrief} data={debriefViewer.selectedDebriefData} simulationGroupId={groupId} />
       <AddQuestionDialog open={isAddQuestionDialogOpen} onOpenChange={setIsAddQuestionDialogOpen} questionType={addQuestionType} existingTags={allExistingTags} onSave={handleSaveNewQuestion} />
       <AddPatientSpecificQuestionDialog open={isAddPatientQuestionDialogOpen} onOpenChange={setIsAddPatientQuestionDialogOpen} patients={manageablePatients.map(p => ({ id: p.patient_id, name: p.patient_name }))} onSave={handleSaveNewPatientQuestion} />
-      <AddInstructorDialog open={isAddInstructorDialogOpen} onOpenChange={setIsAddInstructorDialogOpen} onAddInstructor={handleAddInstructorSubmit} />
+      <AddInstructorDialog open={isAddInstructorDialogOpen} onOpenChange={setIsAddInstructorDialogOpen} onAddInstructor={handleAddInstructorSubmit} existingInstructorEmails={instructors.map(i => i.user_email)} />
 
       <Dialog open={isAccessCodeDialogOpen} onOpenChange={setIsAccessCodeDialogOpen}>
         <DialogContent>
