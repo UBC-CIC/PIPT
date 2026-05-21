@@ -33,6 +33,8 @@ import * as targets from "aws-cdk-lib/aws-events-targets";
 import * as appsync from "aws-cdk-lib/aws-appsync";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as cr from "aws-cdk-lib/custom-resources";
+import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
+import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 
 export class ApiServiceStack extends cdk.Stack {
   private readonly api: apigateway.SpecRestApi;
@@ -64,6 +66,7 @@ export class ApiServiceStack extends cdk.Stack {
     dataIngestRepo?: ecr.IRepository,
     textGenBuildProjectName?: string,
     dataIngestBuildProjectName?: string,
+    cloudFrontWafArn?: string,
     props?: cdk.StackProps
   ) {
     super(scope, id, props);
@@ -142,6 +145,13 @@ export class ApiServiceStack extends cdk.Stack {
       `${id}-PowertoolsLayer`,
       `arn:aws:lambda:${this.region}:017000801446:layer:AWSLambdaPowertoolsPythonV2:78`
     );
+
+    // RSA library layer for CloudFront URL signing (pure Python, no C deps)
+    const rsaLayer = new LayerVersion(this, "rsaLambdaLayer", {
+      code: Code.fromAsset("./layers/rsa.zip"),
+      compatibleRuntimes: [Runtime.PYTHON_3_12],
+      description: "RSA + pyasn1 for CloudFront signed URL generation",
+    });
 
     this.layerList["psycopg2"] = psycopgLayer;
     this.layerList["postgres"] = postgres;
@@ -1392,6 +1402,78 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
+    /**
+     * CloudFront distribution for secure document delivery.
+     * Uses Origin Access Control (OAC) so only CloudFront can read from the bucket.
+     * Signed URLs enforce that only authenticated users with valid tokens can access content.
+     */
+
+    // Read the public key from SSM (stored during pre-deploy setup)
+    const cfPublicKeyPem = ssm.StringParameter.valueForStringParameter(
+      this,
+      "/GenRx/CloudFrontPublicKey"
+    );
+
+    const cfPublicKey = new cloudfront.PublicKey(
+      this,
+      `${id}-CfSigningPublicKey`,
+      {
+        encodedKey: cfPublicKeyPem,
+        comment: "RSA public key for CloudFront signed URL verification",
+      }
+    );
+
+    const cfKeyGroup = new cloudfront.KeyGroup(
+      this,
+      `${id}-CfSigningKeyGroup`,
+      {
+        items: [cfPublicKey],
+        comment: "Key group for GenRx document delivery signed URLs",
+      }
+    );
+
+    const docsCachePolicy = new cloudfront.CachePolicy(
+      this,
+      `${id}-DocsCachePolicy`,
+      {
+        cachePolicyName: `${id}-DocsCachePolicy`,
+        comment: "Cache policy for patient documents and profile pictures",
+        defaultTtl: cdk.Duration.minutes(5),
+        maxTtl: cdk.Duration.hours(1),
+        minTtl: cdk.Duration.seconds(0),
+        // Don't include query strings or headers in cache key — signed URLs are unique per request
+        queryStringBehavior: cloudfront.CacheQueryStringBehavior.none(),
+        headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+        cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      }
+    );
+
+    const docsDistribution = new cloudfront.Distribution(
+      this,
+      `${id}-DocsDistribution`,
+      {
+        comment: "GenRx document delivery CDN",
+        defaultBehavior: {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(dataIngestionBucket),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+          cachePolicy: docsCachePolicy,
+          trustedKeyGroups: [cfKeyGroup],
+        },
+        ...(cloudFrontWafArn && { webAclId: cloudFrontWafArn }),
+      }
+    );
+
+    new cdk.CfnOutput(this, "CloudFrontDomain", {
+      value: docsDistribution.domainName,
+      description: "CloudFront distribution domain for document delivery",
+    });
+
+    new cdk.CfnOutput(this, "CloudFrontKeyPairId", {
+      value: cfPublicKey.publicKeyId,
+      description: "CloudFront public key ID for signed URL generation",
+    });
+
     // Create the Lambda function for generating presigned URLs
     const generatePreSignedURL = new lambda.Function(
       this,
@@ -1660,9 +1742,12 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
+          CLOUDFRONT_DOMAIN: docsDistribution.domainName,
+          CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
+          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
         },
         functionName: `${id}-GetFilesFunction`,
-        layers: [psycopgLayer, powertoolsLayer],
+        layers: [psycopgLayer, powertoolsLayer, rsaLayer],
         logRetention: logs.RetentionDays.INFINITE,
       }
     );
@@ -1715,9 +1800,12 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
+          CLOUDFRONT_DOMAIN: docsDistribution.domainName,
+          CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
+          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
         },
         functionName: `${id}-GetFilesFunctionStudent`,
-        layers: [psycopgLayer, powertoolsLayer],
+        layers: [psycopgLayer, powertoolsLayer, rsaLayer],
         logRetention: logs.RetentionDays.INFINITE,
       }
     );
@@ -1770,9 +1858,12 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
+          CLOUDFRONT_DOMAIN: docsDistribution.domainName,
+          CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
+          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
         },
         functionName: `${id}-GetProfilePictures`,
-        layers: [psycopgLayer, powertoolsLayer],
+        layers: [psycopgLayer, powertoolsLayer, rsaLayer],
         logRetention: logs.RetentionDays.INFINITE,
       }
     );
@@ -1825,9 +1916,12 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
+          CLOUDFRONT_DOMAIN: docsDistribution.domainName,
+          CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
+          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
         },
         functionName: `${id}-GetProfilePicturesStudent`,
-        layers: [psycopgLayer, powertoolsLayer],
+        layers: [psycopgLayer, powertoolsLayer, rsaLayer],
         logRetention: logs.RetentionDays.INFINITE,
       }
     );

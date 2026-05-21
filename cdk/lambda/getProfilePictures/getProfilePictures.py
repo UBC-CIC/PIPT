@@ -2,6 +2,9 @@ import os
 import json
 import boto3
 from botocore.config import Config
+from botocore.signers import CloudFrontSigner
+import rsa
+from datetime import datetime, timedelta
 import psycopg2
 from aws_lambda_powertools import Logger
 
@@ -12,6 +15,9 @@ REGION = os.environ["REGION"]
 BUCKET = os.environ["BUCKET"]
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+CLOUDFRONT_DOMAIN = os.environ["CLOUDFRONT_DOMAIN"]
+CLOUDFRONT_KEY_PAIR_ID = os.environ["CLOUDFRONT_KEY_PAIR_ID"]
+SM_CLOUDFRONT_PRIVATE_KEY = os.environ["SM_CLOUDFRONT_PRIVATE_KEY"]
 
 # AWS Clients
 secrets_manager_client = boto3.client('secretsmanager')
@@ -27,6 +33,7 @@ s3 = boto3.client(
 # Global variables for caching
 connection = None
 db_secret = None
+cf_private_key = None
 
 def get_secret(secret_name):
     global db_secret
@@ -90,16 +97,29 @@ def fetch_persona_ids(simulation_group_id):
         connection.rollback()
         return []
 
+def get_cf_private_key():
+    """Fetch and cache the CloudFront signing private key from Secrets Manager."""
+    global cf_private_key
+    if cf_private_key is None:
+        response = secrets_manager_client.get_secret_value(SecretId=SM_CLOUDFRONT_PRIVATE_KEY)["SecretString"]
+        cf_private_key = rsa.PrivateKey.load_pkcs1(response.encode('utf-8'))
+    return cf_private_key
+
+def rsa_signer(message):
+    """Sign a message with the CloudFront private key (used by CloudFrontSigner)."""
+    private_key = get_cf_private_key()
+    return rsa.sign(message, private_key, 'SHA-1')
+
 def generate_presigned_url(bucket, key):
+    """Generate a CloudFront signed URL for the given S3 key."""
     try:
-        return s3.generate_presigned_url(
-            ClientMethod="get_object",
-            Params={"Bucket": bucket, "Key": key},
-            ExpiresIn=300,
-            HttpMethod="GET",
-        )
+        cf_signer = CloudFrontSigner(CLOUDFRONT_KEY_PAIR_ID, rsa_signer)
+        url = f"https://{CLOUDFRONT_DOMAIN}/{key}"
+        expire_date = datetime.utcnow() + timedelta(seconds=300)  # 5 minutes
+        signed_url = cf_signer.generate_presigned_url(url, date_less_than=expire_date)
+        return signed_url
     except Exception as e:
-        logger.exception(f"Error generating presigned URL for {key}: {e}")
+        logger.exception(f"Error generating CloudFront signed URL for {key}: {e}")
         return None
 
 @logger.inject_lambda_context

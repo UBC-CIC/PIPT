@@ -1,0 +1,68 @@
+import * as cdk from "aws-cdk-lib";
+import * as wafv2 from "aws-cdk-lib/aws-wafv2";
+import { Construct } from "constructs";
+
+/**
+ * CloudFront WAF stack — must be deployed in us-east-1.
+ * CloudFront distributions can only use WAFs in us-east-1.
+ */
+export class CloudFrontWafStack extends cdk.Stack {
+  public readonly webAclArn: string;
+
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+
+    const webAcl = new wafv2.CfnWebACL(this, `${id}-CloudFrontWaf`, {
+      description: "WAF for GenRx CloudFront document delivery",
+      scope: "CLOUDFRONT",
+      defaultAction: { allow: {} },
+      visibilityConfig: {
+        sampledRequestsEnabled: true,
+        cloudWatchMetricsEnabled: true,
+        metricName: `${id}-CloudFrontWaf`,
+      },
+      rules: [
+        {
+          name: "AWS-AWSManagedRulesCommonRuleSet",
+          priority: 1,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesCommonRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "CloudFront-AWSManagedRulesCommonRuleSet",
+          },
+        },
+        {
+          name: "RateLimitRequests2000",
+          priority: 2,
+          action: { block: {} },
+          statement: {
+            rateBasedStatement: {
+              limit: 2000,
+              aggregateKeyType: "IP",
+            },
+          },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "CloudFront-RateLimitRequests2000",
+          },
+        },
+      ],
+    });
+
+    this.webAclArn = webAcl.attrArn;
+
+    new cdk.CfnOutput(this, "CloudFrontWafArn", {
+      value: webAcl.attrArn,
+      description: "WAF Web ACL ARN for CloudFront distribution",
+      exportName: `${id}-WafArn`,
+    });
+  }
+}

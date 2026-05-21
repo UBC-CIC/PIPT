@@ -9,6 +9,7 @@ import { VpcStack } from "../lib/vpc-stack";
 import { EcsSocketStack } from "../lib/ecs-socket-stack";
 import { TurnServerStack } from "../lib/turn-server-stack";
 import { CICDStack } from "../lib/cicd-stack";
+import { CloudFrontWafStack } from "../lib/cloudfront-waf-stack";
 
 const app = new cdk.App();
 
@@ -53,6 +54,17 @@ const vpcStack = new VpcStack(app, `${StackPrefix}-VpcStack`, { env });
 const dbStack = new DatabaseStack(app, `${StackPrefix}-Database`, vpcStack, {
   env,
 });
+
+// CloudFront WAF must be in us-east-1 (AWS requirement for CLOUDFRONT scope)
+const cloudFrontWafStack = new CloudFrontWafStack(
+  app,
+  `${StackPrefix}-CloudFrontWaf`,
+  {
+    env: { account: env.account, region: "us-east-1" },
+    crossRegionReferences: true,
+  }
+);
+
 const apiStack = new ApiServiceStack(
   app,
   `${StackPrefix}-Api`,
@@ -63,7 +75,8 @@ const apiStack = new ApiServiceStack(
   cicdStack.ecrRepositories["dataIngestion"],
   cicdStack.buildProjects["textGeneration"]?.projectName,
   cicdStack.buildProjects["dataIngestion"]?.projectName,
-  { env }
+  cloudFrontWafStack.webAclArn,
+  { env, crossRegionReferences: true }
 );
 const turnServerStack = new TurnServerStack(
   app,
