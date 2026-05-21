@@ -75,11 +75,21 @@ function mapBackendToRecommendationAssignment(row: Record<string, unknown>): Rec
 // ─── Service Functions ───────────────────────────────────────────────────────
 
 /**
- * List all Recommendation items for a given organization.
+ * List all Recommendation items for a given organization (admin use).
  */
 export async function listRecommendationItems(organizationId: string): Promise<RecommendationItem[]> {
   const rows = await apiClient.request<Record<string, unknown>[]>(
     `admin/recommendations_bank?organization_id=${organizationId}`
+  );
+  return rows.map(mapBackendToRecommendationItem);
+}
+
+/**
+ * List all active Recommendation items for a given organization (instructor use, read-only).
+ */
+export async function listRecommendationItemsAsInstructor(organizationId: string): Promise<RecommendationItem[]> {
+  const rows = await apiClient.request<Record<string, unknown>[]>(
+    `instructor/recommendations_bank?organization_id=${organizationId}`
   );
   return rows.map(mapBackendToRecommendationItem);
 }

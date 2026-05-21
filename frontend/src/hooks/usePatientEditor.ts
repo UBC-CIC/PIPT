@@ -21,7 +21,7 @@ export interface UsePatientEditorParams {
 export interface UsePatientEditorReturn {
   // Form state
   selectedPatientForEdit: string | null;
-  editPatientTab: 'info' | 'questions' | 'materials';
+  editPatientTab: 'info' | 'questions' | 'materials' | 'dtps' | 'recommendations';
   editPatientName: string;
   editPatientAge: string;
   editPatientGender: string;
@@ -36,7 +36,7 @@ export interface UsePatientEditorReturn {
   caseSpecificQuestions: GlobalRubricQuestion[];
 
   // Setters for form fields
-  setEditPatientTab: (tab: 'info' | 'questions' | 'materials') => void;
+  setEditPatientTab: (tab: 'info' | 'questions' | 'materials' | 'dtps' | 'recommendations') => void;
   setEditPatientName: (name: string) => void;
   setEditPatientAge: (age: string) => void;
   setEditPatientGender: (gender: string) => void;
@@ -52,7 +52,7 @@ export interface UsePatientEditorReturn {
   stopEditing: () => void;
   savePatient: () => Promise<void>;
   autoSaveNewPatient: () => Promise<string | null>;
-  handleEditPatientTabSwitch: (tab: 'info' | 'questions' | 'materials') => Promise<void>;
+  handleEditPatientTabSwitch: (tab: 'info' | 'questions' | 'materials' | 'dtps' | 'recommendations') => Promise<void>;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   handleFileUpload: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   handleFileDelete: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => Promise<void>;
@@ -77,7 +77,7 @@ export function usePatientEditor({
   const { showNotification } = useNotification();
   // Form state
   const [selectedPatientForEdit, setSelectedPatientForEdit] = useState<string | null>(null);
-  const [editPatientTab, setEditPatientTab] = useState<'info' | 'questions' | 'materials'>('info');
+  const [editPatientTab, setEditPatientTab] = useState<'info' | 'questions' | 'materials' | 'dtps' | 'recommendations'>('info');
   const [editPatientName, setEditPatientName] = useState('');
   const [editPatientAge, setEditPatientAge] = useState('');
   const [editPatientGender, setEditPatientGender] = useState('');
@@ -247,7 +247,7 @@ export function usePatientEditor({
   /**
    * Handle tab switch with auto-save for new patients
    */
-  const handleEditPatientTabSwitch = async (tab: 'info' | 'questions' | 'materials') => {
+  const handleEditPatientTabSwitch = async (tab: 'info' | 'questions' | 'materials' | 'dtps' | 'recommendations') => {
     if (tab !== 'info' && selectedPatientForEdit === 'new') {
       const savedId = await autoSaveNewPatient();
       if (!savedId) return;

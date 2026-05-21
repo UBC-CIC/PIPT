@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { getAllInstructors, type AdminInstructor } from '@/services/adminApiService';
 import LoadingIndicator from '@/components/LoadingIndicator';
@@ -19,8 +20,8 @@ type CreateSimulationGroupDialogProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 } & (
-  | { role: 'admin'; onCreate: (data: AdminCreateData) => void }
-  | { role: 'instructor'; onCreate: (data: InstructorCreateData) => void }
+  | { role: 'admin'; onCreate: (data: AdminCreateData) => Promise<void> | void }
+  | { role: 'instructor'; onCreate: (data: InstructorCreateData) => Promise<void> | void }
 );
 
 function CreateSimulationGroupDialog({ 
@@ -40,6 +41,7 @@ function CreateSimulationGroupDialog({
   const [availableInstructors, setAvailableInstructors] = useState<AdminInstructor[]>([]);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loadingInstructors, setLoadingInstructors] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch instructors when dialog opens (admin only)
@@ -75,27 +77,32 @@ function CreateSimulationGroupDialog({
     ? Boolean(name.trim() && description.trim() && selectedInstructors.length > 0)
     : Boolean(name.trim() && description.trim());
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!isValid) return;
 
-    if (role === 'admin') {
-      onCreate({
-        name: name.trim(),
-        description: description.trim(),
-        instructors: selectedInstructors.join(', '),
-        systemPrompt: systemPrompt.trim(),
-        active,
-        enableVoice
-      });
-    } else {
-      onCreate({
-        name: name.trim(),
-        description: description.trim(),
-        active,
-      });
+    setIsSubmitting(true);
+    try {
+      if (role === 'admin') {
+        await onCreate({
+          name: name.trim(),
+          description: description.trim(),
+          instructors: selectedInstructors.join(', '),
+          systemPrompt: systemPrompt.trim(),
+          active,
+          enableVoice
+        });
+      } else {
+        await onCreate({
+          name: name.trim(),
+          description: description.trim(),
+          active,
+        });
+      }
+      resetForm();
+      onOpenChange(false);
+    } finally {
+      setIsSubmitting(false);
     }
-    resetForm();
-    onOpenChange(false);
   };
 
   const resetForm = () => {
@@ -368,20 +375,21 @@ function CreateSimulationGroupDialog({
           {/* Create Group Button */}
           <Button
             onClick={handleCreate}
-            disabled={!isValid}
+            disabled={!isValid || isSubmitting}
             className="w-full py-6 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: UI_COLORS.button.primary, 
               color: UI_COLORS.button.text 
             }}
             onMouseEnter={(e) => {
-              if (isValid) {
+              if (isValid && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover;
               }
             }}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            Create Group
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Creating...' : 'Create Group'}
           </Button>
         </div>
       </DialogContent>

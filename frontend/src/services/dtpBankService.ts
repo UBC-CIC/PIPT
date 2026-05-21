@@ -83,11 +83,21 @@ function mapBackendToDTPAssignment(row: Record<string, unknown>): DTPAssignment 
 // ─── Service Functions ───────────────────────────────────────────────────────
 
 /**
- * List all DTP items for a given organization.
+ * List all DTP items for a given organization (admin use).
  */
 export async function listDTPItems(organizationId: string): Promise<DTPItem[]> {
   const rows = await apiClient.request<Record<string, unknown>[]>(
     `admin/dtp_bank?organization_id=${organizationId}`
+  );
+  return rows.map(mapBackendToDTPItem);
+}
+
+/**
+ * List all active DTP items for a given organization (instructor use, read-only).
+ */
+export async function listDTPItemsAsInstructor(organizationId: string): Promise<DTPItem[]> {
+  const rows = await apiClient.request<Record<string, unknown>[]>(
+    `instructor/dtp_bank?organization_id=${organizationId}`
   );
   return rows.map(mapBackendToDTPItem);
 }

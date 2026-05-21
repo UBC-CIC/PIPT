@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Menu, HelpCircle } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Menu, HelpCircle, Pill, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
@@ -13,6 +13,8 @@ import { UI_COLORS } from '@/lib/colors';
 import { useSimulationGroupData } from '@/hooks/useSimulationGroupData';
 import { usePatientEditor } from '@/hooks/usePatientEditor';
 import { useQuestionBank } from '@/hooks/useQuestionBank';
+import { useDTPBank } from '@/hooks/useDTPBank';
+import { useRecommendationsBank } from '@/hooks/useRecommendationsBank';
 import { useStudentViewer } from '@/hooks/useStudentViewer';
 import { useDebriefViewer } from '@/hooks/useDebriefViewer';
 import { SimulationGroupSidebar } from '@/components/simulation-group/SimulationGroupSidebar';
@@ -23,12 +25,18 @@ import { StudentDetailsPanel } from '@/components/simulation-group/StudentDetail
 import { EditPatientPanel } from '@/components/simulation-group/EditPatientPanel';
 import { RubricSection } from '@/components/simulation-group/RubricSection';
 import { QuestionBankSection } from '@/components/simulation-group/QuestionBankSection';
+import { DTPBankSection } from '@/components/simulation-group/DTPBankSection';
+import { RecommendationsBankSection } from '@/components/simulation-group/RecommendationsBankSection';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import AIDebriefDialog from '../../components/AIDebriefDialog';
 import { useNotification } from '@/components/notifications';
+import { listDTPItemsAsInstructor, assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP, createDTPItem } from '@/services/dtpBankService';
+import type { DTPAssignment } from '@/services/dtpBankService';
+import { listRecommendationItemsAsInstructor, assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation, createRecommendationItem } from '@/services/recommendationsBankService';
+import type { RecommendationAssignment } from '@/services/recommendationsBankService';
 
-type ActiveSection = 'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'prompt' | 'editPatient' | 'viewStudent';
+type ActiveSection = 'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'dtpBank' | 'recommendationsBank' | 'prompt' | 'editPatient' | 'viewStudent';
 
 /**
  * InstructorSimulationGroupPage — thin shell composing shared hooks and components.
@@ -57,6 +65,8 @@ function InstructorSimulationGroupPage() {
     reloadPatients: groupData.reloadPatients,
   });
   const questionBank = useQuestionBank({ role: 'instructor' });
+  const dtpBank = useDTPBank({ role: 'instructor' });
+  const recommendationsBank = useRecommendationsBank({ role: 'instructor' });
   const studentViewer = useStudentViewer({ groupId, groupName: groupData.simulationGroup?.group_name });
   const debriefViewer = useDebriefViewer({ groupId });
 
@@ -153,6 +163,213 @@ function InstructorSimulationGroupPage() {
         .catch((err: any) => console.error('Failed to load assigned questions:', err));
     }
   }, [activeSection, groupId]);
+
+  // ── DTP Bank: mapping from DTP item ID → group_dtp_id for unassign ──
+  const dtpIdToGroupDtpId = useRef<Map<string, string>>(new Map());
+
+  // ── Recommendations Bank: mapping from Recommendation item ID → group_recommendation_id for unassign ──
+  const recIdToGroupRecId = useRef<Map<string, string>>(new Map());
+
+  // ── Load DTP bank items when section becomes active ──
+  useEffect(() => {
+    if (activeSection !== 'dtpBank' || !groupId) return;
+    const orgId = simulationGroup?.organization_id;
+    if (orgId) {
+      dtpBank.setLoading(true);
+      listDTPItemsAsInstructor(orgId).then((items) => {
+        dtpBank.setDtpItems(items);
+        dtpBank.setLoading(false);
+      }).catch(() => dtpBank.setLoading(false));
+    }
+    // Load assignments (group-wide by default)
+    getAssignedDTPs(groupId).then((assignments) => {
+      dtpBank.setIncludedIds(new Set(assignments.map(a => a.dtpId)));
+      dtpBank.setPendingIds(new Set(assignments.map(a => a.dtpId)));
+      dtpIdToGroupDtpId.current.clear();
+      for (const a of assignments) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+    }).catch(() => dtpBank.setIncludedIds(new Set()));
+  }, [activeSection, groupId, simulationGroup?.organization_id]);
+
+  // ── Load Recommendations bank items when section becomes active ──
+  useEffect(() => {
+    if (activeSection !== 'recommendationsBank' || !groupId) return;
+    const orgId = simulationGroup?.organization_id;
+    if (orgId) {
+      recommendationsBank.setLoading(true);
+      listRecommendationItemsAsInstructor(orgId).then((items) => {
+        recommendationsBank.setRecommendationItems(items);
+        recommendationsBank.setLoading(false);
+      }).catch(() => recommendationsBank.setLoading(false));
+    }
+    // Load assignments (group-wide by default)
+    getAssignedRecommendations(groupId).then((assignments) => {
+      recommendationsBank.setIncludedIds(new Set(assignments.map(a => a.recommendationId)));
+      recommendationsBank.setPendingIds(new Set(assignments.map(a => a.recommendationId)));
+      recIdToGroupRecId.current.clear();
+      for (const a of assignments) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+    }).catch(() => recommendationsBank.setIncludedIds(new Set()));
+  }, [activeSection, groupId, simulationGroup?.organization_id]);
+
+  // ── DTP Bank: confirm selections handler ──
+  const handleConfirmDTPSelections = async () => {
+    if (!groupId) return;
+    try {
+      const idsToAdd = [...dtpBank.pendingIds].filter(id => !dtpBank.includedIds.has(id));
+      const idsToRemove = [...dtpBank.includedIds].filter(id => !dtpBank.pendingIds.has(id));
+
+      for (const id of idsToAdd) {
+        const result = dtpBank.selectedPatientId
+          ? await assignDTPToPatient(id, groupId, dtpBank.selectedPatientId)
+          : await assignDTPToGroup(id, groupId);
+        if (result?.groupDtpId) dtpIdToGroupDtpId.current.set(id, result.groupDtpId);
+      }
+      for (const id of idsToRemove) {
+        const groupDtpId = dtpIdToGroupDtpId.current.get(id);
+        if (groupDtpId) {
+          await unassignDTP(groupDtpId);
+          dtpIdToGroupDtpId.current.delete(id);
+        }
+      }
+      dtpBank.setIncludedIds(new Set(dtpBank.pendingIds));
+      showNotification({ message: 'DTP selections confirmed.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to confirm DTP selections:', err);
+      showNotification({ message: 'Failed to confirm DTP selections.', type: 'error' });
+    }
+  };
+
+  // ── Recommendations Bank: confirm selections handler ──
+  const handleConfirmRecommendationSelections = async () => {
+    if (!groupId) return;
+    try {
+      const idsToAdd = [...recommendationsBank.pendingIds].filter(id => !recommendationsBank.includedIds.has(id));
+      const idsToRemove = [...recommendationsBank.includedIds].filter(id => !recommendationsBank.pendingIds.has(id));
+
+      for (const id of idsToAdd) {
+        const result = recommendationsBank.selectedPatientId
+          ? await assignRecommendationToPatient(id, groupId, recommendationsBank.selectedPatientId)
+          : await assignRecommendationToGroup(id, groupId);
+        if (result?.groupRecommendationId) recIdToGroupRecId.current.set(id, result.groupRecommendationId);
+      }
+      for (const id of idsToRemove) {
+        const groupRecId = recIdToGroupRecId.current.get(id);
+        if (groupRecId) {
+          await unassignRecommendation(groupRecId);
+          recIdToGroupRecId.current.delete(id);
+        }
+      }
+      recommendationsBank.setIncludedIds(new Set(recommendationsBank.pendingIds));
+      showNotification({ message: 'Recommendation selections confirmed.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to confirm Recommendation selections:', err);
+      showNotification({ message: 'Failed to confirm Recommendation selections.', type: 'error' });
+    }
+  };
+
+  // ── DTP/Rec tab sync helpers ──
+  const syncDTPGroupWideIds = () => {
+    if (!groupId) return;
+    getAssignedDTPs(groupId).then((assignments) => {
+      dtpBank.setIncludedIds(new Set(assignments.map(a => a.dtpId)));
+      dtpBank.setPendingIds(new Set(assignments.map(a => a.dtpId)));
+      dtpIdToGroupDtpId.current.clear();
+      for (const a of assignments) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+    }).catch(() => { dtpBank.setIncludedIds(new Set()); dtpBank.setPendingIds(new Set()); });
+  };
+
+  const syncDTPPatientIds = (patientId: string | null) => {
+    if (!groupId || !patientId) { dtpBank.setIncludedIds(new Set()); dtpBank.setPendingIds(new Set()); return; }
+    getAssignedDTPs(groupId, patientId).then((assignments) => {
+      dtpBank.setIncludedIds(new Set(assignments.map(a => a.dtpId)));
+      dtpBank.setPendingIds(new Set(assignments.map(a => a.dtpId)));
+      dtpIdToGroupDtpId.current.clear();
+      for (const a of assignments) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+    }).catch(() => { dtpBank.setIncludedIds(new Set()); dtpBank.setPendingIds(new Set()); });
+  };
+
+  const syncRecGroupWideIds = () => {
+    if (!groupId) return;
+    getAssignedRecommendations(groupId).then((assignments) => {
+      recommendationsBank.setIncludedIds(new Set(assignments.map(a => a.recommendationId)));
+      recommendationsBank.setPendingIds(new Set(assignments.map(a => a.recommendationId)));
+      recIdToGroupRecId.current.clear();
+      for (const a of assignments) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+    }).catch(() => { recommendationsBank.setIncludedIds(new Set()); recommendationsBank.setPendingIds(new Set()); });
+  };
+
+  const syncRecPatientIds = (patientId: string | null) => {
+    if (!groupId || !patientId) { recommendationsBank.setIncludedIds(new Set()); recommendationsBank.setPendingIds(new Set()); return; }
+    getAssignedRecommendations(groupId, patientId).then((assignments) => {
+      recommendationsBank.setIncludedIds(new Set(assignments.map(a => a.recommendationId)));
+      recommendationsBank.setPendingIds(new Set(assignments.map(a => a.recommendationId)));
+      recIdToGroupRecId.current.clear();
+      for (const a of assignments) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+    }).catch(() => { recommendationsBank.setIncludedIds(new Set()); recommendationsBank.setPendingIds(new Set()); });
+  };
+
+  // ── Edit Patient: Patient-specific DTPs/Recs state ──
+  const [patientDTPs, setPatientDTPs] = useState<DTPAssignment[]>([]);
+  const [patientRecommendations, setPatientRecommendations] = useState<RecommendationAssignment[]>([]);
+
+  const handleLoadPatientDTPs = (patientId: string) => {
+    if (!groupId) return;
+    getAssignedDTPs(groupId, patientId).then(setPatientDTPs).catch(() => setPatientDTPs([]));
+  };
+
+  const handleLoadPatientRecommendations = (patientId: string) => {
+    if (!groupId) return;
+    getAssignedRecommendations(groupId, patientId).then(setPatientRecommendations).catch(() => setPatientRecommendations([]));
+  };
+
+  const handleCreatePatientDTP = async (patientId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => {
+    const orgId = simulationGroup?.organization_id;
+    if (!orgId || !groupId) return;
+    try {
+      const created = await createDTPItem(orgId, data);
+      const assignment = await assignDTPToPatient(created.id, groupId, patientId);
+      setPatientDTPs(prev => [...prev, assignment]);
+      showNotification({ message: 'DTP created and assigned to patient.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to create patient DTP:', err);
+      showNotification({ message: 'Failed to create patient DTP.', type: 'error' });
+    }
+  };
+
+  const handleDeletePatientDTP = async (_patientId: string, groupDtpId: string) => {
+    try {
+      await unassignDTP(groupDtpId);
+      setPatientDTPs(prev => prev.filter(d => d.groupDtpId !== groupDtpId));
+      showNotification({ message: 'DTP removed from patient.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to remove patient DTP:', err);
+      showNotification({ message: 'Failed to remove patient DTP.', type: 'error' });
+    }
+  };
+
+  const handleCreatePatientRecommendation = async (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+    const orgId = simulationGroup?.organization_id;
+    if (!orgId || !groupId) return;
+    try {
+      const created = await createRecommendationItem(orgId, data);
+      const assignment = await assignRecommendationToPatient(created.id, groupId, patientId);
+      setPatientRecommendations(prev => [...prev, assignment]);
+      showNotification({ message: 'Recommendation created and assigned to patient.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to create patient Recommendation:', err);
+      showNotification({ message: 'Failed to create patient Recommendation.', type: 'error' });
+    }
+  };
+
+  const handleDeletePatientRecommendation = async (_patientId: string, groupRecommendationId: string) => {
+    try {
+      await unassignRecommendation(groupRecommendationId);
+      setPatientRecommendations(prev => prev.filter(r => r.groupRecommendationId !== groupRecommendationId));
+      showNotification({ message: 'Recommendation removed from patient.', type: 'success' });
+    } catch (err) {
+      console.error('Failed to remove patient Recommendation:', err);
+      showNotification({ message: 'Failed to remove patient Recommendation.', type: 'error' });
+    }
+  };
 
   // ── Navigation handlers ──
   const handleSignOut = async () => { await signOut(); };
@@ -379,6 +596,8 @@ function InstructorSimulationGroupPage() {
             { id: 'students', label: `Manage ${userRoleLabel}s`, icon: <UserCog className="w-5 h-5" /> },
             { id: 'rubric', label: 'Global Key Questions', icon: <FileText className="w-5 h-5" /> },
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" />, onClick: () => { setActiveSection('questionBank'); questionBankTab === 'global' ? syncGlobalIds() : syncPatientIds(selectedPatientForQuestionBank); } },
+            { id: 'dtpBank', label: 'DTP Bank', icon: <Pill className="w-5 h-5" /> },
+            { id: 'recommendationsBank', label: 'Recommendations Bank', icon: <ClipboardList className="w-5 h-5" /> },
             { id: 'prompt', label: 'View Debrief Prompt', icon: <Eye className="w-5 h-5" /> },
           ]}
           accessCode={accessCode}
@@ -388,7 +607,7 @@ function InstructorSimulationGroupPage() {
           onToggleVisibility={() => setIsMainSidebarVisible(!isMainSidebarVisible)}
         />
 
-        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'editPatient', 'viewStudent'].includes(activeSection) ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'editPatient', 'viewStudent'].includes(activeSection) ? '0' : '2rem' }}>
           {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
           {activeSection === 'patients' && <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} onTogglePatientVoice={handleTogglePatientVoice} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (enabled) => {
             for (const p of manageablePatients) {
@@ -399,13 +618,15 @@ function InstructorSimulationGroupPage() {
           {activeSection === 'students' && <StudentsSection students={students} searchQuery={studentSearchQuery} onSearchChange={setStudentSearchQuery} onViewStudent={handleViewStudent} labels={labels} />}
           {activeSection === 'rubric' && <RubricSection questions={globalRubricQuestions} selectedQuestionId={selectedQuestionId} onSelectQuestion={setSelectedQuestionId} searchQuery={rubricSearchQuery} onSearchChange={setRubricSearchQuery} onSaveQuestion={handleSaveQuestion} onUpdateField={handleUpdateQuestionField} />}
           {activeSection === 'questionBank' && <QuestionBankSection questionBank={questionBank} role="instructor" groupId={groupId || '1'} patients={manageablePatients} onConfirmSelections={handleConfirmSelections} onGlobalTabClick={syncGlobalIds} onPatientSpecificTabClick={() => syncPatientIds(selectedPatientForQuestionBank)} onPatientSelect={syncPatientIds} />}
+          {activeSection === 'dtpBank' && <DTPBankSection dtpBank={dtpBank} role="instructor" groupId={groupId || ''} patients={manageablePatients} onConfirmSelections={handleConfirmDTPSelections} onGroupWideTabClick={syncDTPGroupWideIds} onPatientSpecificTabClick={() => syncDTPPatientIds(dtpBank.selectedPatientId)} onPatientSelect={syncDTPPatientIds} />}
+          {activeSection === 'recommendationsBank' && <RecommendationsBankSection recommendationsBank={recommendationsBank} role="instructor" groupId={groupId || ''} patients={manageablePatients} onConfirmSelections={handleConfirmRecommendationSelections} onGroupWideTabClick={syncRecGroupWideIds} onPatientSpecificTabClick={() => syncRecPatientIds(recommendationsBank.selectedPatientId)} onPatientSelect={syncRecPatientIds} />}
           {activeSection === 'prompt' && (
             <div className="space-y-4">
               <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>View Debrief Prompt</h2>
               <textarea readOnly className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.tableHeader, minHeight: '500px' }} defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'} />
             </div>
           )}
-          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} />}
+          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
           {activeSection === 'viewStudent' && studentViewer.selectedStudentId && <StudentDetailsPanel studentDetails={studentViewer.studentDetails} studentDetailsLoading={studentViewer.studentDetailsLoading} studentPatientData={studentViewer.studentPatientData} expandedAttemptId={studentViewer.expandedAttemptId} onExpandAttempt={studentViewer.setExpandedAttemptId} selectedPatientFilter={studentViewer.selectedPatientFilter} onPatientFilterChange={studentViewer.setSelectedPatientFilter} onViewDebrief={debriefViewer.viewDebrief} isFetchingDebrief={debriefViewer.isFetchingDebrief} onDownloadPdf={async (attemptId) => { const el = debriefViewer.attemptPdfRefs.current[String(attemptId)]; if (el) await debriefViewer.downloadPdf(attemptId, el); }} isGeneratingPdf={debriefViewer.isGeneratingPdf} onBack={handleBackFromViewStudent} attemptPdfRefs={debriefViewer.attemptPdfRefs} labels={labels} />}
         </main>
       </div>

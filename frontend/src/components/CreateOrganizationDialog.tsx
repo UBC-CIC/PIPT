@@ -8,12 +8,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 
 interface CreateOrganizationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreate: (data: { name: string; description: string; aiPersonaTitle: string; userRoleTitle: string; systemPrompt: string }) => void;
+  onCreate: (data: { name: string; description: string; aiPersonaTitle: string; userRoleTitle: string; systemPrompt: string }) => Promise<void> | void;
 }
 
 function CreateOrganizationDialog({ 
@@ -26,23 +27,29 @@ function CreateOrganizationDialog({
   const [aiPersonaTitle, setAiPersonaTitle] = useState('');
   const [userRoleTitle, setUserRoleTitle] = useState('');
   const [systemPrompt, setSystemPrompt] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (name.trim() && description.trim() && aiPersonaTitle.trim() && userRoleTitle.trim()) {
-      onCreate({
-        name: name.trim(),
-        description: description.trim(),
-        aiPersonaTitle: aiPersonaTitle.trim(),
-        userRoleTitle: userRoleTitle.trim(),
-        systemPrompt: systemPrompt.trim()
-      });
-      // Reset form
-      setName('');
-      setDescription('');
-      setAiPersonaTitle('');
-      setUserRoleTitle('');
-      setSystemPrompt('');
-      onOpenChange(false);
+      setIsSubmitting(true);
+      try {
+        await onCreate({
+          name: name.trim(),
+          description: description.trim(),
+          aiPersonaTitle: aiPersonaTitle.trim(),
+          userRoleTitle: userRoleTitle.trim(),
+          systemPrompt: systemPrompt.trim()
+        });
+        // Reset form and close only on success
+        setName('');
+        setDescription('');
+        setAiPersonaTitle('');
+        setUserRoleTitle('');
+        setSystemPrompt('');
+        onOpenChange(false);
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -198,20 +205,21 @@ function CreateOrganizationDialog({
           {/* Create Organization Button */}
           <Button
             onClick={handleCreate}
-            disabled={!name.trim() || !description.trim() || !aiPersonaTitle.trim() || !userRoleTitle.trim()}
+            disabled={!name.trim() || !description.trim() || !aiPersonaTitle.trim() || !userRoleTitle.trim() || isSubmitting}
             className="w-full py-6 text-base font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ 
               backgroundColor: UI_COLORS.button.primary, 
               color: UI_COLORS.button.text 
             }}
             onMouseEnter={(e) => {
-              if (name.trim() && description.trim() && aiPersonaTitle.trim() && userRoleTitle.trim()) {
+              if (name.trim() && description.trim() && aiPersonaTitle.trim() && userRoleTitle.trim() && !isSubmitting) {
                 e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover;
               }
             }}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            Create Organisation
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSubmitting ? 'Creating...' : 'Create Organisation'}
           </Button>
         </div>
       </DialogContent>

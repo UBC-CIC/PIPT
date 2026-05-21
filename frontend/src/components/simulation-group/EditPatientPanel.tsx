@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,8 @@ import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import type { UsePatientEditorReturn } from '@/hooks/usePatientEditor';
 import { instructorService, type OrganizationLabels, type GlobalRubricQuestion, type CaseMaterial, type UploadedFileInfo } from '@/services/instructorService';
 import { useNotification } from '@/components/notifications';
+import type { DTPAssignment } from '@/services/dtpBankService';
+import type { RecommendationAssignment } from '@/services/recommendationsBankService';
 
 export interface EditPatientPanelProps {
   patientEditor: UsePatientEditorReturn;
@@ -20,6 +22,15 @@ export interface EditPatientPanelProps {
   onSavePatient: () => Promise<void>;
   onSaveCaseQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   onDeleteCaseQuestion: (patientId: string, questionId: string) => void;
+  // DTP/Rec patient-specific authoring
+  onCreatePatientDTP?: (patientId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => Promise<void>;
+  onDeletePatientDTP?: (patientId: string, groupDtpId: string) => Promise<void>;
+  patientDTPs?: DTPAssignment[];
+  onCreatePatientRecommendation?: (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => Promise<void>;
+  onDeletePatientRecommendation?: (patientId: string, groupRecommendationId: string) => Promise<void>;
+  patientRecommendations?: RecommendationAssignment[];
+  onLoadPatientDTPs?: (patientId: string) => void;
+  onLoadPatientRecommendations?: (patientId: string) => void;
 }
 
 export function EditPatientPanel({
@@ -32,6 +43,14 @@ export function EditPatientPanel({
   onSavePatient,
   onSaveCaseQuestion,
   onDeleteCaseQuestion,
+  onCreatePatientDTP,
+  onDeletePatientDTP,
+  patientDTPs = [],
+  onCreatePatientRecommendation,
+  onDeletePatientRecommendation,
+  patientRecommendations = [],
+  onLoadPatientDTPs,
+  onLoadPatientRecommendations,
 }: EditPatientPanelProps) {
   const [caseQuestionSearchQuery, setCaseQuestionSearchQuery] = useState('');
   const [globalRubricSearchQuery, setGlobalRubricSearchQuery] = useState('');
@@ -88,6 +107,8 @@ export function EditPatientPanel({
           {[
             { tab: 'info' as const, label: 'Patient Information' },
             { tab: 'questions' as const, label: 'Case-specific Key Questions' },
+            { tab: 'dtps' as const, label: 'Patient-Specific DTPs' },
+            { tab: 'recommendations' as const, label: 'Patient-Specific Recommendations' },
             { tab: 'materials' as const, label: 'Physical Assessment Materials' },
           ].map(({ tab, label }) => (
             <button
@@ -109,7 +130,7 @@ export function EditPatientPanel({
 
       {/* Edit Patient Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto" style={{ padding: patientEditor.editPatientTab === 'questions' || patientEditor.editPatientTab === 'materials' ? '0' : '2rem' }}>
+        <div className="flex-1 overflow-y-auto" style={{ padding: patientEditor.editPatientTab === 'questions' || patientEditor.editPatientTab === 'materials' || patientEditor.editPatientTab === 'dtps' || patientEditor.editPatientTab === 'recommendations' ? '0' : '2rem' }}>
           {patientEditor.editPatientTab === 'info' && (
             <InfoTab
               patientEditor={patientEditor}
@@ -130,6 +151,26 @@ export function EditPatientPanel({
               filteredGlobalRubric={filteredGlobalRubric}
               onSaveCaseQuestion={onSaveCaseQuestion}
               onDeleteCaseQuestion={onDeleteCaseQuestion}
+            />
+          )}
+
+          {patientEditor.editPatientTab === 'dtps' && (
+            <PatientDTPsTab
+              patientEditor={patientEditor}
+              patientDTPs={patientDTPs}
+              onCreatePatientDTP={onCreatePatientDTP}
+              onDeletePatientDTP={onDeletePatientDTP}
+              onLoadPatientDTPs={onLoadPatientDTPs}
+            />
+          )}
+
+          {patientEditor.editPatientTab === 'recommendations' && (
+            <PatientRecommendationsTab
+              patientEditor={patientEditor}
+              patientRecommendations={patientRecommendations}
+              onCreatePatientRecommendation={onCreatePatientRecommendation}
+              onDeletePatientRecommendation={onDeletePatientRecommendation}
+              onLoadPatientRecommendations={onLoadPatientRecommendations}
             />
           )}
 
@@ -1150,6 +1191,362 @@ function MaterialsTab({
           ))}
         </Accordion>
       </div>
+    </div>
+  );
+}
+
+
+/* ─── Patient-Specific DTPs Tab ─── */
+
+function PatientDTPsTab({
+  patientEditor,
+  patientDTPs,
+  onCreatePatientDTP,
+  onDeletePatientDTP,
+  onLoadPatientDTPs,
+}: {
+  patientEditor: UsePatientEditorReturn;
+  patientDTPs: DTPAssignment[];
+  onCreatePatientDTP?: (patientId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => Promise<void>;
+  onDeletePatientDTP?: (patientId: string, groupDtpId: string) => Promise<void>;
+  onLoadPatientDTPs?: (patientId: string) => void;
+}) {
+  const { showNotification } = useNotification();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newExpectedDTPText, setNewExpectedDTPText] = useState('');
+  const [newClinicalIntent, setNewClinicalIntent] = useState('');
+  const [newEvaluationCriteria, setNewEvaluationCriteria] = useState('');
+  const [newIsRequired, setNewIsRequired] = useState(false);
+  const [newTagInput, setNewTagInput] = useState('');
+  const [newTags, setNewTags] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const patientId = patientEditor.selectedPatientForEdit;
+
+  // Load DTPs when tab is shown
+  useEffect(() => {
+    if (patientId && patientId !== 'new' && onLoadPatientDTPs) {
+      onLoadPatientDTPs(patientId);
+    }
+  }, [patientId]);
+
+  const filteredDTPs = patientDTPs.filter(d =>
+    (d.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSaveNew = async () => {
+    if (!newTitle.trim() || !newExpectedDTPText.trim()) {
+      showNotification({ message: 'Please fill in at least the Title and Expected DTP Text.', type: 'warning' });
+      return;
+    }
+    if (!patientId || patientId === 'new' || !onCreatePatientDTP) return;
+    await onCreatePatientDTP(patientId, {
+      title: newTitle.trim(),
+      expectedDTPText: newExpectedDTPText.trim(),
+      clinicalIntent: newClinicalIntent.trim(),
+      evaluationCriteria: newEvaluationCriteria.trim(),
+      tags: newTags,
+      isRequired: newIsRequired,
+    });
+    setNewTitle(''); setNewExpectedDTPText(''); setNewClinicalIntent(''); setNewEvaluationCriteria(''); setNewIsRequired(false); setNewTagInput(''); setNewTags([]);
+    setIsAdding(false);
+  };
+
+  const handleDelete = async (groupDtpId: string) => {
+    if (!patientId || !onDeletePatientDTP) return;
+    await onDeletePatientDTP(patientId, groupDtpId);
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto p-8 space-y-6">
+      <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+        Patient-Specific DTPs
+      </h2>
+
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+        <Input
+          placeholder="Search DTPs"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+          style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
+        />
+      </div>
+
+      {/* Add New Button */}
+      <Button
+        onClick={() => setIsAdding(true)}
+        className="justify-start gap-2 py-2.5 h-auto font-medium transition-colors mb-4"
+        style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+      >
+        <Plus className="w-5 h-5" />
+        Add New DTP
+      </Button>
+
+      {/* Add New Form */}
+      {isAdding && (
+        <div className="border rounded-lg p-6 space-y-4 mb-6" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+          <h3 className="font-semibold" style={{ color: UI_COLORS.text.heading }}>New DTP Item</h3>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Title</label>
+            <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g., Unnecessary Drug Therapy" style={{ borderColor: UI_COLORS.border.default }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Expected DTP Text</label>
+            <textarea value={newExpectedDTPText} onChange={(e) => setNewExpectedDTPText(e.target.value)} placeholder="Describe the expected drug therapy problem..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Clinical Intent</label>
+            <textarea value={newClinicalIntent} onChange={(e) => setNewClinicalIntent(e.target.value)} placeholder="Why this DTP matters clinically..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Evaluation Criteria</label>
+            <textarea value={newEvaluationCriteria} onChange={(e) => setNewEvaluationCriteria(e.target.value)} placeholder="How to evaluate the student's identification..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Tags</label>
+            <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>Add tags for filtering. Press Enter or comma to add.</p>
+            <div className="flex gap-2 mb-2">
+              <Input value={newTagInput} onChange={(e) => setNewTagInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); const trimmed = newTagInput.trim(); if (trimmed && !newTags.includes(trimmed)) setNewTags(prev => [...prev, trimmed]); setNewTagInput(''); } }} placeholder="Type a tag and press Enter..." className="flex-1" style={{ borderColor: UI_COLORS.border.default }} />
+              <Button type="button" variant="outline" onClick={() => { const trimmed = newTagInput.trim(); if (trimmed && !newTags.includes(trimmed)) setNewTags(prev => [...prev, trimmed]); setNewTagInput(''); }} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Add</Button>
+            </div>
+            {newTags.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {newTags.map(tag => (
+                  <span key={tag} className="inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>
+                    {tag}
+                    <button type="button" onClick={() => setNewTags(prev => prev.filter(t => t !== tag))} className="ml-1 hover:text-red-600 bg-transparent border-0 cursor-pointer p-0 text-xs" aria-label={`Remove tag ${tag}`}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button type="button" role="switch" aria-checked={newIsRequired} onClick={() => setNewIsRequired(!newIsRequired)} className="relative inline-flex h-6 w-11 items-center rounded-full transition-colors" style={{ backgroundColor: newIsRequired ? UI_COLORS.button.primary : UI_COLORS.background.tableHeader }}>
+              <span className="inline-block h-5 w-5 transform rounded-full bg-white transition-transform" style={{ transform: newIsRequired ? 'translateX(22px)' : 'translateX(2px)' }} />
+            </button>
+            <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>Required for Case Completion</span>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleSaveNew} style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}>Save DTP</Button>
+            <Button variant="outline" onClick={() => { setIsAdding(false); setNewTitle(''); setNewExpectedDTPText(''); setNewClinicalIntent(''); setNewEvaluationCriteria(''); setNewIsRequired(false); setNewTagInput(''); setNewTags([]); }} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Existing DTPs */}
+      {filteredDTPs.length === 0 && !isAdding ? (
+        <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>No patient-specific DTPs yet. Click "Add New DTP" to create one.</p>
+      ) : (
+        <Accordion type="single" collapsible className="space-y-2">
+          {filteredDTPs.map((dtp) => (
+            <AccordionItem key={dtp.groupDtpId} value={dtp.groupDtpId} style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, borderRadius: '0.5rem', overflow: 'hidden' }}>
+              <AccordionTrigger className="px-4 hover:no-underline" style={{ backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }}>
+                <div className="flex items-center justify-between w-full pr-4">
+                  <span className="font-medium text-sm">{dtp.title || 'Untitled DTP'}</span>
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>{dtp.isRequired ? 'Required' : 'Optional'}</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4" style={{ backgroundColor: UI_COLORS.background.white }}>
+                <div className="space-y-3 pt-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Expected DTP Text</label>
+                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{dtp.expectedDTPText || '—'}</p>
+                  </div>
+                  {dtp.clinicalIntent && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                      <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{dtp.clinicalIntent}</p>
+                    </div>
+                  )}
+                  {dtp.evaluationCriteria && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                      <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{dtp.evaluationCriteria}</p>
+                    </div>
+                  )}
+                  {dtp.tags && dtp.tags.length > 0 && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
+                      <div className="flex flex-wrap gap-1">
+                        {dtp.tags.map(tag => (
+                          <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="pt-3">
+                    <Button onClick={() => handleDelete(dtp.groupDtpId)} variant="outline" className="text-white" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>Remove</Button>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
+    </div>
+  );
+}
+
+
+/* ─── Patient-Specific Recommendations Tab ─── */
+
+function PatientRecommendationsTab({
+  patientEditor,
+  patientRecommendations,
+  onCreatePatientRecommendation,
+  onDeletePatientRecommendation,
+  onLoadPatientRecommendations,
+}: {
+  patientEditor: UsePatientEditorReturn;
+  patientRecommendations: RecommendationAssignment[];
+  onCreatePatientRecommendation?: (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => Promise<void>;
+  onDeletePatientRecommendation?: (patientId: string, groupRecommendationId: string) => Promise<void>;
+  onLoadPatientRecommendations?: (patientId: string) => void;
+}) {
+  const { showNotification } = useNotification();
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newRecommendationText, setNewRecommendationText] = useState('');
+  const [newEvaluationCriteria, setNewEvaluationCriteria] = useState('');
+  const [newRationale, setNewRationale] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const patientId = patientEditor.selectedPatientForEdit;
+
+  // Load recommendations when tab is shown
+  useEffect(() => {
+    if (patientId && patientId !== 'new' && onLoadPatientRecommendations) {
+      onLoadPatientRecommendations(patientId);
+    }
+  }, [patientId]);
+
+  const filteredRecs = patientRecommendations.filter(r =>
+    (r.title || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const handleSaveNew = async () => {
+    if (!newTitle.trim() || !newRecommendationText.trim()) {
+      showNotification({ message: 'Please fill in at least the Title and Recommendation Text.', type: 'warning' });
+      return;
+    }
+    if (!patientId || patientId === 'new' || !onCreatePatientRecommendation) return;
+    await onCreatePatientRecommendation(patientId, {
+      title: newTitle.trim(),
+      recommendationText: newRecommendationText.trim(),
+      evaluationCriteria: newEvaluationCriteria.trim(),
+      rationale: newRationale.trim(),
+    });
+    setNewTitle(''); setNewRecommendationText(''); setNewEvaluationCriteria(''); setNewRationale('');
+    setIsAdding(false);
+  };
+
+  const handleDelete = async (groupRecommendationId: string) => {
+    if (!patientId || !onDeletePatientRecommendation) return;
+    await onDeletePatientRecommendation(patientId, groupRecommendationId);
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto p-8 space-y-6">
+      <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
+        Patient-Specific Recommendations
+      </h2>
+
+      {/* Search */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
+        <Input
+          placeholder="Search Recommendations"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
+          style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
+        />
+      </div>
+
+      {/* Add New Button */}
+      <Button
+        onClick={() => setIsAdding(true)}
+        className="justify-start gap-2 py-2.5 h-auto font-medium transition-colors mb-4"
+        style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+      >
+        <Plus className="w-5 h-5" />
+        Add New Recommendation
+      </Button>
+
+      {/* Add New Form */}
+      {isAdding && (
+        <div className="border rounded-lg p-6 space-y-4 mb-6" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
+          <h3 className="font-semibold" style={{ color: UI_COLORS.text.heading }}>New Recommendation Item</h3>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Title</label>
+            <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g., Discontinue Unnecessary Statin" style={{ borderColor: UI_COLORS.border.default }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Recommendation Text</label>
+            <textarea value={newRecommendationText} onChange={(e) => setNewRecommendationText(e.target.value)} placeholder="Describe the recommendation..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Evaluation Criteria</label>
+            <textarea value={newEvaluationCriteria} onChange={(e) => setNewEvaluationCriteria(e.target.value)} placeholder="How to evaluate the student's recommendation..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>Rationale</label>
+            <textarea value={newRationale} onChange={(e) => setNewRationale(e.target.value)} placeholder="Clinical rationale for this recommendation..." className="w-full px-3 py-2 rounded-md border resize-none" rows={3} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }} />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleSaveNew} style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}>Save Recommendation</Button>
+            <Button variant="outline" onClick={() => { setIsAdding(false); setNewTitle(''); setNewRecommendationText(''); setNewEvaluationCriteria(''); setNewRationale(''); }} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Existing Recommendations */}
+      {filteredRecs.length === 0 && !isAdding ? (
+        <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>No patient-specific recommendations yet. Click "Add New Recommendation" to create one.</p>
+      ) : (
+        <Accordion type="single" collapsible className="space-y-2">
+          {filteredRecs.map((rec) => (
+            <AccordionItem key={rec.groupRecommendationId} value={rec.groupRecommendationId} style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, borderRadius: '0.5rem', overflow: 'hidden' }}>
+              <AccordionTrigger className="px-4 hover:no-underline" style={{ backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }}>
+                <div className="flex items-center justify-between w-full pr-4">
+                  <span className="font-medium text-sm">{rec.title || 'Untitled Recommendation'}</span>
+                </div>
+              </AccordionTrigger>
+              <AccordionContent className="px-4 pb-4" style={{ backgroundColor: UI_COLORS.background.white }}>
+                <div className="space-y-3 pt-3">
+                  <div>
+                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Recommendation Text</label>
+                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{rec.recommendationText || '—'}</p>
+                  </div>
+                  {rec.evaluationCriteria && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
+                      <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{rec.evaluationCriteria}</p>
+                    </div>
+                  )}
+                  {rec.rationale && (
+                    <div>
+                      <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Rationale</label>
+                      <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>{rec.rationale}</p>
+                    </div>
+                  )}
+                  <div className="pt-3">
+                    <Button onClick={() => handleDelete(rec.groupRecommendationId)} variant="outline" className="text-white" style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }} onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'} onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}>Remove</Button>
+                  </div>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      )}
     </div>
   );
 }

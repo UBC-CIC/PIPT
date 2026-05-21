@@ -3168,6 +3168,56 @@ exports.handler = async (event, context) => {
           });
         }
         break;
+      case "GET /instructor/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const data = await sqlConnection`
+              SELECT * FROM "dtp_bank"
+              WHERE organization_id = ${organization_id}
+                AND is_active = true
+              ORDER BY created_at DESC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "GET /instructor/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const data = await sqlConnection`
+              SELECT * FROM "recommendations_bank"
+              WHERE organization_id = ${organization_id}
+                AND is_active = true
+              ORDER BY created_at DESC;
+            `;
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            console.error(err);
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

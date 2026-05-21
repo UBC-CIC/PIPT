@@ -3,88 +3,64 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { UI_COLORS } from '@/lib/colors';
-import { createRecommendationItem } from '@/services/recommendationsBankService';
 import { useNotification } from '@/components/notifications';
 
 interface AddRecommendationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  organizationId: string;
-  onSave: () => void;      // Callback after successful save
+  /** Optional — passed from manage bank page but not needed by the dialog itself */
+  organizationId?: string;
+  onSave: (recommendation: {
+    title: string;
+    recommendationText: string;
+    evaluationCriteria: string;
+    rationale: string;
+  }) => void;
 }
 
-export function AddRecommendationDialog({ open, onOpenChange, organizationId, onSave }: AddRecommendationDialogProps) {
+export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecommendationDialogProps) {
   const { showNotification } = useNotification();
   const [title, setTitle] = useState('');
   const [recommendationText, setRecommendationText] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [rationale, setRationale] = useState('');
-  const [saving, setSaving] = useState(false);
 
-  // Validation state
-  const [titleError, setTitleError] = useState('');
-  const [recommendationTextError, setRecommendationTextError] = useState('');
+  const handleSave = () => {
+    if (!title.trim() || !recommendationText.trim()) {
+      showNotification({ message: 'Please fill in at least the Title and Recommendation Text fields.', type: 'warning' });
+      return;
+    }
 
-  const resetForm = () => {
+    onSave({
+      title: title.trim(),
+      recommendationText: recommendationText.trim(),
+      evaluationCriteria: evaluationCriteria.trim(),
+      rationale: rationale.trim(),
+    });
+
+    // Reset form
     setTitle('');
     setRecommendationText('');
     setEvaluationCriteria('');
     setRationale('');
-    setTitleError('');
-    setRecommendationTextError('');
-  };
-
-  const validate = (): boolean => {
-    let valid = true;
-
-    if (!title.trim()) {
-      setTitleError('Title is required');
-      valid = false;
-    } else {
-      setTitleError('');
-    }
-
-    if (!recommendationText.trim()) {
-      setRecommendationTextError('Recommendation text is required');
-      valid = false;
-    } else {
-      setRecommendationTextError('');
-    }
-
-    return valid;
-  };
-
-  const handleSave = async () => {
-    if (!validate()) return;
-
-    setSaving(true);
-    try {
-      await createRecommendationItem(organizationId, {
-        title: title.trim(),
-        recommendationText: recommendationText.trim(),
-        evaluationCriteria: evaluationCriteria.trim(),
-        rationale: rationale.trim(),
-      });
-
-      showNotification({ message: 'Recommendation item created successfully.', type: 'success' });
-      resetForm();
-      onOpenChange(false);
-      onSave();
-    } catch {
-      showNotification({ message: 'Failed to create recommendation item. Please try again.', type: 'error' });
-    } finally {
-      setSaving(false);
-    }
+    onOpenChange(false);
   };
 
   const handleCancel = () => {
-    resetForm();
+    setTitle('');
+    setRecommendationText('');
+    setEvaluationCriteria('');
+    setRationale('');
     onOpenChange(false);
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" onInteractOutside={(e) => e.preventDefault()}>
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-y-auto"
+        onInteractOutside={(e) => e.preventDefault()}
+        onPointerDownOutside={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle style={{ color: UI_COLORS.text.heading }}>
             Add New Recommendation Item
@@ -95,51 +71,37 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
           {/* Title */}
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
-              Title <span className="text-red-500">*</span>
+              Title
             </label>
             <Input
               value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                if (e.target.value.trim()) setTitleError('');
-              }}
-              placeholder="e.g., Initiate ACE Inhibitor Therapy"
-              maxLength={150}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g., Discontinue Unnecessary Statin"
               className="w-full"
               style={{
-                borderColor: titleError ? UI_COLORS.status.error : UI_COLORS.border.default,
+                borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
               }}
             />
-            {titleError && (
-              <p className="text-sm mt-1" style={{ color: UI_COLORS.status.error }}>{titleError}</p>
-            )}
           </div>
 
           {/* Recommendation Text */}
           <div>
             <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
-              Recommendation Text <span className="text-red-500">*</span>
+              Recommendation Text
             </label>
             <textarea
               value={recommendationText}
-              onChange={(e) => {
-                setRecommendationText(e.target.value);
-                if (e.target.value.trim()) setRecommendationTextError('');
-              }}
-              placeholder="e.g., Start lisinopril 10mg once daily for blood pressure management and renal protection in this diabetic patient."
+              onChange={(e) => setRecommendationText(e.target.value)}
+              placeholder="e.g., Recommend discontinuing atorvastatin as the patient no longer meets criteria for statin therapy..."
               className="w-full px-3 py-2 rounded-md border resize-none"
-              rows={3}
-              maxLength={1000}
+              rows={4}
               style={{
-                borderColor: recommendationTextError ? UI_COLORS.status.error : UI_COLORS.border.default,
+                borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
                 color: UI_COLORS.text.heading,
               }}
             />
-            {recommendationTextError && (
-              <p className="text-sm mt-1" style={{ color: UI_COLORS.status.error }}>{recommendationTextError}</p>
-            )}
           </div>
 
           {/* Evaluation Criteria */}
@@ -150,10 +112,9 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
             <textarea
               value={evaluationCriteria}
               onChange={(e) => setEvaluationCriteria(e.target.value)}
-              placeholder="e.g., Student should recommend an ACE inhibitor with appropriate starting dose and identify the dual benefit of BP control and nephroprotection."
+              placeholder="e.g., The student identifies the correct medication, provides clinical justification, and suggests an appropriate monitoring plan..."
               className="w-full px-3 py-2 rounded-md border resize-none"
-              rows={3}
-              maxLength={1000}
+              rows={5}
               style={{
                 borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
@@ -170,10 +131,9 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
             <textarea
               value={rationale}
               onChange={(e) => setRationale(e.target.value)}
-              placeholder="e.g., ACE inhibitors are first-line for hypertension in patients with diabetes due to their renoprotective effects."
+              placeholder="e.g., Based on current guidelines, statin therapy is no longer indicated when the patient's cardiovascular risk has been reassessed..."
               className="w-full px-3 py-2 rounded-md border resize-none"
               rows={4}
-              maxLength={1000}
               style={{
                 borderColor: UI_COLORS.border.default,
                 backgroundColor: UI_COLORS.background.white,
@@ -197,7 +157,6 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
           </Button>
           <Button
             onClick={handleSave}
-            disabled={saving}
             style={{
               backgroundColor: UI_COLORS.button.primary,
               color: UI_COLORS.button.text,
@@ -205,7 +164,7 @@ export function AddRecommendationDialog({ open, onOpenChange, organizationId, on
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
           >
-            {saving ? 'Saving...' : 'Save Recommendation'}
+            Save Recommendation
           </Button>
         </div>
       </DialogContent>
