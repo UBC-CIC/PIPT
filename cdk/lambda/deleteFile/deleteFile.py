@@ -128,14 +128,20 @@ def delete_file_from_db(persona_id, file_name, file_type):
         raise
 
 def verify_instructor_ownership(user_email, simulation_group_id):
-    """Verify the requesting user is an instructor of the target simulation group."""
+    """Verify the requesting user is an instructor of the target simulation group or an admin."""
     conn = connect_to_db()
     cur = conn.cursor()
     try:
         cur.execute(
-            """SELECT 1 FROM "enrollments" e
-               JOIN "users" u ON e.user_id = u.user_id
-               WHERE u.user_email = %s AND e.simulation_group_id = %s AND e.enrollment_type = 'instructor'""",
+            """SELECT 1 FROM "users" u
+               WHERE u.user_email = %s
+               AND (
+                 'admin' = ANY(u.roles)
+                 OR EXISTS (
+                   SELECT 1 FROM "enrollments" e
+                   WHERE e.user_id = u.user_id AND e.simulation_group_id = %s AND e.enrollment_type = 'instructor'
+                 )
+               )""",
             (user_email, simulation_group_id)
         )
         result = cur.fetchone()
