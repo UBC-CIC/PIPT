@@ -114,7 +114,12 @@ def generate_presigned_url(bucket, key):
     """Generate a CloudFront signed URL for the given S3 key."""
     try:
         cf_signer = CloudFrontSigner(CLOUDFRONT_KEY_PAIR_ID, rsa_signer)
-        url = f"https://{CLOUDFRONT_DOMAIN}/{key}"
+        # URL-encode path segments (preserve /) for keys with spaces or special chars
+        encoded_key = "/".join(
+            __import__("urllib.parse", fromlist=["quote"]).quote(segment, safe="")
+            for segment in key.split("/")
+        )
+        url = f"https://{CLOUDFRONT_DOMAIN}/{encoded_key}"
         expire_date = datetime.utcnow() + timedelta(seconds=300)  # 5 minutes
         signed_url = cf_signer.generate_presigned_url(url, date_less_than=expire_date)
         return signed_url

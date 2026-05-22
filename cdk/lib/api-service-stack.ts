@@ -1480,7 +1480,7 @@ export class ApiServiceStack extends cdk.Stack {
     });
 
     // CloudWatch alarm: alert if CloudFront requests exceed 10,000 in 1 hour
-    const cfRequestsAlarm = new cloudwatch.Alarm(
+    new cloudwatch.Alarm(
       this,
       `${id}-CloudFrontHighRequestsAlarm`,
       {

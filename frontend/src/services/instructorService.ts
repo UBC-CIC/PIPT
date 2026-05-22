@@ -845,9 +845,10 @@ async function uploadFileToS3(
     mode: 'cors',
   });
 
-  // S3 POST returns 204 on success. If CORS blocks reading the response,
-  // the upload still succeeded — check for network errors only.
-  if (response.status && response.status >= 400) {
+  // S3 POST may return a 2xx status on success (for example 200 when
+  // success_action_status is configured by the backend). Treat any non-2xx
+  // response as a failure.
+  if (!response.ok) {
     throw new Error(`Upload failed with status ${response.status}`);
   }
 }

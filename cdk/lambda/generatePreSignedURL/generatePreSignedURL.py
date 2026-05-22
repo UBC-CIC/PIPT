@@ -124,6 +124,12 @@ def lambda_handler(event, context):
     if not SAFE_FILENAME.match(file_name):
         return {
             'statusCode': 400,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Headers": "*",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+            },
             'body': json.dumps('Invalid file name. Only alphanumeric characters, spaces, hyphens, underscores, dots, parentheses, and commas are allowed (max 200 chars).')
         }
 
