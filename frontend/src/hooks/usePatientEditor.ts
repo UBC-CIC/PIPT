@@ -162,6 +162,7 @@ export function usePatientEditor({
         .then((assigned: any[]) => {
           const patientQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
             id: q.question_id,
+            group_question_id: q.group_question_id,
             title: q.title || '',
             keyQuestion: q.question_text || '',
             clinicalIntent: '',
@@ -174,9 +175,25 @@ export function usePatientEditor({
           setCaseSpecificQuestions([]);
         });
     } else {
-      // Instructor: load from local service
-      const questions = instructorService.getCaseSpecificQuestions(patientId);
-      setCaseSpecificQuestions(questions);
+      // Instructor: load patient-specific questions from API
+      if (groupId) {
+        instructorService.getSimulationGroupQuestions(groupId, patientId)
+          .then((assigned: any[]) => {
+            const patientQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
+              id: q.question_id,
+              group_question_id: q.group_question_id,
+              title: q.title || '',
+              keyQuestion: q.question_text || '',
+              clinicalIntent: '',
+              evaluationCriteria: q.evaluation_criteria || '',
+              required: q.is_mandatory ?? false,
+            }));
+            setCaseSpecificQuestions(patientQuestions);
+          })
+          .catch(() => {
+            setCaseSpecificQuestions([]);
+          });
+      }
     }
 
     // Materials are loaded by the useEffect above

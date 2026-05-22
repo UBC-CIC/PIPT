@@ -1506,8 +1506,20 @@ function addCaseSpecificQuestion(patientId: string, question: GlobalRubricQuesti
 /**
  * Update a case-specific question
  */
-function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQuestion): void {
-  // TODO: implement API call
+function updateCaseSpecificQuestion(_patientId: string, question: GlobalRubricQuestion): void {
+  // Update the question in the question bank via API
+  apiClient.request<any>(
+    `instructor/question_bank?question_id=${question.id}`,
+    {
+      method: 'PUT',
+      body: {
+        title: question.title,
+        question_text: question.keyQuestion,
+        evaluation_criteria: question.evaluationCriteria,
+        is_mandatory: question.required,
+      },
+    }
+  ).catch((err) => console.error('Failed to update case-specific question:', err));
 }
 
 /**
@@ -1517,8 +1529,18 @@ function updateCaseSpecificQuestion(_patientId: string, _question: GlobalRubricQ
  * Removed async getManageablePatients calls that used an empty string group ID.
  */
 function deleteCaseSpecificQuestion(patientId: string, questionId: string): void {
+  // Remove from local cache
   const questions = caseSpecificQuestions[patientId];
   if (questions) {
+    // Find the group_question_id from the cached question before removing
+    const question = questions.find(q => q.id === questionId);
+    if (question?.group_question_id) {
+      // Unassign via real API call
+      apiClient.request<any>(
+        `instructor/simulation_group_questions?group_question_id=${question.group_question_id}`,
+        { method: 'DELETE' }
+      ).catch((err) => console.error('Failed to delete case-specific question assignment:', err));
+    }
     caseSpecificQuestions[patientId] = questions.filter(q => q.id !== questionId);
   }
 }

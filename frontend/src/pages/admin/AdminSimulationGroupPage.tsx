@@ -41,9 +41,9 @@ import { AddDTPDialog } from '@/components/AddDTPDialog';
 import { AddRecommendationDialog } from '@/components/AddRecommendationDialog';
 import { useDTPBank } from '@/hooks/useDTPBank';
 import { useRecommendationsBank } from '@/hooks/useRecommendationsBank';
-import { assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP, listDTPItems, createDTPItem } from '@/services/dtpBankService';
+import { assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP, listDTPItems, createDTPItem, updateDTPItem } from '@/services/dtpBankService';
 import type { DTPItem, DTPAssignment } from '@/services/dtpBankService';
-import { assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation, listRecommendationItems, createRecommendationItem } from '@/services/recommendationsBankService';
+import { assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation, listRecommendationItems, createRecommendationItem, updateRecommendationItem } from '@/services/recommendationsBankService';
 import type { RecommendationItem, RecommendationAssignment } from '@/services/recommendationsBankService';
 
 import LoadingIndicator from '@/components/LoadingIndicator';
@@ -742,6 +742,28 @@ function AdminSimulationGroupPage() {
     }
   };
 
+  const handleUpdatePatientDTP = async (dtpId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => {
+    try {
+      await updateDTPItem(dtpId, data);
+      setPatientDTPs(prev => prev.map(d => d.dtpId === dtpId ? { ...d, ...data } : d));
+    } catch (err) {
+      console.error('Failed to update patient DTP:', err);
+      showNotification({ message: 'Failed to update DTP.', type: 'error' });
+      throw err;
+    }
+  };
+
+  const handleUpdatePatientRecommendation = async (recommendationId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+    try {
+      await updateRecommendationItem(recommendationId, data);
+      setPatientRecommendations(prev => prev.map(r => r.recommendationId === recommendationId ? { ...r, ...data } : r));
+    } catch (err) {
+      console.error('Failed to update patient Recommendation:', err);
+      showNotification({ message: 'Failed to update Recommendation.', type: 'error' });
+      throw err;
+    }
+  };
+
   // ── Loading state ──
   if (loading) {
     return <DashboardSkeleton cardCount={4} />;
@@ -1041,7 +1063,7 @@ function AdminSimulationGroupPage() {
             </div>
           )}
 
-          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => mockInstructorDataService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => mockInstructorDataService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
+          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
           {activeSection === 'viewStudent' && studentViewer.selectedStudentId && <StudentDetailsPanel studentDetails={studentViewer.studentDetails} studentDetailsLoading={studentViewer.studentDetailsLoading} studentPatientData={studentViewer.studentPatientData} expandedAttemptId={studentViewer.expandedAttemptId} onExpandAttempt={studentViewer.setExpandedAttemptId} selectedPatientFilter={studentViewer.selectedPatientFilter} onPatientFilterChange={studentViewer.setSelectedPatientFilter} onViewDebrief={debriefViewer.viewDebrief} isFetchingDebrief={debriefViewer.isFetchingDebrief} onDownloadPdf={async (attemptId) => { const el = debriefViewer.attemptPdfRefs.current[String(attemptId)]; if (el) await debriefViewer.downloadPdf(attemptId, el); }} isGeneratingPdf={debriefViewer.isGeneratingPdf} onBack={handleBackFromViewStudent} attemptPdfRefs={debriefViewer.attemptPdfRefs} labels={labels} />}
         </main>
       </div>

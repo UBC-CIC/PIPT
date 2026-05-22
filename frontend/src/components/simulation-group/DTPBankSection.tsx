@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, Plus } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -55,7 +55,6 @@ export function DTPBankSection({
     handleTogglePendingItem,
     hasPendingChanges, pendingAddCount, pendingRemoveCount,
     handleResetSelections,
-    setIsAddDialogOpen,
     selectedPatientId, setSelectedPatientId,
   } = dtpBank;
 
@@ -132,20 +131,6 @@ export function DTPBankSection({
                   ? "Select which DTP items should be included for all patients in this simulation group."
                   : "Select which DTP items should be included for all patients in this simulation group. These apply to every patient encounter."}
               </p>
-
-              {/* Admin: Add New DTP button */}
-              {role === 'admin' && (
-                <Button
-                  onClick={() => setIsAddDialogOpen(true)}
-                  className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
-                  style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                >
-                  <Plus className="w-5 h-5" />
-                  Add New DTP Item
-                </Button>
-              )}
 
               {/* Search */}
               <div className="relative mb-4">
@@ -269,20 +254,6 @@ export function DTPBankSection({
                   ))}
                 </select>
               </div>
-
-              {/* Admin: Add New DTP button */}
-              {role === 'admin' && (
-                <Button
-                  onClick={() => setIsAddDialogOpen(true)}
-                  className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
-                  style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                >
-                  <Plus className="w-5 h-5" />
-                  Add New DTP Item
-                </Button>
-              )}
 
               {/* Search */}
               <div className="relative mb-4">

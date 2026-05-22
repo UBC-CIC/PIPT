@@ -31,9 +31,9 @@ import { AddQuestionDialog } from '@/components/AddQuestionDialog';
 import { AddPatientSpecificQuestionDialog } from '@/components/AddPatientSpecificQuestionDialog';
 import AIDebriefDialog from '../../components/AIDebriefDialog';
 import { useNotification } from '@/components/notifications';
-import { listDTPItemsAsInstructor, assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP, createDTPItem } from '@/services/dtpBankService';
+import { listDTPItemsAsInstructor, assignDTPToGroup, assignDTPToPatient, getAssignedDTPs, unassignDTP, createDTPItem, updateDTPItem } from '@/services/dtpBankService';
 import type { DTPAssignment } from '@/services/dtpBankService';
-import { listRecommendationItemsAsInstructor, assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation, createRecommendationItem } from '@/services/recommendationsBankService';
+import { listRecommendationItemsAsInstructor, assignRecommendationToGroup, assignRecommendationToPatient, getAssignedRecommendations, unassignRecommendation, createRecommendationItem, updateRecommendationItem } from '@/services/recommendationsBankService';
 import type { RecommendationAssignment } from '@/services/recommendationsBankService';
 
 type ActiveSection = 'analytics' | 'patients' | 'students' | 'rubric' | 'questionBank' | 'dtpBank' | 'recommendationsBank' | 'prompt' | 'editPatient' | 'viewStudent';
@@ -371,6 +371,30 @@ function InstructorSimulationGroupPage() {
     }
   };
 
+  const handleUpdatePatientDTP = async (dtpId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => {
+    try {
+      await updateDTPItem(dtpId, data);
+      // Update local state to reflect the change
+      setPatientDTPs(prev => prev.map(d => d.dtpId === dtpId ? { ...d, ...data } : d));
+    } catch (err) {
+      console.error('Failed to update patient DTP:', err);
+      showNotification({ message: 'Failed to update DTP.', type: 'error' });
+      throw err;
+    }
+  };
+
+  const handleUpdatePatientRecommendation = async (recommendationId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+    try {
+      await updateRecommendationItem(recommendationId, data);
+      // Update local state to reflect the change
+      setPatientRecommendations(prev => prev.map(r => r.recommendationId === recommendationId ? { ...r, ...data } : r));
+    } catch (err) {
+      console.error('Failed to update patient Recommendation:', err);
+      showNotification({ message: 'Failed to update Recommendation.', type: 'error' });
+      throw err;
+    }
+  };
+
   // ── Navigation handlers ──
   const handleSignOut = async () => { await signOut(); };
   const handleBackToAllGroups = () => navigate('/instructor');
@@ -620,7 +644,7 @@ function InstructorSimulationGroupPage() {
               <textarea readOnly className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.tableHeader, minHeight: '500px' }} defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'} />
             </div>
           )}
-          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
+          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
           {activeSection === 'viewStudent' && studentViewer.selectedStudentId && <StudentDetailsPanel studentDetails={studentViewer.studentDetails} studentDetailsLoading={studentViewer.studentDetailsLoading} studentPatientData={studentViewer.studentPatientData} expandedAttemptId={studentViewer.expandedAttemptId} onExpandAttempt={studentViewer.setExpandedAttemptId} selectedPatientFilter={studentViewer.selectedPatientFilter} onPatientFilterChange={studentViewer.setSelectedPatientFilter} onViewDebrief={debriefViewer.viewDebrief} isFetchingDebrief={debriefViewer.isFetchingDebrief} onDownloadPdf={async (attemptId) => { const el = debriefViewer.attemptPdfRefs.current[String(attemptId)]; if (el) await debriefViewer.downloadPdf(attemptId, el); }} isGeneratingPdf={debriefViewer.isGeneratingPdf} onBack={handleBackFromViewStudent} attemptPdfRefs={debriefViewer.attemptPdfRefs} labels={labels} />}
         </main>
       </div>

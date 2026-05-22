@@ -1,4 +1,4 @@
-import { Search, Plus } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -62,10 +62,6 @@ export function QuestionBankSection({
     handleTogglePendingQuestion,
     hasPendingChanges, pendingAddCount, pendingRemoveCount,
     handleResetSelections,
-    // Dialogs
-    isAddQuestionDialogOpen: _isAddQuestionDialogOpen, setIsAddQuestionDialogOpen,
-    isAddPatientQuestionDialogOpen: _isAddPatientQuestionDialogOpen, setIsAddPatientQuestionDialogOpen,
-    setAddQuestionType,
     // Patient selection
     selectedPatientForQuestionBank, setSelectedPatientForQuestionBank,
     setPatientPagination,
@@ -190,20 +186,6 @@ export function QuestionBankSection({
                   : "Select which global questions should be included in this simulation group\u2019s rubric. These are questions that are saved in the question bank and are visible to be included for all patients in this simulation group."}
               </p>
 
-              {/* Admin: Add New Global Question button */}
-              {role === 'admin' && (
-                <Button
-                  onClick={() => { setAddQuestionType('global'); setIsAddQuestionDialogOpen(true); }}
-                  className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
-                  style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                >
-                  <Plus className="w-5 h-5" />
-                  Add New Global Question
-                </Button>
-              )}
-
               {/* Instructor: per-tab search */}
               {role === 'instructor' && (
                 <div className="relative mb-4">
@@ -317,20 +299,6 @@ export function QuestionBankSection({
                   ))}
                 </select>
               </div>
-
-              {/* Admin: Add New Patient-Specific Question button */}
-              {role === 'admin' && (
-                <Button
-                  onClick={() => setIsAddPatientQuestionDialogOpen(true)}
-                  className="w-full justify-start gap-2 py-3 h-auto font-medium transition-colors mb-4"
-                  style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
-                >
-                  <Plus className="w-5 h-5" />
-                  Add New Patient-Specific Question
-                </Button>
-              )}
 
               {/* Instructor: per-tab search */}
               {role === 'instructor' && (
