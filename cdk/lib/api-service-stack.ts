@@ -1474,6 +1474,26 @@ export class ApiServiceStack extends cdk.Stack {
       description: "CloudFront public key ID for signed URL generation",
     });
 
+    // CloudWatch alarm: alert if CloudFront requests exceed 10,000 in 1 hour
+    const cfRequestsAlarm = new cloudwatch.Alarm(
+      this,
+      `${id}-CloudFrontHighRequestsAlarm`,
+      {
+        alarmName: `${id}-CloudFront-HighRequests`,
+        alarmDescription:
+          "Triggers when CloudFront document delivery requests exceed 10,000 in 1 hour — possible abuse or replay attack",
+        metric: docsDistribution.metricRequests({
+          period: cdk.Duration.hours(1),
+          statistic: "Sum",
+        }),
+        threshold: 10000,
+        evaluationPeriods: 1,
+        comparisonOperator:
+          cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+        treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+      }
+    );
+
     // Create the Lambda function for generating presigned URLs
     const generatePreSignedURL = new lambda.Function(
       this,
@@ -1873,9 +1893,6 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     cfnGetProfilePictures.overrideLogicalId("GetProfilePictures");
 
-    // Grant the Lambda function read-only permissions to the S3 bucket
-    dataIngestionBucket.grantRead(getProfilePictures);
-
     // Grant access to Secret Manager
     getProfilePictures.addToRolePolicy(
       new iam.PolicyStatement({
@@ -1930,9 +1947,6 @@ export class ApiServiceStack extends cdk.Stack {
     const cfnGetProfilePicturesStudent = getProfilePicturesStudent.node
       .defaultChild as lambda.CfnFunction;
     cfnGetProfilePicturesStudent.overrideLogicalId("GetProfilePicturesStudent");
-
-    // Grant the Lambda function read-only permissions to the S3 bucket
-    dataIngestionBucket.grantRead(getProfilePicturesStudent);
 
     // Grant access to Secret Manager
     getProfilePicturesStudent.addToRolePolicy(
