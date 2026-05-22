@@ -1,7 +1,6 @@
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { TooltipProvider, Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { X, Star, CheckCircle, AlertTriangle, XCircle, Loader2, CheckCircle2, Circle } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { useState, useEffect } from 'react';
