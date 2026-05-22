@@ -216,10 +216,14 @@ def lambda_handler(event, context):
         presigned_post = s3.generate_presigned_post(
             Bucket=BUCKET,
             Key=key,
-            Fields={"Content-Type": content_type},
+            Fields={
+                "Content-Type": content_type,
+                "success_action_status": "200",
+            },
             Conditions=[
                 ["content-length-range", 1, 52428800],  # 1 byte to 50 MB
                 {"Content-Type": content_type},
+                {"success_action_status": "200"},
             ],
             ExpiresIn=300,
         )

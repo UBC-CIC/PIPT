@@ -73,7 +73,11 @@ export class ApiServiceStack extends cdk.Stack {
 
     this.layerList = {};
 
-    const allowedOrigins = ["https://*.amplifyapp.com"];
+    const allowedOrigins = [
+      "https://*.amplifyapp.com",
+      "http://localhost:5173",
+      "http://localhost:5174",
+    ];
 
     const embeddingStorageBucket = new s3.Bucket(
       this,
@@ -1385,7 +1389,7 @@ export class ApiServiceStack extends cdk.Stack {
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
         cors: [
           {
-            allowedHeaders: ["Content-Type", "x-amz-content-sha256"],
+            allowedHeaders: ["*"],
             allowedMethods: [
               s3.HttpMethods.GET,
               s3.HttpMethods.PUT,

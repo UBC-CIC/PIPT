@@ -839,10 +839,17 @@ async function uploadFileToS3(
   // File must be the last field
   formData.append('file', file);
 
-  await fetch(data.url, {
+  const response = await fetch(data.url, {
     method: 'POST',
     body: formData,
+    mode: 'cors',
   });
+
+  // S3 POST returns 204 on success. If CORS blocks reading the response,
+  // the upload still succeeded — check for network errors only.
+  if (response.status && response.status >= 400) {
+    throw new Error(`Upload failed with status ${response.status}`);
+  }
 }
 
 /**
