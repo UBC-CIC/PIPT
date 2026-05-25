@@ -34,41 +34,6 @@ class LLM_evaluation(BaseModel):
     verdict: str = Field(description="'True' if the student has properly diagnosed the patient, 'False' otherwise.")
 
 
-def create_dynamodb_history_table(table_name: str) -> bool:
-    """
-    Create a DynamoDB table to store the session history if it doesn't already exist.
-    """
-    dynamodb_resource = boto3.resource("dynamodb")
-    dynamodb_client = boto3.client("dynamodb")
-    
-    existing_tables = []
-    exclusive_start_table_name = None
-    
-    while True:
-        if exclusive_start_table_name:
-            response = dynamodb_client.list_tables(ExclusiveStartTableName=exclusive_start_table_name)
-        else:
-            response = dynamodb_client.list_tables()
-        
-        existing_tables.extend(response.get('TableNames', []))
-        
-        if 'LastEvaluatedTableName' in response:
-            exclusive_start_table_name = response['LastEvaluatedTableName']
-        else:
-            break
-    
-    if table_name not in existing_tables:
-        table = dynamodb_resource.create_table(
-            TableName=table_name,
-            KeySchema=[{"AttributeName": "SessionId", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "SessionId", "AttributeType": "S"}],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
-        dynamodb_client.update_time_to_live(
-            TableName=table_name,
-            TimeToLiveSpecification={"Enabled": True, "AttributeName": "expireAt"},
-        )
 
 def get_bedrock_llm(
     bedrock_llm_id: str,

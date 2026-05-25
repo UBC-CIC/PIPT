@@ -35,6 +35,7 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 export class ApiServiceStack extends cdk.Stack {
   private readonly api: apigateway.SpecRestApi;
@@ -901,6 +902,13 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
+    // Shared table — not owned by this stack (used across multiple stack prefixes)
+    const conversationTable = dynamodb.Table.fromTableName(
+      this,
+      "ConversationTable",
+      "DynamoDB-Conversation-Table"
+    );
+
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(
       this,
@@ -1333,14 +1341,12 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
-          "dynamodb:ListTables",
-          "dynamodb:CreateTable",
           "dynamodb:DescribeTable",
           "dynamodb:PutItem",
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
         ],
-        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/*`],
+        resources: [conversationTable.tableArn],
       })
     );
 
@@ -2139,7 +2145,7 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
-        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/*`],
+        resources: [conversationTable.tableArn],
       })
     );
 
