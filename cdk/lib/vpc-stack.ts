@@ -154,6 +154,12 @@ export class VpcStack extends Stack {
         privateDnsEnabled: true,
       });
 
+      // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
+      this.vpc.addGatewayEndpoint("DynamoDB Endpoint", {
+        service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+        subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
+      });
+
       this.vpc.addFlowLog(`${id}-vpcFlowLog`);
 
       // Get default security group for VPC
@@ -205,6 +211,12 @@ export class VpcStack extends Stack {
       this.vpc.addInterfaceEndpoint(`${id}-RDS Endpoint`, {
         service: ec2.InterfaceVpcEndpointAwsService.RDS,
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      });
+
+      // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
+      this.vpc.addGatewayEndpoint(`${id}-DynamoDB Endpoint`, {
+        service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+        subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
       });
     }
   }

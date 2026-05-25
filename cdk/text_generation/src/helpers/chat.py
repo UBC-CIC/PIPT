@@ -1,4 +1,5 @@
-import boto3, re, json, logging, math, threading
+import boto3, re, json, logging, math, threading, struct
+from boto3.dynamodb.types import Binary
 from concurrent.futures import Future, ThreadPoolExecutor
 import psycopg
 import os
@@ -1066,7 +1067,7 @@ def cache_key_questions(
                 "evaluation_criteria": cq["evaluation_criteria"],
                 "is_mandatory": cq["is_mandatory"],
                 "weight": Decimal(str(cq["weight"])) if cq["weight"] is not None else None,
-                "embedding": [Decimal(str(v)) for v in cq["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(cq["embedding"])}d', *cq["embedding"])),
             })
 
         table.put_item(Item={
@@ -1112,7 +1113,7 @@ def get_cached_key_questions(
                 "evaluation_criteria": q.get("evaluation_criteria"),
                 "is_mandatory": q.get("is_mandatory", False),
                 "weight": float(q["weight"]) if q.get("weight") is not None else None,
-                "embedding": [float(v) for v in q["embedding"]] if q.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(q["embedding"]) // 8}d', bytes(q["embedding"]))) if q.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached key questions for session={session_id}")
@@ -1255,7 +1256,7 @@ def cache_instructor_dtp_embeddings(
                 "dtp_id": item["dtp_id"],
                 "expected_dtp_text": item["expected_dtp_text"],
                 "evaluation_criteria": item["evaluation_criteria"],
-                "embedding": [Decimal(str(v)) for v in item["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(item["embedding"])}d', *item["embedding"])),
             })
 
         table.put_item(Item={
@@ -1332,7 +1333,7 @@ def cache_instructor_rec_embeddings(
                 "recommendation_text": item["recommendation_text"],
                 "rationale": item["rationale"],
                 "evaluation_criteria": item["evaluation_criteria"],
-                "embedding": [Decimal(str(v)) for v in item["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(item["embedding"])}d', *item["embedding"])),
             })
 
         table.put_item(Item={
@@ -1376,7 +1377,7 @@ def get_cached_instructor_dtps(
                 "dtp_id": d["dtp_id"],
                 "expected_dtp_text": d["expected_dtp_text"],
                 "evaluation_criteria": d.get("evaluation_criteria"),
-                "embedding": [float(v) for v in d["embedding"]] if d.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(d["embedding"]) // 8}d', bytes(d["embedding"]))) if d.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached instructor DTPs for group={simulation_group_id}, persona={persona_id}")
@@ -1417,7 +1418,7 @@ def get_cached_instructor_recs(
                 "recommendation_text": r["recommendation_text"],
                 "rationale": r.get("rationale"),
                 "evaluation_criteria": r.get("evaluation_criteria"),
-                "embedding": [float(v) for v in r["embedding"]] if r.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(r["embedding"]) // 8}d', bytes(r["embedding"]))) if r.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached instructor recommendations for group={simulation_group_id}, persona={persona_id}")
