@@ -38,7 +38,8 @@ function AdminRecommendationsBankPage() {
     recommendationText: string;
     evaluationCriteria: string;
     rationale: string;
-  }>({ title: '', recommendationText: '', evaluationCriteria: '', rationale: '' });
+    tags: string[];
+  }>({ title: '', recommendationText: '', evaluationCriteria: '', rationale: '', tags: [] });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -121,6 +122,7 @@ function AdminRecommendationsBankPage() {
     recommendationText: string;
     evaluationCriteria: string;
     rationale: string;
+    tags: string[];
   }) => {
     try {
       setError(null);
@@ -149,6 +151,7 @@ function AdminRecommendationsBankPage() {
       recommendationText: item.recommendationText,
       evaluationCriteria: item.evaluationCriteria,
       rationale: item.rationale,
+      tags: item.tags || [],
     });
     setEditError(null);
   };
@@ -156,6 +159,11 @@ function AdminRecommendationsBankPage() {
   const cancelEditing = () => {
     setEditingItemId(null);
     setEditError(null);
+  };
+
+  const handleTagInput = (value: string) => {
+    const tags = value.split(',').map(t => t.trim()).filter(Boolean);
+    setEditForm(prev => ({ ...prev, tags }));
   };
 
   const saveEditing = async () => {
@@ -177,6 +185,7 @@ function AdminRecommendationsBankPage() {
         recommendationText: editForm.recommendationText.trim(),
         evaluationCriteria: editForm.evaluationCriteria.trim(),
         rationale: editForm.rationale.trim(),
+        tags: editForm.tags,
       });
       setRecommendationItems(prev => prev.map(item => item.id === editingItemId ? updated : item));
       setEditingItemId(null);
@@ -424,6 +433,15 @@ function AdminRecommendationsBankPage() {
                                     }}
                                   />
                                 </div>
+                                <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags (comma-separated)</label>
+                                  <Input
+                                    value={editForm.tags.join(', ')}
+                                    onChange={(e) => handleTagInput(e.target.value)}
+                                    placeholder="e.g. patient_specific, cardiology, dosing"
+                                    style={{ borderColor: UI_COLORS.border.default }}
+                                  />
+                                </div>
                                 {/* Action buttons */}
                                 <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                                   <Button
@@ -474,6 +492,22 @@ function AdminRecommendationsBankPage() {
                                     <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
                                       {item.rationale}
                                     </p>
+                                  </div>
+                                )}
+                                {item.tags && item.tags.length > 0 && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
+                                    <div className="flex flex-wrap gap-1">
+                                      {item.tags.map(tag => (
+                                        <span
+                                          key={tag}
+                                          className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
+                                          style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}
+                                        >
+                                          {tag}
+                                        </span>
+                                      ))}
+                                    </div>
                                   </div>
                                 )}
                               </div>

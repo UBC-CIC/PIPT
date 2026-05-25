@@ -15,6 +15,7 @@ interface AddRecommendationDialogProps {
     recommendationText: string;
     evaluationCriteria: string;
     rationale: string;
+    tags: string[];
   }) => void;
 }
 
@@ -24,6 +25,7 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
   const [recommendationText, setRecommendationText] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [rationale, setRationale] = useState('');
+  const [tagsInput, setTagsInput] = useState('');
 
   const handleSave = () => {
     if (!title.trim() || !recommendationText.trim()) {
@@ -31,11 +33,14 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
       return;
     }
 
+    const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
+
     onSave({
       title: title.trim(),
       recommendationText: recommendationText.trim(),
       evaluationCriteria: evaluationCriteria.trim(),
       rationale: rationale.trim(),
+      tags,
     });
 
     // Reset form
@@ -43,6 +48,7 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
     setRecommendationText('');
     setEvaluationCriteria('');
     setRationale('');
+    setTagsInput('');
     onOpenChange(false);
   };
 
@@ -51,6 +57,7 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
     setRecommendationText('');
     setEvaluationCriteria('');
     setRationale('');
+    setTagsInput('');
     onOpenChange(false);
   };
 
@@ -140,6 +147,26 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
                 color: UI_COLORS.text.heading,
               }}
             />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
+              Tags (comma-separated)
+            </label>
+            <Input
+              value={tagsInput}
+              onChange={(e) => setTagsInput(e.target.value)}
+              placeholder="e.g. patient_specific, cardiology, dosing"
+              className="w-full"
+              style={{
+                borderColor: UI_COLORS.border.default,
+                backgroundColor: UI_COLORS.background.white,
+              }}
+            />
+            <p className="text-xs mt-1" style={{ color: UI_COLORS.text.muted }}>
+              Use "patient_specific" to mark items only relevant for patient-level assignment.
+            </p>
           </div>
         </div>
 

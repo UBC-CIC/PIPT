@@ -1081,12 +1081,15 @@ function MaterialsTab({
                     </select>
                   </div>
 
-                  {/* Embed Link */}
+                  {/* Embed Link or Code */}
                   <div>
-                    <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-                      Embed Link
+                    <label className="block text-sm font-medium mb-1" style={{ color: UI_COLORS.text.body }}>
+                      Embed Link or Code
                     </label>
-                    <Input
+                    <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
+                      Paste a URL or full embed code (e.g. {'<iframe ...>'}). Aspect ratio is auto-detected from embed dimensions.
+                    </p>
+                    <textarea
                       value={material.embedLink || ''}
                       onChange={(e) => {
                         const updatedMaterials = patientEditor.caseMaterials.map(m =>
@@ -1094,13 +1097,15 @@ function MaterialsTab({
                         );
                         patientEditor.setCaseMaterials(updatedMaterials);
                       }}
-                      placeholder="https://..."
-                      className="w-full py-3 text-base focus-visible:ring-0 focus-visible:ring-offset-0"
+                      placeholder={'https://... or <iframe src="..." width="800" height="600"></iframe>'}
+                      rows={3}
+                      className="w-full px-3 py-3 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 resize-y"
                       style={{
                         borderWidth: '1px',
                         borderStyle: 'solid',
                         borderColor: UI_COLORS.border.default,
-                        backgroundColor: UI_COLORS.background.white
+                        backgroundColor: UI_COLORS.background.white,
+                        minHeight: '72px',
                       }}
                     />
                   </div>
@@ -1112,33 +1117,54 @@ function MaterialsTab({
                       <span className="font-medium" style={{ color: UI_COLORS.text.heading }}>Preview</span>
                     </div>
                     {material.embedLink ? (
-                      <div
-                        className="rounded-lg overflow-hidden"
-                        style={{
-                          position: 'relative',
-                          width: '100%',
-                          paddingBottom: '56.25%',
-                          height: 0,
-                          borderWidth: '1px',
-                          borderStyle: 'solid',
-                          borderColor: UI_COLORS.border.default,
-                        }}
-                      >
-                        <iframe
-                          src={material.embedLink}
-                          title={material.title || 'Preview'}
-                          style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
-                          allowFullScreen
-                          allow="autoplay *; fullscreen *; encrypted-media *"
-                          sandbox="allow-downloads allow-forms allow-same-origin allow-scripts allow-top-navigation allow-pointer-lock allow-popups allow-modals allow-orientation-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation-by-user-activation"
+                      material.embedLink.trimStart().toLowerCase().startsWith('<iframe') ? (
+                        <div
+                          className="embed-responsive rounded-lg overflow-hidden"
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            aspectRatio: (() => {
+                              const match = material.embedLink!.match(/width=["']?(\d+)["']?/i);
+                              const matchH = material.embedLink!.match(/height=["']?(\d+)["']?/i);
+                              const w = match ? parseInt(match[1], 10) : 0;
+                              const h = matchH ? parseInt(matchH[1], 10) : 0;
+                              return w > 0 && h > 0 ? `${w} / ${h}` : '16 / 9';
+                            })(),
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
+                            borderColor: UI_COLORS.border.default,
+                          }}
+                          dangerouslySetInnerHTML={{ __html: material.embedLink }}
                         />
-                      </div>
+                      ) : (
+                        <div
+                          className="rounded-lg overflow-hidden"
+                          style={{
+                            position: 'relative',
+                            width: '100%',
+                            paddingBottom: '56.25%',
+                            height: 0,
+                            borderWidth: '1px',
+                            borderStyle: 'solid',
+                            borderColor: UI_COLORS.border.default,
+                          }}
+                        >
+                          <iframe
+                            src={material.embedLink}
+                            title={material.title || 'Preview'}
+                            style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', border: 0 }}
+                            allowFullScreen
+                            allow="autoplay *; fullscreen *; encrypted-media *"
+                            sandbox="allow-downloads allow-forms allow-same-origin allow-scripts allow-top-navigation allow-pointer-lock allow-popups allow-modals allow-orientation-lock allow-popups-to-escape-sandbox allow-presentation allow-top-navigation-by-user-activation"
+                          />
+                        </div>
+                      )
                     ) : (
                       <div
                         className="border rounded-lg p-8 flex items-center justify-center"
                         style={{ borderColor: UI_COLORS.border.default, minHeight: '120px' }}
                       >
-                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Enter an embed link above to see a preview</p>
+                        <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>Enter an embed link or code above to see a preview</p>
                       </div>
                     )}
                   </div>

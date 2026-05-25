@@ -16,6 +16,7 @@ export interface RecommendationItem {
   recommendationText: string;    // The expected recommendation
   evaluationCriteria: string;    // How to evaluate student's recommendation
   rationale: string;             // Clinical rationale for this recommendation
+  tags: string[];                // Filtering tags (e.g., 'patient_specific')
   isActive: boolean;             // Whether the item is active
   createdAt: string;             // ISO timestamp
 }
@@ -48,6 +49,7 @@ export function mapBackendToRecommendationItem(row: Record<string, unknown>): Re
     recommendationText: row.recommendation_text as string,
     evaluationCriteria: (row.evaluation_criteria as string) || '',
     rationale: (row.rationale as string) || '',
+    tags: (row.tags as string[]) || [],
     isActive: row.is_active !== false,
     createdAt: row.created_at as string,
   };
@@ -99,7 +101,7 @@ export async function listRecommendationItemsAsInstructor(organizationId: string
  */
 export async function createRecommendationItem(
   organizationId: string,
-  data: Omit<RecommendationItem, 'id' | 'organizationId' | 'createdAt' | 'isActive'>
+  data: Omit<RecommendationItem, 'id' | 'organizationId' | 'createdAt' | 'isActive'> & { tags?: string[] }
 ): Promise<RecommendationItem> {
   const row = await apiClient.request<Record<string, unknown>>(
     `admin/recommendations_bank?organization_id=${organizationId}`,
@@ -110,6 +112,7 @@ export async function createRecommendationItem(
         recommendation_text: data.recommendationText,
         evaluation_criteria: data.evaluationCriteria || null,
         rationale: data.rationale || null,
+        tags: data.tags || [],
       },
     }
   );
@@ -121,7 +124,7 @@ export async function createRecommendationItem(
  */
 export async function updateRecommendationItem(
   itemId: string,
-  data: Partial<Pick<RecommendationItem, 'title' | 'recommendationText' | 'evaluationCriteria' | 'rationale' | 'isActive'>>
+  data: Partial<Pick<RecommendationItem, 'title' | 'recommendationText' | 'evaluationCriteria' | 'rationale' | 'tags' | 'isActive'>>
 ): Promise<RecommendationItem> {
   const row = await apiClient.request<Record<string, unknown>>(
     `admin/recommendations_bank?recommendation_id=${itemId}`,
@@ -132,6 +135,7 @@ export async function updateRecommendationItem(
         ...(data.recommendationText !== undefined && { recommendation_text: data.recommendationText }),
         ...(data.evaluationCriteria !== undefined && { evaluation_criteria: data.evaluationCriteria }),
         ...(data.rationale !== undefined && { rationale: data.rationale }),
+        ...(data.tags !== undefined && { tags: data.tags }),
         ...(data.isActive !== undefined && { is_active: data.isActive }),
       },
     }

@@ -1731,14 +1731,16 @@ exports.handler = async (event, context) => {
               break;
             }
 
+            const safeTags = Array.isArray(JSON.parse(event.body).tags) ? JSON.parse(event.body).tags : [];
+
             const newRec = await sqlConnectionTableCreator`
               INSERT INTO "recommendations_bank" (
                 organization_id, created_by, title, recommendation_text,
-                evaluation_criteria, rationale
+                evaluation_criteria, rationale, tags
               )
               VALUES (
                 ${organization_id}, ${created_by}, ${title}, ${recommendation_text},
-                ${evaluation_criteria || null}, ${rationale || null}
+                ${evaluation_criteria || null}, ${rationale || null}, ${safeTags}
               )
               RETURNING *;
             `;
@@ -1763,7 +1765,7 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { recommendation_id } = event.queryStringParameters;
-            const { title, recommendation_text, evaluation_criteria, rationale, is_active } = JSON.parse(event.body);
+            const { title, recommendation_text, evaluation_criteria, rationale, tags, is_active } = JSON.parse(event.body);
 
             const updated = await sqlConnectionTableCreator`
               UPDATE "recommendations_bank"
@@ -1772,6 +1774,7 @@ exports.handler = async (event, context) => {
                 recommendation_text = COALESCE(${recommendation_text || null}, recommendation_text),
                 evaluation_criteria = COALESCE(${evaluation_criteria !== undefined ? evaluation_criteria : null}, evaluation_criteria),
                 rationale = COALESCE(${rationale !== undefined ? rationale : null}, rationale),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags),
                 is_active = COALESCE(${is_active !== undefined ? is_active : null}, is_active)
               WHERE recommendation_id = ${recommendation_id}
               RETURNING *;
