@@ -902,12 +902,106 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
+    const dynamoTableName = "DynamoDB-Conversation-Table";
+
+    // The conversation table is referenced by name rather than owned by CDK. It was created
+    // manually in the AWS console before this CDK app existed and already holds live chat history.
+    // Handing ownership to CDK would require destroying it (losing data) or `cdk import`, which
+    // we attempted but could not get working reliably.
+    //
+    // We can't use `new dynamodb.Table(...)` — CloudFormation would fail with "Table already exists".
+    // We can't use only `Table.fromTableName` — on a fresh deploy the table wouldn't exist yet and
+    // every Lambda would crash at runtime with ResourceNotFoundException, with no deploy-time warning.
+    //
+    // This custom resource solves both: it attempts CreateTable and swallows ResourceInUseException,
+    // so existing deploys are a no-op and fresh deploys get the table created automatically before
+    // any Lambda needs it. CDK never owns the lifecycle — cdk destroy will not delete it or its data.
+    const ensureTableFunction = new lambda.Function(this, `${id}-EnsureConversationTable`, {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      code: lambda.Code.fromAsset("lambda/ensureConversationTable"),
+      handler: "index.handler",
+      timeout: cdk.Duration.seconds(300),
+      functionName: `${id}-EnsureConversationTable`,
+      memorySize: 128,
+      logRetention: logs.RetentionDays.INFINITE,
+    });
+
+    ensureTableFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "dynamodb:CreateTable",
+          "dynamodb:DescribeTable",
+          "dynamodb:UpdateTimeToLive",
+        ],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${dynamoTableName}`,
+        ],
+      })
+    );
+
+    const ensureTableProvider = new cr.Provider(this, `${id}-EnsureConversationTableProvider`, {
+      onEventHandler: ensureTableFunction,
+    });
+
+    new cdk.CustomResource(this, `${id}-EnsureConversationTableResource`, {
+      serviceToken: ensureTableProvider.serviceToken,
+    });
+
     // Shared table — not owned by this stack (used across multiple stack prefixes)
     const conversationTable = dynamodb.Table.fromTableName(
       this,
       "ConversationTable",
-      "DynamoDB-Conversation-Table"
+      dynamoTableName
     );
+
+    new cloudwatch.Alarm(this, `${id}-DynamoThrottleAlarm`, {
+      alarmName: `${id}-DynamoDB-ThrottledRequests`,
+      alarmDescription: "DynamoDB throttling on the conversation table — may need capacity increase",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "ThrottledRequests",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-DynamoSystemErrorsAlarm`, {
+      alarmName: `${id}-DynamoDB-SystemErrors`,
+      alarmDescription: "DynamoDB system errors on the conversation table — indicates AWS-side issue",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "SystemErrors",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-DynamoUserErrorsAlarm`, {
+      alarmName: `${id}-DynamoDB-UserErrors`,
+      alarmDescription: "DynamoDB user errors on the conversation table — missing keys or wrong attribute types",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "UserErrors",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
 
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(
