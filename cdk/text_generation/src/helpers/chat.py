@@ -1,4 +1,4 @@
-import boto3, re, json, logging, math, threading, struct
+import boto3, re, json, logging, math, threading, struct, time
 from boto3.dynamodb.types import Binary
 from concurrent.futures import Future, ThreadPoolExecutor
 import psycopg
@@ -65,6 +65,10 @@ def create_dynamodb_history_table(table_name: str) -> bool:
             BillingMode="PAY_PER_REQUEST",
         )
         table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
+        dynamodb_client.update_time_to_live(
+            TableName=table_name,
+            TimeToLiveSpecification={"Enabled": True, "AttributeName": "expireAt"},
+        )
 
 def get_bedrock_llm(
     bedrock_llm_id: str,
@@ -1031,6 +1035,7 @@ def cache_key_questions(
                 "SessionId": f"QCACHE#{session_id}",
                 "questions": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty question list in DynamoDB: {e}")
@@ -1074,6 +1079,7 @@ def cache_key_questions(
             "SessionId": f"QCACHE#{session_id}",
             "questions": serializable_questions,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_questions)} key questions for session={session_id}")
     except Exception as e:
@@ -1223,6 +1229,7 @@ def cache_instructor_dtp_embeddings(
                 "SessionId": cache_key,
                 "items": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty DTP list in DynamoDB: {e}")
@@ -1263,6 +1270,7 @@ def cache_instructor_dtp_embeddings(
             "SessionId": cache_key,
             "items": serializable_items,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_dtps)} instructor DTP embeddings for group={simulation_group_id}, persona={persona_id}")
     except Exception as e:
@@ -1298,6 +1306,7 @@ def cache_instructor_rec_embeddings(
                 "SessionId": cache_key,
                 "items": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty recommendation list in DynamoDB: {e}")
@@ -1340,6 +1349,7 @@ def cache_instructor_rec_embeddings(
             "SessionId": cache_key,
             "items": serializable_items,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_recs)} instructor recommendation embeddings for group={simulation_group_id}, persona={persona_id}")
     except Exception as e:
