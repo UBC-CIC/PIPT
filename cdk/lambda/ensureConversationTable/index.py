@@ -9,7 +9,7 @@ TABLE_NAME = "DynamoDB-Conversation-Table"
 #
 # Why is the table not owned by CDK?
 #   The table was created manually in the AWS console before this CDK app existed.
-#   At that point it already held live chat history data (818 items, ~42 MB).
+#   At that point it already held live chat history data.
 #   Handing ownership to CDK would require either destroying and recreating the table
 #   (losing all data) or using `cdk import`, which we attempted but could not get to
 #   work reliably. So CDK references the table by name rather than managing it.
@@ -19,7 +19,7 @@ TABLE_NAME = "DynamoDB-Conversation-Table"
 #   and roll back the entire stack.
 #
 # Why not just `Table.fromTableName(...)`?
-#   That works for an existing environment but silently fails on a fresh deploy —
+#   That works for an existing environment but silently fails on a fresh deploy,
 #   the stack deploys successfully but every Lambda that touches DynamoDB crashes
 #   at runtime with ResourceNotFoundException, with no obvious error at deploy time.
 #
