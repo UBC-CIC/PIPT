@@ -346,11 +346,11 @@ function InstructorSimulationGroupPage() {
     }
   };
 
-  const handleCreatePatientRecommendation = async (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+  const handleCreatePatientRecommendation = async (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string; tags?: string[] }) => {
     const orgId = simulationGroup?.organization_id;
     if (!orgId || !groupId) return;
     try {
-      const created = await createRecommendationItem(orgId, data);
+      const created = await createRecommendationItem(orgId, { ...data, tags: data.tags ?? [] });
       const assignment = await assignRecommendationToPatient(created.id, groupId, patientId);
       setPatientRecommendations(prev => [...prev, assignment]);
       showNotification({ message: 'Recommendation created and assigned to patient.', type: 'success' });

@@ -668,10 +668,10 @@ function AdminSimulationGroupPage() {
   };
 
   // ── Add New Recommendation handler (from inline dialog) ──
-  const handleSaveNewRecommendationItem = async (data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+  const handleSaveNewRecommendationItem = async (data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string; tags?: string[] }) => {
     if (!organizationId) return;
     try {
-      const created = await createRecommendationItem(organizationId, data);
+      const created = await createRecommendationItem(organizationId, { ...data, tags: data.tags ?? [] });
       recommendationsBank.setRecommendationItems(prev => [created, ...prev]);
       showNotification({ message: 'Recommendation item created successfully.', type: 'success' });
     } catch (err) {
@@ -718,10 +718,10 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  const handleCreatePatientRecommendation = async (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => {
+  const handleCreatePatientRecommendation = async (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string; tags?: string[] }) => {
     if (!organizationId || !groupId) return;
     try {
-      const created = await createRecommendationItem(organizationId, data);
+      const created = await createRecommendationItem(organizationId, { ...data, tags: data.tags ?? [] });
       const assignment = await assignRecommendationToPatient(created.id, groupId, patientId);
       setPatientRecommendations(prev => [...prev, assignment]);
       showNotification({ message: 'Recommendation created and assigned to patient.', type: 'success' });
