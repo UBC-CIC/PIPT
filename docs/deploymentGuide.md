@@ -347,7 +347,53 @@ The CI/CD pipeline builds and pushes all Docker images (text generation, data in
 
 Wait for the pipeline to complete successfully. Once done, the Lambda functions and ECS services will have images to run.
 
-### 4.3 Request SES Production Access (Optional)
+### 4.3 Enable DynamoDB TTL
+
+The `DynamoDB-Conversation-Table` is created automatically on the first Lambda invocation (triggered by the pipeline completing above). TTL must be enabled once per AWS account before users start using the app, otherwise early items will accumulate indefinitely.
+
+> **Skip this step** if TTL is already enabled on the table (check in the DynamoDB console under the table's **Additional settings** tab).
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws dynamodb update-time-to-live \
+  --table-name DynamoDB-Conversation-Table \
+  --time-to-live-specification "Enabled=true, AttributeName=expireAt" \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+aws dynamodb update-time-to-live `
+  --table-name DynamoDB-Conversation-Table `
+  --time-to-live-specification "Enabled=true, AttributeName=expireAt" `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws dynamodb update-time-to-live ^
+  --table-name DynamoDB-Conversation-Table ^
+  --time-to-live-specification "Enabled=true, AttributeName=expireAt" ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+Once enabled, DynamoDB will automatically delete:
+- Question, DTP, and recommendation cache items after **7 days**
+- Chat history items after **90 days**
+
+### 4.4 Request SES Production Access (Optional)
 
 If you need to send more than 50 verification emails per day:
 
@@ -356,7 +402,7 @@ If you need to send more than 50 verification emails per day:
 3. Click **Request production access**
 4. Fill out the form describing your use case
 
-### 4.4 Build the Amplify App
+### 4.5 Build the Amplify App
 
 After the first deployment, Amplify needs to run its initial build:
 
@@ -365,13 +411,13 @@ After the first deployment, Amplify needs to run its initial build:
 3. If the build hasn't triggered automatically, click **Run build** on the `main` branch
 4. Wait for the build to complete (typically 3–5 minutes)
 
-### 4.5 Deploy the Voice Agent (Optional)
+### 4.6 Deploy the Voice Agent (Optional)
 
 The voice agent runs on **Amazon Bedrock AgentCore** and requires the CDK stacks to be deployed first (since the CI/CD pipeline builds and pushes the voice-agent Docker image to ECR). Follow this order of operations:
 
 #### Step 1: Complete the Initial CDK Deployment
 
-Deploy all stacks without a voice agent ARN (sections 3.3–3.4). This creates the ECR repository for the voice agent image.
+Deploy all stacks without a voice agent ARN (sections 3.3–3.4). This creates the ECR repository for the voice agent image. This creates the ECR repository for the voice agent image.
 
 #### Step 2: Push the Voice Agent Image
 
@@ -441,7 +487,7 @@ npx cdk deploy GenRx-EcsSocket \
 
 > **Note:** Voice features will not work until all four steps are complete. The ECS socket server uses the stored ARN to establish a SigV4-signed WebSocket connection to the AgentCore runtime.
 
-### 4.6 Visit the Web App
+### 4.7 Visit the Web App
 
 Once the Amplify build completes, your app is live at the default Amplify domain:
 
@@ -450,6 +496,7 @@ https://main.<AMPLIFY-APP-ID>.amplifyapp.com
 ```
 
 Find the exact URL in the Amplify console or in the CDK stack outputs:
+
 
 ```bash
 aws cloudformation describe-stacks \

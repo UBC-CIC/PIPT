@@ -7,7 +7,7 @@ import psycopg
 from langchain_aws import BedrockEmbeddings
 from helpers.cohere_embeddings import CohereBedrockEmbeddings
 
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, set_stream_callback_url
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, set_stream_callback_url
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +90,7 @@ def initialize_constants():
                 region_name=BEDROCK_EMBEDDING_REGION,
             )
     
-    create_dynamodb_history_table(TABLE_NAME)
+
 
 def connect_to_db():
     global connection

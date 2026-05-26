@@ -26,7 +26,7 @@ logger.info(f"Using RDS Proxy Endpoint: {RDS_PROXY_ENDPOINT}")
 logger.info(f"Using DB Secret Name: {DB_SECRET_NAME}")
 
 def format_chat_history(session_id: str, table_name: str = "DynamoDB-Conversation-Table") -> str:
-    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
+    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     recent_messages = history.messages[-10:]
 
     lines = []
@@ -38,7 +38,7 @@ def format_chat_history(session_id: str, table_name: str = "DynamoDB-Conversatio
     return "\n".join(lines)
 
 def add_message(session_id: str, role: str, content: str, table_name: str = "DynamoDB-Conversation-Table"):
-    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
+    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     if role == "user":
         history.add_message(HumanMessage(content=content))
     elif role == "ai":

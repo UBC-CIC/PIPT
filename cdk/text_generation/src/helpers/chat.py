@@ -1,4 +1,5 @@
-import boto3, re, json, logging, math, threading
+import boto3, re, json, logging, math, threading, struct, time
+from boto3.dynamodb.types import Binary
 from concurrent.futures import Future, ThreadPoolExecutor
 import psycopg
 import os
@@ -33,37 +34,6 @@ class LLM_evaluation(BaseModel):
     verdict: str = Field(description="'True' if the student has properly diagnosed the patient, 'False' otherwise.")
 
 
-def create_dynamodb_history_table(table_name: str) -> bool:
-    """
-    Create a DynamoDB table to store the session history if it doesn't already exist.
-    """
-    dynamodb_resource = boto3.resource("dynamodb")
-    dynamodb_client = boto3.client("dynamodb")
-    
-    existing_tables = []
-    exclusive_start_table_name = None
-    
-    while True:
-        if exclusive_start_table_name:
-            response = dynamodb_client.list_tables(ExclusiveStartTableName=exclusive_start_table_name)
-        else:
-            response = dynamodb_client.list_tables()
-        
-        existing_tables.extend(response.get('TableNames', []))
-        
-        if 'LastEvaluatedTableName' in response:
-            exclusive_start_table_name = response['LastEvaluatedTableName']
-        else:
-            break
-    
-    if table_name not in existing_tables:
-        table = dynamodb_resource.create_table(
-            TableName=table_name,
-            KeySchema=[{"AttributeName": "SessionId", "KeyType": "HASH"}],
-            AttributeDefinitions=[{"AttributeName": "SessionId", "AttributeType": "S"}],
-            BillingMode="PAY_PER_REQUEST",
-        )
-        table.meta.client.get_waiter("table_exists").wait(TableName=table_name)
 
 def get_bedrock_llm(
     bedrock_llm_id: str,
@@ -1030,6 +1000,7 @@ def cache_key_questions(
                 "SessionId": f"QCACHE#{session_id}",
                 "questions": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty question list in DynamoDB: {e}")
@@ -1066,13 +1037,14 @@ def cache_key_questions(
                 "evaluation_criteria": cq["evaluation_criteria"],
                 "is_mandatory": cq["is_mandatory"],
                 "weight": Decimal(str(cq["weight"])) if cq["weight"] is not None else None,
-                "embedding": [Decimal(str(v)) for v in cq["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(cq["embedding"])}d', *cq["embedding"])),
             })
 
         table.put_item(Item={
             "SessionId": f"QCACHE#{session_id}",
             "questions": serializable_questions,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_questions)} key questions for session={session_id}")
     except Exception as e:
@@ -1112,7 +1084,7 @@ def get_cached_key_questions(
                 "evaluation_criteria": q.get("evaluation_criteria"),
                 "is_mandatory": q.get("is_mandatory", False),
                 "weight": float(q["weight"]) if q.get("weight") is not None else None,
-                "embedding": [float(v) for v in q["embedding"]] if q.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(bytes(q["embedding"])) // 8}d', bytes(q["embedding"]))) if q.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached key questions for session={session_id}")
@@ -1222,6 +1194,7 @@ def cache_instructor_dtp_embeddings(
                 "SessionId": cache_key,
                 "items": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty DTP list in DynamoDB: {e}")
@@ -1255,13 +1228,14 @@ def cache_instructor_dtp_embeddings(
                 "dtp_id": item["dtp_id"],
                 "expected_dtp_text": item["expected_dtp_text"],
                 "evaluation_criteria": item["evaluation_criteria"],
-                "embedding": [Decimal(str(v)) for v in item["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(item["embedding"])}d', *item["embedding"])),
             })
 
         table.put_item(Item={
             "SessionId": cache_key,
             "items": serializable_items,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_dtps)} instructor DTP embeddings for group={simulation_group_id}, persona={persona_id}")
     except Exception as e:
@@ -1297,6 +1271,7 @@ def cache_instructor_rec_embeddings(
                 "SessionId": cache_key,
                 "items": [],
                 "cached_at": datetime.now(timezone.utc).isoformat(),
+                "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
         except Exception as e:
             logger.error(f"Failed to cache empty recommendation list in DynamoDB: {e}")
@@ -1332,13 +1307,14 @@ def cache_instructor_rec_embeddings(
                 "recommendation_text": item["recommendation_text"],
                 "rationale": item["rationale"],
                 "evaluation_criteria": item["evaluation_criteria"],
-                "embedding": [Decimal(str(v)) for v in item["embedding"]],
+                "embedding": Binary(struct.pack(f'{len(item["embedding"])}d', *item["embedding"])),
             })
 
         table.put_item(Item={
             "SessionId": cache_key,
             "items": serializable_items,
             "cached_at": datetime.now(timezone.utc).isoformat(),
+            "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
         logger.info(f"✅ Cached {len(cached_recs)} instructor recommendation embeddings for group={simulation_group_id}, persona={persona_id}")
     except Exception as e:
@@ -1376,7 +1352,7 @@ def get_cached_instructor_dtps(
                 "dtp_id": d["dtp_id"],
                 "expected_dtp_text": d["expected_dtp_text"],
                 "evaluation_criteria": d.get("evaluation_criteria"),
-                "embedding": [float(v) for v in d["embedding"]] if d.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(bytes(d["embedding"])) // 8}d', bytes(d["embedding"]))) if d.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached instructor DTPs for group={simulation_group_id}, persona={persona_id}")
@@ -1417,7 +1393,7 @@ def get_cached_instructor_recs(
                 "recommendation_text": r["recommendation_text"],
                 "rationale": r.get("rationale"),
                 "evaluation_criteria": r.get("evaluation_criteria"),
-                "embedding": [float(v) for v in r["embedding"]] if r.get("embedding") else [],
+                "embedding": list(struct.unpack(f'{len(bytes(r["embedding"])) // 8}d', bytes(r["embedding"]))) if r.get("embedding") else [],
             })
 
         logger.info(f"✅ Retrieved {len(result)} cached instructor recommendations for group={simulation_group_id}, persona={persona_id}")
