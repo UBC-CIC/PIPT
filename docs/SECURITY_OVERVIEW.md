@@ -146,7 +146,7 @@ system_prompt = (
 )
 ```
 
-A malicious instructor (or compromised instructor account) could craft a `patient_prompt` that overrides the role guardrails, instructs the LLM to ignore previous instructions, or exfiltrates the system prompt. The `_ensure_guardrails()` function only checks for the presence of the string "NON-NEGOTIABLE RULES" — an attacker could include that string in their payload to bypass the append.
+A malicious instructor (or compromised instructor account) could craft a `patient_prompt` that overrides the role guardrails, instructs the LLM to ignore previous instructions, or exfiltrates the system prompt. Role guardrails are appended unconditionally in `get_response()` via a dedicated `<|start_header_id|>guardrails<|end_header_id|>` section.
 
 Additionally, student messages flow through `get_student_query()` with zero sanitization before being passed to the LLM as the `{input}` variable.
 
