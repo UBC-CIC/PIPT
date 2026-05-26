@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -61,8 +61,16 @@ export function RecommendationsBankSection({
   // Tab state (group-wide vs patient-specific)
   const [activeTab, setActiveTab] = useState<'groupWide' | 'patientSpecific'>('groupWide');
 
-  const paginatedItems = getPaginatedItems(filteredItems, pagination.currentPage, pagination.itemsPerPage);
-  const totalPages = getTotalPages(filteredItems.length, pagination.itemsPerPage);
+  // Filter items by patient_specific tag based on active tab
+  const tabFilteredItems = useMemo(() => {
+    if (activeTab === 'groupWide') {
+      return filteredItems.filter(item => !(item.tags || []).includes('patient_specific'));
+    }
+    return filteredItems.filter(item => (item.tags || []).includes('patient_specific'));
+  }, [filteredItems, activeTab]);
+
+  const paginatedItems = getPaginatedItems(tabFilteredItems, pagination.currentPage, pagination.itemsPerPage);
+  const totalPages = getTotalPages(tabFilteredItems.length, pagination.itemsPerPage);
 
   const handleGroupWideTabSwitch = () => {
     setActiveTab('groupWide');
@@ -146,11 +154,11 @@ export function RecommendationsBankSection({
               </div>
 
               {/* Pagination Info */}
-              {filteredItems.length > 0 && (
+              {tabFilteredItems.length > 0 && (
                 <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                   <span>
                     Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1}&ndash;
-                    {Math.min(pagination.currentPage * pagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
+                    {Math.min(pagination.currentPage * pagination.itemsPerPage, tabFilteredItems.length)} of {tabFilteredItems.length} items
                   </span>
                 </div>
               )}
@@ -194,7 +202,7 @@ export function RecommendationsBankSection({
               {/* Admin: flat card-style item list */}
               {role === 'admin' && (
                 <>
-                  {filteredItems.length === 0 ? (
+                  {tabFilteredItems.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                       {searchQuery ? 'No recommendation items match your search.' : 'No recommendation items yet.'}
                     </p>
@@ -271,11 +279,11 @@ export function RecommendationsBankSection({
               {selectedPatientId ? (
                 <>
                   {/* Pagination Info */}
-                  {filteredItems.length > 0 && (
+                  {tabFilteredItems.length > 0 && (
                     <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                       <span>
                         Showing {((pagination.currentPage - 1) * pagination.itemsPerPage) + 1}&ndash;
-                        {Math.min(pagination.currentPage * pagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
+                        {Math.min(pagination.currentPage * pagination.itemsPerPage, tabFilteredItems.length)} of {tabFilteredItems.length} items
                       </span>
                     </div>
                   )}
@@ -319,7 +327,7 @@ export function RecommendationsBankSection({
                   {/* Admin: flat card-style item list */}
                   {role === 'admin' && (
                     <>
-                      {filteredItems.length === 0 ? (
+                      {tabFilteredItems.length === 0 ? (
                         <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                           {searchQuery ? 'No recommendation items match your search.' : 'No recommendation items yet.'}
                         </p>
