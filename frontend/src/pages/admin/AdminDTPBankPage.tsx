@@ -11,24 +11,24 @@ import { listDTPItems, deleteDTPItem, updateDTPItem, createDTPItem } from '@/ser
 import type { DTPItem } from '@/services/dtpBankService';
 import { filterByTitle, paginate } from '@/lib/bankUtils';
 import LoadingIndicator from '@/components/LoadingIndicator';
-import { UI_COLORS } from '@/lib/colors';
+import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useNotification } from '@/components/notifications';
 
-/**
- * AdminDTPBankPage Component
- *
- * Organization-level DTP (Drug Therapy Problem) bank management for admins.
- * Each item is expandable to preview content, with an inline edit mode.
- */
 function AdminDTPBankPage() {
   const navigate = useNavigate();
   const { organizationId } = useParams<{ organizationId: string }>();
   const { showNotification } = useNotification();
 
+  // Tab state
+  const [dtpBankTab, setDtpBankTab] = useState<'global' | 'patientSpecific'>('global');
+
   // DTP items state
   const [dtpItems, setDtpItems] = useState<DTPItem[]>([]);
   const [isAddDTPDialogOpen, setIsAddDTPDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Per-tab search state
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
   // Expand/edit state
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -49,20 +49,16 @@ function AdminDTPBankPage() {
     open: false, itemId: '', itemTitle: ''
   });
 
-  // Pagination state
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    itemsPerPage: 5
-  });
+  // Per-tab pagination state
+  const [globalPagination, setGlobalPagination] = useState({ currentPage: 1, itemsPerPage: 5 });
+  const [patientPagination, setPatientPagination] = useState({ currentPage: 1, itemsPerPage: 5 });
 
   // Loading and error state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User data
   const user = { name: 'Admin', avatarUrl: undefined };
 
-  // Load data on mount
   const loadData = async () => {
     try {
       setLoading(true);
@@ -80,31 +76,65 @@ function AdminDTPBankPage() {
     if (organizationId) loadData();
   }, [organizationId]);
 
-  // Filter items based on search using shared utility
-  const filteredItems = filterByTitle(dtpItems, searchQuery);
+  // Reset search and pagination when switching tabs
+  useEffect(() => {
+    if (dtpBankTab === 'global') {
+      setGlobalSearchQuery('');
+      setGlobalPagination(prev => ({ ...prev, currentPage: 1 }));
+    } else {
+      setPatientSearchQuery('');
+      setPatientPagination(prev => ({ ...prev, currentPage: 1 }));
+    }
+  }, [dtpBankTab]);
 
-  // Pagination using shared utility
+  // Split items by patient_specific tag
+  const globalDTPs = dtpItems.filter(d => !d.tags?.includes('patient_specific'));
+  const patientSpecificDTPs = dtpItems.filter(d => d.tags?.includes('patient_specific'));
+
+  const activeItems = dtpBankTab === 'global' ? globalDTPs : patientSpecificDTPs;
+  const activeSearchQuery = dtpBankTab === 'global' ? globalSearchQuery : patientSearchQuery;
+  const activePagination = dtpBankTab === 'global' ? globalPagination : patientPagination;
+
+  const filteredItems = filterByTitle(activeItems, activeSearchQuery);
   const { items: paginatedItems, totalPages, currentPage } = paginate(
     filteredItems,
-    pagination.currentPage,
-    pagination.itemsPerPage
+    activePagination.currentPage,
+    activePagination.itemsPerPage
   );
 
-  // Collect all unique tags from existing items for autocomplete
+  // Exclude patient_specific from the tags autocomplete
   const allExistingTags = Array.from(
-    new Set(dtpItems.flatMap(item => item.tags || []))
+    new Set(dtpItems.flatMap(item => item.tags || []).filter(t => t !== 'patient_specific'))
   ).sort();
 
   const handleSignOut = () => {
     navigate('/login');
   };
 
+  const handleSearchChange = (value: string) => {
+    if (dtpBankTab === 'global') {
+      setGlobalSearchQuery(value);
+      setGlobalPagination(prev => ({ ...prev, currentPage: 1 }));
+    } else {
+      setPatientSearchQuery(value);
+      setPatientPagination(prev => ({ ...prev, currentPage: 1 }));
+    }
+  };
+
   const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ ...prev, currentPage: newPage }));
+    if (dtpBankTab === 'global') {
+      setGlobalPagination(prev => ({ ...prev, currentPage: newPage }));
+    } else {
+      setPatientPagination(prev => ({ ...prev, currentPage: newPage }));
+    }
   };
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
-    setPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    if (dtpBankTab === 'global') {
+      setGlobalPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    } else {
+      setPatientPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    }
   };
 
   const handleDeleteDTP = async () => {
@@ -133,7 +163,10 @@ function AdminDTPBankPage() {
   }) => {
     try {
       setError(null);
-      await createDTPItem(organizationId || '', data);
+      const tags = dtpBankTab === 'patientSpecific'
+        ? ['patient_specific', ...data.tags.filter(t => t !== 'patient_specific')]
+        : data.tags.filter(t => t !== 'patient_specific');
+      await createDTPItem(organizationId || '', { ...data, tags });
       showNotification({ message: `"${data.title}" created successfully.`, type: 'success' });
       loadData();
     } catch (err) {
@@ -146,7 +179,7 @@ function AdminDTPBankPage() {
   // ─── Expand/Edit Handlers ─────────────────────────────────────────────────
 
   const toggleExpand = (itemId: string) => {
-    if (editingItemId === itemId) return; // Don't collapse while editing
+    if (editingItemId === itemId) return;
     setExpandedItemId(prev => prev === itemId ? null : itemId);
   };
 
@@ -203,10 +236,7 @@ function AdminDTPBankPage() {
     }
   };
 
-  const handleTagInput = (value: string) => {
-    const tags = value.split(',').map(t => t.trim()).filter(Boolean);
-    setEditForm(prev => ({ ...prev, tags }));
-  };
+  const isPatientSpecificTab = dtpBankTab === 'patientSpecific';
 
   return (
     <PageContainer>
@@ -260,32 +290,58 @@ function AdminDTPBankPage() {
                 </Link>
               </div>
 
-              <h2 className="text-2xl font-bold mb-2" style={{ color: UI_COLORS.text.heading }}>
+              <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
                 DTP Bank
               </h2>
-              <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                Manage Drug Therapy Problem items for this organization.
-              </p>
+
+              {/* Tab Switcher */}
+              <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                <button
+                  onClick={() => setDtpBankTab('global')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: dtpBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: dtpBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Global DTPs
+                </button>
+                <button
+                  onClick={() => setDtpBankTab('patientSpecific')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: dtpBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: dtpBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Patient-Specific DTPs
+                </button>
+              </div>
             </div>
 
             {/* DTP List */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <div className="space-y-3">
+                <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                  {isPatientSpecificTab
+                    ? 'Manage patient-specific Drug Therapy Problem items for this organization.'
+                    : 'Manage Drug Therapy Problem items for this organization.'}
+                </p>
+
                 {/* Search Bar */}
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
                   <Input
                     type="text"
-                    placeholder="Search DTP items..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    }}
+                    placeholder={isPatientSpecificTab ? 'Search patient-specific DTP items...' : 'Search DTP items...'}
+                    value={activeSearchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-10"
-                    style={{
-                      borderColor: UI_COLORS.border.default,
-                    }}
+                    style={{ borderColor: UI_COLORS.border.default }}
                   />
                 </div>
 
@@ -301,15 +357,15 @@ function AdminDTPBankPage() {
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
                 >
                   <Plus className="w-5 h-5" />
-                  Add New DTP
+                  {isPatientSpecificTab ? 'Add New Patient-Specific DTP' : 'Add New DTP'}
                 </Button>
 
                 {/* Pagination Info */}
                 {filteredItems.length > 0 && (
                   <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                     <span>
-                      Showing {((currentPage - 1) * pagination.itemsPerPage) + 1}-
-                      {Math.min(currentPage * pagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
+                      Showing {((currentPage - 1) * activePagination.itemsPerPage) + 1}-
+                      {Math.min(currentPage * activePagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
                     </span>
                   </div>
                 )}
@@ -456,8 +512,12 @@ function AdminDTPBankPage() {
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags (comma-separated)</label>
                                   <Input
-                                    value={editForm.tags.join(', ')}
-                                    onChange={(e) => handleTagInput(e.target.value)}
+                                    value={editForm.tags.filter(t => t !== 'patient_specific').join(', ')}
+                                    onChange={(e) => {
+                                      const userTags = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
+                                      const baseTag = editForm.tags.includes('patient_specific') ? ['patient_specific'] : [];
+                                      setEditForm(prev => ({ ...prev, tags: [...baseTag, ...userTags] }));
+                                    }}
                                     placeholder="e.g. cardiology, dosing, interaction"
                                     style={{ borderColor: UI_COLORS.border.default }}
                                   />
@@ -538,11 +598,11 @@ function AdminDTPBankPage() {
                                     </p>
                                   </div>
                                 )}
-                                {item.tags && item.tags.length > 0 && (
+                                {item.tags && item.tags.filter(t => t !== 'patient_specific').length > 0 && (
                                   <div>
                                     <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
                                     <div className="flex flex-wrap gap-1">
-                                      {item.tags.map(tag => (
+                                      {item.tags.filter(t => t !== 'patient_specific').map(tag => (
                                         <span
                                           key={tag}
                                           className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
@@ -567,7 +627,11 @@ function AdminDTPBankPage() {
                 {filteredItems.length === 0 && !error && (
                   <div className="text-center py-8">
                     <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                      {searchQuery ? 'No DTP items match your search.' : 'No DTP items yet. Add your first one above.'}
+                      {activeSearchQuery
+                        ? 'No DTP items match your search.'
+                        : isPatientSpecificTab
+                          ? 'No patient-specific DTP items yet. Add your first one above.'
+                          : 'No DTP items yet. Add your first one above.'}
                     </p>
                   </div>
                 )}
@@ -578,7 +642,7 @@ function AdminDTPBankPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
                       <select
-                        value={pagination.itemsPerPage}
+                        value={activePagination.itemsPerPage}
                         onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
                         className="px-3 py-1 rounded border text-sm"
                         style={{
@@ -639,6 +703,7 @@ function AdminDTPBankPage() {
         onOpenChange={setIsAddDTPDialogOpen}
         organizationId={organizationId || ''}
         existingTags={allExistingTags}
+        isPatientSpecific={isPatientSpecificTab}
         onSave={handleSaveNewDTP}
       />
 

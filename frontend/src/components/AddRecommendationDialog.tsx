@@ -10,6 +10,8 @@ interface AddRecommendationDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Optional — passed from manage bank page but not needed by the dialog itself */
   organizationId?: string;
+  /** When true, dialog title reflects patient-specific context and injects the patient_specific tag */
+  isPatientSpecific?: boolean;
   onSave: (recommendation: {
     title: string;
     recommendationText: string;
@@ -19,13 +21,12 @@ interface AddRecommendationDialogProps {
   }) => void;
 }
 
-export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecommendationDialogProps) {
+export function AddRecommendationDialog({ open, onOpenChange, onSave, isPatientSpecific = false }: AddRecommendationDialogProps) {
   const { showNotification } = useNotification();
   const [title, setTitle] = useState('');
   const [recommendationText, setRecommendationText] = useState('');
   const [evaluationCriteria, setEvaluationCriteria] = useState('');
   const [rationale, setRationale] = useState('');
-  const [tagsInput, setTagsInput] = useState('');
 
   const handleSave = () => {
     if (!title.trim() || !recommendationText.trim()) {
@@ -33,14 +34,12 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
       return;
     }
 
-    const tags = tagsInput.split(',').map(t => t.trim()).filter(Boolean);
-
     onSave({
       title: title.trim(),
       recommendationText: recommendationText.trim(),
       evaluationCriteria: evaluationCriteria.trim(),
       rationale: rationale.trim(),
-      tags,
+      tags: isPatientSpecific ? ['patient_specific'] : [],
     });
 
     // Reset form
@@ -48,7 +47,6 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
     setRecommendationText('');
     setEvaluationCriteria('');
     setRationale('');
-    setTagsInput('');
     onOpenChange(false);
   };
 
@@ -57,7 +55,6 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
     setRecommendationText('');
     setEvaluationCriteria('');
     setRationale('');
-    setTagsInput('');
     onOpenChange(false);
   };
 
@@ -70,7 +67,7 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
       >
         <DialogHeader>
           <DialogTitle style={{ color: UI_COLORS.text.heading }}>
-            Add New Recommendation Item
+            {isPatientSpecific ? 'Add Patient-Specific Recommendation' : 'Add New Recommendation Item'}
           </DialogTitle>
         </DialogHeader>
 
@@ -149,25 +146,6 @@ export function AddRecommendationDialog({ open, onOpenChange, onSave }: AddRecom
             />
           </div>
 
-          {/* Tags */}
-          <div>
-            <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.heading }}>
-              Tags (comma-separated)
-            </label>
-            <Input
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="e.g. patient_specific, cardiology, dosing"
-              className="w-full"
-              style={{
-                borderColor: UI_COLORS.border.default,
-                backgroundColor: UI_COLORS.background.white,
-              }}
-            />
-            <p className="text-xs mt-1" style={{ color: UI_COLORS.text.muted }}>
-              Use "patient_specific" to mark items only relevant for patient-level assignment.
-            </p>
-          </div>
         </div>
 
         {/* Action Buttons */}
