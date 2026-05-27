@@ -1893,7 +1893,7 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
       };
     }
 
-    return { legacy, updated: { chunk1, chunk2 } };
+    return { legacy, updated: { chunk1, chunk2, dtpSubmission: null, recommendationSubmission: null } };
   } catch (error) {
     console.error('[fetchInstructorDebrief] failed', { sessionId, error });
     return null;

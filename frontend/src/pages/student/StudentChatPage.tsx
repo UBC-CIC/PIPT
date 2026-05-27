@@ -804,7 +804,7 @@ function StudentChatPage() {
             };
 
             // Set chunk1 immediately, chunk2 as null to trigger loading state
-            setUpdatedDebriefData({ chunk1, chunk2: null });
+            setUpdatedDebriefData({ chunk1, chunk2: null, dtpSubmission: null, recommendationSubmission: null });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
           } catch (e) {
@@ -889,7 +889,7 @@ function StudentChatPage() {
               if (content.guidance_key_questions) {
                 updatedChunk1.guidanceKeyQuestions = content.guidance_key_questions;
               }
-              return { chunk1: updatedChunk1, chunk2 };
+              return { chunk1: updatedChunk1, chunk2, dtpSubmission: prev.dtpSubmission, recommendationSubmission: prev.recommendationSubmission };
             });
 
             // Unsubscribe after receiving chunk2 (final event)
@@ -986,7 +986,7 @@ function StudentChatPage() {
               };
             }
 
-            setUpdatedDebriefData({ chunk1, chunk2 });
+            setUpdatedDebriefData({ chunk1, chunk2, dtpSubmission: null, recommendationSubmission: null });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
             unsubscribe();

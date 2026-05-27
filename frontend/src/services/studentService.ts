@@ -1308,7 +1308,7 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
   const baseDelayMs = 500;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
+    const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string; dtp_submission?: any; recommendation_submission?: any }>(
       `student/get_debrief?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}`
     );
 
