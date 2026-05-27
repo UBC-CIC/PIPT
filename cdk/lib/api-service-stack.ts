@@ -1003,6 +1003,38 @@ export class ApiServiceStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
+    new cloudwatch.Alarm(this, `${id}-BedrockInvocationAlarm`, {
+      alarmName: `${id}-Bedrock-InvocationSpike`,
+      alarmDescription: "Bedrock invocation spike — possible student abuse loop triggering repeated debriefs",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InvocationCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 50,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-BedrockTokenAlarm`, {
+      alarmName: `${id}-Bedrock-InputTokenSpike`,
+      alarmDescription: "Bedrock input token spike — cost may be elevated, review usage",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InputTokenCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 500000,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(
       this,

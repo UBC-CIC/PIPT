@@ -705,8 +705,8 @@ def update_session_name(table_name: str, session_id: str, bedrock_llm_id: str) -
     llm_message = ai_messages[0].get('M', {}).get('data', {}).get('M', {}).get('content', {}).get('S', "")
     
     llm = ChatBedrock(
-        model_id=bedrock_llm_id,
-        model_kwargs=dict(temperature=0),
+        model_id="amazon.nova-lite-v1:0",
+        model_kwargs=dict(temperature=0, max_tokens=20),
         region_name='us-east-1'
     )
     
@@ -884,11 +884,12 @@ def cache_key_questions(
             logger.error(f"Failed to cache empty question list in DynamoDB: {e}")
         return []
 
-    # 3. Compute embeddings for each question, skip failures
+    # 3. Compute embeddings in a single batch call to avoid per-question throttling
     cached_questions = []
-    for q in questions:
-        try:
-            embedding = embeddings_model.embed_query(q["question_text"])
+    try:
+        texts = [q["question_text"] for q in questions]
+        embeddings = embeddings_model.embed_documents(texts)
+        for q, embedding in zip(questions, embeddings):
             cached_questions.append({
                 "question_id": q["question_id"],
                 "question_text": q["question_text"],
@@ -897,8 +898,21 @@ def cache_key_questions(
                 "weight": q["weight"],
                 "embedding": embedding,
             })
-        except Exception as e:
-            logger.error(f"Failed to compute embedding for question {q['question_id']}: {e}")
+    except Exception as e:
+        logger.error(f"Batch embedding failed, falling back to per-question: {e}")
+        for q in questions:
+            try:
+                embedding = embeddings_model.embed_query(q["question_text"])
+                cached_questions.append({
+                    "question_id": q["question_id"],
+                    "question_text": q["question_text"],
+                    "evaluation_criteria": q["evaluation_criteria"],
+                    "is_mandatory": q["is_mandatory"],
+                    "weight": q["weight"],
+                    "embedding": embedding,
+                })
+            except Exception as e2:
+                logger.error(f"Failed to compute embedding for question {q['question_id']}: {e2}")
 
     # 4. Store in DynamoDB
     try:
