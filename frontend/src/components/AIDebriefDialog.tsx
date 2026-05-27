@@ -28,6 +28,7 @@ interface AIDebriefDialogProps {
  */
 function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulationGroupId, patientId, chatId, showAnswerKey = false, patientMode = 'full_assessment' }: AIDebriefDialogProps) {
   const [feedbackComment, setFeedbackComment] = useState('');
+  const [feedbackHelpful, setFeedbackHelpful] = useState<boolean | null>(null);
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
   const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
@@ -58,27 +59,12 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
     rubricDescription: '',
   };
 
-  const handleFeedbackSubmit = async (helpful: boolean) => {
-    if (!simulationGroupId || !patientId || !chatId) return;
+  const handleFeedbackSubmit = async () => {
+    if (!simulationGroupId || !patientId || !chatId || feedbackHelpful === null) return;
     setFeedbackSubmitting(true);
     setFeedbackError(null);
     try {
-      await studentService.submitDebriefFeedback(simulationGroupId, patientId, chatId, helpful, feedbackComment || undefined);
-      setFeedbackSubmitted(true);
-      setFeedbackComment('');
-    } catch (error) {
-      setFeedbackError(error instanceof Error ? error.message : 'Failed to submit feedback. Please try again.');
-    } finally {
-      setFeedbackSubmitting(false);
-    }
-  };
-
-  const handleCommentSubmit = async () => {
-    if (!simulationGroupId || !patientId || !chatId) return;
-    setFeedbackSubmitting(true);
-    setFeedbackError(null);
-    try {
-      await studentService.submitDebriefFeedback(simulationGroupId, patientId, chatId, true, feedbackComment);
+      await studentService.submitDebriefFeedback(simulationGroupId, patientId, chatId, feedbackHelpful, feedbackComment || undefined);
       setFeedbackSubmitted(true);
       setFeedbackComment('');
     } catch (error) {
@@ -763,46 +749,54 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
               </p>
             ) : (
               <>
-                <div className="flex items-center gap-4">
-                  <p className="text-sm font-medium italic" style={{ color: UI_COLORS.text.heading }}>
-                    Was this feedback helpful?
-                  </p>
-                  <div className="flex gap-2">
-                    <Button
-                      onClick={() => handleFeedbackSubmit(true)}
-                      disabled={feedbackSubmitting}
-                      className="px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: UI_COLORS.text.heading, color: UI_COLORS.button.text }}
-                    >
-                      {feedbackSubmitting ? 'Submitting...' : 'Yes'}
-                    </Button>
-                    <Button
-                      onClick={() => handleFeedbackSubmit(false)}
-                      disabled={feedbackSubmitting}
-                      className="px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: UI_COLORS.text.heading, color: UI_COLORS.button.text }}
-                    >
-                      No
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={feedbackComment}
-                    onChange={(e) => setFeedbackComment(e.target.value)}
-                    placeholder="Optional comment:"
-                    className="flex-1 px-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                <p className="text-sm font-medium italic" style={{ color: UI_COLORS.text.heading }}>
+                  Was this feedback helpful?
+                </p>
+                <input
+                  type="text"
+                  value={feedbackComment}
+                  onChange={(e) => setFeedbackComment(e.target.value)}
+                  placeholder="Optional comment"
+                  className="w-full px-4 py-2 rounded-lg text-sm focus:outline-none focus:ring-2"
+                  style={{
+                    borderWidth: '1px',
+                    borderStyle: 'solid',
+                    borderColor: UI_COLORS.border.default,
+                    outlineColor: UI_COLORS.border.medium,
+                  }}
+                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    onClick={() => setFeedbackHelpful(true)}
+                    disabled={feedbackSubmitting}
+                    className="px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{
+                      backgroundColor: feedbackHelpful === true ? UI_COLORS.text.heading : 'transparent',
+                      color: feedbackHelpful === true ? UI_COLORS.button.text : UI_COLORS.text.heading,
                       borderWidth: '1px',
                       borderStyle: 'solid',
-                      borderColor: UI_COLORS.border.default,
-                      outlineColor: UI_COLORS.border.medium,
+                      borderColor: UI_COLORS.text.heading,
                     }}
-                  />
+                  >
+                    Yes
+                  </Button>
                   <Button
-                    onClick={handleCommentSubmit}
-                    disabled={!feedbackComment.trim() || feedbackSubmitting}
+                    onClick={() => setFeedbackHelpful(false)}
+                    disabled={feedbackSubmitting}
+                    className="px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: feedbackHelpful === false ? UI_COLORS.text.heading : 'transparent',
+                      color: feedbackHelpful === false ? UI_COLORS.button.text : UI_COLORS.text.heading,
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      borderColor: UI_COLORS.text.heading,
+                    }}
+                  >
+                    No
+                  </Button>
+                  <Button
+                    onClick={handleFeedbackSubmit}
+                    disabled={feedbackHelpful === null || feedbackSubmitting}
                     className="px-6 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
                   >
