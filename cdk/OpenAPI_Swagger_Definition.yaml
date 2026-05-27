@@ -16,16 +16,16 @@ x-amazon-apigateway-request-validators:
     validateRequestParameters: true
     validateRequestBody: true
   params-only:
-    validateRequestParameters": true
-    validateRequestBody": false
-x-amazon-apigateway-request-validator: params-only
+    validateRequestParameters: true
+    validateRequestBody: false
+x-amazon-apigateway-request-validator: all
 x-amazon-apigateway-gateway-responses:
   UNAUTHORIZED:
     statusCode: "401"
     responseParameters:
-      gatewayresponse.header.Access-Control-Allow-Headers: "'*'"
-      gatewayresponse.header.Access-Control-Allow-Methods: "'*'"
-      gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      gatewayresponse.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
     responseTemplates:
       application/json: |
         {"message":$context.error.messageString}
@@ -48,9 +48,9 @@ x-common-options: &commonOptions
         default:
           statusCode: "200"
           responseParameters:
-            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-            method.response.header.Access-Control-Allow-Methods: "'*'"
-            method.response.header.Access-Control-Allow-Origin: "'*'"
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
           responseTemplates:
             application/json: |
               {}
@@ -74,9 +74,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -313,9 +313,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -369,9 +369,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -433,9 +433,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -507,9 +507,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -558,9 +558,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -614,9 +614,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -670,9 +670,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -726,9 +726,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -788,9 +788,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -856,9 +856,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -930,9 +930,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1012,9 +1012,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1107,9 +1107,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1201,9 +1201,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1284,9 +1284,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1371,9 +1371,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1557,9 +1557,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1633,9 +1633,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1696,9 +1696,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1781,9 +1781,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1859,9 +1859,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -1926,9 +1926,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2005,9 +2005,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2068,9 +2068,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2154,9 +2154,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2251,9 +2251,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2334,9 +2334,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2419,9 +2419,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2474,9 +2474,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2593,9 +2593,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2657,9 +2657,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2749,9 +2749,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2827,9 +2827,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2894,9 +2894,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -2950,9 +2950,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3036,9 +3036,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3104,9 +3104,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3235,9 +3235,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3297,9 +3297,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3353,9 +3353,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3409,9 +3409,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3487,9 +3487,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3574,9 +3574,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3670,9 +3670,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3764,9 +3764,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3836,9 +3836,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3911,9 +3911,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -3983,9 +3983,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4061,9 +4061,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4130,9 +4130,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4193,9 +4193,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4256,9 +4256,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4329,9 +4329,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4385,9 +4385,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4455,9 +4455,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4511,9 +4511,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4577,9 +4577,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4643,9 +4643,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4716,9 +4716,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4771,9 +4771,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4832,9 +4832,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4888,9 +4888,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -4944,9 +4944,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5007,9 +5007,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5098,9 +5098,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5152,9 +5152,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5206,9 +5206,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5401,9 +5401,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5463,9 +5463,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5515,9 +5515,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5569,9 +5569,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5629,9 +5629,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5804,9 +5804,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5893,9 +5893,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -5979,9 +5979,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6035,9 +6035,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6078,9 +6078,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6136,9 +6136,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6220,9 +6220,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6285,9 +6285,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6349,9 +6349,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6503,9 +6503,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6570,9 +6570,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6637,9 +6637,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6704,9 +6704,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6771,9 +6771,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6835,9 +6835,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -6899,9 +6899,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -7147,9 +7147,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -7469,9 +7469,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -7655,9 +7655,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -7829,9 +7829,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -8013,9 +8013,9 @@ paths:
           default:
             statusCode: "200"
             responseParameters:
-              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key'"
-              method.response.header.Access-Control-Allow-Methods: "'*'"
-              method.response.header.Access-Control-Allow-Origin: "'*'"
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'https://*.amplifyapp.com, http://localhost:5173, http://localhost:5174'"
             responseTemplates:
               application/json: |
                 {}
@@ -8191,6 +8191,7 @@ components:
         authorizerUri:
           Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminLambdaAuthorizer.Arn}/invocations"
         identitySource: method.request.header.Authorization
+        authorizerResultTtlInSeconds: 300
     studentAuthorizer:
       type: "apiKey"
       name: "Authorization" # The header name where the token is provided
@@ -8201,6 +8202,7 @@ components:
         authorizerUri:
           Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${studentLambdaAuthorizer.Arn}/invocations"
         identitySource: method.request.header.Authorization
+        authorizerResultTtlInSeconds: 300
     instructorAuthorizer:
       type: "apiKey"
       name: "Authorization" # The header name where the token is provided
@@ -8211,6 +8213,7 @@ components:
         authorizerUri:
           Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${instructorLambdaAuthorizer.Arn}/invocations"
         identitySource: method.request.header.Authorization
+        authorizerResultTtlInSeconds: 300
   responses:
     Success:
       description: Request success

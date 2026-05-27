@@ -339,7 +339,7 @@ export class ApiServiceStack extends cdk.Stack {
       deployOptions: {
         metricsEnabled: true,
         loggingLevel: apigateway.MethodLoggingLevel.ERROR,
-        dataTraceEnabled: true,
+        dataTraceEnabled: false,
         stageName: "prod",
         methodOptions: {
           "/*/*": {
