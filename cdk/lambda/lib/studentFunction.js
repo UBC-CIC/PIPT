@@ -1453,7 +1453,24 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // 3) Retry for race condition (debrief inserted async after conclude)
+            // 3a) Fetch student's own submissions from chats table
+            const chatRow = await sqlConnection`
+              SELECT dtp_submission, recommendation_submission
+              FROM "chats"
+              WHERE chat_id = ${sessionId}
+              LIMIT 1;
+            `;
+            const rawDtp = chatRow[0]?.dtp_submission ?? null;
+            const rawRec = chatRow[0]?.recommendation_submission ?? null;
+            const normalize = (v) => {
+              if (!v) return null;
+              if (Array.isArray(v)) return v;
+              try { const p = JSON.parse(v); return Array.isArray(p) ? p : null; } catch { return null; }
+            };
+            const dtpSubmission = normalize(rawDtp);
+            const recommendationSubmission = normalize(rawRec);
+
+            // 3b) Retry for race condition (debrief inserted async after conclude)
             const maxRetries = 6;
             const baseDelayMs = 300; // 0.3s, 0.6s, 1.2s, 2.4s, 4.8s, 9.6s (approx)
             let debriefRow = null;
@@ -1484,7 +1501,7 @@ exports.handler = async (event, context) => {
                 try {
                   parsedDebrief = JSON.parse(parsedDebrief);
                 } catch (parseErr) {
-                  logger.error("Failed to parse debrief JSON from DB", { 
+                  logger.error("Failed to parse debrief JSON from DB", {
                     error: parseErr.message,
                     raw: parsedDebrief.substring(0, 200)
                   });
@@ -1493,7 +1510,9 @@ exports.handler = async (event, context) => {
               }
               response.statusCode = 200;
               response.body = JSON.stringify({
-                generated_text:parsedDebrief, // no double encoding
+                generated_text: parsedDebrief,
+                dtp_submission: dtpSubmission,
+                recommendation_submission: recommendationSubmission,
                 status: "complete",
               });
             } else {
@@ -1567,8 +1586,8 @@ exports.handler = async (event, context) => {
             const updatedChat = await sqlConnection`
               UPDATE "chats"
               SET recommendation = ${recommendation},
-                  dtp_submission = ${dtpSubmission ? JSON.stringify(dtpSubmission.entries || []) : null},
-                  recommendation_submission = ${recommendationSubmission ? JSON.stringify(recommendationSubmission.entries || []) : null},
+                  dtp_submission = ${dtpSubmission ? sqlConnection.json(dtpSubmission.entries || []) : null},
+                  recommendation_submission = ${recommendationSubmission ? sqlConnection.json(recommendationSubmission.entries || []) : null},
                   ended_at = CURRENT_TIMESTAMP,
                   status = 'concluded',
                   last_accessed = CURRENT_TIMESTAMP

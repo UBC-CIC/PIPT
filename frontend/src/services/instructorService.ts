@@ -18,7 +18,7 @@ import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
 import { mockAdminDataService } from '@/services/adminService';
 import { mapBackendToQuestionBankItem } from '@/services/adminApiService';
-import { type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData, type UpdatedDebriefData } from '@/services/studentService';
 import { deepParseJson, extractDebriefFromRawJson } from '@/lib/debrief-parser';
 
 /**
@@ -212,6 +212,11 @@ export interface StudentDetails {
 /**
  * Represents a chat attempt for a patient (maps to chats table in DB)
  */
+export interface RecommendationSubmissionEntry {
+  recommendation: string;
+  rationale: string;
+}
+
 export interface ChatAttempt {
   id: string;                           // Unique identifier (chat_id in DB)
   student_interaction_id: string;       // Reference to student interaction (student_interaction_id in DB)
@@ -220,6 +225,8 @@ export interface ChatAttempt {
   completionStatus: 'In Progress' | 'Debrief Reached'; // Status (derived from completion state)
   score: number | null;                 // Score percentage (null if in progress)
   notes?: string;                       // Notes text (notes field in DB)
+  dtpSubmission?: string[] | null;      // Student-submitted DTPs (dtp_submission in DB)
+  recommendationSubmission?: RecommendationSubmissionEntry[] | null; // Student-submitted recommendations (recommendation_submission in DB)
 }
 
 /**
@@ -250,6 +257,8 @@ export interface StudentPatientData {
   attempts: Record<string, ChatAttempt[]>;
   messages: Record<string, ChatMessage[]>;
   notes: Record<string, string>;
+  dtpSubmissions: Record<string, string[] | null>;
+  recommendationSubmissions: Record<string, RecommendationSubmissionEntry[] | null>;
 }
 
 /**
@@ -376,7 +385,7 @@ export interface InstructorDataService {
   assignQuestionToGroup: (simulationGroupId: string, questionIds: string | string[], personaId?: string, options?: { weight_override?: number; max_score_override?: number; order?: number }) => Promise<any>;
   unassignQuestion: (groupQuestionId: string) => Promise<any>;
   updateQuestionAssignment: (groupQuestionId: string, updates: any) => Promise<any>;
-  fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<AIDebriefData | null>;
+  fetchDebrief: (sessionId: string, simulationGroupId: string) => Promise<{ legacy: AIDebriefData; updated: UpdatedDebriefData } | null>;
   getStudentProgress: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<StudentProgressData[]>;
   getCompletedSessions: (simulationGroupId: string) => Promise<CompletedSession[]>;
   runTestDebrief: (params: { simulationGroupId: string; sessionId: string; personaId: string; debriefPrompt: string }) => Promise<AIDebriefData>;
@@ -1348,7 +1357,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
  * Returns structured data with patient names, chat attempts, messages, and notes.
  */
 async function getStudentPatientData(studentEmail: string, simulationGroupId: string): Promise<StudentPatientData> {
-  const empty: StudentPatientData = { patientNames: [], attempts: {}, messages: {}, notes: {} };
+  const empty: StudentPatientData = { patientNames: [], attempts: {}, messages: {}, notes: {}, dtpSubmissions: {}, recommendationSubmissions: {} };
 
   try {
     const raw = await apiClient.request<Record<string, any[]>>(
@@ -1359,6 +1368,8 @@ async function getStudentPatientData(studentEmail: string, simulationGroupId: st
     const attempts: Record<string, ChatAttempt[]> = {};
     const messages: Record<string, ChatMessage[]> = {};
     const notes: Record<string, string> = {};
+    const dtpSubmissions: Record<string, string[] | null> = {};
+    const recommendationSubmissions: Record<string, RecommendationSubmissionEntry[] | null> = {};
 
     for (const patientName of patientNames) {
       const chats = raw[patientName];
@@ -1388,6 +1399,8 @@ async function getStudentPatientData(studentEmail: string, simulationGroupId: st
 
         messages[attemptId] = chatMessages;
         notes[attemptId] = chat.notes || '';
+        dtpSubmissions[attemptId] = Array.isArray(chat.dtpSubmission) ? chat.dtpSubmission : null;
+        recommendationSubmissions[attemptId] = Array.isArray(chat.recommendationSubmission) ? chat.recommendationSubmission : null;
 
         // Derive date from the first message timestamp (session start)
         const firstMsg = chat.messages?.[0];
@@ -1446,7 +1459,7 @@ async function getStudentPatientData(studentEmail: string, simulationGroupId: st
       attempts[patientName] = patientAttempts;
     }
 
-    return { patientNames, attempts, messages, notes };
+    return { patientNames, attempts, messages, notes, dtpSubmissions, recommendationSubmissions };
   } catch (error) {
     console.error('Failed to fetch student patient data:', error);
     return empty;
@@ -1765,7 +1778,7 @@ async function updateQuestionAssignment(groupQuestionId: string, updates: any): 
 /**
  * Fetch AI debrief for a concluded session via GET /instructor/get_debrief.
  */
-async function fetchInstructorDebrief(sessionId: string, simulationGroupId: string): Promise<AIDebriefData | null> {
+async function fetchInstructorDebrief(sessionId: string, simulationGroupId: string): Promise<{ legacy: AIDebriefData; updated: UpdatedDebriefData } | null> {
   try {
     const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
       `instructor/get_debrief?session_id=${encodeURIComponent(sessionId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
@@ -1807,7 +1820,7 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
     const addressedQuestions = toStrArray(debrief.questions_addressed || []);
     const missedQuestions = toStrArray(debrief.questions_missed || []);
 
-    return {
+    const legacy: AIDebriefData = {
       summary: typeof debrief.summary === 'string' ? debrief.summary : '',
       questionsAddressed: addressedQuestions,
       missedKeyQuestionsCount: missedQuestions.length,
@@ -1834,6 +1847,53 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
         overallAlignment: debrief.answer_key_comparison.overall_alignment,
       } : undefined,
     };
+
+    // Build chunk1 (key questions)
+    const sectionScores = debrief.section_scores || {};
+    const guidanceData = debrief.guidance || {};
+    const chunk1 = {
+      summary: legacy.summary,
+      questionsAddressed: addressedQuestions,
+      questionsAddressedCount: addressedQuestions.length,
+      questionsMissed: missedQuestions,
+      questionsMissedCount: missedQuestions.length,
+      suggestedRewrites: legacy.suggestedRewrites,
+      keyQuestionsScore: sectionScores.key_questions
+        ? { matched: sectionScores.key_questions.matched, total: sectionScores.key_questions.total, percentage: sectionScores.key_questions.percentage }
+        : null,
+      guidanceKeyQuestions: guidanceData.key_questions || null,
+    };
+
+    // Build chunk2 (DTP/rec comparison) — null for interview_practice sessions
+    let chunk2: UpdatedDebriefData['chunk2'] = null;
+    if (debrief.dtp_comparison || debrief.recommendations_comparison) {
+      const dtpRaw = debrief.dtp_comparison || { matched: [], missed: [], additional: [] };
+      const recRaw = debrief.recommendations_comparison || { matched: [], missed: [], additional: [] };
+      chunk2 = {
+        dtpComparison: {
+          overview: `Student identified ${dtpRaw.matched?.length || 0} out of ${(dtpRaw.matched?.length || 0) + (dtpRaw.missed?.length || 0)} expected drug therapy problems.`,
+          matched: (dtpRaw.matched || []).map((m: any) => ({ dtpText: m.instructor_text || '', status: 'matched' as const, matchedWith: m.student_text || '' })),
+          missed: (dtpRaw.missed || []).map((_m: any) => ({ dtpText: '', status: 'missed' as const })),
+          additional: (dtpRaw.additional || []).map((m: any) => ({ dtpText: m.student_text || '', status: 'additional' as const })),
+          score: sectionScores.dtps
+            ? { matched: sectionScores.dtps.matched, total: sectionScores.dtps.total, percentage: sectionScores.dtps.percentage }
+            : null,
+          guidance: guidanceData.dtps || null,
+        },
+        recommendationsComparison: {
+          overview: `Student matched ${recRaw.matched?.length || 0} out of ${(recRaw.matched?.length || 0) + (recRaw.missed?.length || 0)} expected recommendations.`,
+          matched: (recRaw.matched || []).map((m: any) => ({ recommendationText: m.instructor_text || '', status: 'matched' as const, matchedWith: m.student_text || '', rationaleRating: m.rationale_rating || undefined, rationaleExplanation: m.rationale_explanation || undefined })),
+          missed: (recRaw.missed || []).map((_m: any) => ({ recommendationText: '', status: 'missed' as const })),
+          additional: (recRaw.additional || []).map((m: any) => ({ recommendationText: m.student_text || '', status: 'additional' as const })),
+          score: sectionScores.recommendations
+            ? { matched: sectionScores.recommendations.matched, total: sectionScores.recommendations.total, percentage: sectionScores.recommendations.percentage }
+            : null,
+          guidance: guidanceData.recommendations || null,
+        },
+      };
+    }
+
+    return { legacy, updated: { chunk1, chunk2, dtpSubmission: null, recommendationSubmission: null } };
   } catch (error) {
     console.error('[fetchInstructorDebrief] failed', { sessionId, error });
     return null;

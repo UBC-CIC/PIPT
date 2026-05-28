@@ -1,4 +1,5 @@
 import { ArrowLeft } from 'lucide-react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import UserAvatar from '@/components/UserAvatar';
 import LoadingIndicator from '@/components/LoadingIndicator';
@@ -22,6 +23,7 @@ export interface StudentDetailsPanelProps {
   labels: OrganizationLabels;
 }
 
+
 export function StudentDetailsPanel({
   studentDetails,
   studentDetailsLoading,
@@ -37,6 +39,8 @@ export function StudentDetailsPanel({
   onBack,
   attemptPdfRefs,
 }: StudentDetailsPanelProps) {
+  const [showSubmissionsMap, setShowSubmissionsMap] = useState<Record<string, boolean>>({});
+
   const handleDownloadNotesTxt = (attemptId: string) => {
     try {
       const notes = studentPatientData?.notes[attemptId] || '';
@@ -366,7 +370,7 @@ export function StudentDetailsPanel({
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="px-6 pb-6 flex gap-4">
+                        <div className="px-6 pb-6 flex gap-4 flex-wrap">
                           <Button
                             className="px-6 py-3 text-base font-medium transition-colors"
                             style={{
@@ -433,7 +437,91 @@ export function StudentDetailsPanel({
                               )}
                             </Button>
                           )}
+                          <Button
+                            className="px-6 py-3 text-base font-medium transition-colors"
+                            style={{
+                              backgroundColor: UI_COLORS.button.secondary,
+                              color: UI_COLORS.button.text,
+                            }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                UI_COLORS.button.secondaryHover)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.backgroundColor =
+                                UI_COLORS.button.secondary)
+                            }
+                            onClick={() =>
+                              setShowSubmissionsMap((prev) => ({
+                                ...prev,
+                                [attempt.id]: !prev[attempt.id],
+                              }))
+                            }
+                          >
+                            Submissions
+                          </Button>
                         </div>
+
+                        {/* Submissions Panel (toggled by button) */}
+                        {showSubmissionsMap[attempt.id] && (() => {
+                          const dtps = studentPatientData?.dtpSubmissions[attempt.id];
+                          const recs = studentPatientData?.recommendationSubmissions[attempt.id];
+                          const hasDtps = dtps && dtps.length > 0;
+                          const hasRecs = recs && recs.length > 0;
+                          return (
+                            <div className="px-6 pb-6 space-y-4">
+                              {!hasDtps && !hasRecs ? (
+                                <p className="text-sm italic" style={{ color: UI_COLORS.text.muted }}>
+                                  No submissions yet.
+                                </p>
+                              ) : (
+                                <>
+                                  {hasDtps && (
+                                    <div
+                                      className="border rounded-lg p-4"
+                                      style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
+                                    >
+                                      <p className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                                        Drug Therapy Problems
+                                      </p>
+                                      <ul className="space-y-1 list-disc list-inside">
+                                        {dtps!.map((dtp, i) => (
+                                          <li key={i} className="text-sm" style={{ color: UI_COLORS.text.body }}>
+                                            {dtp}
+                                          </li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {hasRecs && (
+                                    <div
+                                      className="border rounded-lg p-4"
+                                      style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}
+                                    >
+                                      <p className="text-sm font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                                        Recommendations &amp; Rationale
+                                      </p>
+                                      <div className="space-y-3">
+                                        {recs!.map((rec, i) => (
+                                          <div key={i} className="border-l-2 pl-3" style={{ borderColor: UI_COLORS.border.default }}>
+                                            <p className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+                                              {rec.recommendation}
+                                            </p>
+                                            {rec.rationale && (
+                                              <p className="text-sm mt-0.5" style={{ color: UI_COLORS.text.body }}>
+                                                <span className="font-medium">Rationale:</span> {rec.rationale}
+                                              </p>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>

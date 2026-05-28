@@ -27,10 +27,12 @@ export interface EditPatientPanelProps {
   onUpdatePatientDTP?: (dtpId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => Promise<void>;
   onDeletePatientDTP?: (patientId: string, groupDtpId: string) => Promise<void>;
   patientDTPs?: DTPAssignment[];
+  groupDTPs?: DTPAssignment[];
   onCreatePatientRecommendation?: (patientId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => Promise<void>;
   onUpdatePatientRecommendation?: (recommendationId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => Promise<void>;
   onDeletePatientRecommendation?: (patientId: string, groupRecommendationId: string) => Promise<void>;
   patientRecommendations?: RecommendationAssignment[];
+  groupRecommendations?: RecommendationAssignment[];
   onLoadPatientDTPs?: (patientId: string) => void;
   onLoadPatientRecommendations?: (patientId: string) => void;
 }
@@ -48,9 +50,11 @@ export function EditPatientPanel({
   onUpdatePatientDTP,
   onDeletePatientDTP,
   patientDTPs = [],
+  groupDTPs = [],
   onUpdatePatientRecommendation,
   onDeletePatientRecommendation,
   patientRecommendations = [],
+  groupRecommendations = [],
   onLoadPatientDTPs,
   onLoadPatientRecommendations,
 }: EditPatientPanelProps) {
@@ -160,6 +164,7 @@ export function EditPatientPanel({
             <PatientDTPsTab
               patientEditor={patientEditor}
               patientDTPs={patientDTPs}
+              groupDTPs={groupDTPs}
               onUpdatePatientDTP={onUpdatePatientDTP}
               onDeletePatientDTP={onDeletePatientDTP}
               onLoadPatientDTPs={onLoadPatientDTPs}
@@ -170,6 +175,7 @@ export function EditPatientPanel({
             <PatientRecommendationsTab
               patientEditor={patientEditor}
               patientRecommendations={patientRecommendations}
+              groupRecommendations={groupRecommendations}
               onUpdatePatientRecommendation={onUpdatePatientRecommendation}
               onDeletePatientRecommendation={onDeletePatientRecommendation}
               onLoadPatientRecommendations={onLoadPatientRecommendations}
@@ -1229,12 +1235,14 @@ function MaterialsTab({
 function PatientDTPsTab({
   patientEditor,
   patientDTPs,
+  groupDTPs,
   onUpdatePatientDTP,
   onDeletePatientDTP,
   onLoadPatientDTPs,
 }: {
   patientEditor: UsePatientEditorReturn;
   patientDTPs: DTPAssignment[];
+  groupDTPs: DTPAssignment[];
   onUpdatePatientDTP?: (dtpId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => Promise<void>;
   onDeletePatientDTP?: (patientId: string, groupDtpId: string) => Promise<void>;
   onLoadPatientDTPs?: (patientId: string) => void;
@@ -1425,6 +1433,64 @@ function PatientDTPsTab({
           </Accordion>
         )}
       </div>
+
+      {/* Group DTPs — Read-Only */}
+      {groupDTPs.length > 0 && (
+        <>
+          <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
+              GLOBAL DTPS
+            </h3>
+            <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+              The following global DTPs are shown for reference to prevent redundancy. Select which global DTPs to include/exclude in the DTP Bank tab.
+            </p>
+            <Accordion type="single" collapsible className="space-y-2">
+              {groupDTPs.map((dtp, index) => (
+                <AccordionItem
+                  key={dtp.groupDtpId}
+                  value={dtp.groupDtpId}
+                  style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, borderRadius: '0.5rem', overflow: 'hidden', opacity: 0.7 }}
+                >
+                  <AccordionTrigger className="px-4 hover:no-underline" style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.heading }}>
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span className="font-medium text-sm">
+                        DTP{index + 1} - {dtp.title || 'Untitled DTP'}
+                      </span>
+                      <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>{dtp.isRequired ? 'Required' : 'Optional'}</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4" style={{ backgroundColor: UI_COLORS.background.white }}>
+                    <div className="space-y-4 pt-4">
+                      {[
+                        { label: 'Title', value: dtp.title, minHeight: undefined },
+                        { label: 'Expected DTP Text', value: dtp.expectedDTPText, minHeight: '100px' },
+                        { label: 'Clinical Intent', value: dtp.clinicalIntent, minHeight: '100px' },
+                        { label: 'Evaluation Criteria', value: dtp.evaluationCriteria, minHeight: '100px' },
+                      ].map(({ label, value, minHeight }) => (
+                        <div key={label}>
+                          <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>{label}</label>
+                          <div
+                            className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap"
+                            style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.hoverLight, color: UI_COLORS.text.body, minHeight }}
+                          >
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium" style={{ color: UI_COLORS.text.body }}>
+                          {dtp.isRequired ? 'Required for Case Completion' : 'Optional'}
+                        </span>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1435,12 +1501,14 @@ function PatientDTPsTab({
 function PatientRecommendationsTab({
   patientEditor,
   patientRecommendations,
+  groupRecommendations,
   onUpdatePatientRecommendation,
   onDeletePatientRecommendation,
   onLoadPatientRecommendations,
 }: {
   patientEditor: UsePatientEditorReturn;
   patientRecommendations: RecommendationAssignment[];
+  groupRecommendations: RecommendationAssignment[];
   onUpdatePatientRecommendation?: (recommendationId: string, data: { title: string; recommendationText: string; evaluationCriteria: string; rationale: string }) => Promise<void>;
   onDeletePatientRecommendation?: (patientId: string, groupRecommendationId: string) => Promise<void>;
   onLoadPatientRecommendations?: (patientId: string) => void;
@@ -1613,6 +1681,58 @@ function PatientRecommendationsTab({
           </Accordion>
         )}
       </div>
+
+      {/* Group Recommendations — Read-Only */}
+      {groupRecommendations.length > 0 && (
+        <>
+          <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
+          <div className="space-y-4">
+            <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
+              GLOBAL RECOMMENDATIONS
+            </h3>
+            <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
+              The following global recommendations are shown for reference to prevent redundancy. Select which global recommendations to include/exclude in the Recommendations Bank tab.
+            </p>
+            <Accordion type="single" collapsible className="space-y-2">
+              {groupRecommendations.map((rec, index) => (
+                <AccordionItem
+                  key={rec.groupRecommendationId}
+                  value={rec.groupRecommendationId}
+                  style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, borderRadius: '0.5rem', overflow: 'hidden', opacity: 0.7 }}
+                >
+                  <AccordionTrigger className="px-4 hover:no-underline" style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.heading }}>
+                    <div className="flex items-center justify-between w-full pr-4">
+                      <span className="font-medium text-sm">
+                        R{index + 1} - {rec.title || 'Untitled Recommendation'}
+                      </span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-4 pb-4" style={{ backgroundColor: UI_COLORS.background.white }}>
+                    <div className="space-y-4 pt-4">
+                      {[
+                        { label: 'Title', value: rec.title, minHeight: undefined },
+                        { label: 'Recommendation Text', value: rec.recommendationText, minHeight: '100px' },
+                        { label: 'Evaluation Criteria', value: rec.evaluationCriteria, minHeight: '100px' },
+                        { label: 'Rationale', value: rec.rationale, minHeight: '100px' },
+                      ].map(({ label, value, minHeight }) => (
+                        <div key={label}>
+                          <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>{label}</label>
+                          <div
+                            className="w-full px-3 py-3 rounded-lg text-base whitespace-pre-wrap"
+                            style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.hoverLight, color: UI_COLORS.text.body, minHeight }}
+                          >
+                            {value}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          </div>
+        </>
+      )}
     </div>
   );
 }

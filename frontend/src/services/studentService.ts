@@ -1227,6 +1227,8 @@ export interface DebriefChunk2 {
 export interface UpdatedDebriefData {
   chunk1: DebriefChunk1;
   chunk2: DebriefChunk2 | null;
+  dtpSubmission: string[] | null;
+  recommendationSubmission: { recommendation: string; rationale: string }[] | null;
 }
 
 /**
@@ -1306,7 +1308,7 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
   const baseDelayMs = 500;
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
+    const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string; dtp_submission?: any; recommendation_submission?: any }>(
       `student/get_debrief?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}`
     );
 
@@ -1426,7 +1428,10 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
       };
     }
 
-    return { chunk1, chunk2 };
+    const dtpSubmission = Array.isArray(data.dtp_submission) ? data.dtp_submission : null;
+    const recommendationSubmission = Array.isArray(data.recommendation_submission) ? data.recommendation_submission : null;
+
+    return { chunk1, chunk2, dtpSubmission, recommendationSubmission };
   }
 
   throw new Error('Debrief generation timed out');

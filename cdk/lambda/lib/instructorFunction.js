@@ -1394,14 +1394,15 @@ exports.handler = async (event, context) => {
             // Step 3: Iterate through the patients and get chats for each patient
             for (const patient of studentPatients) {
               const chats = await sqlConnection`
-                        SELECT c.chat_id, c.chat_name, c.notes, c.status
+                        SELECT c.chat_id, c.chat_name, c.notes, c.status,
+                               c.dtp_submission, c.recommendation_submission
                         FROM "chats" c
                         WHERE c.student_interaction_id IN (
-                            SELECT student_interaction_id 
+                            SELECT student_interaction_id
                             FROM "student_interactions"
                             WHERE persona_id = ${patient.persona_id} AND enrollment_id IN (
-                                SELECT enrollment_id 
-                                FROM "enrollments" 
+                                SELECT enrollment_id
+                                FROM "enrollments"
                                 WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId}
                             )
                         );
@@ -1423,6 +1424,8 @@ exports.handler = async (event, context) => {
                   chatName: chat.chat_name,
                   notes: chat.notes || "No notes available.",
                   status: chat.status || "active",
+                  dtpSubmission: (() => { const v = chat.dtp_submission; if (!v) return null; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : null; } catch { return null; } })(),
+                  recommendationSubmission: (() => { const v = chat.recommendation_submission; if (!v) return null; if (Array.isArray(v)) return v; try { const p = JSON.parse(v); return Array.isArray(p) ? p : null; } catch { return null; } })(),
                   messages: messages.map((msg) => ({
                     sender_type: msg.sender_type,
                     message_content: msg.message_content,
