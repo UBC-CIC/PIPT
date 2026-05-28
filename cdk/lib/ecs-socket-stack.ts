@@ -27,6 +27,7 @@ export class EcsSocketStack extends Stack {
     turnServerStack: TurnServerStack,
     voiceAgentEndpoint: string | undefined,
     stackPrefix: string,
+    dynamoTableName: string,
     props?: StackProps
   ) {
     super(scope, id, props);
@@ -180,6 +181,7 @@ export class EcsSocketStack extends Stack {
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
         BEDROCK_GUARDRAIL_ID: apiServiceStack.getGuardrailId(),
+        TABLE_NAME: dynamoTableName,
         ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {

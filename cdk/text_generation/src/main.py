@@ -231,7 +231,6 @@ def handler(event, context):
     simulation_group_id = query_params.get("simulation_group_id", "")
     session_id = query_params.get("session_id", "")
     persona_id = query_params.get("patient_id", "")
-    session_name = query_params.get("session_name", "New Chat")
     student_user_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', '')
 
     # When the ECS socket server calls us, it passes its own URL so we can
@@ -539,7 +538,7 @@ def handler(event, context):
 
     # Lazy imports for chat mode
     from helpers.vectorstore import get_vectorstore_retriever
-    from helpers.chat import get_response, update_session_name, cache_key_questions
+    from helpers.chat import get_response, cache_key_questions
 
     # TODO(refactor): Extract system prompt and persona detail fetching into a helper function
     system_prompt = get_system_prompt(simulation_group_id)
@@ -743,19 +742,6 @@ def handler(event, context):
             'body': json.dumps(f'Error getting response: {str(e)}')
         }
 
-    try:
-        logger.info("Updating session name if this is the first exchange between the LLM and student")
-        potential_session_name = update_session_name(
-            TABLE_NAME, session_id, BEDROCK_LLM_ID)
-        if potential_session_name:
-            logger.info("This is the first exchange between the LLM and student. Updating session name.")
-            session_name = potential_session_name
-        else:
-            logger.info("Not the first exchange between the LLM and student. Session name remains the same.")
-    except Exception as e:
-        logger.error(f"Error updating session name: {e}")
-        session_name = "New Chat"
-    
 
 
     # TODO(refactor): Extract response formatting into a helper function
@@ -785,7 +771,6 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps({
-                "session_name": session_name,
                 "llm_output": response.get("llm_output", "LLM failed to create response"),
                 "llm_verdict": response.get("llm_verdict", "LLM failed to create verdict"),
             })

@@ -100,6 +100,7 @@ const ecsSocketStack = new EcsSocketStack(
   turnServerStack,
   voiceAgentArn,
   StackPrefix,
+  apiStack.getDynamoTableName(),
   { env }
 );
 const dbFlowStack = new DBFlowStack(

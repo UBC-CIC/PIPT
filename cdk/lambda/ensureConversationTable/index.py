@@ -1,9 +1,10 @@
 import boto3
+import os
 import time
 
 dynamodb = boto3.client("dynamodb")
 
-TABLE_NAME = "DynamoDB-Conversation-Table"
+TABLE_NAME = os.environ["TABLE_NAME"]
 
 # This Lambda is invoked as a CloudFormation custom resource during cdk deploy.
 #

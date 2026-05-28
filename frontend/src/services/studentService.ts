@@ -900,8 +900,8 @@ async function sendMessage(
   patientId: string,
   sessionId: string,
   messageContent: string
-): Promise<{ llm_output: string; session_name?: string }> {
-  const result = await apiClient.request<{ llm_output: string; session_name?: string }>(
+): Promise<{ llm_output: string }> {
+  const result = await apiClient.request<{ llm_output: string }>(
     `student/text_generation?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_id=${encodeURIComponent(sessionId)}`,
     {
       method: 'POST',

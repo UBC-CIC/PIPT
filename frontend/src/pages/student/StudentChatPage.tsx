@@ -444,7 +444,9 @@ function StudentChatPage() {
           const sid = sessionId || routeChatId || '';
           if (sid) {
             studentService.fetchMessages(sid).then((msgs) => {
-              if (msgs.length > 0) setMessages(msgs);
+              if (msgs.length > 0) {
+                setMessages(msgs);
+              }
             });
           }
         };

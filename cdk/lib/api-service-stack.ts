@@ -42,6 +42,7 @@ export class ApiServiceStack extends cdk.Stack {
   public readonly appClient: cognito.UserPoolClient;
   public readonly userPool: cognito.UserPool;
   public readonly identityPool: cognito.CfnIdentityPool;
+  private readonly dynamoTableName: string;
   private readonly layerList: { [key: string]: LayerVersion };
   private readonly guardrailId: string;
   public readonly stageARN_APIGW: string;
@@ -53,6 +54,7 @@ export class ApiServiceStack extends cdk.Stack {
   public getUserPoolClientId = () => this.appClient.userPoolClientId;
   public getIdentityPoolId = () => this.identityPool.ref;
   public getGuardrailId = () => this.guardrailId;
+  public getDynamoTableName = () => this.dynamoTableName;
   public addLayer = (name: string, layer: LayerVersion) =>
     (this.layerList[name] = layer);
   public getLayers = () => this.layerList;
@@ -902,7 +904,8 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
-    const dynamoTableName = "DynamoDB-Conversation-Table";
+    this.dynamoTableName = "DynamoDB-Conversation-Table";
+    const dynamoTableName = this.dynamoTableName;
 
     // The conversation table is referenced by name rather than owned by CDK. It was created
     // manually in the AWS console before this CDK app existed and already holds live chat history.
@@ -924,6 +927,9 @@ export class ApiServiceStack extends cdk.Stack {
       functionName: `${id}-EnsureConversationTable`,
       memorySize: 128,
       logRetention: logs.RetentionDays.INFINITE,
+      environment: {
+        TABLE_NAME: dynamoTableName,
+      },
     });
 
     ensureTableFunction.addToRolePolicy(
@@ -1003,6 +1009,38 @@ export class ApiServiceStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
     });
 
+    new cloudwatch.Alarm(this, `${id}-BedrockInvocationAlarm`, {
+      alarmName: `${id}-Bedrock-InvocationSpike`,
+      alarmDescription: "Bedrock invocation spike — possible student abuse loop triggering repeated debriefs",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InvocationCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 50,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-BedrockTokenAlarm`, {
+      alarmName: `${id}-Bedrock-InputTokenSpike`,
+      alarmDescription: "Bedrock input token spike — cost may be elevated, review usage",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InputTokenCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 500000,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(
       this,
@@ -1030,7 +1068,7 @@ export class ApiServiceStack extends cdk.Stack {
       {
         parameterName: `/${id}/GenRx/TableName`,
         description: "Parameter containing the DynamoDB table name",
-        stringValue: "DynamoDB-Conversation-Table",
+        stringValue: dynamoTableName,
       }
     );
 
