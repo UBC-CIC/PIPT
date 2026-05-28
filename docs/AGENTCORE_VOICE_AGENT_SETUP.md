@@ -146,6 +146,7 @@ Add the following environment variables:
 | `BEDROCK_REGION` | `us-east-1` | Nova Sonic 2.0 is only available in us-east-1, regardless of your deployment region |
 | `SM_DB_CREDENTIALS` | The Secrets Manager secret name for the RDS user credentials | Go to **Secrets Manager** in the console and find the secret created by the Database stack for the `readwrite` user. Copy the **secret name** (not the ARN). |
 | `RDS_PROXY_ENDPOINT` | The RDS Proxy endpoint for the user proxy | Found in the Database stack CloudFormation outputs, or in the **RDS** console under **Proxies**. It will look something like `{StackPrefix}-database-userproxy-....rds.amazonaws.com`. |
+| `TABLE_NAME` | `DynamoDB-Conversation-Table` | The DynamoDB table used to persist conversation history. All other services read this from CDK-managed config — the voice agent must have it set manually here since it runs outside CDK. |
 
 These match the environment variables that were previously defined in the now-removed `VoiceAgentStack`. Without them, the voice agent will fail to connect to the database or reach Nova Sonic in the correct region.
 

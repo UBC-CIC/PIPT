@@ -25,11 +25,13 @@ secrets_manager_client = boto3.client("secretsmanager")
 
 RDS_PROXY_ENDPOINT = os.environ.get("RDS_PROXY_ENDPOINT")
 DB_SECRET_NAME = os.environ.get("SM_DB_CREDENTIALS")
+_TABLE_NAME = os.environ["TABLE_NAME"]
 
 
 def format_chat_history(
-    session_id: str, table_name: str = "DynamoDB-Conversation-Table"
+    session_id: str, table_name: str = None
 ) -> str:
+    table_name = table_name or _TABLE_NAME
     history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
     recent_messages = history.messages[-10:]
 
@@ -43,8 +45,9 @@ def format_chat_history(
 
 
 def add_message(
-    session_id: str, role: str, content: str, table_name: str = "DynamoDB-Conversation-Table"
+    session_id: str, role: str, content: str, table_name: str = None
 ):
+    table_name = table_name or _TABLE_NAME
     history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
     if role == "user":
         history.add_message(HumanMessage(content=content))
