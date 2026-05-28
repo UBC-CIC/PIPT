@@ -3232,7 +3232,7 @@ def generate_debrief(
                     SystemMessage(content=debrief_prompt),
                     HumanMessage(content=prompt_text if attempt == 1 else prompt_text + f"\n\nRETRY: Previous response was not valid JSON. Error: {last_error}. Return ONLY valid JSON."),
                 ]
-                resp = llm.invoke(messages)
+                resp = llm.bind(max_tokens=8192).invoke(messages)
                 raw = resp.content if hasattr(resp, 'content') else str(resp)
                 return _extract_json(raw)
             except json.JSONDecodeError as e:
@@ -3852,7 +3852,7 @@ def generate_test_debrief(
                     SystemMessage(content=debrief_prompt),
                     HumanMessage(content=prompt_text if attempt == 1 else prompt_text + f"\n\nRETRY: Previous response was not valid JSON. Error: {last_error}. Return ONLY valid JSON."),
                 ]
-                resp = llm.invoke(messages)
+                resp = llm.bind(max_tokens=8192).invoke(messages)
                 raw = resp.content if hasattr(resp, 'content') else str(resp)
                 return _extract_json(raw)
             except json.JSONDecodeError as e:
