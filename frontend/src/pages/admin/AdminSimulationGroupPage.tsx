@@ -287,9 +287,10 @@ function AdminSimulationGroupPage() {
       }
       // Load assignments
       getAssignedDTPs(groupId, selectedPatientForDTP || undefined).then((assignments) => {
-        setIncludedDTPIds(new Set(assignments.map(a => a.dtpId)));
+        const filtered = selectedPatientForDTP ? assignments : assignments.filter(a => !a.personaId);
+        setIncludedDTPIds(new Set(filtered.map(a => a.dtpId)));
         dtpIdToGroupDtpId.current.clear();
-        for (const a of assignments) {
+        for (const a of filtered) {
           dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
         }
       }).catch(() => setIncludedDTPIds(new Set()));
@@ -307,9 +308,10 @@ function AdminSimulationGroupPage() {
       }
       // Load assignments
       getAssignedRecommendations(groupId, selectedPatientForRecommendations || undefined).then((assignments) => {
-        setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationId)));
+        const filtered = selectedPatientForRecommendations ? assignments : assignments.filter(a => !a.personaId);
+        setIncludedRecommendationIds(new Set(filtered.map(a => a.recommendationId)));
         recIdToGroupRecId.current.clear();
-        for (const a of assignments) {
+        for (const a of filtered) {
           recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
         }
       }).catch(() => setIncludedRecommendationIds(new Set()));
@@ -680,18 +682,32 @@ function AdminSimulationGroupPage() {
     }
   };
 
-  // ── Edit Patient: Patient-specific DTPs/Recs state ──
+  // ── Edit Patient: Patient-specific and group-level DTPs/Recs state ──
   const [patientDTPs, setPatientDTPs] = useState<DTPAssignment[]>([]);
+  const [groupDTPs, setGroupDTPs] = useState<DTPAssignment[]>([]);
   const [patientRecommendations, setPatientRecommendations] = useState<RecommendationAssignment[]>([]);
+  const [groupRecommendations, setGroupRecommendations] = useState<RecommendationAssignment[]>([]);
 
   const handleLoadPatientDTPs = (patientId: string) => {
     if (!groupId) return;
-    getAssignedDTPs(groupId, patientId).then(setPatientDTPs).catch(() => setPatientDTPs([]));
+    Promise.all([
+      getAssignedDTPs(groupId, patientId),
+      getAssignedDTPs(groupId),
+    ]).then(([patientAssignments, groupAssignments]) => {
+      setPatientDTPs(patientAssignments);
+      setGroupDTPs(groupAssignments.filter(a => !a.personaId));
+    }).catch(() => { setPatientDTPs([]); setGroupDTPs([]); });
   };
 
   const handleLoadPatientRecommendations = (patientId: string) => {
     if (!groupId) return;
-    getAssignedRecommendations(groupId, patientId).then(setPatientRecommendations).catch(() => setPatientRecommendations([]));
+    Promise.all([
+      getAssignedRecommendations(groupId, patientId),
+      getAssignedRecommendations(groupId),
+    ]).then(([patientAssignments, groupAssignments]) => {
+      setPatientRecommendations(patientAssignments);
+      setGroupRecommendations(groupAssignments.filter(a => !a.personaId));
+    }).catch(() => { setPatientRecommendations([]); setGroupRecommendations([]); });
   };
 
   const handleCreatePatientDTP = async (patientId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => {
@@ -887,7 +903,7 @@ function AdminSimulationGroupPage() {
           {activeSection === 'questionBank' && (
             <QuestionBankSection questionBank={questionBank} role="admin" groupId={groupId || '1'} patients={manageablePatients}
               onToggleQuestionInclusion={handleToggleQuestionInclusion}
-              onGlobalTabClick={() => { setIncludedQuestionIds(new Set(instructorService.getGlobalRubricQuestions(groupId || '1').map(q => q.id))); }}
+              onGlobalTabClick={() => { setIncludedQuestionIds(new Set(globalRubricQuestions.map(q => q.id))); }}
               onPatientSpecificTabClick={() => {
                 if (selectedPatientForQuestionBank && groupId) {
                   instructorService.getSimulationGroupQuestions(groupId, selectedPatientForQuestionBank).then((assigned: any[]) => {
@@ -895,8 +911,8 @@ function AdminSimulationGroupPage() {
                     for (const q of assigned) {
                       if (q.question_id && q.group_question_id) questionIdToGroupQuestionId.current.set(q.question_id, q.group_question_id);
                     }
-                  }).catch(() => setIncludedQuestionIds(new Set()));
-                } else { setIncludedQuestionIds(new Set()); }
+                  }).catch(() => {});
+                }
               }}
               onPatientSelect={(patientId) => {
                 if (patientId && groupId) {
@@ -905,8 +921,8 @@ function AdminSimulationGroupPage() {
                     for (const q of assigned) {
                       if (q.question_id && q.group_question_id) questionIdToGroupQuestionId.current.set(q.question_id, q.group_question_id);
                     }
-                  }).catch(() => setIncludedQuestionIds(new Set()));
-                } else { setIncludedQuestionIds(new Set()); }
+                  }).catch(() => {});
+                }
               }}
             />
           )}
@@ -921,9 +937,10 @@ function AdminSimulationGroupPage() {
               onGroupWideTabClick={() => {
                 if (groupId) {
                   getAssignedDTPs(groupId).then((assignments) => {
-                    setIncludedDTPIds(new Set(assignments.map(a => a.dtpId)));
+                    const filtered = assignments.filter(a => !a.personaId);
+                    setIncludedDTPIds(new Set(filtered.map(a => a.dtpId)));
                     dtpIdToGroupDtpId.current.clear();
-                    for (const a of assignments) {
+                    for (const a of filtered) {
                       dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
                     }
                   }).catch(() => setIncludedDTPIds(new Set()));
@@ -954,9 +971,10 @@ function AdminSimulationGroupPage() {
               onGroupWideTabClick={() => {
                 if (groupId) {
                   getAssignedRecommendations(groupId).then((assignments) => {
-                    setIncludedRecommendationIds(new Set(assignments.map(a => a.recommendationId)));
+                    const filtered = assignments.filter(a => !a.personaId);
+                    setIncludedRecommendationIds(new Set(filtered.map(a => a.recommendationId)));
                     recIdToGroupRecId.current.clear();
-                    for (const a of assignments) {
+                    for (const a of filtered) {
                       recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
                     }
                   }).catch(() => setIncludedRecommendationIds(new Set()));
@@ -1063,7 +1081,7 @@ function AdminSimulationGroupPage() {
             </div>
           )}
 
-          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
+          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} groupDTPs={groupDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} groupRecommendations={groupRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
           {activeSection === 'viewStudent' && studentViewer.selectedStudentId && <StudentDetailsPanel studentDetails={studentViewer.studentDetails} studentDetailsLoading={studentViewer.studentDetailsLoading} studentPatientData={studentViewer.studentPatientData} expandedAttemptId={studentViewer.expandedAttemptId} onExpandAttempt={studentViewer.setExpandedAttemptId} selectedPatientFilter={studentViewer.selectedPatientFilter} onPatientFilterChange={studentViewer.setSelectedPatientFilter} onViewDebrief={debriefViewer.viewDebrief} isFetchingDebrief={debriefViewer.isFetchingDebrief} onDownloadPdf={async (attemptId) => { const el = debriefViewer.attemptPdfRefs.current[String(attemptId)]; if (el) await debriefViewer.downloadPdf(attemptId, el); }} isGeneratingPdf={debriefViewer.isGeneratingPdf} onBack={handleBackFromViewStudent} attemptPdfRefs={debriefViewer.attemptPdfRefs} labels={labels} />}
         </main>
       </div>

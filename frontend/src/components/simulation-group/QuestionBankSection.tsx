@@ -247,21 +247,25 @@ export function QuestionBankSection({
                 </>
               )}
 
-              {/* Admin: flat card-style question list */}
+              {/* Admin: accordion-style question list */}
               {role === 'admin' && (
                 <>
                   {filteredGlobalQuestions.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                       {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No global questions yet.'}
                     </p>
-                  ) : filteredGlobalQuestions.map((question) => (
-                    <QuestionCardItem
-                      key={question.id}
-                      question={question}
-                      isChecked={includedQuestionIds.has(question.id)}
-                      onToggle={(checked) => onToggleQuestionInclusion?.(question.id, question, checked)}
-                    />
-                  ))}
+                  ) : (
+                    <Accordion type="single" collapsible className="space-y-2">
+                      {filteredGlobalQuestions.map((question) => (
+                        <QuestionAccordionItem
+                          key={question.id}
+                          question={question}
+                          isChecked={includedQuestionIds.has(question.id)}
+                          onToggle={() => onToggleQuestionInclusion?.(question.id, question, !includedQuestionIds.has(question.id))}
+                        />
+                      ))}
+                    </Accordion>
+                  )}
                 </>
               )}
             </>
@@ -363,21 +367,25 @@ export function QuestionBankSection({
                     </>
                   )}
 
-                  {/* Admin: flat card-style question list */}
+                  {/* Admin: accordion-style question list */}
                   {role === 'admin' && (
                     <>
                       {filteredPatientQuestions.length === 0 ? (
                         <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                           {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No patient-specific questions yet.'}
                         </p>
-                      ) : filteredPatientQuestions.map((question) => (
-                        <QuestionCardItem
-                          key={question.id}
-                          question={question}
-                          isChecked={includedQuestionIds.has(question.id)}
-                          onToggle={(checked) => onToggleQuestionInclusion?.(question.id, question, checked)}
-                        />
-                      ))}
+                      ) : (
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {filteredPatientQuestions.map((question) => (
+                            <QuestionAccordionItem
+                              key={question.id}
+                              question={question}
+                              isChecked={includedQuestionIds.has(question.id)}
+                              onToggle={() => onToggleQuestionInclusion?.(question.id, question, !includedQuestionIds.has(question.id))}
+                            />
+                          ))}
+                        </Accordion>
+                      )}
                     </>
                   )}
                 </>
@@ -429,10 +437,19 @@ function QuestionAccordionItem({
         }}
       >
         <div className="flex items-center justify-between w-full pr-4">
-          <span className="font-medium text-sm">
-            {question.title}
-          </span>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-start gap-1 min-w-0">
+            <span className="font-medium text-sm">
+              {question.title}
+            </span>
+            {(question.tags || []).filter(t => t !== 'patient_specific').length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {(question.tags || []).filter(t => t !== 'patient_specific').map(tag => (
+                  <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
             <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
               {question.isMandatory ? 'Required' : 'Optional'}
             </span>
@@ -487,45 +504,6 @@ function QuestionAccordionItem({
         </div>
       </AccordionContent>
     </AccordionItem>
-  );
-}
-
-/**
- * Card-style question item used in the admin flow.
- * Shows title, tags, and an immediate include checkbox.
- */
-function QuestionCardItem({
-  question,
-  isChecked,
-  onToggle,
-}: {
-  question: QuestionBankItem;
-  isChecked: boolean;
-  onToggle: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg border transition-colors" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-      <div className="flex-1 min-w-0 mr-3">
-        <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>{question.title}</span>
-        {(question.tags || []).filter(t => t !== 'patient_specific').length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {question.tags!.filter(t => t !== 'patient_specific').map(tag => (
-              <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
-            ))}
-          </div>
-        )}
-      </div>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="w-5 h-5 rounded cursor-pointer"
-          style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
-        />
-        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Include</span>
-      </label>
-    </div>
   );
 }
 

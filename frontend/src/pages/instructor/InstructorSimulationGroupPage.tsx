@@ -131,7 +131,8 @@ function InstructorSimulationGroupPage() {
       try {
         setQuestionBankLoading(true); setQuestionBankError(null);
         const questions = await instructorService.getGlobalQuestionBank();
-        setGlobalBankQuestions(questions);
+        setGlobalBankQuestions(questions.filter(q => !q.tags?.includes('patient_specific')));
+        setPatientSpecificBankQuestions(questions.filter(q => q.tags?.includes('patient_specific')));
       } catch (err) {
         setQuestionBankError(err instanceof Error ? err.message : 'Failed to load question bank');
       } finally { setQuestionBankLoading(false); }
@@ -143,18 +144,19 @@ function InstructorSimulationGroupPage() {
     if ((activeSection === 'rubric' || activeSection === 'questionBank' || activeSection === 'editPatient') && groupId) {
       instructorService.getSimulationGroupQuestions(groupId)
         .then((assigned: any[]) => {
-          const rubricQuestions: GlobalRubricQuestion[] = assigned.map((q: any) => ({
+          const globalAssigned = assigned.filter((q: any) => !q.persona_id);
+          const rubricQuestions: GlobalRubricQuestion[] = globalAssigned.map((q: any) => ({
             id: q.question_id, group_question_id: q.group_question_id,
             title: q.title || '', keyQuestion: q.question_text || '',
             clinicalIntent: '', evaluationCriteria: q.evaluation_criteria || '',
             required: q.is_mandatory ?? false,
           }));
           setGlobalRubricQuestions(rubricQuestions);
-          setIncludedQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
-          setPendingQuestionIds(new Set(assigned.map((q: any) => q.question_id)));
+          setIncludedQuestionIds(new Set(globalAssigned.map((q: any) => q.question_id)));
+          setPendingQuestionIds(new Set(globalAssigned.map((q: any) => q.question_id)));
           // Build questionId → groupQuestionId mapping
           const map = new Map<string, string>();
-          for (const q of assigned) {
+          for (const q of globalAssigned) {
             if (q.question_id && q.group_question_id) map.set(q.question_id, q.group_question_id);
           }
           questionIdToGroupQuestionId.current = map;
@@ -183,10 +185,11 @@ function InstructorSimulationGroupPage() {
     }
     // Load assignments (group-wide by default)
     getAssignedDTPs(groupId).then((assignments) => {
-      dtpBank.setIncludedIds(new Set(assignments.map(a => a.dtpId)));
-      dtpBank.setPendingIds(new Set(assignments.map(a => a.dtpId)));
+      const filtered = assignments.filter(a => !a.personaId);
+      dtpBank.setIncludedIds(new Set(filtered.map(a => a.dtpId)));
+      dtpBank.setPendingIds(new Set(filtered.map(a => a.dtpId)));
       dtpIdToGroupDtpId.current.clear();
-      for (const a of assignments) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+      for (const a of filtered) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
     }).catch(() => dtpBank.setIncludedIds(new Set()));
   }, [activeSection, groupId, simulationGroup?.organization_id]);
 
@@ -203,10 +206,11 @@ function InstructorSimulationGroupPage() {
     }
     // Load assignments (group-wide by default)
     getAssignedRecommendations(groupId).then((assignments) => {
-      recommendationsBank.setIncludedIds(new Set(assignments.map(a => a.recommendationId)));
-      recommendationsBank.setPendingIds(new Set(assignments.map(a => a.recommendationId)));
+      const filtered = assignments.filter(a => !a.personaId);
+      recommendationsBank.setIncludedIds(new Set(filtered.map(a => a.recommendationId)));
+      recommendationsBank.setPendingIds(new Set(filtered.map(a => a.recommendationId)));
       recIdToGroupRecId.current.clear();
-      for (const a of assignments) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+      for (const a of filtered) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
     }).catch(() => recommendationsBank.setIncludedIds(new Set()));
   }, [activeSection, groupId, simulationGroup?.organization_id]);
 
@@ -270,10 +274,11 @@ function InstructorSimulationGroupPage() {
   const syncDTPGroupWideIds = () => {
     if (!groupId) return;
     getAssignedDTPs(groupId).then((assignments) => {
-      dtpBank.setIncludedIds(new Set(assignments.map(a => a.dtpId)));
-      dtpBank.setPendingIds(new Set(assignments.map(a => a.dtpId)));
+      const filtered = assignments.filter(a => !a.personaId);
+      dtpBank.setIncludedIds(new Set(filtered.map(a => a.dtpId)));
+      dtpBank.setPendingIds(new Set(filtered.map(a => a.dtpId)));
       dtpIdToGroupDtpId.current.clear();
-      for (const a of assignments) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
+      for (const a of filtered) dtpIdToGroupDtpId.current.set(a.dtpId, a.groupDtpId);
     }).catch(() => { dtpBank.setIncludedIds(new Set()); dtpBank.setPendingIds(new Set()); });
   };
 
@@ -290,10 +295,11 @@ function InstructorSimulationGroupPage() {
   const syncRecGroupWideIds = () => {
     if (!groupId) return;
     getAssignedRecommendations(groupId).then((assignments) => {
-      recommendationsBank.setIncludedIds(new Set(assignments.map(a => a.recommendationId)));
-      recommendationsBank.setPendingIds(new Set(assignments.map(a => a.recommendationId)));
+      const filtered = assignments.filter(a => !a.personaId);
+      recommendationsBank.setIncludedIds(new Set(filtered.map(a => a.recommendationId)));
+      recommendationsBank.setPendingIds(new Set(filtered.map(a => a.recommendationId)));
       recIdToGroupRecId.current.clear();
-      for (const a of assignments) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
+      for (const a of filtered) recIdToGroupRecId.current.set(a.recommendationId, a.groupRecommendationId);
     }).catch(() => { recommendationsBank.setIncludedIds(new Set()); recommendationsBank.setPendingIds(new Set()); });
   };
 
@@ -307,18 +313,32 @@ function InstructorSimulationGroupPage() {
     }).catch(() => { recommendationsBank.setIncludedIds(new Set()); recommendationsBank.setPendingIds(new Set()); });
   };
 
-  // ── Edit Patient: Patient-specific DTPs/Recs state ──
+  // ── Edit Patient: Patient-specific and group-level DTPs/Recs state ──
   const [patientDTPs, setPatientDTPs] = useState<DTPAssignment[]>([]);
+  const [groupDTPs, setGroupDTPs] = useState<DTPAssignment[]>([]);
   const [patientRecommendations, setPatientRecommendations] = useState<RecommendationAssignment[]>([]);
+  const [groupRecommendations, setGroupRecommendations] = useState<RecommendationAssignment[]>([]);
 
   const handleLoadPatientDTPs = (patientId: string) => {
     if (!groupId) return;
-    getAssignedDTPs(groupId, patientId).then(setPatientDTPs).catch(() => setPatientDTPs([]));
+    Promise.all([
+      getAssignedDTPs(groupId, patientId),
+      getAssignedDTPs(groupId),
+    ]).then(([patientAssignments, groupAssignments]) => {
+      setPatientDTPs(patientAssignments);
+      setGroupDTPs(groupAssignments.filter(a => !a.personaId));
+    }).catch(() => { setPatientDTPs([]); setGroupDTPs([]); });
   };
 
   const handleLoadPatientRecommendations = (patientId: string) => {
     if (!groupId) return;
-    getAssignedRecommendations(groupId, patientId).then(setPatientRecommendations).catch(() => setPatientRecommendations([]));
+    Promise.all([
+      getAssignedRecommendations(groupId, patientId),
+      getAssignedRecommendations(groupId),
+    ]).then(([patientAssignments, groupAssignments]) => {
+      setPatientRecommendations(patientAssignments);
+      setGroupRecommendations(groupAssignments.filter(a => !a.personaId));
+    }).catch(() => { setPatientRecommendations([]); setGroupRecommendations([]); });
   };
 
   const handleCreatePatientDTP = async (patientId: string, data: { title: string; expectedDTPText: string; clinicalIntent: string; evaluationCriteria: string; tags: string[]; isRequired: boolean }) => {
@@ -561,14 +581,16 @@ function InstructorSimulationGroupPage() {
 
   // ── Question bank tab sync helpers ──
   const syncGlobalIds = () => {
-    const ids = new Set(instructorService.getGlobalRubricQuestions(groupId || '1').map(q => q.id));
-    setIncludedQuestionIds(ids); setPendingQuestionIds(new Set(ids));
+    const ids = new Set(globalRubricQuestions.map(q => q.id));
+    if (ids.size > 0) { setIncludedQuestionIds(ids); setPendingQuestionIds(new Set(ids)); }
   };
   const syncPatientIds = (patientId: string | null) => {
-    if (patientId) {
-      const ids = instructorService.getPatientCaseSpecificQuestionIds(patientId);
-      setIncludedQuestionIds(ids); setPendingQuestionIds(new Set(ids));
-    } else { setIncludedQuestionIds(new Set()); setPendingQuestionIds(new Set()); }
+    if (patientId && groupId) {
+      instructorService.getSimulationGroupQuestions(groupId, patientId).then((assigned: any[]) => {
+        const ids = new Set(assigned.map((q: any) => q.question_id));
+        setIncludedQuestionIds(ids); setPendingQuestionIds(new Set(ids));
+      }).catch(() => {});
+    }
   };
 
   // ── Loading state ──
@@ -644,7 +666,7 @@ function InstructorSimulationGroupPage() {
               <textarea readOnly className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.tableHeader, minHeight: '500px' }} defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'} />
             </div>
           )}
-          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
+          {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} groupDTPs={groupDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} groupRecommendations={groupRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}
           {activeSection === 'viewStudent' && studentViewer.selectedStudentId && <StudentDetailsPanel studentDetails={studentViewer.studentDetails} studentDetailsLoading={studentViewer.studentDetailsLoading} studentPatientData={studentViewer.studentPatientData} expandedAttemptId={studentViewer.expandedAttemptId} onExpandAttempt={studentViewer.setExpandedAttemptId} selectedPatientFilter={studentViewer.selectedPatientFilter} onPatientFilterChange={studentViewer.setSelectedPatientFilter} onViewDebrief={debriefViewer.viewDebrief} isFetchingDebrief={debriefViewer.isFetchingDebrief} onDownloadPdf={async (attemptId) => { const el = debriefViewer.attemptPdfRefs.current[String(attemptId)]; if (el) await debriefViewer.downloadPdf(attemptId, el); }} isGeneratingPdf={debriefViewer.isGeneratingPdf} onBack={handleBackFromViewStudent} attemptPdfRefs={debriefViewer.attemptPdfRefs} labels={labels} />}
         </main>
       </div>
