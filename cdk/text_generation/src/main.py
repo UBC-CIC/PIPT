@@ -743,19 +743,6 @@ def handler(event, context):
             'body': json.dumps(f'Error getting response: {str(e)}')
         }
 
-    try:
-        logger.info("Updating session name if this is the first exchange between the LLM and student")
-        potential_session_name = update_session_name(
-            TABLE_NAME, session_id, BEDROCK_LLM_ID)
-        if potential_session_name:
-            logger.info("This is the first exchange between the LLM and student. Updating session name.")
-            session_name = potential_session_name
-        else:
-            logger.info("Not the first exchange between the LLM and student. Session name remains the same.")
-    except Exception as e:
-        logger.error(f"Error updating session name: {e}")
-        session_name = "New Chat"
-    
 
 
     # TODO(refactor): Extract response formatting into a helper function
@@ -785,7 +772,6 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps({
-                "session_name": session_name,
                 "llm_output": response.get("llm_output", "LLM failed to create response"),
                 "llm_verdict": response.get("llm_verdict", "LLM failed to create verdict"),
             })
