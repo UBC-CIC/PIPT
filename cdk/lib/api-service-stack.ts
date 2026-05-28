@@ -1393,6 +1393,7 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(textGenRepo!),
         memorySize: 1024,
         timeout: cdk.Duration.seconds(300),
+        reservedConcurrentExecutions: 25,
         vpc: vpcStack.vpc, // Pass the VPC
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
@@ -1715,6 +1716,7 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(dataIngestRepo!),
         memorySize: 3008,
         timeout: cdk.Duration.seconds(900),
+        reservedConcurrentExecutions: 10,
         vpc: vpcStack.vpc, // Pass the VPC
         functionName: `${id}-DataIngestLambdaDockerFunction`,
         environment: {
