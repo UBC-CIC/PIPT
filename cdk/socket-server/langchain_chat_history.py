@@ -9,7 +9,7 @@ import psycopg2
 from langchain_community.chat_message_histories import DynamoDBChatMessageHistory
 from langchain_core.messages import AIMessage, HumanMessage
 
-_TABLE_NAME = os.environ["TABLE_NAME"]
+_TABLE_NAME = os.environ.get("TABLE_NAME")
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +30,8 @@ logger.info(f"Using DB Secret Name: {DB_SECRET_NAME}")
 
 def format_chat_history(session_id: str, table_name: str = None) -> str:
     table_name = table_name or _TABLE_NAME
+    if not table_name:
+        raise RuntimeError("TABLE_NAME environment variable is not set")
     history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     recent_messages = history.messages[-10:]
 
@@ -43,6 +45,8 @@ def format_chat_history(session_id: str, table_name: str = None) -> str:
 
 def add_message(session_id: str, role: str, content: str, table_name: str = None):
     table_name = table_name or _TABLE_NAME
+    if not table_name:
+        raise RuntimeError("TABLE_NAME environment variable is not set")
     history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     if role == "user":
         history.add_message(HumanMessage(content=content))

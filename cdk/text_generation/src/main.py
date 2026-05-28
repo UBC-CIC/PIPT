@@ -231,7 +231,6 @@ def handler(event, context):
     simulation_group_id = query_params.get("simulation_group_id", "")
     session_id = query_params.get("session_id", "")
     persona_id = query_params.get("patient_id", "")
-    session_name = query_params.get("session_name", "New Chat")
     student_user_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', '')
 
     # When the ECS socket server calls us, it passes its own URL so we can
