@@ -539,7 +539,7 @@ def handler(event, context):
 
     # Lazy imports for chat mode
     from helpers.vectorstore import get_vectorstore_retriever
-    from helpers.chat import get_response, update_session_name, cache_key_questions
+    from helpers.chat import get_response, cache_key_questions
 
     # TODO(refactor): Extract system prompt and persona detail fetching into a helper function
     system_prompt = get_system_prompt(simulation_group_id)
