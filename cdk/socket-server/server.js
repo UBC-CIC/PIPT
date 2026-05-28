@@ -257,6 +257,9 @@ io.on("connection", (socket) => {
   // voice agent via WebSocket. Otherwise, falls back to the local
   // nova_sonic.py child process.
   socket.on("start-nova-sonic", async (config = {}) => {
+    const now = Date.now();
+    if (now - lastNovaSonicStart < 2000) return;
+    lastNovaSonicStart = now;
     console.log("🚀 Starting Nova Sonic session for client:", socket.id);
 
     audioStarted = false;
@@ -560,6 +563,8 @@ io.on("connection", (socket) => {
 
   // ─── Audio‑input from client ──────────────────────────────────────────────
   let audioStarted = false;
+  let lastNovaSonicStart = 0;
+  let textGenInFlight = false;
   socket.on("audio-input", (msg) => {
     // ── AgentCore WebSocket path ──────────────────────────────────────────
     if (socket.agentWs && socket.agentWs.readyState === WebSocket.OPEN) {
@@ -606,6 +611,8 @@ io.on("connection", (socket) => {
 
   // ─── Text generation streaming ─────────────────────────────────────────────
   socket.on("text-generation", async (data) => {
+    if (textGenInFlight) return;
+    textGenInFlight = true;
     console.log("🚀 Text generation request:", data);
 
     const sessionId = data.session_id;
@@ -661,6 +668,7 @@ io.on("connection", (socket) => {
       });
     } finally {
       textStreamSockets.delete(sessionId);
+      textGenInFlight = false;
     }
   });
 
