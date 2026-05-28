@@ -124,6 +124,10 @@ function StudentChatPage() {
   const currentVoiceBubbleRef = useRef<{ id: string; role: 'user' | 'assistant' } | null>(null);
   const lastVoiceRoleRef = useRef<string | null>(null);
 
+  // Tracks user turns spoken during voice mode that haven't been persisted to DB yet.
+  // Prevents the message limit loophole where repeated interruptions bypass the check.
+  const pendingVoiceTurnsRef = useRef(0);
+
   // Session ID — set by createSession (new chat) or from route (existing chat)
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -156,6 +160,7 @@ function StudentChatPage() {
    */
   const handleStartVoiceMode = useCallback(() => {
     if (sessionCompleted || isAiResponding) return;
+    pendingVoiceTurnsRef.current = 0;
     setIsVoiceModeActive(true);
     setVoiceError(null);
     setVoiceSessionState('connecting');
@@ -216,6 +221,12 @@ function StudentChatPage() {
         // Only create a new bubble when the role actually changes
         if (role === lastVoiceRoleRef.current) return;
         lastVoiceRoleRef.current = role;
+
+        // Count each new user turn immediately so the message limit check
+        // can't be bypassed by repeatedly interrupting the AI.
+        if (role === 'user') {
+          pendingVoiceTurnsRef.current += 1;
+        }
 
         const senderType = role === 'user' ? 'student' : 'ai';
         const bubbleId = `voice-${role}-${Date.now()}`;
@@ -413,7 +424,8 @@ function StudentChatPage() {
     const maxMessages = patient?.max_messages_per_chat;
     if (maxMessages == null || messageLimitReached) return;
 
-    const studentMessageCount = messages.filter(m => m.sender_type === 'student').length;
+    const savedStudentMessageCount = messages.filter(m => m.sender_type === 'student').length;
+    const studentMessageCount = savedStudentMessageCount + pendingVoiceTurnsRef.current;
     if (studentMessageCount >= maxMessages) {
       setMessageLimitReached(true);
       // If in voice mode, let the AI finish responding before disconnecting.
@@ -444,7 +456,10 @@ function StudentChatPage() {
           const sid = sessionId || routeChatId || '';
           if (sid) {
             studentService.fetchMessages(sid).then((msgs) => {
-              if (msgs.length > 0) setMessages(msgs);
+              if (msgs.length > 0) {
+                pendingVoiceTurnsRef.current = 0;
+                setMessages(msgs);
+              }
             });
           }
         };
