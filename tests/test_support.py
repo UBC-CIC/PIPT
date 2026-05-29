@@ -49,6 +49,7 @@ try:
         compute_cosine_similarity,
         greedy_match_assignment,
         match_submissions,
+        are_clinically_contradictory,
         compute_section_scores,
         compute_overall_score,
         validate_debrief_output,
@@ -60,6 +61,7 @@ except ImportError as e:
     compute_cosine_similarity = None
     greedy_match_assignment = None
     match_submissions = None
+    are_clinically_contradictory = None
     compute_section_scores = None
     compute_overall_score = None
     validate_debrief_output = None

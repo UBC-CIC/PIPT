@@ -1271,6 +1271,66 @@ def get_cached_instructor_recs(
 # above this, while unrelated items fall below.
 SUBMISSION_MATCH_THRESHOLD = 0.55
 
+# Antonym pairs where matching one word from each side means the two texts are
+# clinically contradictory regardless of high embedding similarity. Pairs are
+# lower-cased; both directions are checked (a→b and b→a).
+_CLINICAL_ANTONYM_PAIRS: list[tuple[str, str]] = [
+    # Start / stop actions
+    ("continue", "discontinue"),
+    ("start", "stop"),
+    ("initiate", "discontinue"),
+    ("initiate", "stop"),
+    ("add", "remove"),
+    ("add", "discontinue"),
+    # Dose direction
+    ("increase", "decrease"),
+    ("reduce", "increase"),
+    ("uptitrate", "downtitrate"),
+    ("titrate", "reduce"),
+    # Hold / resume
+    ("hold", "resume"),
+    ("withhold", "resume"),
+    ("hold", "administer"),
+    ("withhold", "administer"),
+    # Adherence
+    ("adherent", "non-adherent"),
+    ("adherent", "nonadherent"),
+    ("adherence", "non-adherence"),
+    ("adherence", "nonadherence"),
+    ("compliant", "non-compliant"),
+    ("compliant", "noncompliant"),
+    ("compliance", "non-compliance"),
+    ("compliance", "noncompliance"),
+    # Effective / ineffective
+    ("effective", "ineffective"),
+    ("effective", "not"),     # "effective" vs "not effective"
+    ("therapeutic", "subtherapeutic"),
+    ("therapeutic", "supratherapeutic"),
+    # Appropriate / inappropriate
+    ("appropriate", "inappropriate"),
+    ("indicated", "contraindicated"),
+    # Switch / keep
+    ("switch", "continue"),
+    ("change", "continue"),
+    # Controlled / uncontrolled
+    ("controlled", "uncontrolled"),
+]
+
+
+def are_clinically_contradictory(text_a: str, text_b: str) -> bool:
+    """Return True if text_a and text_b contain opposing clinical actions.
+
+    Checks whether one text contains a word from one side of a known antonym
+    pair while the other text contains the paired antonym, indicating that the
+    two submissions recommend opposite actions for the same drug/intervention.
+    """
+    words_a = set(text_a.lower().split())
+    words_b = set(text_b.lower().split())
+    for word1, word2 in _CLINICAL_ANTONYM_PAIRS:
+        if (word1 in words_a and word2 in words_b) or (word2 in words_a and word1 in words_b):
+            return True
+    return False
+
 
 def batch_embed_texts(texts: list[str], embeddings_model) -> list[list[float]]:
     """
@@ -1411,10 +1471,16 @@ def match_submissions(
     # Step 2: Extract pre-cached instructor embeddings
     instructor_embeddings = [item["embedding"] for item in instructor_items]
 
-    # Step 3: Compute NxM cosine similarity matrix
+    # Step 3: Compute NxM cosine similarity matrix, excluding pairs where the
+    # student and instructor texts contain opposing clinical actions (e.g.
+    # "continue naproxen" vs "discontinue naproxen"). Embeddings score these
+    # pairs highly because the texts share almost every word, but the clinical
+    # meaning is the opposite — so we drop them before assignment.
     similarity_pairs: list[tuple[int, int, float]] = []
     for s_idx, s_emb in enumerate(student_embeddings):
         for i_idx, i_emb in enumerate(instructor_embeddings):
+            if are_clinically_contradictory(student_texts[s_idx], instructor_items[i_idx][text_key]):
+                continue
             score = compute_cosine_similarity(s_emb, i_emb)
             similarity_pairs.append((s_idx, i_idx, score))
 
