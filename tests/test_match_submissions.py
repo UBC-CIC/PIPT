@@ -10,6 +10,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from test_support import (
     match_submissions,
+    are_clinically_contradictory,
     SUBMISSION_MATCH_THRESHOLD,
     MockEmbeddingsModel,
 )
@@ -186,3 +187,83 @@ def test_identical_texts_produce_score_1():
     assert result["matched"][0]["score"] == 1.0
     assert result["missed"] == []
     assert result["additional"] == []
+
+
+# ---------------------------------------------------------------------------
+# Contradictory clinical action tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.integration
+def test_contradictory_continue_vs_discontinue_not_matched():
+    """Student saying 'continue naproxen' must NOT match instructor 'discontinue naproxen'."""
+    model = MockEmbeddingsModel(dimension=64)
+    instructor_items = _make_instructor_items(
+        ["Mary should discontinue naproxen due to GI bleeding risk"], model
+    )
+
+    result = match_submissions(
+        ["Mary should continue naproxen"], instructor_items, model
+    )
+
+    assert result["matched"] == [], (
+        "Contradictory action (continue vs discontinue) should never produce a match"
+    )
+    assert len(result["missed"]) == 1
+    assert len(result["additional"]) == 1
+
+
+@pytest.mark.integration
+def test_agreeing_discontinue_is_matched():
+    """Student saying 'discontinue naproxen' SHOULD match instructor 'discontinue naproxen'."""
+    model = MockEmbeddingsModel(dimension=64)
+    instructor_items = _make_instructor_items(
+        ["Mary should discontinue naproxen due to GI bleeding risk"], model
+    )
+
+    result = match_submissions(
+        ["Mary should discontinue naproxen"], instructor_items, model
+    )
+
+    assert len(result["matched"]) == 1, (
+        "Same clinical action (discontinue vs discontinue) should be matched"
+    )
+
+
+@pytest.mark.integration
+def test_contradictory_increase_vs_decrease_not_matched():
+    """Student saying 'increase metformin' must NOT match instructor 'decrease metformin'."""
+    model = MockEmbeddingsModel(dimension=64)
+    instructor_items = _make_instructor_items(
+        ["Decrease metformin dose to 500mg daily"], model
+    )
+
+    result = match_submissions(["Increase metformin dose to 1000mg daily"], instructor_items, model)
+
+    assert result["matched"] == []
+
+
+@pytest.mark.unit
+def test_are_clinically_contradictory_continue_discontinue():
+    assert are_clinically_contradictory("continue naproxen", "discontinue naproxen") is True
+    assert are_clinically_contradictory("discontinue naproxen", "continue naproxen") is True
+
+
+@pytest.mark.unit
+def test_are_clinically_contradictory_same_action():
+    assert are_clinically_contradictory("discontinue naproxen", "discontinue naproxen") is False
+    assert are_clinically_contradictory("continue atenolol", "continue atenolol") is False
+
+
+@pytest.mark.unit
+def test_are_clinically_contradictory_unrelated():
+    assert are_clinically_contradictory("start lisinopril 10mg", "add metformin") is False
+
+
+@pytest.mark.unit
+def test_are_clinically_contradictory_increase_decrease():
+    assert are_clinically_contradictory("increase the dose", "decrease the dose") is True
+
+
+@pytest.mark.unit
+def test_are_clinically_contradictory_hold_resume():
+    assert are_clinically_contradictory("hold warfarin", "resume warfarin") is True

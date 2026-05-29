@@ -10,6 +10,7 @@ const { verifyToken, getStsCredentials } = require("./auth");
 const { SignatureV4 } = require("@smithy/signature-v4");
 const { HttpRequest } = require("@smithy/protocol-http");
 const { defaultProvider } = require("@aws-sdk/credential-provider-node");
+const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
 
 // ─── Voice Agent Adapter ──────────────────────────────────────────────────────
 // When VOICE_AGENT_ARN is set, audio is streamed to the AgentCore
@@ -107,9 +108,31 @@ app.get("/health", (req, res) => {
 // Maps sessionId → Socket.IO socket so we can relay chunks to the right client.
 const textStreamSockets = new Map(); // sessionId -> socket
 
+// Load the shared callback secret once at startup so header checks are free.
+let streamCallbackToken = null;
+const _smClient = new SecretsManagerClient({ region: process.env.AWS_REGION || "ca-central-1" });
+(async () => {
+  const secretName = process.env.SM_STREAM_CALLBACK_SECRET;
+  if (!secretName) {
+    console.warn("⚠️ SM_STREAM_CALLBACK_SECRET not set — /stream-callback auth disabled");
+    return;
+  }
+  try {
+    const { SecretString } = await _smClient.send(new GetSecretValueCommand({ SecretId: secretName }));
+    streamCallbackToken = SecretString;
+    console.log("✅ Stream callback token loaded");
+  } catch (e) {
+    console.error("❌ Failed to load stream callback secret:", e.message);
+  }
+})();
+
 app.use(express.json());
 
 app.post("/stream-callback", (req, res) => {
+  if (streamCallbackToken && req.headers["x-callback-token"] !== streamCallbackToken) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+
   const { session_id, data } = req.body;
   if (!session_id || !data) {
     return res.status(400).json({ error: "session_id and data required" });
@@ -234,6 +257,9 @@ io.on("connection", (socket) => {
   // voice agent via WebSocket. Otherwise, falls back to the local
   // nova_sonic.py child process.
   socket.on("start-nova-sonic", async (config = {}) => {
+    const now = Date.now();
+    if (now - lastNovaSonicStart < 2000) return;
+    lastNovaSonicStart = now;
     console.log("🚀 Starting Nova Sonic session for client:", socket.id);
 
     audioStarted = false;
@@ -537,6 +563,8 @@ io.on("connection", (socket) => {
 
   // ─── Audio‑input from client ──────────────────────────────────────────────
   let audioStarted = false;
+  let lastNovaSonicStart = 0;
+  let textGenInFlight = false;
   socket.on("audio-input", (msg) => {
     // ── AgentCore WebSocket path ──────────────────────────────────────────
     if (socket.agentWs && socket.agentWs.readyState === WebSocket.OPEN) {
@@ -583,6 +611,8 @@ io.on("connection", (socket) => {
 
   // ─── Text generation streaming ─────────────────────────────────────────────
   socket.on("text-generation", async (data) => {
+    if (textGenInFlight) return;
+    textGenInFlight = true;
     console.log("🚀 Text generation request:", data);
 
     const sessionId = data.session_id;
@@ -638,6 +668,7 @@ io.on("connection", (socket) => {
       });
     } finally {
       textStreamSockets.delete(sessionId);
+      textGenInFlight = false;
     }
   });
 

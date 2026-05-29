@@ -48,6 +48,7 @@ export class ApiServiceStack extends cdk.Stack {
   public readonly stageARN_APIGW: string;
   public readonly apiGW_basedURL: string;
   public readonly secret: secretsmanager.ISecret;
+  public readonly streamCallbackSecret: secretsmanager.ISecret;
   public readonly appSyncApi: appsync.GraphqlApi;
   public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
@@ -292,6 +293,13 @@ export class ApiServiceStack extends cdk.Stack {
     );
 
     const secretsName = `${id}-GenRx_Cognito_Secrets`;
+
+    this.streamCallbackSecret = new secretsmanager.Secret(this, `${id}-StreamCallbackSecret`, {
+      secretName: `${id}-StreamCallbackSecret`,
+      description: "Shared token authenticating text-gen Lambda → socket server /stream-callback POSTs",
+      generateSecretString: { excludePunctuation: true, passwordLength: 32 },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
     this.secret = new secretsmanager.Secret(this, secretsName, {
       secretName: secretsName,
@@ -1385,6 +1393,7 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(textGenRepo!),
         memorySize: 1024,
         timeout: cdk.Duration.seconds(300),
+        reservedConcurrentExecutions: 25,
         vpc: vpcStack.vpc, // Pass the VPC
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
@@ -1398,12 +1407,14 @@ export class ApiServiceStack extends cdk.Stack {
           APPSYNC_GRAPHQL_URL: this.appSyncApi.graphqlUrl,
           APPSYNC_API_ID: this.appSyncApi.apiId,
           EMBEDDING_STORAGE_BUCKET: embeddingStorageBucket.bucketName,
+          SM_STREAM_CALLBACK_SECRET: this.streamCallbackSecret.secretName,
         },
       }
     );
 
     // Grant text_generation Lambda read access to the embedding storage bucket (for answer key retrieval)
     embeddingStorageBucket.grantRead(textGenLambdaDockerFunc);
+    this.streamCallbackSecret.grantRead(textGenLambdaDockerFunc);
 
     // Override the Logical ID of the Lambda Function to get ARN in OpenAPI
     const cfnTextGenDockerFunc = textGenLambdaDockerFunc.node
@@ -1705,6 +1716,7 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(dataIngestRepo!),
         memorySize: 3008,
         timeout: cdk.Duration.seconds(900),
+        reservedConcurrentExecutions: 10,
         vpc: vpcStack.vpc, // Pass the VPC
         functionName: `${id}-DataIngestLambdaDockerFunction`,
         environment: {

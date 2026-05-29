@@ -21,6 +21,21 @@ def set_stream_callback_url(url: str | None):
     global _stream_callback_url
     _stream_callback_url = url
 
+# Shared token for authenticating POSTs to /stream-callback. Loaded once at
+# cold start so every invocation pays only a dict lookup, not a network call.
+def _load_stream_callback_token() -> str | None:
+    secret_name = os.environ.get("SM_STREAM_CALLBACK_SECRET")
+    if not secret_name:
+        return None
+    try:
+        sm = boto3.client("secretsmanager")
+        return sm.get_secret_value(SecretId=secret_name)["SecretString"]
+    except Exception as e:
+        logger.error(f"Failed to load stream callback secret: {e}")
+        return None
+
+_stream_callback_token: str | None = _load_stream_callback_token()
+
 from langchain_aws import ChatBedrock
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.chains.combine_documents import create_stuff_documents_chain
@@ -499,9 +514,11 @@ def publish_to_appsync(session_id: str, data: dict):
     # ── Fast path: ECS callback ──────────────────────────────────────────
     if _stream_callback_url:
         try:
+            headers = {"x-callback-token": _stream_callback_token} if _stream_callback_token else {}
             requests.post(
                 f"{_stream_callback_url}/stream-callback",
                 json={"session_id": session_id, "data": data},
+                headers=headers,
                 timeout=5,
             )
         except Exception as e:
@@ -1254,6 +1271,66 @@ def get_cached_instructor_recs(
 # above this, while unrelated items fall below.
 SUBMISSION_MATCH_THRESHOLD = 0.55
 
+# Antonym pairs where matching one word from each side means the two texts are
+# clinically contradictory regardless of high embedding similarity. Pairs are
+# lower-cased; both directions are checked (a→b and b→a).
+_CLINICAL_ANTONYM_PAIRS: list[tuple[str, str]] = [
+    # Start / stop actions
+    ("continue", "discontinue"),
+    ("start", "stop"),
+    ("initiate", "discontinue"),
+    ("initiate", "stop"),
+    ("add", "remove"),
+    ("add", "discontinue"),
+    # Dose direction
+    ("increase", "decrease"),
+    ("reduce", "increase"),
+    ("uptitrate", "downtitrate"),
+    ("titrate", "reduce"),
+    # Hold / resume
+    ("hold", "resume"),
+    ("withhold", "resume"),
+    ("hold", "administer"),
+    ("withhold", "administer"),
+    # Adherence
+    ("adherent", "non-adherent"),
+    ("adherent", "nonadherent"),
+    ("adherence", "non-adherence"),
+    ("adherence", "nonadherence"),
+    ("compliant", "non-compliant"),
+    ("compliant", "noncompliant"),
+    ("compliance", "non-compliance"),
+    ("compliance", "noncompliance"),
+    # Effective / ineffective
+    ("effective", "ineffective"),
+    ("effective", "not"),     # "effective" vs "not effective"
+    ("therapeutic", "subtherapeutic"),
+    ("therapeutic", "supratherapeutic"),
+    # Appropriate / inappropriate
+    ("appropriate", "inappropriate"),
+    ("indicated", "contraindicated"),
+    # Switch / keep
+    ("switch", "continue"),
+    ("change", "continue"),
+    # Controlled / uncontrolled
+    ("controlled", "uncontrolled"),
+]
+
+
+def are_clinically_contradictory(text_a: str, text_b: str) -> bool:
+    """Return True if text_a and text_b contain opposing clinical actions.
+
+    Checks whether one text contains a word from one side of a known antonym
+    pair while the other text contains the paired antonym, indicating that the
+    two submissions recommend opposite actions for the same drug/intervention.
+    """
+    words_a = set(text_a.lower().split())
+    words_b = set(text_b.lower().split())
+    for word1, word2 in _CLINICAL_ANTONYM_PAIRS:
+        if (word1 in words_a and word2 in words_b) or (word2 in words_a and word1 in words_b):
+            return True
+    return False
+
 
 def batch_embed_texts(texts: list[str], embeddings_model) -> list[list[float]]:
     """
@@ -1394,10 +1471,16 @@ def match_submissions(
     # Step 2: Extract pre-cached instructor embeddings
     instructor_embeddings = [item["embedding"] for item in instructor_items]
 
-    # Step 3: Compute NxM cosine similarity matrix
+    # Step 3: Compute NxM cosine similarity matrix, excluding pairs where the
+    # student and instructor texts contain opposing clinical actions (e.g.
+    # "continue naproxen" vs "discontinue naproxen"). Embeddings score these
+    # pairs highly because the texts share almost every word, but the clinical
+    # meaning is the opposite — so we drop them before assignment.
     similarity_pairs: list[tuple[int, int, float]] = []
     for s_idx, s_emb in enumerate(student_embeddings):
         for i_idx, i_emb in enumerate(instructor_embeddings):
+            if are_clinically_contradictory(student_texts[s_idx], instructor_items[i_idx][text_key]):
+                continue
             score = compute_cosine_similarity(s_emb, i_emb)
             similarity_pairs.append((s_idx, i_idx, score))
 
