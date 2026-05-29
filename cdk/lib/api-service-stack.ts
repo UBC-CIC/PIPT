@@ -2365,6 +2365,11 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
+    new wafv2.CfnWebACLAssociation(this, `${id}-appsync-waf-association`, {
+      resourceArn: this.appSyncApi.arn,
+      webAclArn: waf.attrArn,
+    });
+
     // Export outputs for frontend configuration
     new cdk.CfnOutput(this, 'ApiEndpoint', {
       value: this.api.url,
