@@ -152,10 +152,18 @@ export class EcsSocketStack extends Stack {
     });
 
     // 3) Network Load Balancer on TCP 80 (created before container so SELF_URL can reference it)
-    const nlb = new elbv2.NetworkLoadBalancer(this, "SocketNLB", {
+    // CloudFront VPC Origin requires the NLB to have a security group.
+    const nlbSg = new ec2.SecurityGroup(this, "SocketNLBSG", {
+      vpc,
+      allowAllOutbound: true,
+    });
+    nlbSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), "CloudFront VPC Origin inbound");
+
+    const nlb = new elbv2.NetworkLoadBalancer(this, "SocketNLBInternal", {
       vpc,
       internetFacing: false,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [nlbSg],
     });
 
     // 4) Container listening on port 80
