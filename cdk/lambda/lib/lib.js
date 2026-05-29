@@ -13,16 +13,13 @@ async function initializeConnection(SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT) {
 
     const credentials = JSON.parse(secretResponse.SecretString);
 
-    // REVIEW: ssl: false means the Node.js Lambda functions connect to RDS without TLS.
-    // When rds.force_ssl is changed to '1', update this to ssl: { rejectUnauthorized: true }
-    // or ssl: 'require' to match the server-side enforcement.
     const connectionConfig = {
       host: RDS_PROXY_ENDPOINT,
       port: credentials.port,
       username: credentials.username,
       password: credentials.password,
       database: credentials.dbname,
-      ssl: false,
+      ssl: { rejectUnauthorized: true },
     };
 
     // REVIEW: The connection is stored on the global object and reused across Lambda invocations.

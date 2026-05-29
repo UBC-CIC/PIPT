@@ -79,6 +79,7 @@ def connect_to_db():
             "password": secret["password"],
             "host": RDS_PROXY_ENDPOINT,
             "port": secret["port"],
+            "sslmode": "require",
         }
         connection_string = " ".join(f"{k}={v}" for k, v in connection_params.items())
         connection = psycopg2.connect(connection_string)
