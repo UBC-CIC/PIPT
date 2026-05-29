@@ -214,11 +214,7 @@ export class EcsSocketStack extends Stack {
       "Allow NLB to reach ECS service"
     );
 
-    // 5.2) Allow inbound UDP for WebRTC media (RTP audio)
-    service.connections.allowFromAnyIpv4(
-      ec2.Port.udpRange(49152, 65535),
-      "AllowWebRTCMediaUDP"
-    );
+
 
     // 6) NLB listener and target group
     // REVIEW: The NLB listener is on port 80 (unencrypted). WebSocket traffic from CloudFront

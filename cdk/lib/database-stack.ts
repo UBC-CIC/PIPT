@@ -119,18 +119,6 @@ export class DatabaseStack extends Stack {
             console.log("Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.");
         }
 
-        // REVIEW: This rule opens port 5432 to the ENTIRE VPC CIDR, including public subnets.
-        // This is redundant with the per-private-subnet rules above and overly broad.
-        // Consider removing this block and relying solely on the private-subnet CIDR rules,
-        // or restricting to specific Lambda/ECS security group IDs for tighter access control.
-        this.dbInstance.connections.securityGroups.forEach(function (securityGroup) {
-            securityGroup.addIngressRule(
-                ec2.Peer.ipv4(vpcStack.vpcCidrString),
-                ec2.Port.tcp(5432),
-                "Allow PostgreSQL traffic from VPC"
-            );
-        });
-
         /**
          * Create IAM role for RDS Proxy
          */
