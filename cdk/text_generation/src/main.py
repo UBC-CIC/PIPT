@@ -104,6 +104,7 @@ def connect_to_db():
                 user=secret["username"],
                 password=secret["password"],
                 autocommit=False,
+                sslmode="require",
             )
             logger.info("Connected to the database!")
         except Exception as e:

@@ -26,20 +26,28 @@ async function putSecret(name, secret) {
 }
 
 async function runMigrations(db) {
-  const dbUrl = `postgresql://${encodeURIComponent(
-    db.username,
-  )}:${encodeURIComponent(db.password)}@${db.host}:${db.port || 5432}/${
-    db.dbname
-  }`;
-  await migrate({
-    databaseUrl: dbUrl,
-    dir: path.join(__dirname, "migrations"),
-    direction: "up",
-    count: Infinity,
-    migrationsTable: "pgmigrations",
-    logger: console,
-    createSchema: false,
+  const client = new Client({
+    user: db.username,
+    password: db.password,
+    host: db.host,
+    port: db.port || 5432,
+    database: db.dbname,
+    ssl: { rejectUnauthorized: false },
   });
+  await client.connect();
+  try {
+    await migrate({
+      dbClient: client,
+      dir: path.join(__dirname, "migrations"),
+      direction: "up",
+      count: Infinity,
+      migrationsTable: "pgmigrations",
+      logger: console,
+      createSchema: false,
+    });
+  } finally {
+    await client.end();
+  }
 }
 
 async function createAppUsers(
@@ -54,7 +62,7 @@ async function createAppUsers(
     host: adminDb.host,
     database: adminDb.dbname, // target DB
     port: adminDb.port || 5432,
-    ssl: adminDb.ssl || undefined, // set true or config if needed
+    ssl: { rejectUnauthorized: false },
   });
   await adminClient.connect();
 

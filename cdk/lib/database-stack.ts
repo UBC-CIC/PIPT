@@ -19,6 +19,7 @@ export class DatabaseStack extends Stack {
     public readonly rdsProxyEndpoint: string;
     public readonly rdsProxyEndpointTableCreator: string;
     public readonly rdsProxyEndpointAdmin: string;
+    public readonly dbSecurityGroup: ec2.ISecurityGroup;
 
     constructor(scope: Construct, id: string, vpcStack: VpcStack, props?: StackProps) {
         super(scope, id, props);
@@ -106,7 +107,8 @@ export class DatabaseStack extends Stack {
         });
         
         // Add CIDR ranges of private subnets to inbound rules of RDS
-        const dbSecurityGroup = this.dbInstance.connections.securityGroups[0];
+        this.dbSecurityGroup = this.dbInstance.connections.securityGroups[0];
+        const dbSecurityGroup = this.dbSecurityGroup;
         if (vpcStack.privateSubnetsCidrStrings && vpcStack.privateSubnetsCidrStrings.length > 0) {
             vpcStack.privateSubnetsCidrStrings.forEach((cidr) => {
                 dbSecurityGroup.addIngressRule(
@@ -196,4 +198,5 @@ export class DatabaseStack extends Stack {
         this.rdsProxyEndpointTableCreator = rdsProxyTableCreator.endpoint;
         this.rdsProxyEndpointAdmin = rdsProxyAdmin.endpoint;
     }
+
 }
