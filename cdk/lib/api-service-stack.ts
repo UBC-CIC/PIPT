@@ -526,6 +526,22 @@ export class ApiServiceStack extends cdk.Stack {
       },
     });
 
+    const apiLambdaSg = new ec2.SecurityGroup(this, `${id}-apiLambdaSg`, {
+      vpc: vpcStack.vpc,
+      description: "Security group for API Lambda functions to access RDS Proxy",
+      allowAllOutbound: true,
+    });
+    const importedDbSg = ec2.SecurityGroup.fromSecurityGroupId(
+      this,
+      `${id}-imported-db-sg`,
+      db.dbSecurityGroup.securityGroupId
+    );
+    importedDbSg.addIngressRule(
+      apiLambdaSg,
+      ec2.Port.tcp(5432),
+      "Allow API Lambda functions to access RDS Proxy"
+    );
+
     const lambdaStudentFunction = new lambda.Function(
       this,
       `${id}-studentFunction`,
@@ -535,6 +551,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "studentFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -567,6 +584,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "instructorFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -599,6 +617,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "adminFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
@@ -744,6 +763,7 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
         },
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-addStudentOnSignUp`,
         memorySize: 128,
         layers: [postgres],
@@ -1395,6 +1415,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(300),
         reservedConcurrentExecutions: 25,
         vpc: vpcStack.vpc, // Pass the VPC
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
@@ -1659,6 +1680,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
@@ -1718,6 +1740,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(900),
         reservedConcurrentExecutions: 10,
         vpc: vpcStack.vpc, // Pass the VPC
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-DataIngestLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
@@ -1876,6 +1899,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1916,6 +1940,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1974,6 +1999,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -2032,6 +2058,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -2087,6 +2114,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -2139,6 +2167,7 @@ export class ApiServiceStack extends cdk.Stack {
       timeout: Duration.seconds(300),
       memorySize: 128,
       vpc: vpcStack.vpc,
+      securityGroups: [apiLambdaSg],
       environment: {
         SM_DB_CREDENTIALS: db.secretPathUser.secretName, // Database User Credentials
         RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint, // RDS Proxy Endpoint
@@ -2192,6 +2221,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
@@ -2253,6 +2283,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -2327,6 +2358,7 @@ export class ApiServiceStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
+              excludedRules: [{ name: "SizeRestrictions_BODY" }],
             },
           },
           overrideAction: { none: {} },
@@ -2354,6 +2386,38 @@ export class ApiServiceStack extends cdk.Stack {
             metricName: "LimitRequests1000",
           },
         },
+        {
+          name: "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+          priority: 3,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesKnownBadInputsRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+          },
+        },
+        {
+          name: "AWS-AWSManagedRulesAmazonIpReputationList",
+          priority: 4,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesAmazonIpReputationList",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "AWS-AWSManagedRulesAmazonIpReputationList",
+          },
+        },
       ],
     });
     const wafAssociation = new wafv2.CfnWebACLAssociation(
@@ -2364,6 +2428,11 @@ export class ApiServiceStack extends cdk.Stack {
         webAclArn: waf.attrArn,
       }
     );
+
+    new wafv2.CfnWebACLAssociation(this, `${id}-appsync-waf-association`, {
+      resourceArn: this.appSyncApi.arn,
+      webAclArn: waf.attrArn,
+    });
 
     // Export outputs for frontend configuration
     new cdk.CfnOutput(this, 'ApiEndpoint', {

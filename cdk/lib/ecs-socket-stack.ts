@@ -200,11 +200,28 @@ export class EcsSocketStack extends Stack {
       },
     });
 
+    const socketServiceSg = new ec2.SecurityGroup(this, "SocketServiceSG", {
+      vpc,
+      description: "Security group for ECS socket service",
+      allowAllOutbound: true,
+    });
+    const importedDbSg = ec2.SecurityGroup.fromSecurityGroupId(
+      this,
+      `${id}-imported-db-sg`,
+      db.dbSecurityGroup.securityGroupId
+    );
+    importedDbSg.addIngressRule(
+      socketServiceSg,
+      ec2.Port.tcp(5432),
+      "Allow ECS socket service to access RDS Proxy"
+    );
+
     const service = new ecs.FargateService(this, "SocketService", {
       cluster,
       taskDefinition: taskDef,
       desiredCount: 1, // Single task — textStreamSockets map is in-memory, requires all traffic on one container
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [socketServiceSg],
     });
 
     // 5.1) Allow the internal NLB to reach the service on port 80 (VPC traffic only)
@@ -214,11 +231,7 @@ export class EcsSocketStack extends Stack {
       "Allow NLB to reach ECS service"
     );
 
-    // 5.2) Allow inbound UDP for WebRTC media (RTP audio)
-    service.connections.allowFromAnyIpv4(
-      ec2.Port.udpRange(49152, 65535),
-      "AllowWebRTCMediaUDP"
-    );
+
 
     // 6) NLB listener and target group
     // REVIEW: The NLB listener is on port 80 (unencrypted). WebSocket traffic from CloudFront
