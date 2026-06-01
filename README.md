@@ -18,13 +18,13 @@ npm install
 npm run dev
 ```
 
-See the [Deployment Guide](docs/deploymentGuide.md) for full setup instructions.
+See the [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) for full setup instructions.
 
 ---
 
 ## High-Level Architecture
 
-The following architecture diagram illustrates the various AWS components utilized to deliver the solution. For an in-depth explanation of the frontend and backend stacks, see the [Architecture Deep Dive](docs/architectureDeepDive.md).
+The following architecture diagram illustrates the various AWS components utilized to deliver the solution. For an in-depth explanation of the frontend and backend stacks, see the [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md).
 
 ![GenRx Architecture](docs/architecture-diagram.drawio.png)
 
@@ -34,11 +34,11 @@ The following architecture diagram illustrates the various AWS components utiliz
 
 | Document | Description |
 |----------|-------------|
-| [Deployment Guide](docs/deploymentGuide.md) | End-to-end deployment instructions, prerequisites, and troubleshooting |
-| [Architecture Deep Dive](docs/architectureDeepDive.md) | System architecture overview and complete database schema |
-| [Database Migrations](docs/databaseMigrations.md) | Migration system usage, patterns, and safety guidelines |
-| [Dependency Management](docs/dependencyManagement.md) | Dependency locking and update procedures for Python and Node.js |
-| [Modification Guide](docs/modificationGuide.md) | How to customize colors, extend the API, configure LLMs, and set up local dev |
+| [Deployment Guide](docs/DEPLOYMENT_GUIDE.md) | End-to-end deployment instructions, prerequisites, and troubleshooting |
+| [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md) | System architecture overview and complete database schema |
+| [Database Migrations](docs/DATABASE_MIGRATIONS.md) | Migration system usage, patterns, and safety guidelines |
+| [Dependency Management](docs/DEPENDENCY_MANAGEMENT.md) | Dependency locking and update procedures for Python and Node.js |
+| [Modification Guide](docs/MODIFICATION_GUIDE.md) | How to customize colors, extend the API, configure LLMs, and set up local dev |
 | [Security Overview](docs/SECURITY_OVERVIEW.md) | Network architecture and security controls |
 | [Voice Agent Setup](docs/AGENTCORE_VOICE_AGENT_SETUP.md) | Bedrock AgentCore voice agent deployment |
 
