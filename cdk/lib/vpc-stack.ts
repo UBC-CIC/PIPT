@@ -141,12 +141,6 @@ export class VpcStack extends Stack {
         privateDnsEnabled: true, // Enable private DNS for proper resolution
       });
 
-      this.vpc.addInterfaceEndpoint("Glue Endpoint", {
-        service: ec2.InterfaceVpcEndpointAwsService.GLUE,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        privateDnsEnabled: true, // Enable private DNS for proper resolution
-      });
-      
       // Add API Gateway VPC endpoint
       this.vpc.addInterfaceEndpoint("API Gateway Endpoint", {
         service: ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
@@ -211,6 +205,12 @@ export class VpcStack extends Stack {
       this.vpc.addInterfaceEndpoint(`${id}-RDS Endpoint`, {
         service: ec2.InterfaceVpcEndpointAwsService.RDS,
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+      });
+
+      this.vpc.addInterfaceEndpoint(`${id}-SSM Endpoint`, {
+        service: ec2.InterfaceVpcEndpointAwsService.SSM,
+        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+        privateDnsEnabled: true,
       });
 
       // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
