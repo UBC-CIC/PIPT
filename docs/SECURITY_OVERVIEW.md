@@ -1,5 +1,9 @@
 # GenRx — Application Security Overview
 
+> **Document Type:** Supplementary Technical Reference
+> **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
+> **Last updated:** 2026-05-30
+
 **Date:** April 26, 2026
 **Classification:** Internal — Confidential
 **Prepared by:** Security Analysis Team
@@ -38,7 +42,7 @@ The most urgent issues are **disabled TLS enforcement on the database layer**, *
 
 ## 2. Application Architecture
 
-```
+```text
 ┌─────────────┐     ┌──────────────┐     ┌──────────────────┐
 │  React SPA  │────▶│ API Gateway  │────▶│  Lambda (Node/   │
 │  (Amplify)  │     │  + WAF       │     │  Python)         │

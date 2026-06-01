@@ -1,5 +1,9 @@
 # GenRx Bedrock AgentCore Voice Agent Setup
 
+> **Document Type:** Supplementary Procedural Guide
+> **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
+> **Last updated:** 2026-05-30
+
 **Date:** April 27, 2026
 **Scope:** Console-side configuration of the Bedrock AgentCore voice agent and how it connects to the CDK deployment
 **Audience:** Developers deploying or maintaining the GenRx voice feature
@@ -29,7 +33,7 @@ The voice agent container itself is built and pushed to ECR by the CI/CD pipelin
 
 ## 2. Architecture: How AgentCore Fits In
 
-```
+```text
 Frontend (React)
     |  Socket.IO (audio frames + control messages)
 Socket Server (ECS Fargate, server.js)
@@ -250,7 +254,7 @@ In the Bedrock console > AgentCore > Runtime > Runtime resources, confirm the ag
 
 After redeploying the ECS socket stack with the ARN, check the socket server CloudWatch logs for:
 
-```
+```text
 Using AgentCore WebSocket for ARN: arn:aws:bedrock-agentcore:...
 Connecting to AgentCore WebSocket: wss://bedrock-agentcore...
 AgentCore WebSocket connected (session: ...)

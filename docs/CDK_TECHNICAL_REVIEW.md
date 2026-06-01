@@ -1,5 +1,9 @@
 # GenRx CDK Infrastructure — Technical Review
 
+> **Document Type:** Supplementary Technical Reference
+> **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
+> **Last updated:** 2026-05-30
+
 **Date:** April 27, 2026
 **Reviewer Role:** AWS Solutions Architect
 **Scope:** All files under `cdk/` — infrastructure stacks, Lambda functions, container workloads, CI/CD pipeline
@@ -50,7 +54,7 @@ The GenRx CDK project is a well-structured, multi-stack serverless application t
 
 ### Stack Dependency Graph
 
-```
+```text
 CICDStack (ECR repos, CodeBuild, CodePipeline)
     │
 VpcStack (VPC, subnets, NAT, endpoints, flow logs)
