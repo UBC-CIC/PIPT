@@ -300,12 +300,15 @@ io.on("connection", (socket) => {
       }
 
       try {
+        // For voice mode, prefer voice_persona_prompt when available, fall back to persona_prompt
+        const effectiveVoicePrompt = patientContext.voice_persona_prompt || patientContext.persona_prompt || config.patient_prompt || "";
+
         const agentWs = await connectToVoiceAgent({
           session_id: config.session_id || "default",
           voice_id: config.voice_id || "",
           user_id: socket.userId || "anonymous",
           patient_name: patientContext.patient_name || config.patient_name || "",
-          patient_prompt: patientContext.patient_prompt || config.patient_prompt || "",
+          patient_prompt: effectiveVoicePrompt,
           patient_id: config.patient_id || "",
           simulation_group_id: config.simulation_group_id || "",
           llm_completion: patientContext.llm_completion || config.llm_completion || false,
@@ -398,6 +401,9 @@ io.on("connection", (socket) => {
     console.log(`🐍 Attempting to spawn: ${pythonCmd} nova_sonic.py`);
 
     try {
+      // For voice mode, prefer voice_persona_prompt when available, fall back to persona_prompt
+      const effectiveLocalVoicePrompt = patientContext.voice_persona_prompt || patientContext.persona_prompt || config.patient_prompt || "";
+
       novaProcess = spawn(pythonCmd, ["nova_sonic.py"], {
         stdio: ["pipe", "pipe", "pipe"],
         env: {
@@ -411,7 +417,7 @@ io.on("connection", (socket) => {
           SM_DB_CREDENTIALS: process.env.SM_DB_CREDENTIALS || "",
           RDS_PROXY_ENDPOINT: process.env.RDS_PROXY_ENDPOINT || "",
           PATIENT_NAME: config.patient_name || "",
-          PATIENT_PROMPT: config.patient_prompt || "",
+          PATIENT_PROMPT: effectiveLocalVoicePrompt,
           PATIENT_ID: config.patient_id || "",
           SIMULATION_GROUP_ID: config.simulation_group_id || "",
           LLM_COMPLETION: config.llm_completion ? "true" : "false",
@@ -529,7 +535,7 @@ io.on("connection", (socket) => {
               SM_DB_CREDENTIALS: process.env.SM_DB_CREDENTIALS || "",
               RDS_PROXY_ENDPOINT: process.env.RDS_PROXY_ENDPOINT || "",
               PATIENT_NAME: config.patient_name || "",
-              PATIENT_PROMPT: config.patient_prompt || "",
+              PATIENT_PROMPT: effectiveLocalVoicePrompt,
               PATIENT_ID: config.patient_id || "",
               SIMULATION_GROUP_ID: config.simulation_group_id || "",
               LLM_COMPLETION: config.llm_completion ? "true" : "false",

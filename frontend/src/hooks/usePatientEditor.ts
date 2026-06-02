@@ -27,6 +27,7 @@ export interface UsePatientEditorReturn {
   editPatientGender: string;
   editPatientPrompt: string;
   editPatientVoiceId: string;
+  editVoicePersonaPrompt: string;
   uploadStatus: Record<string, 'idle' | 'uploading' | 'success' | 'error'>;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   uploadedFiles: Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>;
@@ -42,6 +43,7 @@ export interface UsePatientEditorReturn {
   setEditPatientGender: (gender: string) => void;
   setEditPatientPrompt: (prompt: string) => void;
   setEditPatientVoiceId: (voiceId: string) => void;
+  setEditVoicePersonaPrompt: (prompt: string) => void;
   setSelectedMaterialId: (id: string) => void;
   setCaseMaterials: React.Dispatch<React.SetStateAction<CaseMaterial[]>>;
   setCaseSpecificQuestions: React.Dispatch<React.SetStateAction<GlobalRubricQuestion[]>>;
@@ -83,6 +85,7 @@ export function usePatientEditor({
   const [editPatientGender, setEditPatientGender] = useState('');
   const [editPatientPrompt, setEditPatientPrompt] = useState('');
   const [editPatientVoiceId, setEditPatientVoiceId] = useState('');
+  const [editVoicePersonaPrompt, setEditVoicePersonaPrompt] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   const [uploadedFiles, setUploadedFiles] = useState<Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>>({ llm: [], patientInfo: [] /* , answerKey: [] */ });
@@ -154,6 +157,7 @@ export function usePatientEditor({
     setEditPatientGender((patient as any).patient_gender || (patient as any).gender || '');
     setEditPatientPrompt((patient as any).patient_prompt || instructorService.getDefaultPatientPrompt());
     setEditPatientVoiceId((patient as any).voice_id || 'tiffany');
+    setEditVoicePersonaPrompt((patient as any).voice_persona_prompt ?? '');
     setEditPatientTab('info');
 
     if (role === 'admin' && groupId) {
@@ -212,6 +216,7 @@ export function usePatientEditor({
     setEditPatientGender('');
     setEditPatientPrompt(instructorService.getDefaultPatientPrompt());
     setEditPatientVoiceId('');
+    setEditVoicePersonaPrompt('');
     setEditPatientTab('info');
     setCaseMaterials([]);
     setSelectedMaterialId('');
@@ -249,6 +254,7 @@ export function usePatientEditor({
         patient_age: parseInt(editPatientAge) || 0,
         patient_gender: editPatientGender,
         patient_prompt: editPatientPrompt,
+        voice_persona_prompt: editVoicePersonaPrompt || undefined,
         voice_id: editPatientVoiceId || undefined,
       });
       setSelectedPatientForEdit(newPersonaId);
@@ -284,6 +290,7 @@ export function usePatientEditor({
         patient_age: parseInt(editPatientAge) || 0,
         patient_gender: editPatientGender,
         patient_prompt: editPatientPrompt,
+        voice_persona_prompt: editVoicePersonaPrompt || undefined,
         voice_id: editPatientVoiceId || undefined,
       });
       setSelectedPatientForEdit(newPersonaId);
@@ -294,6 +301,7 @@ export function usePatientEditor({
         patient_age: parseInt(editPatientAge) || 0,
         patient_gender: editPatientGender,
         patient_prompt: editPatientPrompt,
+        voice_persona_prompt: editVoicePersonaPrompt || undefined,
         voice_id: editPatientVoiceId || undefined,
       });
     }
@@ -475,6 +483,7 @@ export function usePatientEditor({
     editPatientGender,
     editPatientPrompt,
     editPatientVoiceId,
+    editVoicePersonaPrompt,
     uploadStatus,
     uploadedFiles,
     editPatientProfilePicUrl,
@@ -489,6 +498,7 @@ export function usePatientEditor({
     setEditPatientGender,
     setEditPatientPrompt,
     setEditPatientVoiceId,
+    setEditVoicePersonaPrompt,
     setSelectedMaterialId,
     setCaseMaterials,
     setCaseSpecificQuestions,

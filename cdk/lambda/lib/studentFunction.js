@@ -1286,7 +1286,7 @@ exports.handler = async (event, context) => {
 
             // Get patient details
             const patientResult = await sqlConnection`
-              SELECT persona_name, persona_age, persona_prompt, llm_completion
+              SELECT persona_name, persona_age, persona_prompt, voice_persona_prompt, llm_completion
               FROM "personas" 
               WHERE persona_id = ${patient_id}
             `;
@@ -1304,6 +1304,7 @@ exports.handler = async (event, context) => {
               persona_name: patientResult[0].persona_name,
               persona_age: patientResult[0].persona_age,
               persona_prompt: patientResult[0].persona_prompt,
+              voice_persona_prompt: patientResult[0].voice_persona_prompt,
               llm_completion: patientResult[0].llm_completion,
             };
 

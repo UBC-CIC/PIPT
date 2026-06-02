@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle, FileText, Mic, MessageSquareText, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -331,27 +331,87 @@ function InfoTab({
         />
       </div>
 
-      {/* Patient Prompt */}
-      <div>
-        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-          Patient Prompt
-        </label>
-        <p className="text-xs mb-2" style={{ color: UI_COLORS.text.muted }}>
-          Defines WHO this patient is — their personality, symptoms, backstory, and condition details. This is unique per patient.
-        </p>
-        <textarea
-          value={patientEditor.editPatientPrompt}
-          onChange={(e) => patientEditor.setEditPatientPrompt(e.target.value)}
-          className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+      {/* ─── Prompt Section ─── */}
+      <div className="space-y-5">
+        {/* Text Prompt */}
+        <div
+          className="rounded-lg p-4"
           style={{
-            borderWidth: '1px',
-            borderStyle: 'solid',
+            border: '1px solid',
             borderColor: UI_COLORS.border.default,
-            outlineColor: UI_COLORS.border.medium,
-            minHeight: '120px',
+            backgroundColor: UI_COLORS.background.white,
           }}
-          placeholder="You are a 45-year-old patient who has been experiencing persistent headaches for the past 2 weeks. You also have mild nausea in the mornings. You take ibuprofen occasionally but it only helps temporarily. You are worried it might be something serious."
-        />
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <MessageSquareText className="w-4 h-4" style={{ color: UI_COLORS.promptMode.textIcon }} />
+            <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+              Text Prompt
+            </label>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: UI_COLORS.promptMode.textBadgeBg, color: UI_COLORS.promptMode.textBadgeText }}
+            >
+              Text mode
+            </span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: UI_COLORS.text.muted }}>
+            Character brief for the text model. Include identity, emotional state, information reveal rules, and conditional logic. Structure and bullet points are fine here.
+          </p>
+          <textarea
+            value={patientEditor.editPatientPrompt}
+            onChange={(e) => patientEditor.setEditPatientPrompt(e.target.value)}
+            className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+            style={{
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: UI_COLORS.border.default,
+              outlineColor: UI_COLORS.border.medium,
+              minHeight: '140px',
+            }}
+            placeholder="Describe who this persona is: their personality, emotional state, backstory, and how they reveal information. Include behavioral rules like what they withhold until asked, and how they refer to things in their own words. Structure and conditionals are fine here."
+          />
+          <PromptGuidanceToggle mode="text" />
+        </div>
+
+        {/* Voice Prompt */}
+        <div
+          className="rounded-lg p-4"
+          style={{
+            border: '1px solid',
+            borderColor: UI_COLORS.border.default,
+            backgroundColor: UI_COLORS.background.white,
+          }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <Mic className="w-4 h-4" style={{ color: UI_COLORS.promptMode.voiceIcon }} />
+            <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>
+              Voice Prompt
+            </label>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{ backgroundColor: UI_COLORS.promptMode.voiceBadgeBg, color: UI_COLORS.promptMode.voiceBadgeText }}
+            >
+              Voice mode
+            </span>
+          </div>
+          <p className="text-xs mb-3" style={{ color: UI_COLORS.text.muted }}>
+            Instructions for the voice model describing how this persona sounds and speaks. Use plain prose: no bullets or headers. Leave blank to reuse the text prompt above.
+          </p>
+          <textarea
+            value={patientEditor.editVoicePersonaPrompt}
+            onChange={(e) => patientEditor.setEditVoicePersonaPrompt(e.target.value)}
+            className="w-full px-3 py-3 rounded-lg resize-none focus:outline-none focus:ring-2 text-base"
+            style={{
+              borderWidth: '1px',
+              borderStyle: 'solid',
+              borderColor: UI_COLORS.border.default,
+              outlineColor: UI_COLORS.border.medium,
+              minHeight: '140px',
+            }}
+            placeholder="Describe how this persona sounds and speaks in real time: their pace, filler words, emotional tone, and any physical vocal cues. Write in plain prose, one instruction per sentence. Keep it under 150 words."
+          />
+          <PromptGuidanceToggle mode="voice" />
+        </div>
       </div>
 
       {/* File Upload Sections */}
@@ -460,6 +520,59 @@ function InfoTab({
           Save Changes
         </Button>
       </div>
+    </div>
+  );
+}
+
+
+/* ─── Prompt Guidance Toggle ─── */
+
+function PromptGuidanceToggle({ mode }: { mode: 'text' | 'voice' }) {
+  const [open, setOpen] = useState(false);
+
+  const textGuidance = (
+    <ul className="list-disc pl-4 space-y-1 text-xs" style={{ color: UI_COLORS.text.body }}>
+      <li><strong>Identity & presentation</strong> — name, age, emotional tone, how they come across</li>
+      <li><strong>Information reveal rules</strong> — what they volunteer vs. withhold until asked</li>
+      <li><strong>Behavioral rules (conditionals OK)</strong> — "Only mention X if asked about Y"</li>
+      <li><strong>Their own language</strong> — how they refer to things in lay terms</li>
+      <li><strong>Relationship & trust level</strong> — how they relate to the person they're speaking with</li>
+      <li className="pt-1" style={{ color: UI_COLORS.text.muted }}><em>Don't include:</em> factual details already in uploaded documents, or speech-style instructions (irrelevant for text)</li>
+    </ul>
+  );
+
+  const voiceGuidance = (
+    <ul className="list-disc pl-4 space-y-1 text-xs" style={{ color: UI_COLORS.text.body }}>
+      <li><strong>Speech pace & filler words</strong> — "speaks slowly", "uses 'um' and 'you know'"</li>
+      <li><strong>Physical sound cues</strong> — "slightly breathless", "voice cracks when emotional"</li>
+      <li><strong>Emotional tone as heard</strong> — "sounds anxious", "flat and tired", "defensive"</li>
+      <li><strong>Lay terminology</strong> — avoid jargon the voice AI may mispronounce</li>
+      <li><strong>Simple behavioral rules (1 sentence each)</strong> — "Don't mention X unless asked"</li>
+      <li className="pt-1" style={{ color: UI_COLORS.text.muted }}><em>Don't include:</em> bullet points or headers (plain prose only), complex conditional logic, jargon, or long backstory</li>
+    </ul>
+  );
+
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1 text-xs transition-colors bg-transparent border-0 cursor-pointer p-0"
+        style={{ color: UI_COLORS.text.muted }}
+        onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+        onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.muted}
+      >
+        <Info className="w-3 h-3" />
+        {open ? 'Hide writing tips' : 'Writing tips'}
+      </button>
+      {open && (
+        <div
+          className="mt-2 p-3 rounded-lg"
+          style={{ backgroundColor: UI_COLORS.background.tableHeader }}
+        >
+          {mode === 'text' ? textGuidance : voiceGuidance}
+        </div>
+      )}
     </div>
   );
 }

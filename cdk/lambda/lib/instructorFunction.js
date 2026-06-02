@@ -426,7 +426,7 @@ exports.handler = async (event, context) => {
             voice_id: provided_voice_id,
           } = event.queryStringParameters;
 
-          const { persona_prompt } = JSON.parse(event.body);
+          const { persona_prompt, voice_persona_prompt } = JSON.parse(event.body);
 
           try {
             // Check if a patient with the same name already exists in the simulation group
@@ -480,7 +480,8 @@ exports.handler = async (event, context) => {
                         persona_age, 
                         persona_gender,
                         persona_prompt,
-                        voice_id
+                        voice_id,
+                        voice_persona_prompt
                     )
                     VALUES (
                         uuid_generate_v4(), 
@@ -490,7 +491,8 @@ exports.handler = async (event, context) => {
                         ${persona_age}, 
                         ${persona_gender}, 
                         ${persona_prompt},
-                        ${voice_id}
+                        ${voice_id},
+                        ${voice_persona_prompt || null}
                     )
                     RETURNING *;
                 `;
@@ -618,7 +620,7 @@ exports.handler = async (event, context) => {
         ) {
           const { persona_id, instructor_email, simulation_group_id } =
             event.queryStringParameters;
-          const { persona_name, persona_age, persona_gender, persona_prompt, voice_enabled, voice_id } =
+          const { persona_name, persona_age, persona_gender, persona_prompt, voice_enabled, voice_id, voice_persona_prompt } =
             JSON.parse(event.body || "{}");
 
           if (
@@ -653,7 +655,8 @@ exports.handler = async (event, context) => {
                             persona_gender = ${persona_gender}, 
                             persona_prompt = ${persona_prompt},
                             voice_enabled = ${voice_enabled !== undefined ? voice_enabled : true},
-                            voice_id = ${voice_id || 'tiffany'}
+                            voice_id = ${voice_id || 'tiffany'},
+                            voice_persona_prompt = ${voice_persona_prompt !== undefined ? voice_persona_prompt : null}
                         WHERE persona_id = ${persona_id};
                     `;
 
@@ -892,7 +895,7 @@ exports.handler = async (event, context) => {
           try {
             // Query to get all patients for the given simulation group, including mode info
             const simulationPatients = await sqlConnection`
-                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id,
+                    SELECT p.persona_id, p.persona_name, p.persona_age, p.persona_gender, p.persona_prompt, p.voice_persona_prompt, p.llm_completion, p.voice_enabled, p.voice_id,
                       (SELECT COUNT(*) > 0 FROM simulation_group_dtps sgd
                         WHERE sgd.simulation_group_id = ${simulation_group_id}
                         AND (sgd.persona_id = p.persona_id OR sgd.persona_id IS NULL)) AS has_dtps,

@@ -100,6 +100,14 @@ export const UI_COLORS = {
     interviewPracticeBg: '#DBEAFE',  // blue-100
     interviewPracticeText: '#1E40AF', // blue-800
   },
+  promptMode: {
+    textIcon: '#3b82f6',        // blue-500
+    textBadgeBg: '#eff6ff',     // blue-50
+    textBadgeText: '#3b82f6',   // blue-500
+    voiceIcon: '#8b5cf6',       // violet-500
+    voiceBadgeBg: '#f5f3ff',    // violet-50
+    voiceBadgeText: '#8b5cf6',  // violet-500
+  },
 } as const;
 
 /**

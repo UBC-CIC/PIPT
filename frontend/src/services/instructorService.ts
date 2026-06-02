@@ -150,6 +150,7 @@ export interface ManageablePatient {
   patient_gender: string;               // Patient gender (persona_gender in DB)
   patient_number?: number;              // Patient number (persona_number in DB)
   patient_prompt: string;               // Patient prompt for LLM (persona_prompt in DB)
+  voice_persona_prompt?: string;         // Voice-specific prompt, falls back to persona_prompt if null (voice_persona_prompt in DB)
   average_wpm?: number;                 // Average words per minute (average_wpm in DB)
   voice_id?: string;                    // Voice ID for TTS (voice_id in DB)
   voice_enabled?: boolean;              // Whether voice mode is enabled for this patient (voice_enabled in DB)
@@ -269,6 +270,7 @@ export interface PatientCreateData {
   patient_age: number;                  // persona_age
   patient_gender: string;               // persona_gender
   patient_prompt: string;               // persona_prompt
+  voice_persona_prompt?: string;        // voice_persona_prompt (optional, falls back to persona_prompt)
   patient_number?: number;              // persona_number (optional)
   average_wpm?: number;                 // average_wpm (optional)
   voice_id?: string;                    // voice_id (optional)
@@ -284,6 +286,7 @@ export interface PatientUpdateData {
   patient_age: number;                  // persona_age
   patient_gender: string;               // persona_gender
   patient_prompt: string;               // persona_prompt
+  voice_persona_prompt?: string;        // voice_persona_prompt (optional, falls back to persona_prompt)
   photo_url?: string;                   // Photo URL (stored separately)
   patient_number?: number;              // persona_number (optional)
   average_wpm?: number;                 // average_wpm (optional)
@@ -714,6 +717,7 @@ async function getManageablePatients(simulationGroupId: string): Promise<Managea
       patient_gender: patient.persona_gender,
       patient_number: patient.persona_number,
       patient_prompt: patient.persona_prompt,
+      voice_persona_prompt: patient.voice_persona_prompt || undefined,
       average_wpm: patient.average_wpm,
       voice_id: patient.voice_id,
       voice_enabled: patient.voice_enabled !== false,
@@ -763,6 +767,7 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
         method: 'POST',
         body: {
           persona_prompt: patientData.patient_prompt || '',
+          voice_persona_prompt: patientData.voice_persona_prompt || null,
         },
       }
     );
@@ -794,6 +799,7 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
         persona_age: patientData.patient_age,
         persona_gender: patientData.patient_gender,
         persona_prompt: patientData.patient_prompt,
+        voice_persona_prompt: patientData.voice_persona_prompt !== undefined ? patientData.voice_persona_prompt : undefined,
         voice_enabled: patientData.voice_enabled,
         voice_id: patientData.voice_id,
       },
