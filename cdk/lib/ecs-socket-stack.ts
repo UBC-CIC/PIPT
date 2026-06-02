@@ -27,6 +27,8 @@ export class EcsSocketStack extends Stack {
     turnServerStack: TurnServerStack,
     voiceAgentEndpoint: string | undefined,
     stackPrefix: string,
+    dynamoTableName: string,
+    cloudFrontWafArn: string,
     props?: StackProps
   ) {
     super(scope, id, props);
@@ -129,7 +131,8 @@ export class EcsSocketStack extends Stack {
         actions: ["secretsmanager:GetSecretValue"],
         resources: [
           db.secretPathUser.secretArn,
-          apiServiceStack.secret.secretArn
+          apiServiceStack.secret.secretArn,
+          apiServiceStack.streamCallbackSecret.secretArn,
         ],
       })
     );
@@ -149,10 +152,18 @@ export class EcsSocketStack extends Stack {
     });
 
     // 3) Network Load Balancer on TCP 80 (created before container so SELF_URL can reference it)
-    const nlb = new elbv2.NetworkLoadBalancer(this, "SocketNLB", {
+    // CloudFront VPC Origin requires the NLB to have a security group.
+    const nlbSg = new ec2.SecurityGroup(this, "SocketNLBSG", {
       vpc,
-      internetFacing: true,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      allowAllOutbound: true,
+    });
+    nlbSg.addIngressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(80), "CloudFront VPC Origin inbound");
+
+    const nlb = new elbv2.NetworkLoadBalancer(this, "SocketNLBInternal", {
+      vpc,
+      internetFacing: false,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [nlbSg],
     });
 
     // 4) Container listening on port 80
@@ -180,6 +191,8 @@ export class EcsSocketStack extends Stack {
         TURN_SERVER_URL: turnServerStack.turnServerUrl,
         STUN_SERVER_URL: turnServerStack.stunServerUrl,
         BEDROCK_GUARDRAIL_ID: apiServiceStack.getGuardrailId(),
+        TABLE_NAME: dynamoTableName,
+        SM_STREAM_CALLBACK_SECRET: apiServiceStack.streamCallbackSecret.secretName,
         ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {
@@ -187,37 +200,38 @@ export class EcsSocketStack extends Stack {
       },
     });
 
-    // REVIEW: ECS tasks are placed in PUBLIC subnets with assignPublicIp: true.
-    // This gives each task a public IP, which is necessary because the NLB is internet-facing
-    // and needs to route to public-subnet targets. However, this exposes the containers directly
-    // to the internet. The security group below mitigates this, but consider using an ALB with
-    // private subnets if the WebSocket protocol allows it, or use AWS PrivateLink.
+    const socketServiceSg = new ec2.SecurityGroup(this, "SocketServiceSG", {
+      vpc,
+      description: "Security group for ECS socket service",
+      allowAllOutbound: true,
+    });
+    const importedDbSg = ec2.SecurityGroup.fromSecurityGroupId(
+      this,
+      `${id}-imported-db-sg`,
+      db.dbSecurityGroup.securityGroupId
+    );
+    importedDbSg.addIngressRule(
+      socketServiceSg,
+      ec2.Port.tcp(5432),
+      "Allow ECS socket service to access RDS Proxy"
+    );
+
     const service = new ecs.FargateService(this, "SocketService", {
       cluster,
       taskDefinition: taskDef,
       desiredCount: 1, // Single task — textStreamSockets map is in-memory, requires all traffic on one container
-      assignPublicIp: true,
-      vpcSubnets: { subnetType: ec2.SubnetType.PUBLIC },
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [socketServiceSg],
     });
 
-    // 5.1) Allow the NLB (and CloudFront via NLB) to reach your service on port 80
-    service.connections.allowFromAnyIpv4(
-      ec2.Port.tcp(80),
-      "AllowHTTPFromLoadBalancer"
-    );
-
-    // 5.2) Allow inbound UDP for WebRTC media (RTP audio)
-    service.connections.allowFromAnyIpv4(
-      ec2.Port.udpRange(49152, 65535),
-      "AllowWebRTCMediaUDP"
-    );
-    
-    // Allow NLB to reach ECS service from VPC
+    // 5.1) Allow the internal NLB to reach the service on port 80 (VPC traffic only)
     service.connections.allowFrom(
       ec2.Peer.ipv4(vpc.vpcCidrBlock),
       ec2.Port.tcp(80),
       "Allow NLB to reach ECS service"
     );
+
+
 
     // 6) NLB listener and target group
     // REVIEW: The NLB listener is on port 80 (unencrypted). WebSocket traffic from CloudFront
@@ -245,7 +259,7 @@ export class EcsSocketStack extends Stack {
     // 7) CloudFront distribution in front of the NLB
     const distro = new cloudfront.Distribution(this, "SocketDistro", {
       defaultBehavior: {
-        origin: new origins.HttpOrigin(nlb.loadBalancerDnsName, {
+        origin: origins.VpcOrigin.withNetworkLoadBalancer(nlb, {
           protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
         }),
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
@@ -253,9 +267,10 @@ export class EcsSocketStack extends Stack {
         originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
       },
+      webAclId: cloudFrontWafArn,
     });
 
-    // 8) Output both CloudFront and direct NLB URLs
+    // 8) Output CloudFront URL
     this.socketUrl = `wss://${distro.domainName}`;
     new CfnOutput(this, "SocketUrl", {
       value: this.socketUrl,
@@ -263,10 +278,5 @@ export class EcsSocketStack extends Stack {
       exportName: `${id}-SocketUrl`,
     });
     
-    new CfnOutput(this, "DirectSocketUrl", {
-      value: `ws://${nlb.loadBalancerDnsName}`,
-      description: "Direct WebSocket server URL (bypasses CloudFront)",
-      exportName: `${id}-DirectSocketUrl`,
-    });
   }
 }

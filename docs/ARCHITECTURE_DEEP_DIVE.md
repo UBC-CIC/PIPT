@@ -1,44 +1,181 @@
 # Architecture Deep Dive
 
-This document provides a high-level overview of the GenRx system architecture and a complete reference of the database schema.
+> **Type:** Technical Reference
+> **Last updated:** 2026-05-30
 
----
+## Table of Contents
 
-## Architecture
+- [Overview](#overview)
+- [Component Breakdown](#component-breakdown)
+  - [Edge and Security](#edge-and-security)
+  - [Frontend Hosting](#frontend-hosting)
+  - [Authentication](#authentication)
+  - [API Layer](#api-layer)
+  - [Real-time Streaming](#real-time-streaming)
+  - [Data Persistence](#data-persistence)
+  - [Object Storage](#object-storage)
+  - [AI Services](#ai-services)
+  - [Voice Agent](#voice-agent)
+  - [CI/CD Pipeline](#cicd-pipeline)
+- [Data Flow Diagrams](#data-flow-diagrams)
+  - [Text Chat Flow](#text-chat-flow)
+  - [Voice Interaction Flow](#voice-interaction-flow)
+  - [Document Ingestion Flow](#document-ingestion-flow)
+- [Database Schema](#database-schema)
+  - [organizations](#organizations)
+  - [users](#users)
+  - [simulation_groups](#simulation_groups)
+  - [group_instructors](#group_instructors)
+  - [personas](#personas)
+  - [persona_media](#persona_media)
+  - [persona_data](#persona_data)
+  - [rubrics](#rubrics)
+  - [key_questions](#key_questions)
+  - [enrollments](#enrollments)
+  - [student_interactions](#student_interactions)
+  - [chats](#chats)
+  - [messages](#messages)
+  - [debriefs](#debriefs)
+  - [feedback](#feedback)
+  - [user_engagement_log](#user_engagement_log)
+  - [system_prompt_history](#system_prompt_history)
+  - [question_bank](#question_bank)
+  - [simulation_group_questions](#simulation_group_questions)
+  - [question_interactions](#question_interactions)
+  - [debrief_prompt_history](#debrief_prompt_history)
+  - [debrief_feedback](#debrief_feedback)
+  - [issue_reports](#issue_reports)
+  - [dtp_bank](#dtp_bank)
+  - [recommendations_bank](#recommendations_bank)
+  - [simulation_group_dtps](#simulation_group_dtps)
+  - [simulation_group_recommendations](#simulation_group_recommendations)
+- [Entity Relationships](#entity-relationships)
+- [Cross-References](#cross-references)
+
+## Overview
+
+The GenRx platform is a clinical simulation system for pharmacy education. Students interact with AI-powered patient personas through text and voice chat, practicing clinical assessment skills in a safe environment. The system is built on AWS using CDK for infrastructure-as-code, with a React SPA frontend, monolithic Lambda API handlers, real-time streaming via Socket.IO on ECS Fargate, and AI inference through Amazon Bedrock.
 
 ![GenRx Architecture](./architecture-diagram.drawio.png)
 
-The GenRx platform is composed of the following layers:
+## Component Breakdown
 
-1. **Edge & Security** — CloudFront sits in front of the Socket.IO server (NLB origin) to provide HTTPS termination and WebSocket proxying. All traffic enters through HTTPS endpoints. Cognito handles authentication and a Bedrock Guardrail screens user input/AI output for content safety.
+### Edge and Security
 
-2. **Frontend Hosting** — A React SPA built with Vite is hosted on AWS Amplify. Amplify auto-builds from the `main` branch on push. The app uses Tailwind CSS, shadcn/ui components, and communicates with the backend via REST API and WebSocket connections.
+CloudFront sits in front of the Socket.IO server (NLB origin) to provide HTTPS termination and WebSocket proxying. All traffic enters through HTTPS endpoints. Cognito handles authentication and a Bedrock Guardrail screens user input and AI output for content safety.
 
-3. **Authentication** — Amazon Cognito User Pool handles sign-up, sign-in, and email verification. A custom Lambda authorizer (`jwtAuthorizer.js`) validates JWTs on every API request and injects `userId` and `email` into the request context. Roles are stored in the database (not JWT claims).
+### Frontend Hosting
 
-4. **API Layer** — Amazon API Gateway (REST) routes requests to monolithic Lambda handlers per role: `studentFunction.js`, `instructorFunction.js`, and `adminFunction.js`. Each handler uses `httpMethod + resource` switch routing. An OpenAPI/Swagger definition drives the API Gateway configuration.
+A React SPA built with Vite is hosted on AWS Amplify. Amplify auto-builds from the `main` branch on push. The app uses Tailwind CSS, shadcn/ui components, and communicates with the backend via REST API and WebSocket connections.
 
-5. **Real-time Streaming** — Both text chat and voice flow through a Socket.IO server running on ECS Fargate. The frontend establishes a single WebSocket connection (via CloudFront → NLB → ECS) for all real-time communication. For text chat, the Socket.IO server invokes the Text Generation Lambda and streams response tokens back to the client. This unified WebSocket approach replaced an earlier AppSync-based design, providing consistent low-latency streaming and a single connection point for both modalities.
+### Authentication
 
-6. **Data Persistence** — Amazon RDS PostgreSQL 16 (Multi-AZ, encrypted at rest) stores all application data. Three RDS Proxy instances (user, table creator, admin) pool connections. The `pgvector` extension enables semantic similarity search on document embeddings.
+Amazon Cognito User Pool handles sign-up, sign-in, and email verification. A custom Lambda authorizer (`jwtAuthorizer.js`) validates JWTs on every API request and injects `userId` and `email` into the request context. Roles are stored in the database, not in JWT claims.
 
-7. **Object Storage** — Amazon S3 stores uploaded persona documents (PDFs) and generated embeddings. Pre-signed URLs provide secure, time-limited access for uploads and downloads.
+### API Layer
 
-8. **AI Services** — Amazon Bedrock provides LLM inference (Claude Sonnet 4.6 via cross-region inference profile `us.anthropic.claude-sonnet-4-6`), text embeddings (Cohere Embed v4 `cohere.embed-v4:0`), content evaluation (Nova Lite), and voice interactions (Nova Sonic 2.0). All model calls are routed to `us-east-1` regardless of deployment region. A Docker Lambda (`text_generation`) handles chat, debrief generation, and semantic question matching via LangChain. A separate Docker Lambda (`data_ingestion`) processes uploaded PDFs into vector embeddings.
+Amazon API Gateway (REST) routes requests to monolithic Lambda handlers per role: `studentFunction.js`, `instructorFunction.js`, and `adminFunction.js`. Each handler uses `httpMethod + resource` switch routing. An OpenAPI/Swagger definition drives the API Gateway configuration.
 
-9. **Voice Agent** — The voice pipeline uses Amazon Bedrock AgentCore to host a containerized voice agent (`cdk/voice-agent/bot.py`). The ECS Socket.IO server connects to AgentCore via a SigV4-authenticated WebSocket, relaying audio frames between the frontend and the voice agent. The voice agent container uses Nova Sonic 2.0's bidirectional streaming API for real-time speech-to-speech interaction. A TURN server stack exists in the CDK deployment but is effectively dead code — it was provisioned for a WebRTC-based approach that was superseded by the AgentCore design. It remains available if anyone wants to explore WebRTC in the future; see the [Voice Agent Deep Dive](./VOICE_AGENT_DEEP_DIVE.md) for design decision context.
+### Real-time Streaming
 
-10. **CI/CD** — AWS CodePipeline triggers on GitHub pushes. CodeBuild projects build Docker images for each service module, push to ECR, run vulnerability scans, and update Lambda function code. Amplify handles frontend CI/CD independently.
+Both text chat and voice flow through a Socket.IO server running on ECS Fargate. The frontend establishes a single WebSocket connection (via CloudFront → NLB → ECS) for all real-time communication. For text chat, the Socket.IO server invokes the Text Generation Lambda and streams response tokens back to the client. This unified WebSocket approach replaced an earlier AppSync-based design, providing consistent low-latency streaming and a single connection point for both modalities.
 
----
+### Data Persistence
+
+Amazon RDS PostgreSQL 16 (Multi-AZ, encrypted at rest) stores all application data. Three RDS Proxy instances (user, table creator, admin) pool connections. The `pgvector` extension enables semantic similarity search on document embeddings.
+
+### Object Storage
+
+Amazon S3 stores uploaded persona documents (PDFs) and generated embeddings. Pre-signed URLs provide secure, time-limited access for uploads and downloads.
+
+### AI Services
+
+Amazon Bedrock provides LLM inference (Claude Sonnet 4.6 via cross-region inference profile `us.anthropic.claude-sonnet-4-6`), text embeddings (Cohere Embed v4 `cohere.embed-v4:0`), content evaluation (Nova Lite), and voice interactions (Nova Sonic 2.0). All model calls route to `us-east-1` regardless of deployment region.
+
+A Docker Lambda (`text_generation`) handles chat, debrief generation, and semantic question matching via LangChain. A separate Docker Lambda (`data_ingestion`) processes uploaded PDFs into vector embeddings. See [Data Ingestion](./DATA_INGESTION.md) for pipeline details.
+
+### Voice Agent
+
+The voice pipeline uses Amazon Bedrock AgentCore to host a containerized voice agent (`cdk/voice-agent/bot.py`). The ECS Socket.IO server connects to AgentCore via a SigV4-authenticated WebSocket, relaying audio frames between the frontend and the voice agent. The voice agent container uses Nova Sonic 2.0's bidirectional streaming API for real-time speech-to-speech interaction.
+
+A TURN server stack exists in the CDK deployment but is effectively dead code — it was provisioned for a WebRTC-based approach that was superseded by the AgentCore design. It remains available if anyone wants to explore WebRTC in the future. See the [Voice Agent Deep Dive](./VOICE_AGENT_DEEP_DIVE.md) for design decision context.
+
+### CI/CD Pipeline
+
+AWS CodePipeline triggers on GitHub pushes. CodeBuild projects build Docker images for each service module, push to ECR, run vulnerability scans, and update Lambda function code. Amplify handles frontend CI/CD independently.
+
+## Data Flow Diagrams
+
+### Text Chat Flow
+
+```mermaid
+sequenceDiagram
+    participant Student as Student (Browser)
+    participant CF as CloudFront
+    participant ECS as Socket.IO Server (ECS)
+    participant TG as Text Generation Lambda
+    participant Bedrock as Amazon Bedrock
+    participant RDS as PostgreSQL (RDS)
+
+    Student->>CF: WebSocket connect
+    CF->>ECS: Forward connection
+    Student->>ECS: Send message (Socket.IO event)
+    ECS->>RDS: Store student message
+    ECS->>TG: Invoke text generation
+    TG->>RDS: Fetch persona context & history
+    TG->>Bedrock: LLM inference (streaming)
+    Bedrock-->>TG: Token stream
+    TG-->>ECS: Stream tokens
+    ECS-->>Student: Emit tokens (Socket.IO)
+    ECS->>RDS: Store AI response
+```
+
+### Voice Interaction Flow
+
+```mermaid
+sequenceDiagram
+    participant Student as Student (Browser)
+    participant CF as CloudFront
+    participant ECS as Socket.IO Server (ECS)
+    participant AC as AgentCore (Voice Agent)
+    participant Bedrock as Nova Sonic 2.0
+
+    Student->>CF: WebSocket connect
+    CF->>ECS: Forward connection
+    Student->>ECS: Audio frames (Socket.IO)
+    ECS->>AC: SigV4 WebSocket relay
+    AC->>Bedrock: Bidirectional audio stream
+    Bedrock-->>AC: Speech response stream
+    AC-->>ECS: Audio frames
+    ECS-->>Student: Audio frames (Socket.IO)
+```
+
+### Document Ingestion Flow
+
+```mermaid
+sequenceDiagram
+    participant Instructor as Instructor
+    participant API as API Gateway
+    participant S3 as S3 Bucket
+    participant DI as Data Ingestion Lambda
+    participant Bedrock as Bedrock (Cohere Embed)
+    participant RDS as PostgreSQL (pgvector)
+
+    Instructor->>API: Upload PDF (pre-signed URL)
+    API->>S3: Store document
+    S3->>DI: Trigger ingestion
+    DI->>S3: Fetch document
+    DI->>DI: Extract text (PyMuPDF)
+    DI->>Bedrock: Generate embeddings
+    Bedrock-->>DI: Vector embeddings
+    DI->>RDS: Store in pgvector
+```
 
 ## Database Schema
 
 The database runs PostgreSQL 16 with the `uuid-ossp` and `vector` (pgvector) extensions enabled. All primary keys are UUIDs generated by `uuid_generate_v4()`.
 
----
-
-##### organizations
+### organizations
 
 Top-level grouping for institutions (universities, programs).
 
@@ -54,9 +191,7 @@ Top-level grouping for institutions (universities, programs).
 | icon_color | varchar | Brand color for UI (default: '#03045E') |
 | system_prompt | text | Organization-level default system prompt |
 
----
-
-##### users
+### users
 
 User accounts with roles and organization affiliation.
 
@@ -72,9 +207,7 @@ User accounts with roles and organization affiliation.
 | last_sign_in | timestamptz | Last login timestamp |
 | username | varchar | Display username |
 
----
-
-##### simulation_groups
+### simulation_groups
 
 Instructor-created scenarios containing patient personas and enrolled students.
 
@@ -92,9 +225,7 @@ Instructor-created scenarios containing patient personas and enrolled students.
 | debrief_prompt | text | Custom debrief evaluation prompt |
 | max_messages_per_chat | integer | Per-chat message limit (NULL = unlimited) |
 
----
-
-##### group_instructors
+### group_instructors
 
 Mapping of instructors to simulation groups (many-to-many).
 
@@ -108,9 +239,7 @@ Mapping of instructors to simulation groups (many-to-many).
 
 Constraints: UNIQUE(simulation_group_id, user_id)
 
----
-
-##### personas
+### personas
 
 AI patient characters within simulation groups.
 
@@ -129,9 +258,7 @@ AI patient characters within simulation groups.
 | llm_completion | boolean | Whether LLM completion is enabled |
 | voice_enabled | boolean | Whether voice is enabled for this persona (default: true) |
 
----
-
-##### persona_media
+### persona_media
 
 Media files (images, documents) associated with personas.
 
@@ -145,9 +272,7 @@ Media files (images, documents) associated with personas.
 | description | text | Description |
 | created_at | timestamp | Upload timestamp |
 
----
-
-##### persona_data
+### persona_data
 
 Uploaded knowledge base files (PDFs) ingested into the vector store.
 
@@ -165,9 +290,7 @@ Uploaded knowledge base files (PDFs) ingested into the vector store.
 | ingestion_status | varchar(20) | Processing status (default: 'not processing') |
 | display_name | varchar | User-facing file name |
 
----
-
-##### rubrics
+### rubrics
 
 Assessment rubrics for simulation groups/personas.
 
@@ -180,9 +303,7 @@ Assessment rubrics for simulation groups/personas.
 | description | text | Rubric description |
 | created_at | timestamp | Creation timestamp |
 
----
-
-##### key_questions
+### key_questions
 
 Assessment questions within rubrics (legacy — superseded by question_bank).
 
@@ -196,9 +317,7 @@ Assessment questions within rubrics (legacy — superseded by question_bank).
 | weight | float | Scoring weight |
 | max_score | integer | Maximum possible score |
 
----
-
-##### enrollments
+### enrollments
 
 Student enrollment in simulation groups.
 
@@ -213,9 +332,7 @@ Student enrollment in simulation groups.
 
 Constraints: UNIQUE(simulation_group_id, user_id)
 
----
-
-##### student_interactions
+### student_interactions
 
 Per-persona interaction session for a student within an enrollment.
 
@@ -231,9 +348,7 @@ Per-persona interaction session for a student within an enrollment.
 
 Constraints: UNIQUE(persona_id, enrollment_id)
 
----
-
-##### chats
+### chats
 
 Individual chat sessions between a student and an AI persona.
 
@@ -252,9 +367,7 @@ Individual chat sessions between a student and an AI persona.
 | dtp_submission | jsonb | Array of DTP strings submitted by the student |
 | recommendation_submission | jsonb | Array of {recommendation, rationale} objects submitted on conclude |
 
----
-
-##### messages
+### messages
 
 Individual messages within a chat session.
 
@@ -268,9 +381,7 @@ Individual messages within a chat session.
 | sent_at | timestamptz | When the message was sent |
 | matched_question_ids | jsonb | Array of {question_id, similarity_score} matches |
 
----
-
-##### debriefs
+### debriefs
 
 AI-generated evaluations of student chat performance.
 
@@ -291,9 +402,7 @@ AI-generated evaluations of student chat performance.
 | total_questions_missed | integer | Number of questions missed |
 | overall_score | float | Aggregate score (0.0–100.0) |
 
----
-
-##### feedback
+### feedback
 
 Student feedback on chat sessions (legacy).
 
@@ -306,9 +415,7 @@ Student feedback on chat sessions (legacy).
 | areas_for_improvement | varchar[] | Improvement suggestions |
 | submitted_at | timestamp | Submission timestamp |
 
----
-
-##### user_engagement_log
+### user_engagement_log
 
 Audit trail of user engagement events.
 
@@ -323,9 +430,7 @@ Audit trail of user engagement events.
 | engagement_type | varchar | Type of engagement event |
 | engagement_details | text | Event details |
 
----
-
-##### system_prompt_history
+### system_prompt_history
 
 Audit trail of organization-level system prompt changes.
 
@@ -337,9 +442,7 @@ Audit trail of organization-level system prompt changes.
 | prompt_content | text | Prompt content at time of change |
 | created_at | timestamp | Change timestamp |
 
----
-
-##### question_bank
+### question_bank
 
 Organization-scoped repository of assessment questions.
 
@@ -360,9 +463,7 @@ Organization-scoped repository of assessment questions.
 | created_at | timestamp | Creation timestamp |
 | tags | varchar[] | Flexible categorization tags (default: '{}') |
 
----
-
-##### simulation_group_questions
+### simulation_group_questions
 
 Links questions from the bank to specific simulation groups, with optional persona-level specificity.
 
@@ -380,9 +481,7 @@ Links questions from the bank to specific simulation groups, with optional perso
 
 Constraints: UNIQUE(simulation_group_id, persona_id, question_id)
 
----
-
-##### question_interactions
+### question_interactions
 
 Per-question tracking of student interactions during chat.
 
@@ -406,9 +505,7 @@ Per-question tracking of student interactions during chat.
 | created_at | timestamp | Record creation timestamp |
 | updated_at | timestamp | Last update timestamp |
 
----
-
-##### debrief_prompt_history
+### debrief_prompt_history
 
 Audit trail of debrief prompt changes per simulation group.
 
@@ -420,9 +517,7 @@ Audit trail of debrief prompt changes per simulation group.
 | prompt_content | text | Prompt content at time of change |
 | created_at | timestamp | Change timestamp |
 
----
-
-##### debrief_feedback
+### debrief_feedback
 
 Student feedback on debrief quality (thumbs up/down with optional comment).
 
@@ -437,9 +532,7 @@ Student feedback on debrief quality (thumbs up/down with optional comment).
 | comment | text | Optional comment |
 | submitted_at | timestamptz | Submission timestamp |
 
----
-
-##### issue_reports
+### issue_reports
 
 Student-submitted issue/bug reports during simulations.
 
@@ -454,9 +547,7 @@ Student-submitted issue/bug reports during simulations.
 | details | text | Issue description |
 | submitted_at | timestamptz | Submission timestamp |
 
----
-
-##### dtp_bank
+### dtp_bank
 
 Organization-scoped Drug Therapy Problem repository.
 
@@ -474,9 +565,7 @@ Organization-scoped Drug Therapy Problem repository.
 | is_active | boolean | Soft-delete flag (default: true) |
 | created_at | timestamp | Creation timestamp |
 
----
-
-##### recommendations_bank
+### recommendations_bank
 
 Organization-scoped Recommendation repository.
 
@@ -492,9 +581,7 @@ Organization-scoped Recommendation repository.
 | is_active | boolean | Soft-delete flag (default: true) |
 | created_at | timestamp | Creation timestamp |
 
----
-
-##### simulation_group_dtps
+### simulation_group_dtps
 
 Links DTP items from the bank to specific simulation groups, with optional persona-level specificity.
 
@@ -510,9 +597,7 @@ Links DTP items from the bank to specific simulation groups, with optional perso
 
 Constraints: UNIQUE(simulation_group_id, persona_id, dtp_id)
 
----
-
-##### simulation_group_recommendations
+### simulation_group_recommendations
 
 Links Recommendation items from the bank to specific simulation groups, with optional persona-level specificity.
 
@@ -528,11 +613,9 @@ Links Recommendation items from the bank to specific simulation groups, with opt
 
 Constraints: UNIQUE(simulation_group_id, persona_id, recommendation_id)
 
----
+## Entity Relationships
 
-## Entity Relationship Summary
-
-```
+```text
 organizations (1) ──── (N) users
 organizations (1) ──── (N) simulation_groups
 organizations (1) ──── (N) question_bank
@@ -561,3 +644,11 @@ question_bank (1) ──── (N) question_interactions
 dtp_bank (1) ──── (N) simulation_group_dtps
 recommendations_bank (1) ──── (N) simulation_group_recommendations
 ```
+
+## Cross-References
+
+- [CDK Technical Review](./CDK_TECHNICAL_REVIEW.md) — Infrastructure code review and recommendations
+- [Security Overview](./SECURITY_OVERVIEW.md) — OWASP assessment and remediation roadmap
+- [Voice Agent Deep Dive](./VOICE_AGENT_DEEP_DIVE.md) — Voice architecture and design decisions
+- [Data Ingestion](./DATA_INGESTION.md) — Document processing pipeline and vector store
+- [Deployment Guide](./DEPLOYMENT_GUIDE.md) — Full deployment from scratch

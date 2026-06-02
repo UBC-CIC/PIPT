@@ -58,7 +58,8 @@ def connect_to_db():
                 'user': secret["username"],
                 'password': secret["password"],
                 'host': RDS_PROXY_ENDPOINT,
-                'port': secret["port"]
+                'port': secret["port"],
+                'sslmode': 'require'
             }
             connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
             connection = psycopg2.connect(connection_string)
@@ -113,6 +114,27 @@ def delete_last_two_db_messages(session_id):
         connection.rollback()
         return False
 
+def verify_session_ownership(session_id, user_email):
+    """Return True if user_email owns the session, False otherwise."""
+    conn = connect_to_db()
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT c.chat_id
+            FROM chats c
+            JOIN student_interactions si ON c.student_interaction_id = si.student_interaction_id
+            JOIN enrollments e ON si.enrollment_id = e.enrollment_id
+            JOIN users u ON e.user_id = u.user_id
+            WHERE c.chat_id = %s AND u.user_email = %s
+        """, (session_id, user_email))
+        row = cur.fetchone()
+        cur.close()
+        return row is not None
+    except Exception as e:
+        logger.error(f"Error verifying session ownership: {e}")
+        return False
+
+
 def lambda_handler(event, context):
     query_params = event.get("queryStringParameters", {})
 
@@ -130,7 +152,37 @@ def lambda_handler(event, context):
             },
             'body': json.dumps('Missing required parameter: session_id')
         }
-    
+
+    authorizer = event.get("requestContext", {}).get("authorizer", {})
+    user_email = authorizer.get("email", "")
+    user_roles = authorizer.get("roles", "")
+    is_admin = "admin" in user_roles.split(",")
+
+    if not is_admin:
+        if not user_email:
+            return {
+                'statusCode': 403,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                'body': json.dumps('Forbidden')
+            }
+        if not verify_session_ownership(session_id, user_email):
+            logger.warning(f"Ownership check failed: user={user_email} session={session_id}")
+            return {
+                'statusCode': 403,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                'body': json.dumps('Forbidden')
+            }
+
     try:
         # Fetch the conversation history from DynamoDB
         table_name = get_parameter(os.environ["TABLE_NAME_PARAM"])

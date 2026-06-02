@@ -111,7 +111,7 @@ export function DTPBankSection({
               cursor: 'pointer',
             }}
           >
-            Group-wide
+            Global DTPs
           </button>
           <button
             onClick={handlePatientSpecificTabSwitch}
@@ -123,7 +123,7 @@ export function DTPBankSection({
               cursor: 'pointer',
             }}
           >
-            Patient-Specific
+            Patient-Specific DTPs
           </button>
         </div>
       </div>
@@ -199,21 +199,25 @@ export function DTPBankSection({
                 </>
               )}
 
-              {/* Admin: flat card-style item list */}
+              {/* Admin: accordion-style item list */}
               {role === 'admin' && (
                 <>
                   {tabFilteredItems.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                       {searchQuery ? 'No DTP items match your search.' : 'No DTP items yet.'}
                     </p>
-                  ) : paginatedItems.map((item) => (
-                    <DTPCardItem
-                      key={item.id}
-                      item={item}
-                      isChecked={includedIds.has(item.id)}
-                      onToggle={(checked) => onToggleDTPInclusion?.(item.id, item, checked)}
-                    />
-                  ))}
+                  ) : (
+                    <Accordion type="single" collapsible className="space-y-2">
+                      {paginatedItems.map((item) => (
+                        <DTPAccordionItem
+                          key={item.id}
+                          item={item}
+                          isChecked={includedIds.has(item.id)}
+                          onToggle={() => onToggleDTPInclusion?.(item.id, item, !includedIds.has(item.id))}
+                        />
+                      ))}
+                    </Accordion>
+                  )}
 
                   {/* Pagination Controls */}
                   {totalPages > 1 && (
@@ -324,21 +328,25 @@ export function DTPBankSection({
                     </>
                   )}
 
-                  {/* Admin: flat card-style item list */}
+                  {/* Admin: accordion-style item list */}
                   {role === 'admin' && (
                     <>
                       {tabFilteredItems.length === 0 ? (
                         <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                           {searchQuery ? 'No DTP items match your search.' : 'No DTP items yet.'}
                         </p>
-                      ) : paginatedItems.map((item) => (
-                        <DTPCardItem
-                          key={item.id}
-                          item={item}
-                          isChecked={includedIds.has(item.id)}
-                          onToggle={(checked) => onToggleDTPInclusion?.(item.id, item, checked)}
-                        />
-                      ))}
+                      ) : (
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {paginatedItems.map((item) => (
+                            <DTPAccordionItem
+                              key={item.id}
+                              item={item}
+                              isChecked={includedIds.has(item.id)}
+                              onToggle={() => onToggleDTPInclusion?.(item.id, item, !includedIds.has(item.id))}
+                            />
+                          ))}
+                        </Accordion>
+                      )}
 
                       {/* Pagination Controls */}
                       {totalPages > 1 && (
@@ -400,8 +408,17 @@ function DTPAccordionItem({
         }}
       >
         <div className="flex items-center justify-between w-full pr-4">
-          <span className="font-medium text-sm">{item.title}</span>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col items-start gap-1 min-w-0">
+            <span className="font-medium text-sm">{item.title}</span>
+            {(item.tags || []).filter(t => t !== 'patient_specific').length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {(item.tags || []).filter(t => t !== 'patient_specific').map(tag => (
+                  <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3 flex-shrink-0">
             <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>
               {item.isRequired ? 'Required' : 'Optional'}
             </span>
@@ -461,55 +478,6 @@ function DTPAccordionItem({
         </div>
       </AccordionContent>
     </AccordionItem>
-  );
-}
-
-/**
- * Card-style DTP item used in the admin flow.
- */
-function DTPCardItem({
-  item,
-  isChecked,
-  onToggle,
-}: {
-  item: DTPItem;
-  isChecked: boolean;
-  onToggle: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg border transition-colors" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-      <div className="flex-1 min-w-0 mr-3">
-        <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>{item.title}</span>
-        {item.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
-            {item.tags.map(tag => (
-              <span key={tag} className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: '#e0e7ff', color: '#3730a3' }}>{tag}</span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="flex items-center gap-3 flex-shrink-0">
-        <span
-          className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
-          style={{
-            backgroundColor: item.isRequired ? '#dcfce7' : '#f3f4f6',
-            color: item.isRequired ? '#166534' : '#6b7280',
-          }}
-        >
-          {item.isRequired ? 'Required' : 'Optional'}
-        </span>
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={(e) => onToggle(e.target.checked)}
-            className="w-5 h-5 rounded cursor-pointer"
-            style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
-          />
-          <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Include</span>
-        </label>
-      </div>
-    </div>
   );
 }
 

@@ -111,7 +111,7 @@ export function RecommendationsBankSection({
               cursor: 'pointer',
             }}
           >
-            Group-wide
+            Global Recommendations
           </button>
           <button
             onClick={handlePatientSpecificTabSwitch}
@@ -123,7 +123,7 @@ export function RecommendationsBankSection({
               cursor: 'pointer',
             }}
           >
-            Patient-Specific
+            Patient-Specific Recommendations
           </button>
         </div>
       </div>
@@ -199,21 +199,25 @@ export function RecommendationsBankSection({
                 </>
               )}
 
-              {/* Admin: flat card-style item list */}
+              {/* Admin: accordion-style item list */}
               {role === 'admin' && (
                 <>
                   {tabFilteredItems.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                       {searchQuery ? 'No recommendation items match your search.' : 'No recommendation items yet.'}
                     </p>
-                  ) : paginatedItems.map((item) => (
-                    <RecommendationCardItem
-                      key={item.id}
-                      item={item}
-                      isChecked={includedIds.has(item.id)}
-                      onToggle={(checked) => onToggleRecommendationInclusion?.(item.id, item, checked)}
-                    />
-                  ))}
+                  ) : (
+                    <Accordion type="single" collapsible className="space-y-2">
+                      {paginatedItems.map((item) => (
+                        <RecommendationAccordionItem
+                          key={item.id}
+                          item={item}
+                          isChecked={includedIds.has(item.id)}
+                          onToggle={() => onToggleRecommendationInclusion?.(item.id, item, !includedIds.has(item.id))}
+                        />
+                      ))}
+                    </Accordion>
+                  )}
 
                   {/* Pagination Controls */}
                   {totalPages > 1 && (
@@ -324,21 +328,25 @@ export function RecommendationsBankSection({
                     </>
                   )}
 
-                  {/* Admin: flat card-style item list */}
+                  {/* Admin: accordion-style item list */}
                   {role === 'admin' && (
                     <>
                       {tabFilteredItems.length === 0 ? (
                         <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
                           {searchQuery ? 'No recommendation items match your search.' : 'No recommendation items yet.'}
                         </p>
-                      ) : paginatedItems.map((item) => (
-                        <RecommendationCardItem
-                          key={item.id}
-                          item={item}
-                          isChecked={includedIds.has(item.id)}
-                          onToggle={(checked) => onToggleRecommendationInclusion?.(item.id, item, checked)}
-                        />
-                      ))}
+                      ) : (
+                        <Accordion type="single" collapsible className="space-y-2">
+                          {paginatedItems.map((item) => (
+                            <RecommendationAccordionItem
+                              key={item.id}
+                              item={item}
+                              isChecked={includedIds.has(item.id)}
+                              onToggle={() => onToggleRecommendationInclusion?.(item.id, item, !includedIds.has(item.id))}
+                            />
+                          ))}
+                        </Accordion>
+                      )}
 
                       {/* Pagination Controls */}
                       {totalPages > 1 && (
@@ -436,40 +444,6 @@ function RecommendationAccordionItem({
         </div>
       </AccordionContent>
     </AccordionItem>
-  );
-}
-
-/**
- * Card-style Recommendation item used in the admin flow.
- */
-function RecommendationCardItem({
-  item,
-  isChecked,
-  onToggle,
-}: {
-  item: RecommendationItem;
-  isChecked: boolean;
-  onToggle: (checked: boolean) => void;
-}) {
-  return (
-    <div className="flex items-center justify-between p-4 rounded-lg border transition-colors" style={{ borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white }}>
-      <div className="flex-1 min-w-0 mr-3">
-        <span className="text-sm font-medium block" style={{ color: UI_COLORS.text.heading }}>{item.title}</span>
-        <span className="text-xs block mt-0.5" style={{ color: UI_COLORS.text.muted }}>
-          {item.recommendationText.length > 120 ? item.recommendationText.slice(0, 120) + '...' : item.recommendationText}
-        </span>
-      </div>
-      <label className="flex items-center gap-2 cursor-pointer flex-shrink-0">
-        <input
-          type="checkbox"
-          checked={isChecked}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="w-5 h-5 rounded cursor-pointer"
-          style={{ accentColor: SIMULATION_GROUP_COLOR_PALETTE[2] }}
-        />
-        <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Include</span>
-      </label>
-    </div>
   );
 }
 

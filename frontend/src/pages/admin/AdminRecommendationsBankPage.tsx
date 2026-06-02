@@ -11,24 +11,24 @@ import { listRecommendationItems, deleteRecommendationItem, updateRecommendation
 import type { RecommendationItem } from '@/services/recommendationsBankService';
 import { filterByTitle, paginate } from '@/lib/bankUtils';
 import LoadingIndicator from '@/components/LoadingIndicator';
-import { UI_COLORS } from '@/lib/colors';
+import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { useNotification } from '@/components/notifications';
 
-/**
- * AdminRecommendationsBankPage Component
- *
- * Organization-level Recommendations bank management for admins.
- * Each item is expandable to preview content, with an inline edit mode.
- */
 function AdminRecommendationsBankPage() {
   const navigate = useNavigate();
   const { organizationId } = useParams<{ organizationId: string }>();
   const { showNotification } = useNotification();
 
+  // Tab state
+  const [recommendationsBankTab, setRecommendationsBankTab] = useState<'global' | 'patientSpecific'>('global');
+
   // Recommendation items state
   const [recommendationItems, setRecommendationItems] = useState<RecommendationItem[]>([]);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+
+  // Per-tab search state
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [patientSearchQuery, setPatientSearchQuery] = useState('');
 
   // Expand/edit state
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
@@ -48,20 +48,16 @@ function AdminRecommendationsBankPage() {
     open: false, itemId: '', itemTitle: ''
   });
 
-  // Pagination state
-  const [pagination, setPagination] = useState({
-    currentPage: 1,
-    itemsPerPage: 5
-  });
+  // Per-tab pagination state
+  const [globalPagination, setGlobalPagination] = useState({ currentPage: 1, itemsPerPage: 5 });
+  const [patientPagination, setPatientPagination] = useState({ currentPage: 1, itemsPerPage: 5 });
 
   // Loading and error state
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // User data
   const user = { name: 'Admin', avatarUrl: undefined };
 
-  // Load data on mount
   const loadData = async () => {
     try {
       setLoading(true);
@@ -79,26 +75,60 @@ function AdminRecommendationsBankPage() {
     if (organizationId) loadData();
   }, [organizationId]);
 
-  // Filter items based on search using shared utility
-  const filteredItems = filterByTitle(recommendationItems, searchQuery);
+  // Reset search and pagination when switching tabs
+  useEffect(() => {
+    if (recommendationsBankTab === 'global') {
+      setGlobalSearchQuery('');
+      setGlobalPagination(prev => ({ ...prev, currentPage: 1 }));
+    } else {
+      setPatientSearchQuery('');
+      setPatientPagination(prev => ({ ...prev, currentPage: 1 }));
+    }
+  }, [recommendationsBankTab]);
 
-  // Pagination using shared utility
+  // Split items by patient_specific tag
+  const globalRecommendations = recommendationItems.filter(r => !r.tags?.includes('patient_specific'));
+  const patientSpecificRecommendations = recommendationItems.filter(r => r.tags?.includes('patient_specific'));
+
+  const activeItems = recommendationsBankTab === 'global' ? globalRecommendations : patientSpecificRecommendations;
+  const activeSearchQuery = recommendationsBankTab === 'global' ? globalSearchQuery : patientSearchQuery;
+  const activePagination = recommendationsBankTab === 'global' ? globalPagination : patientPagination;
+
+  const filteredItems = filterByTitle(activeItems, activeSearchQuery);
   const { items: paginatedItems, totalPages, currentPage } = paginate(
     filteredItems,
-    pagination.currentPage,
-    pagination.itemsPerPage
+    activePagination.currentPage,
+    activePagination.itemsPerPage
   );
 
   const handleSignOut = () => {
     navigate('/login');
   };
 
+  const handleSearchChange = (value: string) => {
+    if (recommendationsBankTab === 'global') {
+      setGlobalSearchQuery(value);
+      setGlobalPagination(prev => ({ ...prev, currentPage: 1 }));
+    } else {
+      setPatientSearchQuery(value);
+      setPatientPagination(prev => ({ ...prev, currentPage: 1 }));
+    }
+  };
+
   const handlePageChange = (newPage: number) => {
-    setPagination(prev => ({ ...prev, currentPage: newPage }));
+    if (recommendationsBankTab === 'global') {
+      setGlobalPagination(prev => ({ ...prev, currentPage: newPage }));
+    } else {
+      setPatientPagination(prev => ({ ...prev, currentPage: newPage }));
+    }
   };
 
   const handleItemsPerPageChange = (newItemsPerPage: number) => {
-    setPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    if (recommendationsBankTab === 'global') {
+      setGlobalPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    } else {
+      setPatientPagination({ currentPage: 1, itemsPerPage: newItemsPerPage });
+    }
   };
 
   const handleDeleteRecommendation = async () => {
@@ -126,7 +156,10 @@ function AdminRecommendationsBankPage() {
   }) => {
     try {
       setError(null);
-      await createRecommendationItem(organizationId || '', data);
+      const tags = recommendationsBankTab === 'patientSpecific'
+        ? ['patient_specific', ...data.tags.filter(t => t !== 'patient_specific')]
+        : data.tags.filter(t => t !== 'patient_specific');
+      await createRecommendationItem(organizationId || '', { ...data, tags });
       showNotification({ message: `"${data.title}" created successfully.`, type: 'success' });
       loadData();
     } catch (err) {
@@ -139,7 +172,7 @@ function AdminRecommendationsBankPage() {
   // ─── Expand/Edit Handlers ─────────────────────────────────────────────────
 
   const toggleExpand = (itemId: string) => {
-    if (editingItemId === itemId) return; // Don't collapse while editing
+    if (editingItemId === itemId) return;
     setExpandedItemId(prev => prev === itemId ? null : itemId);
   };
 
@@ -159,11 +192,6 @@ function AdminRecommendationsBankPage() {
   const cancelEditing = () => {
     setEditingItemId(null);
     setEditError(null);
-  };
-
-  const handleTagInput = (value: string) => {
-    const tags = value.split(',').map(t => t.trim()).filter(Boolean);
-    setEditForm(prev => ({ ...prev, tags }));
   };
 
   const saveEditing = async () => {
@@ -198,6 +226,8 @@ function AdminRecommendationsBankPage() {
       setEditSaving(false);
     }
   };
+
+  const isPatientSpecificTab = recommendationsBankTab === 'patientSpecific';
 
   return (
     <PageContainer>
@@ -251,32 +281,58 @@ function AdminRecommendationsBankPage() {
                 </Link>
               </div>
 
-              <h2 className="text-2xl font-bold mb-2" style={{ color: UI_COLORS.text.heading }}>
+              <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
                 Recommendations Bank
               </h2>
-              <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
-                Manage Recommendation & Rationale items for this organization.
-              </p>
+
+              {/* Tab Switcher */}
+              <div className="flex gap-2 border-b" style={{ borderColor: UI_COLORS.border.default }}>
+                <button
+                  onClick={() => setRecommendationsBankTab('global')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: recommendationsBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: recommendationsBankTab === 'global' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Global Recommendations
+                </button>
+                <button
+                  onClick={() => setRecommendationsBankTab('patientSpecific')}
+                  className="px-6 py-3 font-medium transition-colors border-b-2"
+                  style={{
+                    color: recommendationsBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : UI_COLORS.text.body,
+                    borderColor: recommendationsBankTab === 'patientSpecific' ? SIMULATION_GROUP_COLOR_PALETTE[2] : 'transparent',
+                    backgroundColor: 'transparent',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Patient-Specific Recommendations
+                </button>
+              </div>
             </div>
 
             {/* Recommendations List */}
             <div className="flex-1 overflow-y-auto px-8 py-6">
               <div className="space-y-3">
+                <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                  {isPatientSpecificTab
+                    ? 'Manage patient-specific Recommendation & Rationale items for this organization.'
+                    : 'Manage Recommendation & Rationale items for this organization.'}
+                </p>
+
                 {/* Search Bar */}
                 <div className="relative mb-4">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
                   <Input
                     type="text"
-                    placeholder="Search recommendation items..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setPagination(prev => ({ ...prev, currentPage: 1 }));
-                    }}
+                    placeholder={isPatientSpecificTab ? 'Search patient-specific recommendations...' : 'Search recommendation items...'}
+                    value={activeSearchQuery}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-10"
-                    style={{
-                      borderColor: UI_COLORS.border.default,
-                    }}
+                    style={{ borderColor: UI_COLORS.border.default }}
                   />
                 </div>
 
@@ -292,15 +348,15 @@ function AdminRecommendationsBankPage() {
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
                 >
                   <Plus className="w-5 h-5" />
-                  Add New Recommendation
+                  {isPatientSpecificTab ? 'Add New Patient-Specific Recommendation' : 'Add New Recommendation'}
                 </Button>
 
                 {/* Pagination Info */}
                 {filteredItems.length > 0 && (
                   <div className="flex items-center justify-between mb-3 text-sm" style={{ color: UI_COLORS.text.muted }}>
                     <span>
-                      Showing {((currentPage - 1) * pagination.itemsPerPage) + 1}-
-                      {Math.min(currentPage * pagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
+                      Showing {((currentPage - 1) * activePagination.itemsPerPage) + 1}-
+                      {Math.min(currentPage * activePagination.itemsPerPage, filteredItems.length)} of {filteredItems.length} items
                     </span>
                   </div>
                 )}
@@ -433,15 +489,6 @@ function AdminRecommendationsBankPage() {
                                     }}
                                   />
                                 </div>
-                                <div>
-                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags (comma-separated)</label>
-                                  <Input
-                                    value={editForm.tags.join(', ')}
-                                    onChange={(e) => handleTagInput(e.target.value)}
-                                    placeholder="e.g. patient_specific, cardiology, dosing"
-                                    style={{ borderColor: UI_COLORS.border.default }}
-                                  />
-                                </div>
                                 {/* Action buttons */}
                                 <div className="flex items-center gap-2 pt-3 border-t" style={{ borderColor: UI_COLORS.border.default }}>
                                   <Button
@@ -494,11 +541,11 @@ function AdminRecommendationsBankPage() {
                                     </p>
                                   </div>
                                 )}
-                                {item.tags && item.tags.length > 0 && (
+                                {item.tags && item.tags.filter(t => t !== 'patient_specific').length > 0 && (
                                   <div>
                                     <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags</label>
                                     <div className="flex flex-wrap gap-1">
-                                      {item.tags.map(tag => (
+                                      {item.tags.filter(t => t !== 'patient_specific').map(tag => (
                                         <span
                                           key={tag}
                                           className="inline-block text-xs font-medium px-2 py-0.5 rounded-full"
@@ -523,7 +570,11 @@ function AdminRecommendationsBankPage() {
                 {filteredItems.length === 0 && !error && (
                   <div className="text-center py-8">
                     <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>
-                      {searchQuery ? 'No recommendation items match your search.' : 'No recommendation items yet. Add your first one above.'}
+                      {activeSearchQuery
+                        ? 'No recommendation items match your search.'
+                        : isPatientSpecificTab
+                          ? 'No patient-specific recommendation items yet. Add your first one above.'
+                          : 'No recommendation items yet. Add your first one above.'}
                     </p>
                   </div>
                 )}
@@ -534,7 +585,7 @@ function AdminRecommendationsBankPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Items per page:</span>
                       <select
-                        value={pagination.itemsPerPage}
+                        value={activePagination.itemsPerPage}
                         onChange={(e) => handleItemsPerPageChange(Number(e.target.value))}
                         className="px-3 py-1 rounded border text-sm"
                         style={{
@@ -594,6 +645,7 @@ function AdminRecommendationsBankPage() {
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
         organizationId={organizationId || ''}
+        isPatientSpecific={isPatientSpecificTab}
         onSave={handleSaveNewRecommendation}
       />
 

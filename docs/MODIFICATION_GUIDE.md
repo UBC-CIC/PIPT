@@ -1,6 +1,38 @@
 # Modification Guide
 
-Instructions for customizing GenRx — colors, local development, email templates, API extension, frontend assets, and LLM configuration.
+> **Type:** Procedural Guide
+> **Last updated:** 2026-05-30
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Prerequisites](#prerequisites)
+- [Modifying Colors and Styles](#modifying-colors-and-styles)
+- [Setting Up Local Development](#setting-up-local-development)
+- [Customizing the Verification Email](#customizing-the-verification-email)
+- [Extending the API](#extending-the-api)
+- [Modifying Frontend Text, Icons, and Logo](#modifying-frontend-text-icons-and-logo)
+- [Modifying the LLM](#modifying-the-llm)
+- [Verification](#verification)
+- [Cross-References](#cross-references)
+
+---
+
+## Overview
+
+This guide provides step-by-step instructions for customizing GenRx — colors, local development setup, email templates, API extension, frontend assets, and LLM configuration. Each section covers a specific modification type with prerequisites, instructions, and verification steps.
+
+---
+
+## Prerequisites
+
+Before making any modifications, ensure you have:
+
+- Node.js 22+ and npm installed
+- Access to the GenRx repository
+- A deployed GenRx backend (API endpoint, Cognito, and Socket URLs)
+- AWS CDK CLI installed (`npm install -g aws-cdk`)
+- Appropriate AWS credentials configured for deployment
 
 ---
 
@@ -65,19 +97,19 @@ All colors are defined as `rgb()` values in the `:root` selector. The `.dark` cl
 }
 ```
 
-### How to Customize
+### Step-by-Step Instructions
 
-1. Open `frontend/src/index.css`
-2. Modify the `rgb()` values in `:root` for light mode
-3. Modify the `.dark` selector for dark mode (if implementing dark mode)
-4. All shadcn/ui components automatically pick up the new values
+1. Open `frontend/src/index.css`.
+2. Modify the `rgb()` values in `:root` for light mode.
+3. Modify the `.dark` selector for dark mode (if you are implementing dark mode).
+4. Save the file — all shadcn/ui components automatically pick up the new values.
 
 ### Key Color Relationships
 
-- `--primary` and `--accent` are the same by default — change both for a consistent brand
-- `--sidebar` uses the primary color for a branded navigation experience
-- `--sidebar-accent` (teal) provides contrast for active states in the sidebar
-- `--chart-*` variables control the Recharts color palette on analytics dashboards
+- `--primary` and `--accent` are the same by default — change both for a consistent brand.
+- `--sidebar` uses the primary color for a branded navigation experience.
+- `--sidebar-accent` (teal) provides contrast for active states in the sidebar.
+- `--chart-*` variables control the Recharts color palette on analytics dashboards.
 
 ---
 
@@ -89,14 +121,18 @@ All colors are defined as `rgb()` values in the `:root` selector. The `.dark` cl
 - npm
 - A deployed GenRx backend (you need the API endpoint, Cognito, and Socket URLs)
 
-### Step 1: Install Dependencies
+### Step-by-Step Instructions
+
+#### Step 1: Install Dependencies
+
+Run the following from the `frontend/` directory:
 
 ```bash
 cd frontend
 npm install
 ```
 
-### Step 2: Configure Environment Variables
+#### Step 2: Configure Environment Variables
 
 Create or edit `frontend/.env` with your deployed backend values:
 
@@ -122,7 +158,7 @@ VITE_APPSYNC_GRAPHQL_URL=https://xxxxxxxxxxxxxxxxxxxxxx.appsync-api.ca-central-1
 
 You can find all these values in the Secrets Manager secret named `{StackPrefix}-Api-GenRx_Cognito_Secrets` or from the CDK stack outputs.
 
-### Step 3: Start the Dev Server
+#### Step 3: Start the Dev Server
 
 ```bash
 npm run dev
@@ -135,6 +171,7 @@ The Vite dev server starts at `http://localhost:5173` with hot module replacemen
 The `frontend/src/config/aws-config.ts` file reads all `VITE_` environment variables at build time and configures AWS Amplify:
 
 ```typescript
+// frontend/src/config/aws-config.ts
 export const appConfig = {
   region: import.meta.env.VITE_AWS_REGION || 'ca-central-1',
   cognito: {
@@ -154,7 +191,7 @@ export const appConfig = {
 };
 ```
 
-### Troubleshooting Local Dev
+### Troubleshooting
 
 - **CORS errors**: The API Gateway is configured to allow all origins. If you see CORS issues, verify the `VITE_API_ENDPOINT` ends with `/prod/` (trailing slash).
 - **Auth failures**: Ensure the Cognito User Pool ID and Client ID match the deployed environment.
@@ -169,43 +206,47 @@ The Cognito verification email template is defined inline in the CDK stack at `c
 
 ### Location
 
-```
+```text
 cdk/lib/api-service-stack.ts → UserPool → userVerification → emailBody
 ```
 
 ### Template Structure
 
 The email is a full HTML document with:
+
 - Responsive design (mobile-friendly)
 - Dark mode support via `@media (prefers-color-scheme: dark)`
 - GenRx branding (green gradient header)
 - Verification code display using `{####}` placeholder
 
-### How to Modify
+### Step-by-Step Instructions
 
-1. Edit the `emailBody` string in `cdk/lib/api-service-stack.ts`
-2. Keep the `{####}` placeholder — Cognito replaces it with the actual verification code
-3. Deploy the API stack:
+1. Open `cdk/lib/api-service-stack.ts`.
+2. Locate the `emailBody` string inside the `userVerification` property of the User Pool construct.
+3. Edit the HTML template as needed. Keep the `{####}` placeholder — Cognito replaces it with the actual verification code.
+4. Deploy the API stack:
 
-   ```bash
-   npx cdk deploy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
-   ```
+```bash
+npx cdk deploy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
+```
 
-> **Note:** Changes only affect new verification emails. Users who already received a code won't see the updated template.
+> **Note:** Changes only affect new verification emails. Users who already received a code will not see the updated template.
 
 ---
 
 ## Extending the API
 
-To add a new REST endpoint:
+To add a new REST endpoint, follow these steps.
 
-### Step 1: Add the Route Handler
+### Step-by-Step Instructions
+
+#### Step 1: Add the Route Handler
 
 Edit the appropriate Lambda handler file based on which role should access the endpoint:
 
-- Student: `cdk/lambda/lib/studentFunction.js`
-- Instructor: `cdk/lambda/lib/instructorFunction.js`
-- Admin: `cdk/lambda/adminFunction/adminFunction.js`
+- **Student**: `cdk/lambda/lib/studentFunction.js`
+- **Instructor**: `cdk/lambda/lib/instructorFunction.js`
+- **Admin**: `cdk/lambda/adminFunction/adminFunction.js`
 
 Add a new case to the switch statement:
 
@@ -229,7 +270,7 @@ case "POST /student/my_new_endpoint":
   };
 ```
 
-### Step 2: Add the API Gateway Resource
+#### Step 2: Add the API Gateway Resource
 
 Edit `cdk/OpenAPI_Swagger_Definition.yaml` to add the new path:
 
@@ -248,13 +289,13 @@ Edit `cdk/OpenAPI_Swagger_Definition.yaml` to add the new path:
         type: "aws_proxy"
 ```
 
-### Step 3: Deploy
+#### Step 3: Deploy
 
 ```bash
 npx cdk deploy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
 ```
 
-### Step 4: Add Frontend Service Method
+#### Step 4: Add Frontend Service Method
 
 Add the corresponding API call in the appropriate service file:
 
@@ -285,15 +326,17 @@ Search for "GENRx" across the frontend to find all instances.
 | App icon | `frontend/public/stethoscope_icon.png` | Browser tab favicon / app icon |
 | Vite default | `frontend/public/vite.svg` | Can be removed or replaced |
 
-To change the app icon:
-1. Replace `frontend/public/stethoscope_icon.png` with your new icon
-2. Update `frontend/index.html` if the filename changes
+### Step-by-Step Instructions
+
+1. To change the app icon, replace `frontend/public/stethoscope_icon.png` with your new icon file.
+2. Update `frontend/index.html` if the filename changes.
+3. To change branding text, search for "GENRx" in the `frontend/src/` directory and update each occurrence.
 
 ### Component-Level Customization
 
-- **Sidebar navigation**: Components in `frontend/src/components/` that render the sidebar
-- **Page layouts**: `frontend/src/pages/{role}/` directories contain role-specific page components
-- **UI primitives**: `frontend/src/components/ui/` contains shadcn/ui components (Button, Dialog, Card, etc.)
+- **Sidebar navigation**: Components in `frontend/src/components/` that render the sidebar.
+- **Page layouts**: `frontend/src/pages/{role}/` directories contain role-specific page components.
+- **UI primitives**: `frontend/src/components/ui/` contains shadcn/ui components (Button, Dialog, Card, etc.).
 
 ---
 
@@ -303,43 +346,45 @@ To change the app icon:
 
 Administrators can change the active LLM model through the admin interface:
 
-1. Log in as an admin
-2. Navigate to **Settings → Prompt Management**
-3. Select a different model from the available options
+1. Log in as an admin.
+2. Navigate to **Settings → Prompt Management**.
+3. Select a different model from the available options.
 
 This updates the SSM parameter `/{StackPrefix}-Api/GenRx/BedrockLLMId` at runtime.
 
 ### Changing Available Models (Code)
 
-The default model is set in the CDK stack. To change it:
+To change the default model in the CDK stack:
 
-1. Edit `cdk/lib/api-service-stack.ts`:
+1. Open `cdk/lib/api-service-stack.ts`.
+2. Locate the `BedrockLLMParameter` construct and update the `stringValue`:
 
-   ```typescript
-   const bedrockLLMParameter = new ssm.StringParameter(
-     this,
-     "BedrockLLMParameter",
-     {
-       parameterName: `/${id}/GenRx/BedrockLLMId`,
-       description: "Parameter containing the Bedrock LLM ID",
-       stringValue: "anthropic.claude-3-5-sonnet-20241022-v2:0", // ← Change this
-     }
-   );
-   ```
+```typescript
+// cdk/lib/api-service-stack.ts
+const bedrockLLMParameter = new ssm.StringParameter(
+  this,
+  "BedrockLLMParameter",
+  {
+    parameterName: `/${id}/GenRx/BedrockLLMId`,
+    description: "Parameter containing the Bedrock LLM ID",
+    stringValue: "anthropic.claude-3-5-sonnet-20241022-v2:0", // ← Change this
+  }
+);
+```
 
-2. Ensure the model is enabled in your Bedrock console (Model access)
+3. Ensure the model is enabled in your Bedrock console (Model access).
+4. Deploy:
 
-3. Deploy:
-
-   ```bash
-   npx cdk deploy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
-   ```
+```bash
+npx cdk deploy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
+```
 
 ### Changing the Embedding Model
 
 The embedding model is used for document ingestion and semantic search:
 
 ```typescript
+// cdk/lib/api-service-stack.ts
 const embeddingModelParameter = new ssm.StringParameter(
   this,
   "EmbeddingModelParameter",
@@ -381,3 +426,24 @@ The voice model (Nova Sonic) is hardcoded in the socket server and voice agent:
 - `cdk/socket-server/voice_preview_tts.py` — `MODEL_ID = "amazon.nova-2-sonic-v1:0"`
 
 To change the voice model, update these constants and redeploy the socket server / voice agent containers.
+
+---
+
+## Verification
+
+After making any modification, verify your changes:
+
+- **Color/style changes**: Run `npm run dev` and visually inspect the UI for consistency across pages.
+- **Local development setup**: Confirm the dev server starts without errors and you can log in.
+- **Email template**: Trigger a new sign-up and check the verification email in your inbox.
+- **API extensions**: Test the new endpoint with `curl` or the frontend and confirm the expected response.
+- **Frontend text/icons**: Run `npm run build` to confirm no build errors, then preview the changes.
+- **LLM changes**: Start a new chat session and verify responses come from the expected model.
+
+---
+
+## Cross-References
+
+- [Deployment Guide](./DEPLOYMENT_GUIDE.md) — Full deployment from scratch
+- [Dependency Management](./DEPENDENCY_MANAGEMENT.md) — Python and Node.js dependency strategy
+- [Database Migrations](./DATABASE_MIGRATIONS.md) — Creating and running schema changes

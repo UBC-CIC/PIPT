@@ -12,6 +12,8 @@ interface AddDTPDialogProps {
   organizationId?: string;
   /** Optional — existing tags for autocomplete suggestions */
   existingTags?: string[];
+  /** When true, dialog title reflects patient-specific context and injects the patient_specific tag */
+  isPatientSpecific?: boolean;
   onSave: (dtp: {
     title: string;
     expectedDTPText: string;
@@ -22,7 +24,7 @@ interface AddDTPDialogProps {
   }) => void;
 }
 
-export function AddDTPDialog({ open, onOpenChange, onSave }: AddDTPDialogProps) {
+export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = false }: AddDTPDialogProps) {
   const { showNotification } = useNotification();
   const [title, setTitle] = useState('');
   const [expectedDTPText, setExpectedDTPText] = useState('');
@@ -57,12 +59,16 @@ export function AddDTPDialog({ open, onOpenChange, onSave }: AddDTPDialogProps) 
       return;
     }
 
+    const finalTags = isPatientSpecific
+      ? ['patient_specific', ...tags.filter(t => t !== 'patient_specific')]
+      : tags.filter(t => t !== 'patient_specific');
+
     onSave({
       title: title.trim(),
       expectedDTPText: expectedDTPText.trim(),
       clinicalIntent: clinicalIntent.trim(),
       evaluationCriteria: evaluationCriteria.trim(),
-      tags,
+      tags: finalTags,
       isRequired,
     });
 
@@ -97,7 +103,7 @@ export function AddDTPDialog({ open, onOpenChange, onSave }: AddDTPDialogProps) 
       >
         <DialogHeader>
           <DialogTitle style={{ color: UI_COLORS.text.heading }}>
-            Add New DTP Item
+            {isPatientSpecific ? 'Add Patient-Specific DTP' : 'Add New DTP Item'}
           </DialogTitle>
         </DialogHeader>
 

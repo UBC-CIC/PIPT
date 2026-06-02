@@ -1,0 +1,244 @@
+# GenRx User Guide
+
+> **Type:** User Guide
+> **Last updated:** 2026-05-30
+
+## Table of Contents
+
+- [Getting Started](#getting-started)
+- [Student Workflow](#student-workflow)
+- [Instructor Workflow](#instructor-workflow)
+- [Admin Workflow](#admin-workflow)
+- [FAQ](#faq)
+
+## Getting Started
+
+### Creating Your Account
+
+1. Navigate to the GenRx sign-up page provided by your institution.
+2. Enter your email address and create a password that meets the security requirements.
+3. Verify your email address by clicking the confirmation link sent to your inbox.
+4. Log in with your credentials to access the platform.
+
+### Logging In
+
+1. Open the GenRx application URL in your browser.
+2. Enter your registered email and password.
+3. Click **Sign In** to access your role-specific dashboard.
+
+### Understanding Your Role
+
+GenRx supports three user roles, each with different capabilities:
+
+| Role | Description |
+|------|-------------|
+| **Student** | Join simulation groups, chat with AI patients, view debriefs |
+| **Instructor** | Create and manage simulation groups, configure patients, review analytics |
+| **Admin** | Manage organizations, assign instructors, manage question banks |
+
+Your role determines which dashboard you see after logging in. If you have questions about your assigned role, contact your institution's administrator.
+
+---
+
+## Student Workflow
+
+As a student, you practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
+
+### Joining a Simulation Group
+
+1. Obtain the access code from your instructor (shared in class or via your institution's LMS).
+2. From your **Student Dashboard**, click **Join Group**.
+3. Enter the access code and confirm.
+4. The simulation group appears on your dashboard with its available patient personas.
+
+### Viewing Available Patients
+
+1. Select a simulation group from your dashboard.
+2. Browse the list of patient personas available in that group.
+3. Each patient card displays the patient's name, age, and gender to help you identify the scenario.
+
+### Starting a Chat Session
+
+1. Click on a patient persona to open the patient dashboard.
+2. Click **Start Chat** to begin a new conversation.
+3. Type your clinical questions and assessments in the message input field.
+4. The AI patient responds based on their configured case materials and persona.
+
+### Using Voice Chat
+
+1. If voice is enabled for the patient, you see a **Voice** option on the chat interface.
+2. Click the voice button to initiate a voice session.
+3. Speak naturally — the AI patient responds with synthesized speech.
+4. You can switch between text and voice during the same session.
+
+### Concluding an Interaction
+
+1. When you have gathered enough information, click **Conclude Interaction**.
+2. Enter your clinical recommendation or diagnosis in the provided form.
+3. Submit your recommendation to end the session.
+4. The system generates a debrief evaluating your performance.
+
+### Viewing Your Debrief
+
+1. After concluding an interaction, navigate to your **Chat History**.
+2. Select the completed session to view the AI-generated debrief.
+3. The debrief includes:
+   - A summary of your conversation
+   - Scores against key clinical questions
+   - Comparison with the answer key (if configured by your instructor)
+   - Areas for improvement
+
+### Reviewing Chat History
+
+1. From your dashboard, click **Chat History**.
+2. Browse past sessions organized by simulation group and patient.
+3. Select any session to review the full conversation transcript and debrief.
+
+---
+
+## Instructor Workflow
+
+As an instructor, you design clinical simulation scenarios, manage student enrollment, and review performance analytics.
+
+### Creating a Simulation Group
+
+1. From your **Instructor Dashboard**, click **Create Simulation Group**.
+2. Provide a name and description for the group.
+3. Configure the system prompt that guides AI behavior for all patients in this group.
+4. Set an access code that students use to join.
+5. Save the group to make it available.
+
+### Adding Patient Personas
+
+1. Open an existing simulation group from your dashboard.
+2. Click **Add Patient** to create a new persona.
+3. Configure the patient details:
+   - **Name, Age, Gender**: Basic demographics for the scenario
+   - **Patient Prompt**: Instructions that define the patient's condition, personality, and responses
+   - **Case Materials**: Upload PDF documents (lab results, medical history) that the AI uses for context
+4. Save the patient persona.
+
+### Configuring Key Questions
+
+1. Within a patient persona, navigate to the **Key Questions** section.
+2. Add questions that students should ask during the interaction.
+3. These questions are used for semantic matching — the system detects when students address each topic.
+4. Optionally, provide an answer key for debrief scoring.
+
+### Managing Enrollments
+
+1. Share the access code with your students.
+2. View enrolled students from the simulation group page.
+3. Monitor which students have joined and their interaction status.
+
+### Configuring Debrief Settings
+
+1. Open the simulation group settings.
+2. Customize the debrief prompt to control how AI evaluates student performance.
+3. Set message limits if you want to constrain interaction length.
+4. Enable or disable voice chat for specific patients.
+
+### Reviewing Analytics
+
+1. From your simulation group page, access the **Analytics** section.
+2. View engagement metrics including:
+   - Student completion rates
+   - Average scores against key questions
+   - Time spent per interaction
+   - Question coverage across students
+3. Use these insights to identify areas where students need additional guidance.
+
+---
+
+## Admin Workflow
+
+As an administrator, you manage the organizational structure, assign roles, and maintain shared resources like question banks.
+
+### Managing Organizations
+
+1. From the **Admin Home**, select **Organizations**.
+2. Create a new organization or select an existing one.
+3. Configure organization details:
+   - Organization name and description
+   - Contact information
+   - Associated instructors
+
+### Assigning Instructors
+
+1. Navigate to the organization management page.
+2. Click **Assign Instructor** to add an instructor to the organization.
+3. Search for the instructor by email.
+4. Confirm the assignment — the instructor can now create simulation groups under this organization.
+
+### Managing Question Banks
+
+1. From the Admin Home, select **Question Banks**.
+2. Create organization-level question banks that instructors can reference.
+3. Add questions with tags for categorization.
+4. Questions in the bank are available for semantic matching across all simulation groups in the organization.
+
+### Managing DTP Recommendation Banks
+
+1. Navigate to **Recommendation Banks** from the Admin Home.
+2. Create and organize drug therapy problem (DTP) recommendations.
+3. These recommendations serve as reference material for debrief evaluations.
+
+### Viewing Simulation Groups
+
+1. As an admin, you have visibility into all simulation groups across your organization.
+2. Navigate to any group to review its configuration, enrolled students, and analytics.
+3. Use this access for quality assurance and support purposes.
+
+---
+
+## FAQ
+
+### General
+
+**Q: Which browsers are supported?**
+A: GenRx works best in modern browsers including Chrome, Firefox, Safari, and Edge. Ensure your browser is up to date for the best experience.
+
+**Q: I forgot my password. How do I reset it?**
+A: Click the **Forgot Password** link on the login page. Enter your email address and follow the instructions in the reset email.
+
+**Q: Can I change my role?**
+A: Roles are assigned by your institution's administrator. Contact your admin if you need a role change.
+
+### Students
+
+**Q: My access code isn't working. What should I do?**
+A: Verify the code with your instructor. Access codes are case-sensitive. If the group has been archived or closed, the code may no longer be valid.
+
+**Q: Can I redo a conversation with a patient?**
+A: Yes. You can start a new chat session with the same patient at any time. Each session is tracked independently.
+
+**Q: How is my debrief score calculated?**
+A: The AI evaluates your conversation against the key questions configured by your instructor. It checks whether you addressed each clinical topic and compares your recommendation against the answer key.
+
+**Q: Is voice chat available for all patients?**
+A: Voice chat availability depends on your instructor's configuration. If the voice option is not visible, it has not been enabled for that patient.
+
+### Instructors
+
+**Q: How many patients can I add to a simulation group?**
+A: There is no hard limit on the number of patients per group. Add as many scenarios as needed for your curriculum.
+
+**Q: Can I edit a patient after students have started interacting?**
+A: Yes, you can update patient prompts and case materials at any time. Changes apply to new sessions — existing conversations are not affected.
+
+**Q: How do I upload case materials?**
+A: When creating or editing a patient, use the file upload area to attach PDF documents. The system processes these documents and makes them available to the AI during conversations.
+
+### Admins
+
+**Q: Can I remove an instructor from an organization?**
+A: Yes. Navigate to the organization page and manage instructor assignments from there. Removing an instructor does not delete their simulation groups.
+
+**Q: How do question banks relate to individual patients?**
+A: Organization-level question banks provide a shared pool of questions. Instructors can also add patient-specific questions. Both are used for semantic matching during student interactions.
+
+---
+
+## Related Documentation
+
+For deployment and infrastructure details, see the [Deployment Guide](./DEPLOYMENT_GUIDE.md).

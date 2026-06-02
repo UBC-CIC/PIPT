@@ -100,7 +100,9 @@ const ecsSocketStack = new EcsSocketStack(
   turnServerStack,
   voiceAgentArn,
   StackPrefix,
-  { env }
+  apiStack.getDynamoTableName(),
+  cloudFrontWafStack.webAclArn,
+  { env, crossRegionReferences: true }
 );
 const dbFlowStack = new DBFlowStack(
   app,

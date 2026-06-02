@@ -19,6 +19,7 @@ export class DatabaseStack extends Stack {
     public readonly rdsProxyEndpoint: string;
     public readonly rdsProxyEndpointTableCreator: string;
     public readonly rdsProxyEndpointAdmin: string;
+    public readonly dbSecurityGroup: ec2.ISecurityGroup;
 
     constructor(scope: Construct, id: string, vpcStack: VpcStack, props?: StackProps) {
         super(scope, id, props);
@@ -61,17 +62,13 @@ export class DatabaseStack extends Stack {
             }
         });
 
-        // REVIEW: rds.force_ssl is set to '0', meaning database connections are NOT required to use TLS.
-        // All traffic between Lambda/ECS and RDS travels in plaintext within the VPC.
-        // Change to '1' and update all client connection configs (lib.js ssl:false, psycopg2 calls)
-        // to use SSL before deploying to production.
         const parameterGroup = new rds.ParameterGroup(this, `${id}-rdsParameterGroup`, {
             engine: rds.DatabaseInstanceEngine.postgres({
                 version: rds.PostgresEngineVersion.VER_16_10,
             }),
             description: "Empty parameter group",
             parameters: {
-                'rds.force_ssl': '0'
+                'rds.force_ssl': '1'
             }
         });
 
@@ -110,7 +107,8 @@ export class DatabaseStack extends Stack {
         });
         
         // Add CIDR ranges of private subnets to inbound rules of RDS
-        const dbSecurityGroup = this.dbInstance.connections.securityGroups[0];
+        this.dbSecurityGroup = this.dbInstance.connections.securityGroups[0];
+        const dbSecurityGroup = this.dbSecurityGroup;
         if (vpcStack.privateSubnetsCidrStrings && vpcStack.privateSubnetsCidrStrings.length > 0) {
             vpcStack.privateSubnetsCidrStrings.forEach((cidr) => {
                 dbSecurityGroup.addIngressRule(
@@ -122,18 +120,6 @@ export class DatabaseStack extends Stack {
         } else {
             console.log("Deploying with new VPC. No need to add private subnet CIDR ranges to inbound rules of RDS.");
         }
-
-        // REVIEW: This rule opens port 5432 to the ENTIRE VPC CIDR, including public subnets.
-        // This is redundant with the per-private-subnet rules above and overly broad.
-        // Consider removing this block and relying solely on the private-subnet CIDR rules,
-        // or restricting to specific Lambda/ECS security group IDs for tighter access control.
-        this.dbInstance.connections.securityGroups.forEach(function (securityGroup) {
-            securityGroup.addIngressRule(
-                ec2.Peer.ipv4(vpcStack.vpcCidrString),
-                ec2.Port.tcp(5432),
-                "Allow PostgreSQL traffic from VPC"
-            );
-        });
 
         /**
          * Create IAM role for RDS Proxy
@@ -155,16 +141,14 @@ export class DatabaseStack extends Stack {
         /**
          * Create RDS Proxy for database connections
          */
-        // REVIEW: requireTLS is false on all three RDS Proxy instances. When rds.force_ssl is
-        // changed to '1', also set requireTLS: true here so the proxy enforces TLS on its side.
-        // Also note: the TableCreator proxy uses '+proxy' in its ID — this is unusual and may cause
+        // NOTE: The TableCreator proxy uses '+proxy' in its ID — this is unconventional and may cause
         // issues with CloudFormation resource naming. Consider using '-proxy-tablecreator' instead.
         const rdsProxy = this.dbInstance.addProxy(id + '-proxy', {
             secrets: [this.secretPathUser!],
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
             securityGroups: this.dbInstance.connections.securityGroups,
-            requireTLS: false,
+            requireTLS: true,
         });
 
         const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', { // NOTE: '+' in construct ID is unconventional
@@ -172,7 +156,7 @@ export class DatabaseStack extends Stack {
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
             securityGroups: this.dbInstance.connections.securityGroups,
-            requireTLS: false,
+            requireTLS: true,
         });
 
         const secretPathAdmin = secretmanager.Secret.fromSecretNameV2(this, 'AdminSecret', this.secretPathAdminName);
@@ -182,7 +166,7 @@ export class DatabaseStack extends Stack {
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
             securityGroups: this.dbInstance.connections.securityGroups,
-            requireTLS: false,
+            requireTLS: true,
         });
 
         /**
@@ -214,4 +198,5 @@ export class DatabaseStack extends Stack {
         this.rdsProxyEndpointTableCreator = rdsProxyTableCreator.endpoint;
         this.rdsProxyEndpointAdmin = rdsProxyAdmin.endpoint;
     }
+
 }

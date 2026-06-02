@@ -7,7 +7,7 @@ import psycopg
 from langchain_aws import BedrockEmbeddings
 from helpers.cohere_embeddings import CohereBedrockEmbeddings
 
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, create_dynamodb_history_table, set_stream_callback_url
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, set_stream_callback_url
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -90,7 +90,7 @@ def initialize_constants():
                 region_name=BEDROCK_EMBEDDING_REGION,
             )
     
-    create_dynamodb_history_table(TABLE_NAME)
+
 
 def connect_to_db():
     global connection
@@ -104,6 +104,7 @@ def connect_to_db():
                 user=secret["username"],
                 password=secret["password"],
                 autocommit=False,
+                sslmode="require",
             )
             logger.info("Connected to the database!")
         except Exception as e:
@@ -231,7 +232,6 @@ def handler(event, context):
     simulation_group_id = query_params.get("simulation_group_id", "")
     session_id = query_params.get("session_id", "")
     persona_id = query_params.get("patient_id", "")
-    session_name = query_params.get("session_name", "New Chat")
     student_user_id = event.get('requestContext', {}).get('authorizer', {}).get('userId', '')
 
     # When the ECS socket server calls us, it passes its own URL so we can
@@ -539,7 +539,7 @@ def handler(event, context):
 
     # Lazy imports for chat mode
     from helpers.vectorstore import get_vectorstore_retriever
-    from helpers.chat import get_response, update_session_name, cache_key_questions
+    from helpers.chat import get_response, cache_key_questions
 
     # TODO(refactor): Extract system prompt and persona detail fetching into a helper function
     system_prompt = get_system_prompt(simulation_group_id)
@@ -743,19 +743,6 @@ def handler(event, context):
             'body': json.dumps(f'Error getting response: {str(e)}')
         }
 
-    try:
-        logger.info("Updating session name if this is the first exchange between the LLM and student")
-        potential_session_name = update_session_name(
-            TABLE_NAME, session_id, BEDROCK_LLM_ID)
-        if potential_session_name:
-            logger.info("This is the first exchange between the LLM and student. Updating session name.")
-            session_name = potential_session_name
-        else:
-            logger.info("Not the first exchange between the LLM and student. Session name remains the same.")
-    except Exception as e:
-        logger.error(f"Error updating session name: {e}")
-        session_name = "New Chat"
-    
 
 
     # TODO(refactor): Extract response formatting into a helper function
@@ -785,7 +772,6 @@ def handler(event, context):
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps({
-                "session_name": session_name,
                 "llm_output": response.get("llm_output", "LLM failed to create response"),
                 "llm_verdict": response.get("llm_verdict", "LLM failed to create verdict"),
             })

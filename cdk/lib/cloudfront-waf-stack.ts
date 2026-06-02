@@ -54,6 +54,54 @@ export class CloudFrontWafStack extends cdk.Stack {
             metricName: "CloudFront-RateLimitRequests2000",
           },
         },
+        {
+          name: "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+          priority: 3,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesKnownBadInputsRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "CloudFront-AWSManagedRulesKnownBadInputsRuleSet",
+          },
+        },
+        {
+          name: "AWS-AWSManagedRulesAmazonIpReputationList",
+          priority: 4,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesAmazonIpReputationList",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "CloudFront-AWSManagedRulesAmazonIpReputationList",
+          },
+        },
+        {
+          name: "AWS-AWSManagedRulesSQLiRuleSet",
+          priority: 5,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesSQLiRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "CloudFront-AWSManagedRulesSQLiRuleSet",
+          },
+        },
       ],
     });
 

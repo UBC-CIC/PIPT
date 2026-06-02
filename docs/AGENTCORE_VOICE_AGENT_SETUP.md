@@ -1,5 +1,9 @@
 # GenRx Bedrock AgentCore Voice Agent Setup
 
+> **Document Type:** Supplementary Procedural Guide
+> **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
+> **Last updated:** 2026-05-30
+
 **Date:** April 27, 2026
 **Scope:** Console-side configuration of the Bedrock AgentCore voice agent and how it connects to the CDK deployment
 **Audience:** Developers deploying or maintaining the GenRx voice feature
@@ -29,7 +33,7 @@ The voice agent container itself is built and pushed to ECR by the CI/CD pipelin
 
 ## 2. Architecture: How AgentCore Fits In
 
-```
+```text
 Frontend (React)
     |  Socket.IO (audio frames + control messages)
 Socket Server (ECS Fargate, server.js)
@@ -146,6 +150,7 @@ Add the following environment variables:
 | `BEDROCK_REGION` | `us-east-1` | Nova Sonic 2.0 is only available in us-east-1, regardless of your deployment region |
 | `SM_DB_CREDENTIALS` | The Secrets Manager secret name for the RDS user credentials | Go to **Secrets Manager** in the console and find the secret created by the Database stack for the `readwrite` user. Copy the **secret name** (not the ARN). |
 | `RDS_PROXY_ENDPOINT` | The RDS Proxy endpoint for the user proxy | Found in the Database stack CloudFormation outputs, or in the **RDS** console under **Proxies**. It will look something like `{StackPrefix}-database-userproxy-....rds.amazonaws.com`. |
+| `TABLE_NAME` | `DynamoDB-Conversation-Table` | The DynamoDB table used to persist conversation history. All other services read this from CDK-managed config — the voice agent must have it set manually here since it runs outside CDK. |
 
 These match the environment variables that were previously defined in the now-removed `VoiceAgentStack`. Without them, the voice agent will fail to connect to the database or reach Nova Sonic in the correct region.
 
@@ -249,7 +254,7 @@ In the Bedrock console > AgentCore > Runtime > Runtime resources, confirm the ag
 
 After redeploying the ECS socket stack with the ARN, check the socket server CloudWatch logs for:
 
-```
+```text
 Using AgentCore WebSocket for ARN: arn:aws:bedrock-agentcore:...
 Connecting to AgentCore WebSocket: wss://bedrock-agentcore...
 AgentCore WebSocket connected (session: ...)

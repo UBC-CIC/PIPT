@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { instructorService } from '@/services/instructorService';
-import { type AIDebriefData } from '@/services/studentService';
+import { type AIDebriefData, type UpdatedDebriefData } from '@/services/studentService';
 import { downloadChatPdf } from '@/lib/download-chat-pdf';
 import { useNotification } from '@/components/notifications';
 
@@ -11,6 +11,7 @@ interface UseDebriefViewerParams {
 interface UseDebriefViewerReturn {
   isAIDebriefOpen: boolean;
   selectedDebriefData: AIDebriefData | null;
+  selectedUpdatedDebriefData: UpdatedDebriefData | undefined;
   isFetchingDebrief: string | null;
   isGeneratingPdf: string | null;
   attemptPdfRefs: React.MutableRefObject<Record<string, HTMLDivElement | null>>;
@@ -29,6 +30,7 @@ export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebrie
   const { showNotification } = useNotification();
   const [isAIDebriefOpen, setIsAIDebriefOpen] = useState(false);
   const [selectedDebriefData, setSelectedDebriefData] = useState<AIDebriefData | null>(null);
+  const [selectedUpdatedDebriefData, setSelectedUpdatedDebriefData] = useState<UpdatedDebriefData | undefined>(undefined);
   const [isFetchingDebrief, setIsFetchingDebrief] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<string | null>(null);
   const attemptPdfRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -38,7 +40,8 @@ export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebrie
     try {
       const data = await instructorService.fetchDebrief(attemptId, groupId || '');
       if (data) {
-        setSelectedDebriefData(data);
+        setSelectedDebriefData(data.legacy);
+        setSelectedUpdatedDebriefData(data.updated);
         setIsAIDebriefOpen(true);
       } else {
         showNotification({ message: 'Debrief is still generating or not available for this session.', type: 'warning' });
@@ -83,6 +86,7 @@ export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebrie
   return {
     isAIDebriefOpen,
     selectedDebriefData,
+    selectedUpdatedDebriefData,
     isFetchingDebrief,
     isGeneratingPdf,
     attemptPdfRefs,

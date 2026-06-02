@@ -1,12 +1,15 @@
 import json
 import os
-from langchain_community.chat_message_histories import DynamoDBChatMessageHistory
-from langchain_core.messages import AIMessage, HumanMessage
-import psycopg2
 import logging
-import boto3
 import uuid
 from datetime import datetime
+
+import boto3
+import psycopg2
+from langchain_community.chat_message_histories import DynamoDBChatMessageHistory
+from langchain_core.messages import AIMessage, HumanMessage
+
+_TABLE_NAME = os.environ.get("TABLE_NAME")
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -25,8 +28,11 @@ print(f"Using DB Secret Name: {DB_SECRET_NAME}")
 logger.info(f"Using RDS Proxy Endpoint: {RDS_PROXY_ENDPOINT}")
 logger.info(f"Using DB Secret Name: {DB_SECRET_NAME}")
 
-def format_chat_history(session_id: str, table_name: str = "DynamoDB-Conversation-Table") -> str:
-    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
+def format_chat_history(session_id: str, table_name: str = None) -> str:
+    table_name = table_name or _TABLE_NAME
+    if not table_name:
+        raise RuntimeError("TABLE_NAME environment variable is not set")
+    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     recent_messages = history.messages[-10:]
 
     lines = []
@@ -37,8 +43,11 @@ def format_chat_history(session_id: str, table_name: str = "DynamoDB-Conversatio
         lines.append(f"{role}: {safe_content}")
     return "\n".join(lines)
 
-def add_message(session_id: str, role: str, content: str, table_name: str = "DynamoDB-Conversation-Table"):
-    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
+def add_message(session_id: str, role: str, content: str, table_name: str = None):
+    table_name = table_name or _TABLE_NAME
+    if not table_name:
+        raise RuntimeError("TABLE_NAME environment variable is not set")
+    history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id, ttl=90 * 24 * 60 * 60)
     if role == "user":
         history.add_message(HumanMessage(content=content))
     elif role == "ai":
@@ -71,7 +80,8 @@ def connect_to_db():
                 'user': secret["username"],
                 'password': secret["password"],
                 'host': RDS_PROXY_ENDPOINT,
-                'port': secret["port"]
+                'port': secret["port"],
+                'sslmode': 'require'
             }
             connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
             connection = psycopg2.connect(connection_string)

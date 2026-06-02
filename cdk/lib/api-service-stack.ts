@@ -35,23 +35,27 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 
 export class ApiServiceStack extends cdk.Stack {
   private readonly api: apigateway.SpecRestApi;
   public readonly appClient: cognito.UserPoolClient;
   public readonly userPool: cognito.UserPool;
   public readonly identityPool: cognito.CfnIdentityPool;
+  private readonly dynamoTableName: string;
   private readonly layerList: { [key: string]: LayerVersion };
   private readonly guardrailId: string;
   public readonly stageARN_APIGW: string;
   public readonly apiGW_basedURL: string;
   public readonly secret: secretsmanager.ISecret;
+  public readonly streamCallbackSecret: secretsmanager.ISecret;
   public readonly appSyncApi: appsync.GraphqlApi;
   public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
   public getUserPoolClientId = () => this.appClient.userPoolClientId;
   public getIdentityPoolId = () => this.identityPool.ref;
   public getGuardrailId = () => this.guardrailId;
+  public getDynamoTableName = () => this.dynamoTableName;
   public addLayer = (name: string, layer: LayerVersion) =>
     (this.layerList[name] = layer);
   public getLayers = () => this.layerList;
@@ -290,6 +294,13 @@ export class ApiServiceStack extends cdk.Stack {
 
     const secretsName = `${id}-GenRx_Cognito_Secrets`;
 
+    this.streamCallbackSecret = new secretsmanager.Secret(this, `${id}-StreamCallbackSecret`, {
+      secretName: `${id}-StreamCallbackSecret`,
+      description: "Shared token authenticating text-gen Lambda → socket server /stream-callback POSTs",
+      generateSecretString: { excludePunctuation: true, passwordLength: 32 },
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     this.secret = new secretsmanager.Secret(this, secretsName, {
       secretName: secretsName,
       description: "Cognito Secrets for authentication",
@@ -515,6 +526,22 @@ export class ApiServiceStack extends cdk.Stack {
       },
     });
 
+    const apiLambdaSg = new ec2.SecurityGroup(this, `${id}-apiLambdaSg`, {
+      vpc: vpcStack.vpc,
+      description: "Security group for API Lambda functions to access RDS Proxy",
+      allowAllOutbound: true,
+    });
+    const importedDbSg = ec2.SecurityGroup.fromSecurityGroupId(
+      this,
+      `${id}-imported-db-sg`,
+      db.dbSecurityGroup.securityGroupId
+    );
+    importedDbSg.addIngressRule(
+      apiLambdaSg,
+      ec2.Port.tcp(5432),
+      "Allow API Lambda functions to access RDS Proxy"
+    );
+
     const lambdaStudentFunction = new lambda.Function(
       this,
       `${id}-studentFunction`,
@@ -524,6 +551,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "studentFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -556,6 +584,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "instructorFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -588,6 +617,7 @@ export class ApiServiceStack extends cdk.Stack {
         handler: "adminFunction.handler",
         timeout: Duration.seconds(300),
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
@@ -733,6 +763,7 @@ export class ApiServiceStack extends cdk.Stack {
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
         },
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-addStudentOnSignUp`,
         memorySize: 128,
         layers: [postgres],
@@ -901,6 +932,143 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
+    this.dynamoTableName = "DynamoDB-Conversation-Table";
+    const dynamoTableName = this.dynamoTableName;
+
+    // The conversation table is referenced by name rather than owned by CDK. It was created
+    // manually in the AWS console before this CDK app existed and already holds live chat history.
+    // Handing ownership to CDK would require destroying it (losing data) or `cdk import`, which
+    // we attempted but could not get working reliably.
+    //
+    // We can't use `new dynamodb.Table(...)` — CloudFormation would fail with "Table already exists".
+    // We can't use only `Table.fromTableName` — on a fresh deploy the table wouldn't exist yet and
+    // every Lambda would crash at runtime with ResourceNotFoundException, with no deploy-time warning.
+    //
+    // This custom resource solves both: it attempts CreateTable and swallows ResourceInUseException,
+    // so existing deploys are a no-op and fresh deploys get the table created automatically before
+    // any Lambda needs it. CDK never owns the lifecycle — cdk destroy will not delete it or its data.
+    const ensureTableFunction = new lambda.Function(this, `${id}-EnsureConversationTable`, {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      code: lambda.Code.fromAsset("lambda/ensureConversationTable"),
+      handler: "index.handler",
+      timeout: cdk.Duration.seconds(300),
+      functionName: `${id}-EnsureConversationTable`,
+      memorySize: 128,
+      logRetention: logs.RetentionDays.INFINITE,
+      environment: {
+        TABLE_NAME: dynamoTableName,
+      },
+    });
+
+    ensureTableFunction.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "dynamodb:CreateTable",
+          "dynamodb:DescribeTable",
+          "dynamodb:UpdateTimeToLive",
+        ],
+        resources: [
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${dynamoTableName}`,
+        ],
+      })
+    );
+
+    const ensureTableProvider = new cr.Provider(this, `${id}-EnsureConversationTableProvider`, {
+      onEventHandler: ensureTableFunction,
+    });
+
+    new cdk.CustomResource(this, `${id}-EnsureConversationTableResource`, {
+      serviceToken: ensureTableProvider.serviceToken,
+    });
+
+    // Shared table — not owned by this stack (used across multiple stack prefixes)
+    const conversationTable = dynamodb.Table.fromTableName(
+      this,
+      "ConversationTable",
+      dynamoTableName
+    );
+
+    new cloudwatch.Alarm(this, `${id}-DynamoThrottleAlarm`, {
+      alarmName: `${id}-DynamoDB-ThrottledRequests`,
+      alarmDescription: "DynamoDB throttling on the conversation table — may need capacity increase",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "ThrottledRequests",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-DynamoSystemErrorsAlarm`, {
+      alarmName: `${id}-DynamoDB-SystemErrors`,
+      alarmDescription: "DynamoDB system errors on the conversation table — indicates AWS-side issue",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "SystemErrors",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-DynamoUserErrorsAlarm`, {
+      alarmName: `${id}-DynamoDB-UserErrors`,
+      alarmDescription: "DynamoDB user errors on the conversation table — missing keys or wrong attribute types",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/DynamoDB",
+        metricName: "UserErrors",
+        dimensionsMap: { TableName: dynamoTableName },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 1,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-BedrockInvocationAlarm`, {
+      alarmName: `${id}-Bedrock-InvocationSpike`,
+      alarmDescription: "Bedrock invocation spike — possible student abuse loop triggering repeated debriefs",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InvocationCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.minutes(5),
+      }),
+      threshold: 50,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
+    new cloudwatch.Alarm(this, `${id}-BedrockTokenAlarm`, {
+      alarmName: `${id}-Bedrock-InputTokenSpike`,
+      alarmDescription: "Bedrock input token spike — cost may be elevated, review usage",
+      metric: new cloudwatch.Metric({
+        namespace: "AWS/Bedrock",
+        metricName: "InputTokenCount",
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        statistic: "Sum",
+        period: cdk.Duration.hours(1),
+      }),
+      threshold: 500000,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     // Create parameters for Bedrock LLM ID, Embedding Model ID, and Table Name in Parameter Store
     const bedrockLLMParameter = new ssm.StringParameter(
       this,
@@ -928,7 +1096,7 @@ export class ApiServiceStack extends cdk.Stack {
       {
         parameterName: `/${id}/GenRx/TableName`,
         description: "Parameter containing the DynamoDB table name",
-        stringValue: "DynamoDB-Conversation-Table",
+        stringValue: dynamoTableName,
       }
     );
 
@@ -1245,7 +1413,9 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(textGenRepo!),
         memorySize: 1024,
         timeout: cdk.Duration.seconds(300),
+        reservedConcurrentExecutions: 25,
         vpc: vpcStack.vpc, // Pass the VPC
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
@@ -1258,12 +1428,14 @@ export class ApiServiceStack extends cdk.Stack {
           APPSYNC_GRAPHQL_URL: this.appSyncApi.graphqlUrl,
           APPSYNC_API_ID: this.appSyncApi.apiId,
           EMBEDDING_STORAGE_BUCKET: embeddingStorageBucket.bucketName,
+          SM_STREAM_CALLBACK_SECRET: this.streamCallbackSecret.secretName,
         },
       }
     );
 
     // Grant text_generation Lambda read access to the embedding storage bucket (for answer key retrieval)
     embeddingStorageBucket.grantRead(textGenLambdaDockerFunc);
+    this.streamCallbackSecret.grantRead(textGenLambdaDockerFunc);
 
     // Override the Logical ID of the Lambda Function to get ARN in OpenAPI
     const cfnTextGenDockerFunc = textGenLambdaDockerFunc.node
@@ -1333,14 +1505,12 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: [
-          "dynamodb:ListTables",
-          "dynamodb:CreateTable",
           "dynamodb:DescribeTable",
           "dynamodb:PutItem",
           "dynamodb:GetItem",
           "dynamodb:UpdateItem",
         ],
-        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/*`],
+        resources: [conversationTable.tableArn],
       })
     );
 
@@ -1510,6 +1680,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
@@ -1567,7 +1738,9 @@ export class ApiServiceStack extends cdk.Stack {
         code: lambda.DockerImageCode.fromEcr(dataIngestRepo!),
         memorySize: 3008,
         timeout: cdk.Duration.seconds(900),
+        reservedConcurrentExecutions: 10,
         vpc: vpcStack.vpc, // Pass the VPC
+        securityGroups: [apiLambdaSg],
         functionName: `${id}-DataIngestLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
@@ -1726,6 +1899,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1766,6 +1940,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1824,6 +1999,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1882,6 +2058,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1937,6 +2114,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -1989,6 +2167,7 @@ export class ApiServiceStack extends cdk.Stack {
       timeout: Duration.seconds(300),
       memorySize: 128,
       vpc: vpcStack.vpc,
+      securityGroups: [apiLambdaSg],
       environment: {
         SM_DB_CREDENTIALS: db.secretPathUser.secretName, // Database User Credentials
         RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint, // RDS Proxy Endpoint
@@ -2042,6 +2221,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
@@ -2103,6 +2283,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(300),
         memorySize: 128,
         vpc: vpcStack.vpc,
+        securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
@@ -2139,7 +2320,7 @@ export class ApiServiceStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["dynamodb:GetItem", "dynamodb:UpdateItem"],
-        resources: [`arn:aws:dynamodb:${this.region}:${this.account}:table/*`],
+        resources: [conversationTable.tableArn],
       })
     );
 
@@ -2177,6 +2358,7 @@ export class ApiServiceStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
+              excludedRules: [{ name: "SizeRestrictions_BODY" }],
             },
           },
           overrideAction: { none: {} },
@@ -2204,6 +2386,54 @@ export class ApiServiceStack extends cdk.Stack {
             metricName: "LimitRequests1000",
           },
         },
+        {
+          name: "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+          priority: 3,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesKnownBadInputsRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "AWS-AWSManagedRulesKnownBadInputsRuleSet",
+          },
+        },
+        {
+          name: "AWS-AWSManagedRulesAmazonIpReputationList",
+          priority: 4,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesAmazonIpReputationList",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "AWS-AWSManagedRulesAmazonIpReputationList",
+          },
+        },
+        {
+          name: "AWS-AWSManagedRulesSQLiRuleSet",
+          priority: 5,
+          statement: {
+            managedRuleGroupStatement: {
+              vendorName: "AWS",
+              name: "AWSManagedRulesSQLiRuleSet",
+            },
+          },
+          overrideAction: { none: {} },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "AWS-AWSManagedRulesSQLiRuleSet",
+          },
+        },
       ],
     });
     const wafAssociation = new wafv2.CfnWebACLAssociation(
@@ -2214,6 +2444,11 @@ export class ApiServiceStack extends cdk.Stack {
         webAclArn: waf.attrArn,
       }
     );
+
+    new wafv2.CfnWebACLAssociation(this, `${id}-appsync-waf-association`, {
+      resourceArn: this.appSyncApi.arn,
+      webAclArn: waf.attrArn,
+    });
 
     // Export outputs for frontend configuration
     new cdk.CfnOutput(this, 'ApiEndpoint', {

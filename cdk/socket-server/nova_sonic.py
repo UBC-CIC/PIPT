@@ -114,7 +114,8 @@ def get_pg_connection():
                 port=secret['port'],
                 database=secret['dbname'],
                 user=secret['username'],
-                password=secret['password']
+                password=secret['password'],
+                sslmode='require'
             )
         
         return pg_conn_pool.getconn()

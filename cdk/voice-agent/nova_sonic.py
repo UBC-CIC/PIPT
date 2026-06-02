@@ -127,6 +127,7 @@ def get_pg_connection():
                 database=secret["dbname"],
                 user=secret["username"],
                 password=secret["password"],
+                sslmode="require",
             )
 
         return pg_conn_pool.getconn()

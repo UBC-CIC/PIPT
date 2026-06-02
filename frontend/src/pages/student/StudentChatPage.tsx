@@ -444,7 +444,9 @@ function StudentChatPage() {
           const sid = sessionId || routeChatId || '';
           if (sid) {
             studentService.fetchMessages(sid).then((msgs) => {
-              if (msgs.length > 0) setMessages(msgs);
+              if (msgs.length > 0) {
+                setMessages(msgs);
+              }
             });
           }
         };
@@ -763,7 +765,7 @@ function StudentChatPage() {
    * Called after ConcludeModal successfully submits DTP + Recommendation data.
    * Subscribes to AppSync for progressive debrief_chunk1 and debrief_chunk2 events.
    */
-  const handleConcludeWithSubmissions = async () => {
+  const handleConcludeWithSubmissions = async (dtpSubmission: string[], recommendationSubmission: { recommendation: string; rationale: string }[]) => {
     if (!groupId || !patientId || !sessionId) return;
 
     setSessionStatus('generating_debrief');
@@ -804,7 +806,7 @@ function StudentChatPage() {
             };
 
             // Set chunk1 immediately, chunk2 as null to trigger loading state
-            setUpdatedDebriefData({ chunk1, chunk2: null });
+            setUpdatedDebriefData({ chunk1, chunk2: null, dtpSubmission: dtpSubmission.length > 0 ? dtpSubmission : null, recommendationSubmission: recommendationSubmission.length > 0 ? recommendationSubmission : null });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
           } catch (e) {
@@ -889,7 +891,7 @@ function StudentChatPage() {
               if (content.guidance_key_questions) {
                 updatedChunk1.guidanceKeyQuestions = content.guidance_key_questions;
               }
-              return { chunk1: updatedChunk1, chunk2 };
+              return { chunk1: updatedChunk1, chunk2, dtpSubmission: prev.dtpSubmission ?? (dtpSubmission.length > 0 ? dtpSubmission : null), recommendationSubmission: prev.recommendationSubmission ?? (recommendationSubmission.length > 0 ? recommendationSubmission : null) };
             });
 
             // Unsubscribe after receiving chunk2 (final event)
@@ -986,7 +988,7 @@ function StudentChatPage() {
               };
             }
 
-            setUpdatedDebriefData({ chunk1, chunk2 });
+            setUpdatedDebriefData({ chunk1, chunk2, dtpSubmission: dtpSubmission.length > 0 ? dtpSubmission : null, recommendationSubmission: recommendationSubmission.length > 0 ? recommendationSubmission : null });
             setSessionStatus('concluded');
             setIsAIDebriefOpen(true);
             unsubscribe();

@@ -1,5 +1,9 @@
 # GenRx Voice Agent Deep Dive
 
+> **Document Type:** Supplementary Technical Reference
+> **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
+> **Last updated:** 2026-05-30
+
 **Date:** April 27, 2026
 **Scope:** Architecture, code walkthrough, runtime flow, debrief integration, and design decisions for the voice agent pipeline
 **Audience:** Developers working on or maintaining the GenRx voice feature
@@ -28,7 +32,7 @@ Unlike Text Mode (which uses API Gateway > Lambda > LangChain), Voice Mode requi
 
 ### Request Path
 
-```
+```text
 Browser > Socket.IO > Node.js (socket-server) > WebSocket > AgentCore container > Bedrock
 ```
 

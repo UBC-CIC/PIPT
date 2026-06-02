@@ -19,7 +19,7 @@ interface ConcludeModalProps {
   sessionId: string;
   simulationGroupId: string;
   patientId: string;
-  onConcluded: () => void;
+  onConcluded: (dtpSubmission: string[], recommendationSubmission: { recommendation: string; rationale: string }[]) => void;
   mode?: 'interview_practice' | 'full_assessment';
 }
 
@@ -123,9 +123,11 @@ export function ConcludeModal({
           entries: recommendationEntries.filter((e) => e.recommendation.trim().length > 0),
         },
       });
+      const submittedDtps = dtpEntries.filter((e) => e.trim().length > 0);
+      const submittedRecs = recommendationEntries.filter((e) => e.recommendation.trim().length > 0);
       resetState();
       onOpenChange(false);
-      onConcluded();
+      onConcluded(submittedDtps, submittedRecs);
     } catch {
       setRecValidationError('Failed to submit. Please try again.');
     } finally {
@@ -143,7 +145,7 @@ export function ConcludeModal({
       }
       resetState();
       onOpenChange(false);
-      onConcluded();
+      onConcluded([], []);
     } catch {
       setRecValidationError('Failed to conclude. Please try again.');
     } finally {

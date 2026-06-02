@@ -17,6 +17,23 @@ interface ChangelogEntry {
 
 const changelog: ChangelogEntry[] = [
   {
+    date: 'May 28, 2026',
+    items: [
+      { feature: 'Accordion expand/collapse for admin DTP, Rec, and Question Bank entries', status: 'working', note: 'admin can now expand any DTP, recommendation, or question bank item to preview its full details before including or excluding it — matches the instructor experience' },
+      { feature: 'Tags visible on accordion trigger row', status: 'working', note: 'question, DTP, and recommendation tags appear inline on the collapsed row so admins can filter at a glance without opening the accordion' },
+      { feature: 'Edit patient panel DTP & recommendation fields aligned to key questions', status: 'working', note: 'DTP and recommendation edit forms are now fully 1:1 with the key questions panel layout' },
+      { feature: 'Instructor question bank patient-specific tab filtering fixed', status: 'working', note: 'patient-specific questions (persona_id not null) now correctly appear only in the Patient-Specific tab instead of showing in the Global tab' },
+    ],
+  },
+  {
+    date: 'May 27, 2026',
+    items: [
+      { feature: 'Student debrief now shows submitted DTPs and recommendations', status: 'working', note: 'the AI Debrief dialog displays the exact drug therapy problems and recommendations you submitted at conclude time, so you can follow along as the AI scores each one' },
+      { feature: 'Instructor & admin session view shows student submissions', status: 'working', note: 'the Submissions panel in Manage Students now correctly displays the DTPs and recommendations a student submitted for each concluded session' },
+      { feature: 'Debrief feedback flow reordered', status: 'working', note: 'the optional comment field now appears before the Yes / No buttons so it\'s clear the comment can be filled in before submitting' },
+    ],
+  },
+  {
     date: 'May 15, 2026',
     items: [
       { feature: 'Interview Practice mode for patients', status: 'working', note: 'patients with no DTPs & Recommendations assigned are automatically marked as "Interview Practice" — no extra setup needed' },

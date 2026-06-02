@@ -115,6 +115,19 @@ export class DBFlowStack extends Stack {
             allowAllOutbound: true
         });
 
+        // Allow this Lambda to reach RDS directly (needed for migrations and user creation, which require admin access and cannot go through the proxy).
+        // Import the DB security group by ID to avoid a circular dependency — using allowFrom() would add the rule to DatabaseStack, creating a cycle.
+        const importedDbSg = ec2.SecurityGroup.fromSecurityGroupId(
+            this,
+            `${id}-imported-db-sg`,
+            db.dbInstance.connections.securityGroups[0].securityGroupId
+        );
+        importedDbSg.addIngressRule(
+            lambdaSecurityGroup,
+            ec2.Port.tcp(5432),
+            "Allow DBFlow migration Lambda to access RDS directly"
+        );
+
         // Add the security group to Lambda
         initializerLambda.addToRolePolicy(
             new iam.PolicyStatement({
