@@ -767,7 +767,7 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
         method: 'POST',
         body: {
           persona_prompt: patientData.patient_prompt || '',
-          voice_persona_prompt: patientData.voice_persona_prompt || null,
+          ...(patientData.voice_persona_prompt ? { voice_persona_prompt: patientData.voice_persona_prompt } : {}),
         },
       }
     );
@@ -1026,7 +1026,8 @@ async function deletePatientPhoto(simulationGroupId: string, patientId: string):
 async function fetchProfilePictures(simulationGroupId: string): Promise<Record<string, string>> {
   try {
     const data = await apiClient.request<Record<string, string>>(
-      `instructor/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+      { method: 'POST' }
     );
     return data;
   } catch (error) {

@@ -29,6 +29,40 @@ x-amazon-apigateway-gateway-responses:
     responseTemplates:
       application/json: |
         {"message":$context.error.messageString}
+  BAD_REQUEST_PARAMETERS:
+    statusCode: "400"
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+    responseTemplates:
+      application/json: |
+        {"message":$context.error.messageString}
+  BAD_REQUEST_BODY:
+    statusCode: "400"
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+    responseTemplates:
+      application/json: |
+        {"message":$context.error.messageString}
+  DEFAULT_4XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+    responseTemplates:
+      application/json: |
+        {"message":$context.error.messageString}
+  DEFAULT_5XX:
+    responseParameters:
+      gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Amz-Date,X-Api-Key,X-Amz-Security-Token'"
+      gatewayresponse.header.Access-Control-Allow-Methods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
+    responseTemplates:
+      application/json: |
+        {"message":$context.error.messageString}
 x-common-options: &commonOptions
   options:
     summary: CORS support
@@ -1802,9 +1836,9 @@ paths:
           schema:
             type: string
         - in: query
-          name: patient_id
+          name: persona_id
           required: true
-          description: ID of the patient
+          description: ID of the patient (persona)
           schema:
             type: string
         - in: query
@@ -2770,9 +2804,9 @@ paths:
           schema:
             type: string
         - in: query
-          name: patient_id
+          name: persona_id
           required: true
-          description: ID of the patient
+          description: ID of the patient (persona)
           schema:
             type: string
         - in: query
@@ -4488,9 +4522,9 @@ paths:
       operationId: instructor_delete_patient_DELETE
       parameters:
         - in: query
-          name: patient_id
+          name: persona_id
           required: true
-          description: The ID of the patient to delete
+          description: The ID of the patient (persona) to delete
           schema:
             type: string
       responses:
