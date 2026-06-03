@@ -296,7 +296,7 @@ def handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                "body": json.dumps({"error": f"Debrief generation failed: {str(e)}"}),
+                "body": json.dumps({"error": "Internal server error"}),
             }
 
     if mode == "match":
@@ -367,7 +367,7 @@ def handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                "body": json.dumps({"error": f"Matching failed: {str(e)}"}),
+                "body": json.dumps({"error": "Internal server error"}),
             }
 
     if mode == "test_debrief":
@@ -420,7 +420,7 @@ def handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                "body": json.dumps({"error": f"Test debrief generation failed: {str(e)}"}),
+                "body": json.dumps({"error": "Internal server error"}),
             }
 
     if mode == "test_system_prompt":
@@ -530,7 +530,7 @@ def handler(event, context):
                     "Access-Control-Allow-Origin": "*",
                     "Access-Control-Allow-Methods": "*",
                 },
-                "body": json.dumps({"error": f"Test system prompt chat failed: {str(e)}"}),
+                "body": json.dumps({"error": "Internal server error"}),
             }
 
     # =========================================================================
@@ -740,7 +740,7 @@ def handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps(f'Error getting response: {str(e)}')
+            'body': json.dumps("Internal server error")
         }
 
 

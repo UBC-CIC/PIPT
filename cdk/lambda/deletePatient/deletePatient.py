@@ -183,5 +183,5 @@ def lambda_handler(event, context):
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "*",
             },
-            'body': json.dumps(f"Internal server error: {str(e)}")
+            'body': json.dumps("Internal server error")
         }
