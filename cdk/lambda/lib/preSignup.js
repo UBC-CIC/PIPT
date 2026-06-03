@@ -1,17 +1,24 @@
 const { SSMClient, GetParameterCommand } = require("@aws-sdk/client-ssm");
 
+const ssmClient = new SSMClient();
+let cachedAllowedDomains = null;
+
+async function getAllowedDomains() {
+  if (!cachedAllowedDomains) {
+    const parameterName = process.env.ALLOWED_EMAIL_DOMAINS;
+    const data = await ssmClient.send(
+      new GetParameterCommand({ Name: parameterName, WithDecryption: true })
+    );
+    cachedAllowedDomains = data.Parameter.Value.split(",");
+  }
+  return cachedAllowedDomains;
+}
+
 exports.handler = async (event, context) => {
   const requestId = context?.awsRequestId || "unknown";
-  const ssmClient = new SSMClient();
-  const parameterName = process.env.ALLOWED_EMAIL_DOMAINS;
 
   try {
-    const getParameterCommand = new GetParameterCommand({
-      Name: parameterName,
-      WithDecryption: true,
-    });
-    const data = await ssmClient.send(getParameterCommand);
-    const allowedDomains = data.Parameter.Value.split(",");
+    const allowedDomains = await getAllowedDomains();
     const email = event.request.userAttributes.email;
     const emailDomain = email.split("@")[1];
 
