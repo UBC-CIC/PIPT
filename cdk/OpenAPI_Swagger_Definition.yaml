@@ -3595,33 +3595,39 @@ paths:
           schema:
             type: string
         - in: query
-          name: patient_name
+          name: persona_name
           required: true
           description: Name of the new patient
           schema:
             type: string
         - in: query
-          name: patient_age
+          name: persona_age
           required: true
           description: Age of the new patient
           schema:
-            type: integer
+            type: string
         - in: query
-          name: patient_gender
+          name: persona_gender
           required: true
           description: Gender of the new patient
           schema:
             type: string
         - in: query
-          name: patient_number
+          name: persona_number
           required: true
           description: Number of the new patient
           schema:
-            type: integer
+            type: string
         - in: query
           name: instructor_email
           required: true
           description: Email of the instructor creating the patient
+          schema:
+            type: string
+        - in: query
+          name: voice_id
+          required: false
+          description: Voice ID for TTS
           schema:
             type: string
       requestBody:
@@ -3631,9 +3637,15 @@ paths:
             schema:
               type: object
               properties:
-                patient_prompt:
+                persona_prompt:
                   type: string
-                  description: Patient prompt for the patient
+                  description: System prompt for the patient persona
+                voice_persona_prompt:
+                  nullable: true
+                  type: string
+                  description: Optional voice-specific prompt for the persona
+              required:
+                - persona_prompt
       responses:
         "200":
           description: Patient created successfully
@@ -3685,7 +3697,7 @@ paths:
       operationId: instructor_edit_patient_PUT
       parameters:
         - in: query
-          name: patient_id
+          name: persona_id
           required: true
           description: ID of the patient to be updated
           schema:
@@ -3709,25 +3721,31 @@ paths:
             schema:
               type: object
               properties:
-                patient_name:
+                persona_name:
                   type: string
-                patient_age:
+                persona_age:
                   type: integer
-                patient_gender:
+                persona_gender:
                   type: string
-                patient_prompt:
+                persona_prompt:
                   type: string
                 voice_id:
+                  nullable: true
                   type: string
                   description: Voice ID for TTS (e.g. tiffany, matthew, amy, olivia, kiara, arjun)
                 voice_enabled:
+                  nullable: true
                   type: boolean
                   description: Whether voice mode is enabled for this patient
+                voice_persona_prompt:
+                  nullable: true
+                  type: string
+                  description: Optional voice-specific prompt for the persona
               required:
-                - patient_name
-                - patient_age
-                - patient_gender
-                - patient_prompt
+                - persona_name
+                - persona_age
+                - persona_gender
+                - persona_prompt
       responses:
         "200":
           description: Patient updated successfully

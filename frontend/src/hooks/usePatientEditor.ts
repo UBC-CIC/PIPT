@@ -52,7 +52,7 @@ export interface UsePatientEditorReturn {
   startEditing: (patientId: string) => void;
   startCreating: () => void;
   stopEditing: () => void;
-  savePatient: () => Promise<void>;
+  savePatient: () => Promise<boolean>;
   autoSaveNewPatient: () => Promise<string | null>;
   handleEditPatientTabSwitch: (tab: 'info' | 'questions' | 'materials' | 'dtps' | 'recommendations') => Promise<void>;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
@@ -215,7 +215,7 @@ export function usePatientEditor({
     setEditPatientAge('');
     setEditPatientGender('');
     setEditPatientPrompt(instructorService.getDefaultPatientPrompt());
-    setEditPatientVoiceId('');
+    setEditPatientVoiceId('tiffany');
     setEditVoicePersonaPrompt('');
     setEditPatientTab('info');
     setCaseMaterials([]);
@@ -279,10 +279,16 @@ export function usePatientEditor({
   };
 
   /**
-   * Save patient changes (create or update)
+   * Save patient changes (create or update).
+   * Returns true if saved, false if validation blocked it.
    */
-  const savePatient = async () => {
-    if (!selectedPatientForEdit || !groupId) return;
+  const savePatient = async (): Promise<boolean> => {
+    if (!selectedPatientForEdit || !groupId) return false;
+
+    if (!editPatientPrompt.trim()) {
+      showNotification({ message: 'Please fill in the Text Prompt before saving.', type: 'warning' });
+      return false;
+    }
 
     if (selectedPatientForEdit === 'new') {
       const newPersonaId = await instructorService.createPatient(groupId, {
@@ -308,6 +314,7 @@ export function usePatientEditor({
 
     // Reload patients list
     setManageablePatients(await instructorService.getManageablePatients(groupId));
+    return true;
   };
 
   /**

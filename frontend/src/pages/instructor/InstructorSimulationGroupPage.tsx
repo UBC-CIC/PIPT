@@ -454,7 +454,18 @@ function InstructorSimulationGroupPage() {
     setActiveSection('editPatient');
   };
   const handleBackFromEditPatient = () => { patientEditor.stopEditing(); setActiveSection('patients'); };
-  const handleSavePatientChanges = async () => { await patientEditor.savePatient(); handleBackFromEditPatient(); };
+  const handleSavePatientChanges = async () => {
+    try {
+      const saved = await patientEditor.savePatient();
+      if (saved) {
+        showNotification({ message: 'Patient saved successfully.', type: 'success' });
+        handleBackFromEditPatient();
+      }
+    } catch (error) {
+      console.error('Failed to save patient changes:', error);
+      showNotification({ message: 'Failed to save changes. Please try again.', type: 'error' });
+    }
+  };
   const handleCreateNewPatient = () => { patientEditor.startCreating(); setActiveSection('editPatient'); };
   const handleTogglePatientVoice = async (patientId: string, enabled: boolean) => {
     groupData.setManageablePatients(prev =>

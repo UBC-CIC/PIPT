@@ -532,22 +532,22 @@ function PromptGuidanceToggle({ mode }: { mode: 'text' | 'voice' }) {
 
   const textGuidance = (
     <ul className="list-disc pl-4 space-y-1 text-xs" style={{ color: UI_COLORS.text.body }}>
-      <li><strong>Identity & presentation</strong> — name, age, emotional tone, how they come across</li>
-      <li><strong>Information reveal rules</strong> — what they volunteer vs. withhold until asked</li>
-      <li><strong>Behavioral rules (conditionals OK)</strong> — "Only mention X if asked about Y"</li>
-      <li><strong>Their own language</strong> — how they refer to things in lay terms</li>
-      <li><strong>Relationship & trust level</strong> — how they relate to the person they're speaking with</li>
+      <li><strong>Identity & presentation</strong>: name, age, emotional tone, how they come across</li>
+      <li><strong>Information reveal rules</strong>: what they volunteer vs. withhold until asked</li>
+      <li><strong>Behavioral rules (conditionals OK)</strong>: "Only mention X if asked about Y"</li>
+      <li><strong>Their own language</strong>: how they refer to things in lay terms</li>
+      <li><strong>Relationship & trust level</strong>: how they relate to the person they're speaking with</li>
       <li className="pt-1" style={{ color: UI_COLORS.text.muted }}><em>Don't include:</em> factual details already in uploaded documents, or speech-style instructions (irrelevant for text)</li>
     </ul>
   );
 
   const voiceGuidance = (
     <ul className="list-disc pl-4 space-y-1 text-xs" style={{ color: UI_COLORS.text.body }}>
-      <li><strong>Speech pace & filler words</strong> — "speaks slowly", "uses 'um' and 'you know'"</li>
-      <li><strong>Physical sound cues</strong> — "slightly breathless", "voice cracks when emotional"</li>
-      <li><strong>Emotional tone as heard</strong> — "sounds anxious", "flat and tired", "defensive"</li>
-      <li><strong>Lay terminology</strong> — avoid jargon the voice AI may mispronounce</li>
-      <li><strong>Simple behavioral rules (1 sentence each)</strong> — "Don't mention X unless asked"</li>
+      <li><strong>Speech pace & filler words</strong>: "speaks slowly", "uses 'um' and 'you know'"</li>
+      <li><strong>Physical sound cues</strong>: "slightly breathless", "voice cracks when emotional"</li>
+      <li><strong>Emotional tone as heard</strong>: "sounds anxious", "flat and tired", "defensive"</li>
+      <li><strong>Lay terminology</strong>: avoid jargon the voice AI may mispronounce</li>
+      <li><strong>Simple behavioral rules (1 sentence each)</strong>: "Don't mention X unless asked"</li>
       <li className="pt-1" style={{ color: UI_COLORS.text.muted }}><em>Don't include:</em> bullet points or headers (plain prose only), complex conditional logic, jargon, or long backstory</li>
     </ul>
   );

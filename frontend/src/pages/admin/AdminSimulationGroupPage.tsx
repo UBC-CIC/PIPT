@@ -381,11 +381,14 @@ function AdminSimulationGroupPage() {
   const handleBackFromEditPatient = () => { patientEditor.stopEditing(); setActiveSection('patients'); };
   const handleSavePatientChanges = async () => {
     try {
-      await patientEditor.savePatient();
-      alert('Changes saved successfully.');
+      const saved = await patientEditor.savePatient();
+      if (saved) {
+        showNotification({ message: 'Patient saved successfully.', type: 'success' });
+        handleBackFromEditPatient();
+      }
     } catch (error) {
       console.error('Failed to save patient changes:', error);
-      alert('Failed to save changes. Please try again.');
+      showNotification({ message: 'Failed to save changes. Please try again.', type: 'error' });
     }
   };
   const handleCreateNewPatient = () => { patientEditor.startCreating(); setActiveSection('editPatient'); };
