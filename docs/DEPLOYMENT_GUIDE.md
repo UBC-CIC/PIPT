@@ -1,7 +1,7 @@
 # Deployment Guide
 
 > **Type:** Procedural Guide
-> **Last updated:** 2026-05-30
+> **Last updated:** 2026-06-04
 
 ## Table of Contents
 
@@ -44,14 +44,15 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 - **AWS CDK CLI** installed globally: `npm install -g aws-cdk`
 - **Git** installed
 - **GitHub account** with a fork of the GenRx repository
+- **OpenSSL** for generating the RSA key pair used in CloudFront signed URLs (pre-installed on macOS/Linux; on Windows, available via [Git Bash](https://gitforwindows.org/) or [Win32 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html))
 
-> **Note:** Docker is **not** required locally. All Docker images are built in the cloud by CodePipeline/CodeBuild. Python is also not required locally — the Python Lambda functions and voice agent run in containers built remotely.
+> **Note:** Docker is **not** required locally. All Docker images are built in the cloud by CodePipeline/CodeBuild. Python is also not required locally since the Python Lambda functions and voice agent run in containers built remotely.
 
 ### Optional
 
-- **Docker** — Only needed if you want to manually build and push container images locally (not required for normal deployment).
-- **Custom domain** — If you want to use a custom domain for the Amplify-hosted frontend, configure it in the AWS Amplify console after deployment.
-- **Amazon SES** — For production email sending (verification emails). By default, Cognito uses its built-in email service (limited to 50 emails/day).
+- **Docker**: only needed if you want to manually build and push container images locally (not required for normal deployment).
+- **Custom domain**: if you want to use a custom domain for the Amplify-hosted frontend, configure it in the AWS Amplify console after deployment.
+- **Amazon SES**: for production email sending (verification emails). By default, Cognito uses its built-in email service (limited to 50 emails/day).
 
 ---
 
@@ -61,14 +62,14 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 
 The CI/CD pipeline and Amplify app use a GitHub PAT to pull source code.
 
-1. Go to [GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic)](https://github.com/settings/tokens).
+1. Go to [GitHub > Settings > Developer settings > Personal access tokens > Tokens (classic)](https://github.com/settings/tokens).
 2. Click **Generate new token (classic)**.
 3. Select scopes: `repo` (full control of private repositories) and `admin:repo_hook` (for webhooks).
-4. Copy the generated token — you will need it in Step 4.
+4. Copy the generated token. You will need it in Step 4.
 
 ### Step 2: Verify Bedrock Model Availability
 
-GenRx uses several Amazon Bedrock models. These models are available by default — no manual access request is needed. However, verify they are accessible in the regions used by the application.
+GenRx uses several Amazon Bedrock models. These models are available by default (no manual access request is needed). However, verify they are accessible in the regions used by the application.
 
 The application deploys to **`ca-central-1`** but makes cross-region calls to `us-east-1` for certain models that are only available there:
 
@@ -76,8 +77,7 @@ The application deploys to **`ca-central-1`** but makes cross-region calls to `u
 |-------|--------|---------|
 | **Anthropic Claude Sonnet 4.6** (`us.anthropic.claude-sonnet-4-6`) | `us-east-1` | Primary LLM for text generation |
 | **Cohere Embed v4** (`cohere.embed-v4:0`) | `us-east-1` | Document and query embeddings |
-| **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) | `us-east-1` | Voice interactions |
-| **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) | `us-east-1` | Lightweight inference (diagnosis evaluation) |
+| **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) | `us-east-1` | Voice interactions (via AgentCore) |
 
 To verify access, open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/) and confirm these models appear under **Model access** as available. If any model shows as unavailable, enable it there.
 
@@ -97,7 +97,7 @@ Before deploying, create the following secrets and parameters in AWS. These are 
 
 #### Secret 1: GENRXSecrets
 
-This secret contains the admin username for the RDS PostgreSQL instance. You choose this value — it will be the master username for your database. The database stack reads `DB_Username` from this secret at deploy time.
+This secret contains the admin username for the RDS PostgreSQL instance. You choose this value; it becomes the master username for your database. The database stack reads `DB_Username` from this secret at deploy time.
 
 <details>
 <summary>macOS / Linux</summary>
@@ -263,13 +263,174 @@ aws ssm put-parameter ^
 
 </details>
 
-> **Example:** `--value "gmail.com,ubc.ca"` — only users with emails from these domains will be able to register. Add additional domains as needed, separated by commas.
+> **Example:** `--value "gmail.com,ubc.ca"` allows only users with emails from these domains to register. Add additional domains as needed, separated by commas.
 
-#### Parameter 3 (Post-Deployment): /{StackPrefix}/voiceAgentArn
+#### Parameter 3: /{StackPrefix}/voiceAgentArn (Placeholder Required)
 
-> **Skip this for now.** This parameter is created after the initial deployment as part of the voice agent setup (see [Deploy the Voice Agent](#deploy-the-voice-agent-optional)). It is listed here for reference only.
+The EcsSocket stack **unconditionally** reads this SSM parameter at deploy time to configure the voice agent WebSocket connection. Even though you won't have a real voice agent ARN until post-deployment, a placeholder value **must** exist before the first `cdk deploy` or CloudFormation will fail during the EcsSocket stack creation.
 
-The EcsSocket stack reads this parameter to connect to the Bedrock AgentCore voice agent. You will create it after deploying the voice agent.
+Create the placeholder now. You will update it with the real ARN after deploying the voice agent (see [Deploy the Voice Agent](#deploy-the-voice-agent-optional)).
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws ssm put-parameter \
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" \
+  --value "placeholder" \
+  --type String \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+aws ssm put-parameter `
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" `
+  --value "placeholder" `
+  --type String `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws ssm put-parameter ^
+  --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" ^
+  --value "placeholder" ^
+  --type String ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+> **Example:** If your `StackPrefix` is `GenRx`, the parameter name is `/GenRx/voiceAgentArn`. Voice features will not function with the placeholder value (they require the real ARN set up in post-deployment), but the placeholder prevents the deployment from failing.
+
+#### Secret 3: GenRx/CloudFrontSigningKey
+
+The API service stack uses CloudFront signed URLs to deliver patient documents securely. This requires an RSA key pair: the private key signs download URLs, and the public key lets CloudFront verify them. Without these, the `{StackPrefix}-Api` stack will fail to deploy because it reads `/GenRx/CloudFrontPublicKey` from SSM and references `GenRx/CloudFrontSigningKey` from Secrets Manager at synthesis time.
+
+**Why this is required:** In `cdk/lib/api-service-stack.ts`, the stack calls `ssm.StringParameter.valueForStringParameter(this, "/GenRx/CloudFrontPublicKey")` to create a CloudFront `PublicKey` resource, and Lambda functions reference the `GenRx/CloudFrontSigningKey` secret at runtime to generate signed URLs. If either is missing, deployment fails.
+
+**Step 1: Generate an RSA 2048-bit key pair.**
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+openssl genrsa -out private_key.pem 2048
+openssl rsa -pubout -in private_key.pem -out public_key.pem
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+openssl genrsa -out private_key.pem 2048
+openssl rsa -pubout -in private_key.pem -out public_key.pem
+```
+
+> **Note:** If `openssl` is not available, install it via [Git for Windows](https://gitforwindows.org/) (included in Git Bash) or [Win32/Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html).
+
+</details>
+
+**Step 2: Store the private key in Secrets Manager.**
+
+This is the signing key that Lambda functions use at runtime to generate time-limited signed URLs for document downloads.
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws secretsmanager create-secret \
+  --name "GenRx/CloudFrontSigningKey" \
+  --secret-string file://private_key.pem \
+  --description "RSA private key for signing CloudFront document delivery URLs" \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+$privateKey = Get-Content -Raw private_key.pem
+aws secretsmanager create-secret `
+  --name "GenRx/CloudFrontSigningKey" `
+  --secret-string $privateKey `
+  --description "RSA private key for signing CloudFront document delivery URLs" `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws secretsmanager create-secret ^
+  --name "GenRx/CloudFrontSigningKey" ^
+  --secret-string file://private_key.pem ^
+  --description "RSA private key for signing CloudFront document delivery URLs" ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+**Step 3: Store the public key in SSM.**
+
+CDK reads this at synthesis time to create the CloudFront `PublicKey` resource that verifies signed URLs.
+
+<details>
+<summary>macOS / Linux</summary>
+
+```bash
+aws ssm put-parameter \
+  --name "/GenRx/CloudFrontPublicKey" \
+  --value file://public_key.pem \
+  --type String \
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (PowerShell)</summary>
+
+```powershell
+$publicKey = Get-Content -Raw public_key.pem
+aws ssm put-parameter `
+  --name "/GenRx/CloudFrontPublicKey" `
+  --value $publicKey `
+  --type String `
+  --region <YOUR-REGION>
+```
+
+</details>
+
+<details>
+<summary>Windows (CMD)</summary>
+
+```cmd
+aws ssm put-parameter ^
+  --name "/GenRx/CloudFrontPublicKey" ^
+  --value file://public_key.pem ^
+  --type String ^
+  --region <YOUR-REGION>
+```
+
+</details>
+
+> **Security note:** After uploading, delete the local key files (`rm private_key.pem public_key.pem`). The private key is sensitive: anyone with access to it can generate signed URLs that bypass CloudFront access controls.
 
 #### Summary of Required Secrets and Parameters
 
@@ -277,17 +438,27 @@ The EcsSocket stack reads this parameter to connect to the Bedrock AgentCore voi
 |------|------|-----------|---------|
 | `GENRXSecrets` | Secrets Manager | `{"DB_Username": "..."}` | Database stack (RDS admin credentials) |
 | `github-personal-access-token` | Secrets Manager | `{"my-github-token": "..."}` | CI/CD stack, Amplify stack |
+| `GenRx/CloudFrontSigningKey` | Secrets Manager | RSA private key (PEM) | Api stack (Lambda signed URL generation) |
 | `genrx-owner-name` | SSM Parameter (String) | GitHub username | CI/CD stack, Amplify stack |
 | `/GenRx/AllowedEmailDomains` | SSM Parameter (SecureString) | Comma-separated email domains | Cognito pre-signup Lambda |
-| `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | Voice agent ARN (created post-deployment) | EcsSocket stack |
+| `/GenRx/CloudFrontPublicKey` | SSM Parameter (String) | RSA public key (PEM) | Api stack (CloudFront PublicKey resource) |
+| `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | `placeholder` (updated post-deployment) | EcsSocket stack |
 
 ### Step 5: Bootstrap CDK
 
-If this is your first CDK deployment in the target account/region, bootstrap the environment:
+CDK must be bootstrapped in **two regions**: your deployment region and `us-east-1`.
+
+**Why both regions?** The `CloudFrontWafStack` is deployed to `us-east-1` because AWS requires CloudFront-scoped WAF Web ACLs to reside in `us-east-1` regardless of where your application runs. The CDK app uses `crossRegionReferences: true` to pass the WAF ARN from the `us-east-1` stack to the Api and EcsSocket stacks in your deployment region. This cross-region reference mechanism relies on CDK's bootstrap resources (S3 bucket, SSM parameters, IAM roles) existing in both regions. If `us-east-1` is not bootstrapped, the `{StackPrefix}-CloudFrontWaf` stack deployment will fail with a "bootstrap stack not found" error.
 
 ```bash
+# Bootstrap your primary deployment region
 cdk bootstrap aws://<YOUR-ACCOUNT-ID>/<YOUR-REGION> --profile <YOUR-AWS-PROFILE>
+
+# Bootstrap us-east-1 (required for the CloudFront WAF stack)
+cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 --profile <YOUR-AWS-PROFILE>
 ```
+
+> **Note:** If your deployment region IS `us-east-1`, you only need to run the command once. The second bootstrap is only needed when deploying to a different region (e.g., `ca-central-1`).
 
 ### Step 6: Deploy Stacks
 
@@ -341,14 +512,15 @@ cdk deploy --all \
 
 The CDK app creates the following stacks in dependency order:
 
-1. **`{StackPrefix}-CICD`** — ECR repositories, CodeBuild projects, CodePipeline
-2. **`{StackPrefix}-VpcStack`** — VPC, subnets, NAT gateway, VPC endpoints
-3. **`{StackPrefix}-Database`** — RDS PostgreSQL instance, RDS Proxy, secrets
-4. **`{StackPrefix}-Api`** — API Gateway, Lambda functions, Cognito, AppSync, S3
-5. **`{StackPrefix}-TurnServer`** — TURN server for WebRTC
-6. **`{StackPrefix}-EcsSocket`** — ECS Fargate service for Socket.IO
-7. **`{StackPrefix}-DBFlow`** — Database migration runner (triggers on deploy)
-8. **`{StackPrefix}-Amplify`** — Amplify hosting for the React frontend
+1. **`{StackPrefix}-CICD`** : ECR repositories, CodeBuild projects, CodePipeline
+2. **`{StackPrefix}-VpcStack`** : VPC, subnets, NAT gateway, VPC endpoints
+3. **`{StackPrefix}-Database`** : RDS PostgreSQL instance, RDS Proxy, secrets
+4. **`{StackPrefix}-CloudFrontWaf`** : WAF Web ACL for CloudFront (deployed to `us-east-1`)
+5. **`{StackPrefix}-Api`** : API Gateway, Lambda functions, Cognito, AppSync, S3, CloudFront
+6. **`{StackPrefix}-TurnServer`** : TURN server for WebRTC
+7. **`{StackPrefix}-EcsSocket`** : ECS Fargate service for Socket.IO
+8. **`{StackPrefix}-DBFlow`** : Database migration runner (triggers on deploy)
+9. **`{StackPrefix}-Amplify`** : Amplify hosting for the React frontend
 
 > **Note:** `--all` handles the dependency order automatically. Deployment takes approximately 30–45 minutes on first run.
 
@@ -380,6 +552,8 @@ The CI/CD pipeline builds and pushes all Docker images (text generation, data in
 - **Clicking "Release change"** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline
 
 Wait for the pipeline to complete successfully. Once done, the Lambda functions and ECS services will have images to run.
+
+> **Expected behavior:** Until the pipeline finishes pushing the `socketServer` image, the ECS socket service will show `STOPPED` tasks with `CannotPullContainerError`. This is normal on first deployment. The service retries automatically and will stabilize once the image is available in ECR (typically 10–15 minutes after the pipeline starts). Do not manually intervene or delete the service.
 
 ### Enable DynamoDB TTL
 
@@ -470,7 +644,7 @@ Once complete, you will have a voice agent runtime ARN.
 
 #### Step D: Store the ARN and Redeploy
 
-Store the ARN in SSM so the EcsSocket stack can connect to it:
+Store the ARN in SSM so the EcsSocket stack can connect to it (this overwrites the placeholder created in Step 4):
 
 <details>
 <summary>macOS / Linux</summary>
@@ -480,6 +654,7 @@ aws ssm put-parameter \
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" \
   --value "<YOUR-VOICE-AGENT-ARN>" \
   --type String \
+  --overwrite \
   --region <YOUR-REGION>
 ```
 
@@ -493,6 +668,7 @@ aws ssm put-parameter `
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" `
   --value "<YOUR-VOICE-AGENT-ARN>" `
   --type String `
+  --overwrite `
   --region <YOUR-REGION>
 ```
 
@@ -506,6 +682,7 @@ aws ssm put-parameter ^
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" ^
   --value "<YOUR-VOICE-AGENT-ARN>" ^
   --type String ^
+  --overwrite ^
   --region <YOUR-REGION>
 ```
 
@@ -555,7 +732,7 @@ cdk destroy --all \
   --profile <YOUR-AWS-PROFILE>
 ```
 
-> **Warning:** The RDS instance has `deletionProtection: true`. You must disable deletion protection in the RDS console before the database stack can be deleted. The S3 bucket also has `removalPolicy: RETAIN` — empty and delete it manually after stack deletion.
+> **Warning:** The RDS instance has `deletionProtection: true`. You must disable deletion protection in the RDS console before the database stack can be deleted. The S3 bucket also has `removalPolicy: RETAIN`, so you need to empty and delete it manually after stack deletion.
 
 To delete individual stacks, destroy them in reverse dependency order:
 
@@ -565,6 +742,7 @@ cdk destroy GenRx-DBFlow -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranc
 cdk destroy GenRx-EcsSocket -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy GenRx-TurnServer -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy GenRx-Api -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-CloudFrontWaf -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy GenRx-Database -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy GenRx-VpcStack -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
@@ -628,20 +806,26 @@ aws secretsmanager update-secret \
 
 ### Lambda functions return errors after first deploy
 
-**Cause:** ECR repositories are empty — the Docker Lambda functions have no image to run.
+**Cause:** ECR repositories are empty. The Docker Lambda functions have no image to run.
 
 **Fix:** Push initial images by triggering the CI/CD pipeline (see [Push Initial Docker Images](#push-initial-docker-images)) or push a commit to the tracked branch.
 
+### ECS socket service shows STOPPED tasks after first deploy
+
+**Cause:** The ECS service starts immediately after the stack deploys, but the ECR repository for `socketServer` is empty until the CI/CD pipeline finishes building and pushing the image. The service cannot pull a container image that doesn't exist yet, so tasks fail with `CannotPullContainerError` and restart repeatedly.
+
+**Fix:** This resolves itself. Once the CI/CD pipeline pushes the `socketServer` image to ECR, the ECS service will pull it on the next retry and stabilize. No manual action is needed. If tasks are still failing 20+ minutes after the pipeline completes successfully, check that the image tag in ECR matches what the task definition expects (`latest`).
+
 ### Voice features not working
 
-**Cause:** Nova Sonic models are only available in `us-east-1`. If your deployment region is different, the voice service makes cross-region calls. Additionally, the voice agent must be deployed to Bedrock AgentCore and its ARN configured.
+**Cause:** Nova Sonic models are only available in `us-east-1`. If your deployment region is different, the voice service makes cross-region calls. The voice agent must also be deployed to Bedrock AgentCore and its ARN configured.
 
 **Fix:**
 
 1. Ensure Bedrock model access is enabled in `us-east-1` for Nova Sonic models.
 2. Verify the ECS task role has `bedrock:InvokeModelWithBidirectionalStream` permission in `us-east-1`.
 3. Confirm the voice agent is deployed to Bedrock AgentCore (see [Deploy the Voice Agent](#deploy-the-voice-agent-optional)).
-4. Verify the `voiceAgentArn` is set — either via the `-c` context flag or the `/{StackPrefix}/voiceAgentArn` SSM parameter.
+4. Verify the `voiceAgentArn` is set, either via the `-c` context flag or the `/{StackPrefix}/voiceAgentArn` SSM parameter.
 
 ### Text generation or embeddings not working
 
@@ -658,7 +842,7 @@ aws secretsmanager update-secret \
 
 ## Cross-References
 
-- [Security Overview](./SECURITY_OVERVIEW.md) — OWASP assessment and security remediation roadmap
-- [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) — Console-side voice agent configuration
-- [Database Migrations](./DATABASE_MIGRATIONS.md) — Creating and running schema changes
-- [Modification Guide](./MODIFICATION_GUIDE.md) — Customizing colors, API, LLM, and frontend
+- [Security Overview](./SECURITY_OVERVIEW.md) : OWASP assessment and security remediation roadmap
+- [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) : Console-side voice agent configuration
+- [Database Migrations](./DATABASE_MIGRATIONS.md) : Creating and running schema changes
+- [Modification Guide](./MODIFICATION_GUIDE.md) : Customizing colors, API, LLM, and frontend
