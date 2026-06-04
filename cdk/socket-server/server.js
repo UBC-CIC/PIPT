@@ -103,7 +103,7 @@ const corsOriginConfig = allowedOrigins.includes("*")
       if (!origin) return callback(null, true); // allow non-browser requests
       const isAllowed = allowedOrigins.some((pattern) => {
         if (pattern.includes("*")) {
-          const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+");
+          const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".+");
           return new RegExp("^" + escaped + "$").test(origin);
         }
         return pattern === origin;

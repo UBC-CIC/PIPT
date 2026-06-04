@@ -80,6 +80,7 @@ export class ApiServiceStack extends cdk.Stack {
     this.layerList = {};
 
     const allowedOrigins = [
+      "https://main.d3sunerinpg5un.amplifyapp.com",
       "https://*.amplifyapp.com",
       "http://localhost:5173",
       "http://localhost:5174",
@@ -1636,6 +1637,25 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
+    // CORS response headers policy — CloudFront injects the correct
+    // Access-Control-Allow-Origin at the edge using the same origin list.
+    const docsCorsHeadersPolicy = new cloudfront.ResponseHeadersPolicy(
+      this,
+      `${id}-DocsCorsHeadersPolicy`,
+      {
+        responseHeadersPolicyName: `${id}-DocsCorsHeadersPolicy`,
+        comment: "CORS headers for GenRx document/profile picture delivery",
+        corsBehavior: {
+          accessControlAllowCredentials: false,
+          accessControlAllowHeaders: ["*"],
+          accessControlAllowMethods: ["GET", "HEAD"],
+          accessControlAllowOrigins: allowedOrigins,
+          accessControlMaxAge: cdk.Duration.seconds(3600),
+          originOverride: true,
+        },
+      }
+    );
+
     const docsDistribution = new cloudfront.Distribution(
       this,
       `${id}-DocsDistribution`,
@@ -1647,6 +1667,7 @@ export class ApiServiceStack extends cdk.Stack {
           allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
           cachePolicy: docsCachePolicy,
           trustedKeyGroups: [cfKeyGroup],
+          responseHeadersPolicy: docsCorsHeadersPolicy,
         },
         ...(cloudFrontWafArn && { webAclId: cloudFrontWafArn }),
       }
