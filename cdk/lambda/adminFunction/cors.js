@@ -30,8 +30,8 @@ function getCorsOrigin(event) {
 
   const isAllowed = ALLOWED_ORIGINS.some((pattern) => {
     if (pattern.includes("*")) {
-      // Escape regex special chars except *, then replace * with [^.]+ for subdomain matching
-      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+");
+      // Escape regex special chars except *, then replace * with .+ for subdomain matching
+      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".+");
       return new RegExp("^" + escaped + "$").test(origin);
     }
     return pattern === origin;

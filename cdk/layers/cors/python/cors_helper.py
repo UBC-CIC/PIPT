@@ -31,7 +31,7 @@ def _resolve_origin(origin):
         return _ALLOWED[0]
     for p in _ALLOWED:
         if "*" in p:
-            regex = "^" + re.escape(p).replace(r"\*", "[^.]+") + "$"
+            regex = "^" + re.escape(p).replace(r"\*", ".+") + "$"
             if re.match(regex, origin):
                 return origin
         elif p == origin:
