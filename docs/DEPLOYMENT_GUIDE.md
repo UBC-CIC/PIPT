@@ -66,19 +66,22 @@ The CI/CD pipeline and Amplify app use a GitHub PAT to pull source code.
 3. Select scopes: `repo` (full control of private repositories) and `admin:repo_hook` (for webhooks).
 4. Copy the generated token — you will need it in Step 4.
 
-### Step 2: Enable Bedrock Models
+### Step 2: Verify Bedrock Model Availability
 
-GenRx uses several Amazon Bedrock models. You must request access before deployment.
+GenRx uses several Amazon Bedrock models. These models are available by default — no manual access request is needed. However, verify they are accessible in the regions used by the application.
 
-1. Open the [Amazon Bedrock console](https://console.aws.amazon.com/bedrock/).
-2. Navigate to **Model access** in the left sidebar.
-3. Request access to the following models **in `us-east-1`**:
-   - **Anthropic Claude Sonnet 4.6** (`us.anthropic.claude-sonnet-4-6`) — primary LLM for text generation (cross-region inference profile)
-   - **Cohere Embed v4** (`cohere.embed-v4:0`) — document and query embeddings
-   - **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) — voice interactions
-   - **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) — lightweight inference tasks (diagnosis evaluation)
+The application deploys to **`ca-central-1`** but makes cross-region calls to `us-east-1` for certain models that are only available there:
 
-> **Important:** All models above are called in `us-east-1` regardless of your deployment region. The application hardcodes `us-east-1` for LLM calls (Claude Sonnet 4.6), embedding calls (Cohere Embed v4), and voice calls (Nova Sonic). You must enable model access in `us-east-1` even if you deploy the CDK stacks to a different region.
+| Model | Region | Purpose |
+|-------|--------|---------|
+| **Anthropic Claude Sonnet 4.6** (`us.anthropic.claude-sonnet-4-6`) | `us-east-1` | Primary LLM for text generation |
+| **Cohere Embed v4** (`cohere.embed-v4:0`) | `us-east-1` | Document and query embeddings |
+| **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) | `us-east-1` | Voice interactions |
+| **Amazon Nova Lite** (`amazon.nova-lite-v1:0`) | `us-east-1` | Lightweight inference (diagnosis evaluation) |
+
+To verify access, open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/) and confirm these models appear under **Model access** as available. If any model shows as unavailable, enable it there.
+
+> **Note:** The CDK stacks deploy to `ca-central-1`, but the application routes LLM, embedding, and voice calls to `us-east-1` where these models are hosted. This cross-region routing is handled automatically by the application code.
 
 ### Step 3: Fork and Clone the Repository
 
@@ -641,14 +644,14 @@ aws secretsmanager update-secret \
 
 ### Text generation or embeddings not working
 
-**Cause:** Claude Sonnet 4.6 and Cohere Embed v4 are called in `us-east-1` via cross-region inference, but model access was not enabled there.
+**Cause:** Claude Sonnet 4.6 and Cohere Embed v4 are called in `us-east-1` via cross-region inference, but the models may not be accessible there.
 
 **Fix:**
 
 1. Open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/).
-2. Navigate to **Model access**.
-3. Ensure access is granted for `anthropic.claude-sonnet-4-6` and `cohere.embed-v4:0`.
-4. Check CloudWatch Logs for the `TextGenLambdaDockerFunction` for specific error messages.
+2. Navigate to **Model access** and verify the models are available.
+3. Check CloudWatch Logs for the `TextGenLambdaDockerFunction` for specific error messages.
+4. Ensure the Lambda execution role has `bedrock:InvokeModel` permissions for the model ARNs in `us-east-1`.
 
 ---
 
