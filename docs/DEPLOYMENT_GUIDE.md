@@ -9,7 +9,7 @@
 - [Prerequisites](#prerequisites)
 - [Step-by-Step Instructions](#step-by-step-instructions)
   - [Step 1: Create a GitHub Personal Access Token](#step-1-create-a-github-personal-access-token)
-  - [Step 2: Enable Bedrock Models](#step-2-enable-bedrock-models)
+  - [Step 2: Verify Bedrock Model Availability](#step-2-verify-bedrock-model-availability)
   - [Step 3: Fork and Clone the Repository](#step-3-fork-and-clone-the-repository)
   - [Step 4: Upload Secrets and Parameters](#step-4-upload-secrets-and-parameters)
   - [Step 5: Bootstrap CDK](#step-5-bootstrap-cdk)
@@ -39,7 +39,7 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 ### Required
 
 - **AWS Account** with administrative access
-- **AWS CLI v2** installed and configured (`aws configure`)
+- **AWS CLI v2** installed and configured (`aws configure`) with a named profile
 - **Node.js 22+** and npm
 - **AWS CDK CLI** installed globally: `npm install -g aws-cdk`
 - **Git** installed
@@ -286,7 +286,7 @@ The EcsSocket stack reads this parameter to connect to the Bedrock AgentCore voi
 If this is your first CDK deployment in the target account/region, bootstrap the environment:
 
 ```bash
-npx cdk bootstrap aws://<YOUR-ACCOUNT-ID>/<YOUR-REGION>
+cdk bootstrap aws://<YOUR-ACCOUNT-ID>/<YOUR-REGION> --profile <YOUR-AWS-PROFILE>
 ```
 
 ### Step 6: Deploy Stacks
@@ -305,39 +305,36 @@ Choose one of the following deployment options:
 #### Option A: Deploy All Stacks (Recommended for First Deployment)
 
 ```bash
-npx cdk deploy --all \
+cdk deploy --all \
   -c StackPrefix=GenRx \
-  -c githubRepo=genrx
+  -c githubRepo=GenRx \
+  -c githubBranch=main \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
-#### Option B: Deploy All Stacks with a Custom Branch
-
-```bash
-npx cdk deploy --all \
-  -c StackPrefix=GenRx \
-  -c githubRepo=genrx \
-  -c githubBranch=develop
-```
-
-#### Option C: Deploy Individual Stacks (Incremental Updates)
+#### Option B: Deploy Individual Stacks (Incremental Updates)
 
 Stacks deploy in dependency order. If you only need to update a specific stack:
 
 ```bash
-npx cdk deploy GenRx-Api \
+cdk deploy GenRx-Api \
   -c StackPrefix=GenRx \
-  -c githubRepo=genrx
+  -c githubRepo=GenRx \
+  -c githubBranch=main \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
-#### Option D: Redeploy with Voice Agent
+#### Option C: Redeploy with Voice Agent
 
 After completing the voice agent setup, you can pass the ARN explicitly on subsequent deploys. However, the recommended approach is to store it in SSM so you do not need this flag.
 
 ```bash
-npx cdk deploy --all \
+cdk deploy --all \
   -c StackPrefix=GenRx \
-  -c githubRepo=genrx \
-  -c voiceAgentArn="arn:aws:bedrock:us-east-1:123456789012:agent-runtime/XXXXXXXXXX"
+  -c githubRepo=GenRx \
+  -c githubBranch=main \
+  -c voiceAgentArn="arn:aws:bedrock:us-east-1:123456789012:agent-runtime/XXXXXXXXXX" \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 #### Stack Deployment Order
@@ -517,9 +514,11 @@ aws ssm put-parameter ^
 Then redeploy the EcsSocket stack to pick up the new value:
 
 ```bash
-npx cdk deploy GenRx-EcsSocket \
+cdk deploy GenRx-EcsSocket \
   -c StackPrefix=GenRx \
-  -c githubRepo=genrx
+  -c githubRepo=GenRx \
+  -c githubBranch=main \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 > **Note:** Voice features will not work until all four steps are complete. The ECS socket server uses the stored ARN to establish a SigV4-signed WebSocket connection to the AgentCore runtime.
@@ -549,9 +548,11 @@ aws cloudformation describe-stacks \
 To tear down all deployed resources, run:
 
 ```bash
-npx cdk destroy --all \
+cdk destroy --all \
   -c StackPrefix=GenRx \
-  -c githubRepo=genrx
+  -c githubRepo=GenRx \
+  -c githubBranch=main \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 > **Warning:** The RDS instance has `deletionProtection: true`. You must disable deletion protection in the RDS console before the database stack can be deleted. The S3 bucket also has `removalPolicy: RETAIN` — empty and delete it manually after stack deletion.
@@ -559,14 +560,14 @@ npx cdk destroy --all \
 To delete individual stacks, destroy them in reverse dependency order:
 
 ```bash
-npx cdk destroy GenRx-Amplify -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-DBFlow -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-EcsSocket -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-TurnServer -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-Api -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-Database -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-VpcStack -c StackPrefix=GenRx -c githubRepo=genrx
-npx cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=genrx
+cdk destroy GenRx-Amplify -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-DBFlow -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-EcsSocket -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-TurnServer -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-Api -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-Database -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-VpcStack -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 ```
 
 ---
