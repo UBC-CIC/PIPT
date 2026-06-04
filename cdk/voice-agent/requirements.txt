@@ -21,21 +21,21 @@ asyncpg==0.31.0
 attrs==26.1.0
     # via aiohttp
 aws-sdk-bedrock-runtime==0.1.0
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 aws-sdk-signers==0.1.0
     # via smithy-aws-core
 awscrt==0.32.0
     # via smithy-http
 bedrock-agentcore==1.6.1
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 boto3==1.42.87
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   bedrock-agentcore
     #   langchain-aws
 botocore==1.42.87
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   bedrock-agentcore
     #   boto3
     #   s3transfer
@@ -48,8 +48,6 @@ charset-normalizer==3.4.7
     # via requests
 click==8.3.2
     # via uvicorn
-colorama==0.4.6
-    # via click
 dataclasses-json==0.6.7
     # via langchain-community
 frozenlist==1.8.0
@@ -85,21 +83,21 @@ jsonpatch==1.33
 jsonpointer==3.1.1
     # via jsonpatch
 langchain-aws==1.4.3
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 langchain-classic==1.0.3
     # via langchain-community
 langchain-community==0.4.1
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 langchain-core==1.2.28
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   langchain-aws
     #   langchain-classic
     #   langchain-community
     #   langchain-postgres
     #   langchain-text-splitters
 langchain-postgres==0.0.17
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 langchain-text-splitters==1.1.1
     # via langchain-classic
 langsmith==0.7.30
@@ -130,7 +128,7 @@ packaging==26.0
     #   marshmallow
 pgvector==0.3.6
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   langchain-postgres
 propcache==0.4.1
     # via
@@ -138,14 +136,14 @@ propcache==0.4.1
     #   yarl
 psycopg[binary]==3.3.3
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   langchain-postgres
 psycopg-binary==3.3.3
     # via psycopg
 psycopg-pool==3.3.0
     # via langchain-postgres
 psycopg2-binary==2.9.11
-    # via -r cdk/voice-agent/requirements.in
+    # via -r requirements.in
 pydantic==2.12.5
     # via
     #   bedrock-agentcore
@@ -162,7 +160,7 @@ python-dateutil==2.9.0.post0
     # via botocore
 python-dotenv==1.2.2
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   pydantic-settings
 pyyaml==6.0.3
     # via
@@ -183,7 +181,7 @@ six==1.17.0
     # via python-dateutil
 smithy-aws-core[eventstream,json]==0.1.0
     # via
-    #   -r cdk/voice-agent/requirements.in
+    #   -r requirements.in
     #   aws-sdk-bedrock-runtime
 smithy-aws-event-stream==0.1.0
     # via smithy-aws-core
@@ -205,7 +203,7 @@ sqlalchemy[asyncio]==2.0.49
     #   langchain-classic
     #   langchain-community
     #   langchain-postgres
-starlette==1.0.0
+starlette==1.0.1
     # via bedrock-agentcore
 tenacity==9.1.4
     # via
@@ -231,8 +229,6 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-tzdata==2026.1
-    # via psycopg
 urllib3==2.6.3
     # via
     #   bedrock-agentcore
