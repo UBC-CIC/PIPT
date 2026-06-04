@@ -48,21 +48,6 @@ exports.handler = async (event, context) => {
     logger.info("Database connection initialized");
   }
 
-  // --- Role-based authorization: DB is the single source of truth ---
-  // Verify the authenticated user has 'instructor' or 'admin' role in the database.
-  const roleCheckResult = await sqlConnection`
-    SELECT roles FROM "users" WHERE user_email = ${userEmailAttribute};
-  `;
-  const userRoles = roleCheckResult[0]?.roles || [];
-  if (!userRoles.includes("instructor") && !userRoles.includes("admin")) {
-    logger.warn("Forbidden: user lacks instructor/admin role", { userEmailAttribute, userRoles });
-    return {
-      statusCode: 403,
-      headers: getCorsHeaders(event),
-      body: JSON.stringify({ error: "Forbidden: insufficient role" }),
-    };
-  }
-
   // Function to format student full names (lowercase and spaces replaced with "_")
   const formatNames = (name) => {
     return name.toLowerCase().replace(/\s+/g, "_");

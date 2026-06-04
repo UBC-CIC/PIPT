@@ -831,8 +831,7 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Student Authorization endpoints
-     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
-     * Role-based authorization is enforced in the Lambda handlers via the DB.
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=student,instructor,admin
      */
     const authorizationFunction_student = new lambda.Function(
       this,
@@ -846,6 +845,8 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "student,instructor,admin",
         },
         functionName: `${id}-studentLambdaAuthorizer`,
         memorySize: 128,
@@ -870,8 +871,7 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Instructor Authorization endpoints
-     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
-     * Role-based authorization is enforced in the Lambda handlers via the DB.
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=instructor,admin
      */
     const authorizationFunction_instructor = new lambda.Function(
       this,
@@ -885,6 +885,8 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "instructor,admin",
         },
         functionName: `${id}-instructorLambdaAuthorizer`,
         memorySize: 128,
@@ -909,8 +911,7 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Admin Authorization endpoints
-     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
-     * Role-based authorization is enforced in the Lambda handlers via the DB.
+     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=admin
      */
     const authorizationFunction = new lambda.Function(
       this,
@@ -924,6 +925,8 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
+          AUTH_ROLES_CLAIM: "cognito:groups",
+          AUTH_ALLOWED_ROLES: "admin",
         },
         functionName: `${id}-adminLambdaAuthorizer`,
         memorySize: 128,
