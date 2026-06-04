@@ -151,8 +151,24 @@ def lambda_handler(event, context):
 
     authorizer = event.get("requestContext", {}).get("authorizer", {})
     user_email = authorizer.get("email", "")
-    user_roles = authorizer.get("roles", "")
-    is_admin = "admin" in user_roles.split(",")
+
+    # Check admin role from the database (single source of truth for roles)
+    is_admin = False
+    if user_email:
+        conn = connect_to_db()
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                """SELECT roles FROM "users" WHERE user_email = %s""",
+                (user_email,)
+            )
+            row = cur.fetchone()
+            cur.close()
+            if row and row[0] and "admin" in row[0]:
+                is_admin = True
+        except Exception as e:
+            cur.close()
+            logger.error(f"Error checking admin role: {e}")
 
     if not is_admin:
         if not user_email:
