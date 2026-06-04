@@ -3,6 +3,7 @@ import boto3
 import json
 import logging
 import psycopg2
+from cors_helper import get_cors_headers
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -144,12 +145,7 @@ def lambda_handler(event, context):
         logger.error("Missing required parameter: session_id")
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Missing required parameter: session_id')
         }
 
@@ -162,24 +158,14 @@ def lambda_handler(event, context):
         if not user_email:
             return {
                 'statusCode': 403,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps('Forbidden')
             }
         if not verify_session_ownership(session_id, user_email):
             logger.warning(f"Ownership check failed: user={user_email} session={session_id}")
             return {
                 'statusCode': 403,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps('Forbidden')
             }
 
@@ -199,12 +185,7 @@ def lambda_handler(event, context):
             logger.error(f"No conversation history found for session_id: {session_id}")
             return {
                 'statusCode': 400,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"No conversation history found for session_id: {session_id}")
             }
 
@@ -215,12 +196,7 @@ def lambda_handler(event, context):
             logger.info("Not enough messages to delete.")
             return {
                 'statusCode': 400,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"Not enough messages to delete for session_id: {session_id}")
             }
 
@@ -248,24 +224,14 @@ def lambda_handler(event, context):
             logger.info(f"Successfully deleted the last human and AI messages in RDS for session_id: {session_id}")
             return {
                 'statusCode': 200,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"Successfully deleted the last human and AI messages for session_id: {session_id}")
             }
         else:
             logger.error(f"Failed to delete the last human and AI messages in RDS for session_id: {session_id}")
             return {
                 'statusCode': 500,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"Error deleting last messages from the database for session_id: {session_id}")
             }
 
@@ -273,11 +239,6 @@ def lambda_handler(event, context):
         logger.error(f"Error deleting last message: {e}")
         return {
             'statusCode': 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps("Internal server error")
         }

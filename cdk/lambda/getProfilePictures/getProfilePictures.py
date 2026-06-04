@@ -7,6 +7,7 @@ import rsa
 from datetime import datetime, timedelta
 import psycopg2
 from aws_lambda_powertools import Logger
+from cors_helper import get_cors_headers
 
 logger = Logger()
 
@@ -136,12 +137,7 @@ def lambda_handler(event, context):
     if not simulation_group_id:
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps("Missing required parameter: simulation_group_id"),
         }
 
@@ -151,12 +147,7 @@ def lambda_handler(event, context):
     if not persona_ids:
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps("No persona IDs found"),
         }
 
@@ -169,11 +160,6 @@ def lambda_handler(event, context):
 
     return {
         'statusCode': 200,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
-        },
+        "headers": get_cors_headers(event),
         'body': json.dumps(profile_pics)
     }

@@ -3,6 +3,7 @@ import boto3
 import psycopg2
 from botocore.config import Config
 from aws_lambda_powertools import Logger
+from cors_helper import get_cors_headers
 
 BUCKET = os.environ["BUCKET"]
 REGION = os.environ["REGION"]
@@ -131,12 +132,7 @@ def lambda_handler(event, context):
     if not SAFE_FILENAME.match(file_name):
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Invalid file name. Only alphanumeric characters, spaces, hyphens, underscores, dots, parentheses, and commas are allowed (max 200 chars).')
         }
 
@@ -148,12 +144,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 403,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Forbidden: You are not an instructor of this simulation group')
         }
 
@@ -243,12 +234,7 @@ def lambda_handler(event, context):
 
         return {
             "statusCode": 200,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             "body": json.dumps({
                 "url": presigned_post["url"],
                 "fields": presigned_post["fields"],

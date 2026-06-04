@@ -4,6 +4,7 @@ import re
 import boto3
 import psycopg2
 from aws_lambda_powertools import Logger
+from cors_helper import get_cors_headers
 
 logger = Logger()
 
@@ -177,12 +178,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Missing required parameters: simulation_group_id, persona_id, file_name, file_type, or folder_type')
         }
 
@@ -194,12 +190,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 403,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Forbidden: You are not an instructor of this simulation group')
         }
 
@@ -207,12 +198,7 @@ def lambda_handler(event, context):
     if not SAFE_FILENAME.match(file_name):
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Invalid file name')
         }
 
@@ -241,12 +227,7 @@ def lambda_handler(event, context):
         else:
             return {
                 'statusCode': 400,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps('Unsupported file type')
             }
 
@@ -271,12 +252,7 @@ def lambda_handler(event, context):
                 logger.error(f"Error deleting embeddings for {file_name}.{file_type}: {e}")
                 return {
                     'statusCode': 500,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Methods": "*",
-                    },
+                    "headers": get_cors_headers(event),
                     'body': json.dumps(f"File deleted from S3 but error cleaning up embeddings for {file_name}.{file_type}")
                 }
 
@@ -289,23 +265,13 @@ def lambda_handler(event, context):
                 logger.error(f"Error deleting file {file_name}.{file_type} from the database: {e}")
                 return {
                     'statusCode': 500,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
-                        "Access-Control-Allow-Methods": "*",
-                    },
+                    "headers": get_cors_headers(event),
                     'body': json.dumps(f"Error deleting file {file_name}.{file_type} from the database")
                 }
 
         return {
             'statusCode': 200,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('File deleted successfully')
         }
         
@@ -313,11 +279,6 @@ def lambda_handler(event, context):
         logger.exception(f"Error deleting file: {e}")
         return {
             'statusCode': 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Internal server error')
         }

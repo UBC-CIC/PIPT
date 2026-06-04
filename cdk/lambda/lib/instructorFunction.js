@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { initializeConnection } = require("./lib.js");
+const { getCorsHeaders } = require("./cors.js");
 const logger = require("./logger");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
@@ -28,24 +29,14 @@ exports.handler = async (event, context) => {
     logger.warn("Unauthorized access attempt", { queryEmail, instructorEmail, userEmailAttribute });
     return {
       statusCode: 401,
-      headers: {
-        "Access-Control-Allow-Headers":
-          "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "*",
-      },
+      headers: getCorsHeaders(event),
       body: JSON.stringify({ error: "Unauthorized" }),
     };
   }
 
   const response = {
     statusCode: 200,
-    headers: {
-      "Access-Control-Allow-Headers":
-        "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "*",
-    },
+    headers: getCorsHeaders(event),
     body: "",
   };
 

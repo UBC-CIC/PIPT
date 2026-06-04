@@ -3,6 +3,7 @@ import json
 import boto3
 import psycopg2
 from aws_lambda_powertools import Logger
+from cors_helper import get_cors_headers
 
 logger = Logger()
 
@@ -90,12 +91,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps("Missing required parameters: simulation_group_id or persona_id")
         }
 
@@ -107,12 +103,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 403,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Forbidden: You are not an instructor of this simulation group')
         }
 
@@ -152,24 +143,14 @@ def lambda_handler(event, context):
             logger.info(f"Deleted objects: {delete_response}")
             return {
                 'statusCode': 200,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"Deleted persona directory: {persona_prefix}")
             }
         else:
             logger.info(f"No objects found in persona directory: {persona_prefix}")
             return {
                 'statusCode': 200,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
+                "headers": get_cors_headers(event),
                 'body': json.dumps(f"No objects found in persona directory: {persona_prefix}")
             }
 
@@ -177,11 +158,6 @@ def lambda_handler(event, context):
         logger.exception(f"Error deleting persona directory: {e}")
         return {
             'statusCode': 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps("Internal server error")
         }

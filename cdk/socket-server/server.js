@@ -94,8 +94,25 @@ async function connectToVoiceAgent(initConfig) {
 
 const app = express();
 const server = createServer(app);
+
+// Parse ALLOWED_ORIGINS env var for CORS. Supports wildcard subdomains.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "*").split(",").map(s => s.trim()).filter(Boolean);
+const corsOriginConfig = allowedOrigins.includes("*")
+  ? "*"
+  : (origin, callback) => {
+      if (!origin) return callback(null, true); // allow non-browser requests
+      const isAllowed = allowedOrigins.some((pattern) => {
+        if (pattern.includes("*")) {
+          const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^.]+");
+          return new RegExp("^" + escaped + "$").test(origin);
+        }
+        return pattern === origin;
+      });
+      callback(null, isAllowed ? origin : false);
+    };
+
 const io = new Server(server, {
-  cors: { origin: "*", methods: ["GET", "POST"] },
+  cors: { origin: corsOriginConfig, methods: ["GET", "POST"] },
 });
 
 // ─── Health Check ─────────────────────────────────────────────────────────────

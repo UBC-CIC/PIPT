@@ -7,6 +7,7 @@ import rsa
 from datetime import datetime, timedelta
 import psycopg2
 from aws_lambda_powertools import Logger
+from cors_helper import get_cors_headers
 
 logger = Logger()
 
@@ -174,12 +175,7 @@ def lambda_handler(event, context):
         })
         return {
             'statusCode': 400,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Missing required parameters: simulation_group_id or persona_id')
         }
 
@@ -244,12 +240,7 @@ def lambda_handler(event, context):
 
         return {
             'statusCode': 200,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps({
                 'document_files': document_files_urls,
                 'info_files': info_files_urls,
@@ -261,11 +252,6 @@ def lambda_handler(event, context):
         logger.exception(f"Error generating presigned URLs or retrieving metadata: {e}")
         return {
             'statusCode': 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "*",
-            },
+            "headers": get_cors_headers(event),
             'body': json.dumps('Internal server error')
         }

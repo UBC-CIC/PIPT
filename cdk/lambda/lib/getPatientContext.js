@@ -1,4 +1,5 @@
 const { Pool } = require('pg');
+const { getCorsHeaders } = require('./cors.js');
 
 let pool;
 
@@ -22,11 +23,7 @@ exports.getPatientContext = async (event, context) => {
     console.log(JSON.stringify({ level: "WARN", requestId, message: "Missing required parameters", simulation_group_id, patient_id }));
     return {
       statusCode: 400,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Allow-Methods": "*",
-      },
+      headers: getCorsHeaders(event),
       body: JSON.stringify({ error: "Missing required parameters" })
     };
   }
@@ -53,11 +50,7 @@ exports.getPatientContext = async (event, context) => {
     if (systemPromptResult.rows.length === 0 || patientResult.rows.length === 0) {
       return {
         statusCode: 404,
-        headers: {
-          "Access-Control-Allow-Origin": "*",
-          "Access-Control-Allow-Headers": "*", 
-          "Access-Control-Allow-Methods": "*",
-        },
+        headers: getCorsHeaders(event),
         body: JSON.stringify({ error: "Patient or simulation group not found" })
       };
     }
@@ -74,11 +67,7 @@ exports.getPatientContext = async (event, context) => {
 
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Allow-Methods": "*",
-      },
+      headers: getCorsHeaders(event),
       body: JSON.stringify(context)
     };
 
@@ -86,11 +75,7 @@ exports.getPatientContext = async (event, context) => {
     console.error(JSON.stringify({ level: "ERROR", requestId, message: "Error fetching patient context", error: error.message, stack: error.stack, simulation_group_id, patient_id }));
     return {
       statusCode: 500,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "*",
-        "Access-Control-Allow-Methods": "*",
-      },
+      headers: getCorsHeaders(event),
       body: JSON.stringify({ error: "Internal server error" })
     };
   }

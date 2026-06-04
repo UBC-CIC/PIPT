@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { initializeConnection } = require("./libadmin.js");
+const { getCorsHeaders } = require("./cors.js");
 const logger = require("./logger");
 const { CognitoIdentityProviderClient, AdminGetUserCommand } = require("@aws-sdk/client-cognito-identity-provider");
 const { S3Client, ListObjectsV2Command, DeleteObjectsCommand } = require("@aws-sdk/client-s3");
@@ -22,12 +23,7 @@ exports.handler = async (event, context) => {
 
   const response = {
     statusCode: 200,
-    headers: {
-      "Access-Control-Allow-Headers":
-        "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "*",
-    },
+    headers: getCorsHeaders(event),
     body: "",
   };
 

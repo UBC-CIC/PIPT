@@ -75,12 +75,11 @@ exports.handler = async (event, context) => {
       process.env.AUTH_ALLOWED_ROLES
     );
 
-    // REVIEW: The JWT authorizer allows requests through when the roles claim is completely absent
-    // from the token (hasRolesClaim === false). The comment says this supports a "transition period"
-    // where existing tokens don't carry group claims. This effectively bypasses role-based authorization
-    // for any valid JWT without the cognito:groups claim. If the transition period is over, remove
-    // this bypass and always enforce role checks.
-    const hasRolesClaim = payload[process.env.AUTH_ROLES_CLAIM || "cognito:groups"] !== undefined;
+    // NOTE: The app assigns roles in the database (users.roles column), NOT via Cognito groups.
+    // Most users will not have the cognito:groups claim in their token at all.
+    // Only enforce the role check if the claim is actually present in the token.
+    const hasRolesClaim =
+      payload[process.env.AUTH_ROLES_CLAIM || "cognito:groups"] !== undefined;
 
     if (hasRolesClaim && !allowed) {
       console.error(

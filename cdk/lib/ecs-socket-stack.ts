@@ -193,6 +193,7 @@ export class EcsSocketStack extends Stack {
         BEDROCK_GUARDRAIL_ID: apiServiceStack.getGuardrailId(),
         TABLE_NAME: dynamoTableName,
         SM_STREAM_CALLBACK_SECRET: apiServiceStack.streamCallbackSecret.secretName,
+        ALLOWED_ORIGINS: apiServiceStack.getAllowedOriginsEnv(),
         ...(resolvedVoiceAgentEndpoint ? { VOICE_AGENT_ENDPOINT: resolvedVoiceAgentEndpoint } : {}),
       },
       secrets: {
