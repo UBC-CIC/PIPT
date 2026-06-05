@@ -278,6 +278,11 @@ export class ApiServiceStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // Enable advanced security in AUDIT mode — logs risk events and detects
+    // compromised credentials without blocking sign-ins.
+    const cfnUserPool = this.userPool.node.defaultChild as cognito.CfnUserPool;
+    cfnUserPool.userPoolAddOns = { advancedSecurityMode: 'AUDIT' };
+
     // Create app client
     this.appClient = this.userPool.addClient(`${id}-pool`, {
       userPoolClientName: userPoolName,

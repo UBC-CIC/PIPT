@@ -100,10 +100,12 @@ class AuthService {
     return this.buildAuthResult();
   }
 
-  // Sign out and clear cached profile
+  // Sign out and clear cached profile.
+  // Uses global sign-out to revoke all refresh tokens server-side,
+  // preventing stolen tokens from being used after the user logs out.
   async signOut(): Promise<void> {
     this.cachedUser = null;
-    await signOut();
+    await signOut({ global: true });
   }
 
   // Get current ID token for API requests

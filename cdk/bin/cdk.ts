@@ -122,4 +122,4 @@ const amplifyStack = new AmplifyStack(
     env,
   }
 );
-cdk.Tags.of(app).add("app", "GenRx");
+cdk.Tags.of(app).add("Project", StackPrefix);
