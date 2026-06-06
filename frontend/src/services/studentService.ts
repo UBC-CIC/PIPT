@@ -226,7 +226,7 @@ async function fetchPatientDetail(simulationGroupId: string, patientId: string):
       mode?: 'interview_practice' | 'full_assessment';
       max_messages_per_chat?: number | null;
     }>>(
-      `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `student/simulation_group_page?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     const persona = data.find(p => p.persona_id === patientId);
@@ -387,7 +387,7 @@ async function fetchChatHistory(simulationGroupId: string, patientId: string): P
       status: string | null;
       overall_score: number | null;
     }>>(
-      `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
+      `student/patient?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`
     );
 
     if (!Array.isArray(data) || data.length === 0) return [];
@@ -496,7 +496,7 @@ export async function fetchDebrief(sessionId: string): Promise<AIDebriefData | n
       console.log('[fetchDebrief] request attempt', { attempt: attempt + 1, maxAttempts });
 
       const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string }>(
-        `student/get_debrief?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}`
+        `student/get_debrief?session_id=${encodeURIComponent(sessionId)}`
       );
 
       console.log('[fetchDebrief] response meta', {
@@ -715,7 +715,7 @@ async function getSimulationGroups(): Promise<SimulationGroup[]> {
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<SimulationGroup[]>(
-      `student/simulation_group?email=${encodeURIComponent(user.email)}`
+      `student/simulation_group`
     );
     return data.map((g: any, i: number) => ({
       simulation_group_id: g.simulation_group_id,
@@ -758,7 +758,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<any[]>(
-      `student/simulation_group_page?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `student/simulation_group_page?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     // Deduplicate by persona_id (backend may return multiple rows from different enrollments)
@@ -794,7 +794,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
           overall_score: number | null;
           last_accessed: string | null;
         }>>(
-          `student/patient?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(p.persona_id)}`
+          `student/patient?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(p.persona_id)}`
         );
         if (!Array.isArray(chats) || chats.length === 0) return { attemptCount: 0, bestCoverage: null, hasActiveChat: false, lastChatAccessed: null };
         const completedScores = chats
@@ -859,7 +859,7 @@ async function joinGroup(accessCode: string, enrollmentType?: string): Promise<{
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    let url = `student/enroll_student?student_email=${encodeURIComponent(user.email)}&group_access_code=${encodeURIComponent(accessCode)}`;
+    let url = `student/enroll_student?group_access_code=${encodeURIComponent(accessCode)}`;
     if (enrollmentType) {
       url += `&enrollment_type=${encodeURIComponent(enrollmentType)}`;
     }
@@ -881,7 +881,7 @@ async function createSession(simulationGroupId: string, patientId: string, sessi
     if (!user) throw new Error('Not authenticated');
 
     const data = await apiClient.request<Session[]>(
-      `student/create_session?email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_name=${encodeURIComponent(sessionName)}`,
+      `student/create_session?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}&session_name=${encodeURIComponent(sessionName)}`,
       { method: 'POST' }
     );
 
@@ -1022,7 +1022,7 @@ async function deleteSession(
     if (!user) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `student/delete_session?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`,
+      `student/delete_session?session_id=${encodeURIComponent(sessionId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(patientId)}`,
       { method: 'DELETE' }
     );
     return true;
@@ -1309,7 +1309,7 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const data = await apiClient.request<{ generated_text?: any; status?: string; error?: string; dtp_submission?: any; recommendation_submission?: any }>(
-      `student/get_debrief?session_id=${encodeURIComponent(sessionId)}&email=${encodeURIComponent(user.email)}`
+      `student/get_debrief?session_id=${encodeURIComponent(sessionId)}`
     );
 
     if (data?.status === 'generating') {

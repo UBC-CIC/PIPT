@@ -40,8 +40,8 @@ export function useStudentViewer({ groupId, groupName }: UseStudentViewerParams)
       const details = await instructorService.getStudentDetails(studentId, groupId || '', groupName);
       setStudentDetails(details || null);
 
-      if (details?.email) {
-        const patientData = await instructorService.getStudentPatientData(details.email, groupId || '');
+      if (details?.id) {
+        const patientData = await instructorService.getStudentPatientData(details.id, groupId || '');
         setStudentPatientData(patientData);
         if (patientData.patientNames.length > 0) {
           setSelectedPatientFilter(patientData.patientNames[0]);

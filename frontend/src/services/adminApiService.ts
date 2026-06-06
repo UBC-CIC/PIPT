@@ -5,14 +5,14 @@
  * Falls back gracefully if API calls fail (for local dev without backend).
  * 
  * Backend endpoints used:
- * - GET  /admin/instructors?instructor_email=... → list all instructors
+ * - GET  /admin/instructors → list all instructors
  * - GET  /admin/simulation_groups → list all simulation groups
  * - GET  /admin/groupInstructors?simulation_group_id=... → instructors for a group
- * - GET  /admin/instructorGroups?instructor_email=... → groups for an instructor
- * - POST /admin/elevate_instructor?email=... → make user an instructor
- * - POST /admin/lower_instructor?email=... → demote instructor to student
- * - POST /admin/enroll_instructor?simulation_group_id=...&instructor_email=... → assign to group
- * - DELETE /admin/delete_instructor_enrolments?instructor_email=... → remove all enrollments
+ * - GET  /admin/instructorGroups?instructor_id=... → groups for an instructor
+ * - POST /admin/elevate_instructor (body: {email}) → make user an instructor
+ * - POST /admin/lower_instructor (body: {email}) → demote instructor to student
+ * - POST /admin/enroll_instructor?simulation_group_id=... (body: {instructor_email}) → assign to group
+ * - DELETE /admin/delete_instructor_enrolments (body: {instructor_email}) → remove all enrollments
  * - DELETE /admin/delete_group_instructor_enrolments?simulation_group_id=... → remove all instructors from group
  * - POST /admin/create_simulation_group → create new group
  * - DELETE /admin/delete_group?simulation_group_id=... → delete group
@@ -26,6 +26,7 @@ import type { QuestionBankItem } from '@/services/instructorService';
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
 export interface AdminInstructor {
+  user_id: string;
   user_email: string;
   first_name: string;
   last_name: string;
@@ -59,12 +60,7 @@ export interface InstructorGroup {
  * Get all users with the instructor role
  */
 export async function getAllInstructors(): Promise<AdminInstructor[]> {
-  const user = await authService.getCurrentUser();
-  if (!user?.email) throw new Error('Not authenticated');
-
-  return apiClient.request<AdminInstructor[]>(
-    `admin/instructors?instructor_email=${encodeURIComponent(user.email)}`
-  );
+  return apiClient.request<AdminInstructor[]>(`admin/instructors`);
 }
 
 /**
@@ -97,9 +93,14 @@ export async function getGroupInstructors(simulationGroupId: string): Promise<Ad
 /**
  * Get simulation groups an instructor is enrolled in
  */
-export async function getInstructorGroups(instructorEmail: string): Promise<InstructorGroup[]> {
+export async function getInstructorGroups(instructorIdOrEmail: string): Promise<InstructorGroup[]> {
+  // If it looks like a UUID, send as instructor_id; otherwise fall back to instructor_email
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(instructorIdOrEmail);
+  const param = isUuid
+    ? `instructor_id=${encodeURIComponent(instructorIdOrEmail)}`
+    : `instructor_email=${encodeURIComponent(instructorIdOrEmail)}`;
   return apiClient.request<InstructorGroup[]>(
-    `admin/instructorGroups?instructor_email=${encodeURIComponent(instructorEmail)}`
+    `admin/instructorGroups?${param}`
   );
 }
 
@@ -108,8 +109,8 @@ export async function getInstructorGroups(instructorEmail: string): Promise<Inst
  */
 export async function elevateToInstructor(email: string): Promise<{ message: string }> {
   return apiClient.request<{ message: string }>(
-    `admin/elevate_instructor?email=${encodeURIComponent(email)}`,
-    { method: 'POST' }
+    `admin/elevate_instructor`,
+    { method: 'POST', body: { email } }
   );
 }
 
@@ -118,8 +119,8 @@ export async function elevateToInstructor(email: string): Promise<{ message: str
  */
 export async function lowerInstructor(email: string): Promise<{ message: string }> {
   return apiClient.request<{ message: string }>(
-    `admin/lower_instructor?email=${encodeURIComponent(email)}`,
-    { method: 'POST' }
+    `admin/lower_instructor`,
+    { method: 'POST', body: { email } }
   );
 }
 
@@ -132,8 +133,8 @@ export async function enrollInstructorInGroup(
   instructorEmail: string
 ): Promise<{ message: string }> {
   return apiClient.request<{ message: string }>(
-    `admin/enroll_instructor?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
-    { method: 'POST' }
+    `admin/enroll_instructor?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+    { method: 'POST', body: { instructor_email: instructorEmail } }
   );
 }
 
@@ -142,8 +143,8 @@ export async function enrollInstructorInGroup(
  */
 export async function deleteInstructorEnrollments(instructorEmail: string): Promise<{ message: string }> {
   return apiClient.request<{ message: string }>(
-    `admin/delete_instructor_enrolments?instructor_email=${encodeURIComponent(instructorEmail)}`,
-    { method: 'DELETE' }
+    `admin/delete_instructor_enrolments`,
+    { method: 'DELETE', body: { instructor_email: instructorEmail } }
   );
 }
 
