@@ -139,10 +139,14 @@ export class DatabaseStack extends Stack {
         }));
 
         /**
-         * Create RDS Proxy for database connections
+         * Create RDS Proxies for database connections.
+         * 
+         * NOTE: All three proxies exist to preserve CloudFormation exports during migration.
+         * The Api stack has been updated to only use rdsProxyEndpoint — once all environments
+         * have deployed this code, a follow-up PR will consolidate to a single proxy.
          */
-        // NOTE: The TableCreator proxy uses '+proxy' in its ID — this is unconventional and may cause
-        // issues with CloudFormation resource naming. Consider using '-proxy-tablecreator' instead.
+        const secretPathAdmin = secretmanager.Secret.fromSecretNameV2(this, 'AdminSecret', this.secretPathAdminName);
+
         const rdsProxy = this.dbInstance.addProxy(id + '-proxy', {
             secrets: [this.secretPathUser!],
             vpc: vpcStack.vpc,
@@ -151,7 +155,7 @@ export class DatabaseStack extends Stack {
             requireTLS: true,
         });
 
-        const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', { // NOTE: '+' in construct ID is unconventional
+        const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', {
             secrets: [this.secretPathTableCreator!],
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
@@ -159,8 +163,6 @@ export class DatabaseStack extends Stack {
             requireTLS: true,
         });
 
-        const secretPathAdmin = secretmanager.Secret.fromSecretNameV2(this, 'AdminSecret', this.secretPathAdminName);
-        
         const rdsProxyAdmin = this.dbInstance.addProxy(id + '-proxy-admin', {
             secrets: [secretPathAdmin],
             vpc: vpcStack.vpc,
@@ -176,18 +178,17 @@ export class DatabaseStack extends Stack {
         let targetGroup = rdsProxy.node.children.find((child: any) => {
             return child instanceof rds.CfnDBProxyTargetGroup;
         }) as rds.CfnDBProxyTargetGroup;
-
         targetGroup.addPropertyOverride('TargetGroupName', 'default');
 
         let targetGroupTableCreator = rdsProxyTableCreator.node.children.find((child: any) => {
             return child instanceof rds.CfnDBProxyTargetGroup;
         }) as rds.CfnDBProxyTargetGroup;
-
-        // BUG: targetGroup.addPropertyOverride is called twice — the first call here is a duplicate
-        // that overrides the user proxy's target group again instead of the table creator's.
-        // The second call (targetGroupTableCreator) is correct. Remove the duplicate line.
-        targetGroup.addPropertyOverride('TargetGroupName', 'default');       // ← duplicate, should be removed
         targetGroupTableCreator.addPropertyOverride('TargetGroupName', 'default');
+
+        let targetGroupAdmin = rdsProxyAdmin.node.children.find((child: any) => {
+            return child instanceof rds.CfnDBProxyTargetGroup;
+        }) as rds.CfnDBProxyTargetGroup;
+        targetGroupAdmin.addPropertyOverride('TargetGroupName', 'default');
 
         /**
          * Grant the role permission to connect to the database

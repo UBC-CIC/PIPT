@@ -122,4 +122,16 @@ const amplifyStack = new AmplifyStack(
     env,
   }
 );
-cdk.Tags.of(app).add("app", "GenRx");
+// Tag all resources for cost allocation.
+// EcsSocket stack excluded entirely — AWS::CloudFront::VpcOrigin cannot be
+// updated (even tag changes) while attached to a distribution. Any resource
+// change in that stack triggers a cascading VpcOrigin update that fails.
+// ECS/CloudFront costs are still trackable via AWS billing dimensions.
+cdk.Tags.of(cicdStack).add("Project", StackPrefix);
+cdk.Tags.of(vpcStack).add("Project", StackPrefix);
+cdk.Tags.of(dbStack).add("Project", StackPrefix);
+cdk.Tags.of(cloudFrontWafStack).add("Project", StackPrefix);
+cdk.Tags.of(apiStack).add("Project", StackPrefix);
+cdk.Tags.of(turnServerStack).add("Project", StackPrefix);
+cdk.Tags.of(dbFlowStack).add("Project", StackPrefix);
+cdk.Tags.of(amplifyStack).add("Project", StackPrefix);

@@ -65,11 +65,28 @@ const token = session.tokens?.idToken?.toString();
 
 **Important:** Roles are NOT hierarchical. Having `admin` does NOT grant access to `/instructor/*` or `/student/*` endpoints. Each role's endpoints require the corresponding authorizer.
 
+### Email Validation (Security)
+
+All Lambda handlers extract the authenticated user's email from the JWT token (`event.requestContext.authorizer.email`). If any email-based query parameter (`email`, `student_email`, `user_email`, `instructor_email`) is provided, it is validated against the token email. A mismatch results in a **401 Unauthorized** response.
+
+When no email query parameter is provided, the handler automatically uses the token email. This prevents users from accessing other users' data by spoofing email parameters.
+
+### Role Enforcement (Database as Source of Truth)
+
+Beyond the API Gateway authorizer (JWT validation), backend handlers perform a secondary role check against the database:
+
+- **Instructor endpoints** verify the authenticated user has `instructor` or `admin` in their DB `roles` array. If not, the request is rejected with **403 Forbidden**.
+- **Admin endpoints** grant access if the user has `admin` in EITHER the Cognito `admin` group (from `cognito:groups` JWT claim) OR the database `roles` array. This allows fresh deployers to bootstrap admin access via the Cognito group without needing direct DB access.
+
+### CORS Origin Restriction
+
+Lambda responses use a configurable allowlist-based CORS policy via the `ALLOWED_ORIGINS` environment variable (comma-separated list). Wildcard subdomain matching is supported (e.g., `https://*.amplifyapp.com`). If `ALLOWED_ORIGINS` is not set or equals `*`, all origins are permitted (backwards-compatible default).
+
 ### Shared Endpoints
 
 The following endpoints are accessible to any authenticated user regardless of role:
 
-- `GET /student/me` — Get current user profile and roles
+- `GET /student/me` — Get current user profile and roles (uses token email directly, no query param needed)
 - `GET /student/get_user_roles` — Get available roles for user
 - `POST /student/create_user` — Create/update user profile on first sign-in
 
@@ -97,8 +114,8 @@ Content-Type: application/json
 | Status Code | Description |
 |---|---|
 | 400 | Bad Request — Missing or invalid parameters |
-| 401 | Unauthorized — Invalid or missing JWT token, or email mismatch |
-| 403 | Forbidden — Access denied to the requested resource |
+| 401 | Unauthorized — Invalid or missing JWT token, or email query parameter does not match the authenticated token email |
+| 403 | Forbidden — Access denied; authenticated user lacks the required role in the database, or does not own the requested resource |
 | 404 | Not Found — Resource does not exist |
 | 429 | Too Many Requests — Rate limit exceeded |
 | 500 | Internal Server Error |
@@ -116,7 +133,7 @@ Error response body format:
 
 # Student Endpoints
 
-All student endpoints require the `studentAuthorizer`. The authenticated user's email is validated against any email-based query parameters to prevent unauthorized access.
+All student endpoints require the `studentAuthorizer`. The authenticated user's email is extracted from the JWT token and used as the source of truth. If an email-based query parameter is provided, it must match the token email or a **401 Unauthorized** is returned. When omitted, the token email is used automatically.
 
 ## User Management
 
@@ -160,7 +177,7 @@ curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/cr
 
 ### Get Current User Profile
 
-Get the authenticated user's profile including roles.
+Get the authenticated user's profile including roles. Uses the email from the JWT token directly — no query parameters needed.
 
 **Endpoint:** `GET /student/me`
 
@@ -168,13 +185,11 @@ Get the authenticated user's profile including roles.
 
 ```json
 {
-  "user_id": "uuid",
   "user_email": "student@example.com",
-  "username": "jdoe",
   "first_name": "Jane",
   "last_name": "Doe",
   "roles": ["student"],
-  "last_sign_in": "2024-06-01T08:00:00.000Z"
+  "organization_id": "uuid"
 }
 ```
 
@@ -189,13 +204,13 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/me"
 
 ### Get User Roles
 
-Get the roles assigned to a user.
+Get the roles assigned to the authenticated user. Prefers the token email; falls back to the query parameter for backwards compatibility.
 
 **Endpoint:** `GET /student/get_user_roles`
 
 **Query Parameters:**
 
-- `user_email` (string, optional): Email of the user
+- `user_email` (string, optional): Email of the user (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -216,13 +231,13 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/get
 
 ### Get User Name
 
-Get the first name of a user by email.
+Get the first name of the authenticated user. Prefers the token email; falls back to the query parameter for backwards compatibility.
 
 **Endpoint:** `GET /student/get_name`
 
 **Query Parameters:**
 
-- `user_email` (string, optional): Email of the user
+- `user_email` (string, optional): Email of the user (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -251,7 +266,7 @@ Get all simulation groups the student is enrolled in.
 
 **Query Parameters:**
 
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -284,7 +299,7 @@ Get detailed simulation group page with all patient personas and student engagem
 
 **Query Parameters:**
 
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 
 **Response:**
@@ -325,7 +340,7 @@ Enroll a student in a simulation group using an access code.
 
 **Query Parameters:**
 
-- `student_email` (string, required): Email of the student to enroll
+- `student_email` (string, optional): Email of the student to enroll (must match token email if provided; token email used if omitted)
 - `group_access_code` (string, required): Access code of the group
 
 **Response:**
@@ -356,7 +371,7 @@ Get all sessions for a specific patient accessed by a student.
 
 **Query Parameters:**
 
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 - `patient_id` (string, required): ID of the patient
 
@@ -393,7 +408,7 @@ Create a new chat session with a patient.
 **Query Parameters:**
 
 - `patient_id` (string, required): ID of the patient
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 - `session_name` (string, required): Name of the session
 
@@ -427,7 +442,7 @@ Delete a session for a student interaction.
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session to delete
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 - `patient_id` (string, required): ID of the patient
 
@@ -495,7 +510,7 @@ Send a student message in a session. Checks the per-group message limit.
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 - `patient_id` (string, required): ID of the patient
 
@@ -547,7 +562,7 @@ Create an AI response message for a session (used internally after text generati
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 - `patient_id` (string, required): ID of the patient
 
@@ -833,14 +848,16 @@ curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/te
 
 ### Get Debrief
 
-Get the AI-generated debrief evaluation for a completed chat session.
+Get the AI-generated debrief evaluation for a completed chat session. Verifies the authenticated student owns the specified chat before returning the debrief.
 
 **Endpoint:** `GET /student/get_debrief`
 
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session/chat
-- `email` (string, required): Email of the student (for authorization)
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
+
+**Security:** The endpoint verifies chat ownership by checking that the chat belongs to the authenticated student via the enrollment chain (`chats → student_interactions → enrollments → user`). Returns **403 Forbidden** if the chat does not belong to the authenticated user.
 
 **Response (status=complete):**
 
@@ -934,12 +951,12 @@ curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/co
 
 Update the patient interaction score based on LLM verdict.
 
-**Endpoint:** `POST /student/update_patient_score`
+**Endpoint:** `POST /student/update_persona_score`
 
 **Query Parameters:**
 
 - `patient_id` (string, required): ID of the patient
-- `student_email` (string, required): Email of the student
+- `student_email` (string, required): Email of the student (must match token email)
 - `simulation_group_id` (string, required): ID of the simulation group
 - `llm_verdict` (boolean, required): LLM verdict — `true` sets score to 100, `false` sets to 0
 
@@ -970,7 +987,7 @@ Get completion status for all patient interactions in a simulation group.
 **Query Parameters:**
 
 - `simulation_group_id` (string, required): ID of the group
-- `student_email` (string, required): Email of the student
+- `student_email` (string, required): Email of the student (must match token email)
 
 **Response:**
 
@@ -1004,7 +1021,7 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/get
 
 ### Submit Debrief Feedback
 
-Submit feedback on whether the AI debrief was helpful.
+Submit feedback on whether the AI debrief was helpful. The user is identified from the JWT token — no email field is required in the request body.
 
 **Endpoint:** `POST /student/debrief_feedback`
 
@@ -1049,7 +1066,7 @@ curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/de
 
 ### Submit Issue Report
 
-Report a technical or content issue with the AI patient simulation.
+Report a technical or content issue with the AI patient simulation. The user is identified from the JWT token — no email field is required in the request body.
 
 **Endpoint:** `POST /student/issue_report`
 
@@ -1255,7 +1272,7 @@ Get empathy evaluation summary and scores for a student's session.
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session
-- `email` (string, required): Email of the student
+- `email` (string, optional): Email of the student (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the simulation group
 - `patient_id` (string, required): ID of the patient
 
@@ -1291,7 +1308,7 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/emp
 
 # Instructor Endpoints
 
-All instructor endpoints require the `instructorAuthorizer`. The authenticated user's email is validated against email-based query parameters.
+All instructor endpoints require the `instructorAuthorizer`. Additionally, the handler verifies the authenticated user has the `instructor` or `admin` role in the database (DB is the source of truth). If the role check fails, the request is rejected with **403 Forbidden**. Email-based query parameters are validated against the token email — a mismatch results in **401 Unauthorized**.
 
 ## Group Management
 
@@ -1303,7 +1320,7 @@ Get all simulation groups where the instructor is enrolled.
 
 **Query Parameters:**
 
-- `email` (string, required): Email of the instructor
+- `email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -1339,7 +1356,7 @@ Get groups for a specific student.
 
 **Query Parameters:**
 
-- `email` (string, required): Email of the instructor
+- `email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -1370,7 +1387,7 @@ Create a new simulation group.
 
 **Query Parameters:**
 
-- `instructor_email` (string, required): Email of the instructor creating the group
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Request Body:**
 
@@ -1518,7 +1535,7 @@ Create a new patient persona within a simulation group.
 - `persona_age` (string, required): Age of the patient
 - `persona_gender` (string, required): Gender of the patient
 - `persona_number` (string, required): Display order number
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 - `voice_id` (string, optional): Voice ID for TTS
 
 **Request Body:**
@@ -1567,7 +1584,7 @@ Update details of an existing patient.
 **Query Parameters:**
 
 - `persona_id` (string, required): ID of the patient
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 - `simulation_group_id` (string, required): ID of the group
 
 **Request Body:**
@@ -1617,7 +1634,7 @@ Reorder and rename an existing patient.
 
 - `patient_id` (string, required): ID of the patient
 - `patient_number` (integer, required): New display order number
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Request Body:**
 
@@ -1704,7 +1721,7 @@ Remove a student from a simulation group.
 **Query Parameters:**
 
 - `simulation_group_id` (string, required): ID of the group
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 - `user_email` (string, required): Email of the student to remove
 
 **Response:** `200 OK`
@@ -1831,7 +1848,7 @@ Update the system prompt for a simulation group.
 **Query Parameters:**
 
 - `simulation_group_id` (string, required): ID of the group
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Request Body:**
 
@@ -1894,7 +1911,7 @@ Update the debrief evaluation prompt for a simulation group.
 **Query Parameters:**
 
 - `simulation_group_id` (string, required): ID of the group
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Request Body:**
 
@@ -1953,7 +1970,7 @@ Get prompt change history for a group.
 **Query Parameters:**
 
 - `simulation_group_id` (string, required): ID of the group
-- `instructor_email` (string, required): Email of the instructor
+- `instructor_email` (string, optional): Email of the instructor (must match token email if provided; token email used if omitted)
 
 **Response:**
 
@@ -2051,14 +2068,16 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/
 
 ### Get Debrief (Instructor)
 
-Get AI debrief for a student's completed chat session (instructor access).
+Get AI debrief for a student's completed chat session (instructor access). Authorizes by verifying the chat belongs to the specified simulation group via the data model chain.
 
 **Endpoint:** `GET /instructor/get_debrief`
 
 **Query Parameters:**
 
 - `session_id` (string, required): ID of the session/chat
-- `simulation_group_id` (string, required): ID of the simulation group (for authorization)
+- `simulation_group_id` (string, required): ID of the simulation group (used for authorization — chat must belong to this group)
+
+**Security:** The endpoint verifies access by joining `chats → student_interactions → personas` and confirming the persona belongs to the given simulation group. Returns **404** if the chat is not found in the group (avoids leaking existence of chats in other groups).
 
 **Response:**
 
@@ -3246,7 +3265,7 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/
 
 # Admin Endpoints
 
-All admin endpoints require the `adminAuthorizer`.
+All admin endpoints require the `adminAuthorizer`. Additionally, the handler verifies admin access by checking if the user has `admin` in either the Cognito `admin` group (`cognito:groups` JWT claim) or the database `roles` array. This dual-source approach allows fresh deployers to bootstrap admin access via the Cognito group without needing direct DB access. If the check fails, the request is rejected with **403 Forbidden**.
 
 ## Instructor Management
 
@@ -3258,7 +3277,7 @@ Get all users with the instructor role.
 
 **Query Parameters:**
 
-- `instructor_email` (string, required): Email of the admin accessing the list
+- `instructor_email` (string, optional): Email of the admin (backwards-compatible; the authenticated admin's email from the token is used for authorization)
 
 **Response:**
 
@@ -3283,13 +3302,18 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/admin/instr
 
 ### Elevate to Instructor
 
-Grant the instructor role to a registered user.
+Grant the instructor role to a registered user. The target user must exist in both Cognito (registered account) and the database (completed first sign-in).
 
 **Endpoint:** `POST /admin/elevate_instructor`
 
 **Query Parameters:**
 
 - `email` (string, required): Email of the user to be elevated
+
+**Security:**
+- Verifies the target user exists in Cognito via `AdminGetUser`. Returns **400** if the user has not registered.
+- Verifies the user exists in the database. Returns **400** if the user registered but hasn't completed sign-in (post-confirmation trigger hasn't fired).
+- If the user already has `instructor` or `admin` role, no changes are made.
 
 **Response:**
 

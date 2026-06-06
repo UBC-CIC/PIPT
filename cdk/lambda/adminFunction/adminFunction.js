@@ -35,6 +35,28 @@ exports.handler = async (event, context) => {
     logger.info("Database connection initialized");
   }
 
+  // --- Role-based authorization ---
+  // Admin access is granted if the user has 'admin' in EITHER:
+  //   1. The Cognito 'admin' group (cognito:groups claim in the JWT), OR
+  //   2. The database roles array.
+  // This allows fresh deployers to bootstrap admin access via Cognito group
+  // without needing direct DB access.
+  const adminEmail = event.requestContext.authorizer.email;
+  const cognitoGroups = JSON.parse(event.requestContext.authorizer.cognitoGroups || "[]");
+  const roleCheckResult = await sqlConnectionTableCreator`
+    SELECT roles FROM "users" WHERE user_email = ${adminEmail};
+  `;
+  const userRoles = roleCheckResult[0]?.roles || [];
+  const hasAdminAccess = cognitoGroups.includes("admin") || userRoles.includes("admin");
+  if (!hasAdminAccess) {
+    logger.warn("Forbidden: user lacks admin role", { adminEmail, userRoles, cognitoGroups });
+    return {
+      statusCode: 403,
+      headers: getCorsHeaders(event),
+      body: JSON.stringify({ error: "Forbidden: insufficient role" }),
+    };
+  }
+
   // Function to format student full names (lowercase and spaces replaced with "_")
   const formatNames = (name) => {
     return name.toLowerCase().replace(/\s+/g, "_");
@@ -45,25 +67,28 @@ exports.handler = async (event, context) => {
     const pathData = event.httpMethod + " " + event.resource;
     switch (pathData) {
       case "GET /admin/instructors":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.instructor_email
-        ) {
-          const { instructor_email } = event.queryStringParameters;
+        {
+          // Authentication is handled by the authorizer + role check above.
+          // Previously required instructor_email query param; now uses authorizer context.
+          // Fall back to query param for backwards compatibility.
+          const instructor_email = adminEmail || (event.queryStringParameters && event.queryStringParameters.instructor_email);
+
+          if (!instructor_email) {
+            response.statusCode = 400;
+            response.body = "instructor_email is required";
+            logger.warn("Missing instructor_email parameter");
+            break;
+          }
 
           // SQL query to fetch all users who are instructors
           const instructors = await sqlConnectionTableCreator`
-                SELECT user_email, first_name, last_name
+                SELECT user_id, user_email, first_name, last_name
                 FROM "users"
                 WHERE roles @> ARRAY['instructor']::varchar[]
                 ORDER BY last_name ASC;
               `;
 
           response.body = JSON.stringify(instructors);
-        } else {
-          response.statusCode = 400;
-          response.body = "instructor_email is required";
-          logger.warn("Missing instructor_email parameter");
         }
         break;
       case "GET /admin/simulation_groups":
@@ -108,12 +133,18 @@ exports.handler = async (event, context) => {
       case "POST /admin/enroll_instructor":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.simulation_group_id &&
-          event.queryStringParameters.instructor_email
+          event.queryStringParameters.simulation_group_id
         ) {
           try {
-            const { simulation_group_id, instructor_email } =
-              event.queryStringParameters;
+            const { simulation_group_id } = event.queryStringParameters;
+            const body = event.body ? JSON.parse(event.body) : {};
+            const instructor_email = body.instructor_email || event.queryStringParameters.instructor_email;
+
+            if (!instructor_email) {
+              response.statusCode = 400;
+              response.body = "simulation_group_id and instructor_email are required";
+              break;
+            }
 
             // Retrieve user_id from users table based on the instructor email
             const userResult = await sqlConnectionTableCreator`
@@ -280,24 +311,43 @@ exports.handler = async (event, context) => {
       case "GET /admin/instructorGroups":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.instructor_email
+          (event.queryStringParameters.instructor_id || event.queryStringParameters.instructor_email)
         ) {
-          const { instructor_email } = event.queryStringParameters;
+          const instructorId = event.queryStringParameters.instructor_id;
+          const instructor_email = event.queryStringParameters.instructor_email;
 
-          // SQL query to fetch all groups for a given instructor
-          const groups = await sqlConnectionTableCreator`
-              SELECT g.simulation_group_id, g.group_name, g.group_description
-              FROM "enrollments" e
-              JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
-              JOIN "users" u ON e.user_id = u.user_id
-              WHERE u.user_email = ${instructor_email} AND e.enrollment_type = 'instructor';
-            `;
+          try {
+            let groups;
 
-          response.body = JSON.stringify(groups);
+            if (instructorId) {
+              // Use user_id directly — skip email lookup
+              groups = await sqlConnectionTableCreator`
+                SELECT g.simulation_group_id, g.group_name, g.group_description
+                FROM "enrollments" e
+                JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
+                WHERE e.user_id = ${instructorId} AND e.enrollment_type = 'instructor';
+              `;
+            } else {
+              // Fall back to email lookup for backwards compatibility
+              groups = await sqlConnectionTableCreator`
+                SELECT g.simulation_group_id, g.group_name, g.group_description
+                FROM "enrollments" e
+                JOIN "simulation_groups" g ON e.simulation_group_id = g.simulation_group_id
+                JOIN "users" u ON e.user_id = u.user_id
+                WHERE u.user_email = ${instructor_email} AND e.enrollment_type = 'instructor';
+              `;
+            }
+
+            response.body = JSON.stringify(groups);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "instructor_email is required",
+            error: "instructor_id (or instructor_email) is required",
           });
         }
         break;
@@ -369,13 +419,17 @@ exports.handler = async (event, context) => {
         }
         break;
       case "DELETE /admin/delete_instructor_enrolments":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.instructor_email
-        ) {
-          try {
-            const { instructor_email } = event.queryStringParameters;
+        {
+          const body = event.body ? JSON.parse(event.body) : {};
+          const instructor_email = body.instructor_email || (event.queryStringParameters && event.queryStringParameters.instructor_email);
 
+          if (!instructor_email) {
+            response.statusCode = 400;
+            response.body = "instructor_email is required";
+            break;
+          }
+
+          try {
             // Retrieve the user's ID
             const userResult = await sqlConnectionTableCreator`
                         SELECT user_id 
@@ -388,7 +442,7 @@ exports.handler = async (event, context) => {
             if (!userId) {
               response.statusCode = 404;
               response.body = JSON.stringify({ error: "Instructor not found" });
-              return;
+              break;
             }
 
             // Delete all enrollments for the instructor
@@ -405,9 +459,6 @@ exports.handler = async (event, context) => {
             logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
-        } else {
-          response.statusCode = 400;
-          response.body = "instructor_email query parameter is required";
         }
         break;
       case "DELETE /admin/delete_group_instructor_enrolments":
@@ -511,11 +562,15 @@ exports.handler = async (event, context) => {
         }
         break;
       case "POST /admin/elevate_instructor":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.email
-        ) {
-          const instructorEmail = event.queryStringParameters.email;
+        {
+          const body = event.body ? JSON.parse(event.body) : {};
+          const instructorEmail = body.email || (event.queryStringParameters && event.queryStringParameters.email);
+
+          if (!instructorEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Email is required" });
+            break;
+          }
 
           try {
             // Verify the user exists in Cognito (i.e., they signed up through the proper channel)
@@ -587,19 +642,22 @@ exports.handler = async (event, context) => {
             logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
           }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Email is required" });
         }
         break;
       case "POST /admin/lower_instructor":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.email
-        ) {
-          try {
-            const userEmail = event.queryStringParameters.email;
+        {
+          const body = event.body ? JSON.parse(event.body) : {};
+          const userEmail = body.email || (event.queryStringParameters && event.queryStringParameters.email);
 
+          if (!userEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "email is required",
+            });
+            break;
+          }
+
+          try {
             // Fetch the roles for the user
             const userRoleData = await sqlConnectionTableCreator`
                     SELECT roles, user_id
@@ -645,11 +703,6 @@ exports.handler = async (event, context) => {
             response.statusCode = 500;
             response.body = JSON.stringify({ error: "Internal server error" });
           }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "email query parameter is missing",
-          });
         }
         break;
       case "GET /admin/system_prompts":

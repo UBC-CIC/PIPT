@@ -22,6 +22,9 @@ exports.handler = async (event, context) => {
     const firstName = userAttributes.given_name || "";
     const lastName = userAttributes.family_name || "";
 
+    // event.userName is the immutable Cognito sub (e.g. "abc123-def456-...")
+    const cognitoSub = event.userName || userAttributes.sub || null;
+
     if (!email) {
       logger.error("Email attribute missing from event userAttributes", { userName: event.userName });
       return {
@@ -34,13 +37,16 @@ exports.handler = async (event, context) => {
 
     const username = `${firstName}_${lastName}`.toLowerCase().replace(/\s+/g, '_');
 
-    // Idempotent upsert: insert new user or update last_sign_in if already exists
+    // Idempotent upsert: insert new user or update last_sign_in if already exists.
+    // Also sets cognito_sub on insert and backfills it on subsequent sign-ins
+    // (COALESCE keeps any existing value, so we never overwrite with NULL).
     await sqlConnection`
       INSERT INTO "users" (
         user_email, 
         username, 
         first_name, 
         last_name, 
+        cognito_sub,
         time_account_created, 
         roles, 
         last_sign_in
@@ -50,14 +56,17 @@ exports.handler = async (event, context) => {
         ${username}, 
         ${firstName}, 
         ${lastName}, 
+        ${cognitoSub},
         CURRENT_TIMESTAMP, 
         ARRAY['student'], 
         CURRENT_TIMESTAMP
       )
-      ON CONFLICT (user_email) DO UPDATE SET last_sign_in = CURRENT_TIMESTAMP
+      ON CONFLICT (user_email) DO UPDATE SET 
+        last_sign_in = CURRENT_TIMESTAMP,
+        cognito_sub = COALESCE("users".cognito_sub, EXCLUDED.cognito_sub)
     `;
 
-    logger.info("User upserted successfully", { email });
+    logger.info("User upserted successfully", { email, cognitoSub });
 
     return event;
   } catch (err) {

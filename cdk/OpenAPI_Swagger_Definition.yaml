@@ -408,12 +408,6 @@ paths:
       operationId: student_create_user_POST
       parameters:
         - in: query
-          name: user_email
-          required: false
-          description: email of the user
-          schema:
-            type: string
-        - in: query
           name: username
           required: false
           description: username of the user
@@ -483,15 +477,8 @@ paths:
     get:
       tags:
         - Student
-      summary: Get the list of available regions
+      summary: Get the list of roles for the authenticated user
       operationId: student_get_user_roles_GET
-      parameters:
-        - in: query
-          name: user_email
-          required: false
-          description: email of the user
-          schema:
-            type: string
       responses:
         "200":
           description: Roles Available
@@ -516,18 +503,11 @@ paths:
     get:
       tags:
         - Student
-      summary: Get the list of available regions
+      summary: Get the name of the authenticated user
       operationId: student_get_name_GET
-      parameters:
-        - in: query
-          name: user_email
-          required: false
-          description: email of the user
-          schema:
-            type: string
       responses:
         "200":
-          description: Roles Available
+          description: Name returned successfully
         "400":
           description: Bad Request
         "401":
@@ -549,15 +529,8 @@ paths:
     get:
       tags:
         - Student
-      summary: Get groups enrolled by a student
+      summary: Get groups enrolled by the authenticated student
       operationId: student_simulation_group_GET
-      parameters:
-        - in: query
-          name: email
-          required: true
-          description: Email of the student
-          schema:
-            type: string
       responses:
         "200":
           description: List of simulation groups
@@ -582,15 +555,9 @@ paths:
     get:
       tags:
         - Student
-      summary: Get simulation group page details for a student
+      summary: Get simulation group page details for the authenticated student
       operationId: student_simulation_group_page_GET
       parameters:
-        - in: query
-          name: email
-          required: true
-          description: Email of the student
-          schema:
-            type: string
         - in: query
           name: simulation_group_id
           required: true
@@ -621,15 +588,9 @@ paths:
     get:
       tags:
         - Student
-      summary: Get sessions for a patient accessed by a student
+      summary: Get sessions for a patient accessed by the authenticated student
       operationId: student_patient_GET
       parameters:
-        - in: query
-          name: email
-          required: true
-          description: Email of the student
-          schema:
-            type: string
         - in: query
           name: simulation_group_id
           required: true
@@ -676,12 +637,6 @@ paths:
           schema:
             type: string
         - in: query
-          name: email
-          required: true
-          description: Email of the student
-          schema:
-            type: string
-        - in: query
           name: simulation_group_id
           required: true
           description: ID of the group
@@ -724,12 +679,6 @@ paths:
           name: session_id
           required: true
           description: ID of the session to delete
-          schema:
-            type: string
-        - in: query
-          name: email
-          required: true
-          description: Email of the student
           schema:
             type: string
         - in: query
@@ -783,12 +732,6 @@ paths:
           name: session_id
           required: true
           description: ID of the session where the message is sent
-          schema:
-            type: string
-        - in: query
-          name: email
-          required: true
-          description: Email of the student sending the message
           schema:
             type: string
         - in: query
@@ -858,12 +801,6 @@ paths:
           schema:
             type: string
         - in: query
-          name: email
-          required: true
-          description: Email of the student associated with the session
-          schema:
-            type: string
-        - in: query
           name: simulation_group_id
           required: true
           description: ID of the group related to the session
@@ -920,15 +857,9 @@ paths:
     post:
       tags:
         - Student
-      summary: Enroll a student in a group
+      summary: Enroll the authenticated student in a group
       operationId: admin_enroll_student_POST
       parameters:
-        - in: query
-          name: student_email
-          required: true
-          schema:
-            type: string
-          description: Email of the student to enroll
         - in: query
           name: group_access_code
           required: true
@@ -955,7 +886,7 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "student_email and group_access_code query parameters are required"
+                    example: "group_access_code query parameter is required"
         "404":
           description: Not Found
           content:
@@ -1210,7 +1141,7 @@ paths:
     get:
       tags:
         - Student
-      summary: Get all notes in a session
+      summary: Get voice ID for a patient
       operationId: patient_voice_id_GET
       parameters:
         - in: query
@@ -1313,12 +1244,6 @@ paths:
           schema:
             type: string
           description: ID of the simulation group patient
-        - in: query
-          name: student_email
-          required: true
-          schema:
-            type: string
-          description: Email of the student
         - in: query
           name: simulation_group_id
           required: true
@@ -1476,12 +1401,6 @@ paths:
           schema:
             type: string
           description: ID of the group
-        - in: query
-          name: student_email
-          required: true
-          schema:
-            type: string
-          description: Email of the student
       responses:
         "200":
           description: Successfully retrieved completion statuses for interactions
@@ -1517,7 +1436,6 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
-  # /student/empathy_enabled endpoint removed — empathy feature disabled
   /student/voice_enabled:
     <<: *commonOptions
     get:
@@ -1571,12 +1489,6 @@ paths:
           name: session_id
           required: true
           description: ID of the session/chat
-          schema:
-            type: string
-        - in: query
-          name: email
-          required: true
-          description: Email of the student (for authorization)
           schema:
             type: string
       responses:
@@ -1849,25 +1761,18 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
-  # Endpoint to retrieve empathy evaluation summary and scores for a student's session
   /student/empathy_summary:
     <<: *commonOptions
     get:
       tags:
         - Student
-      summary: Get empathy evaluation summary for a student
+      summary: Get empathy evaluation summary for the authenticated student
       operationId: student_empathy_summary_GET
       parameters:
         - in: query
           name: session_id
           required: true
           description: ID of the session
-          schema:
-            type: string
-        - in: query
-          name: email
-          required: true
-          description: Email of the student
           schema:
             type: string
         - in: query
@@ -1951,18 +1856,11 @@ paths:
     get:
       tags:
         - Instructor
-      summary: Get student groups
+      summary: Get student groups for the authenticated instructor
       operationId: instructor_student_group_GET
-      parameters:
-        - in: query
-          name: email
-          required: true
-          description: email of the instructor
-          schema:
-            type: string
       responses:
         "200":
-          description: Groups student is a part of are returned successfully
+          description: Groups retrieved successfully
           content:
             application/json:
               schema:
@@ -2162,15 +2060,8 @@ paths:
     get:
       tags:
         - Admin
-      summary: Get simulation groups where the instructor is enrolled
+      summary: Get simulation groups where the authenticated instructor is enrolled
       operationId: instructor_get_groups_GET
-      parameters:
-        - in: query
-          name: email
-          required: true
-          description: Email of the instructor
-          schema:
-            type: string
       responses:
         "200":
           description: Simulation groups retrieved successfully
@@ -2258,7 +2149,7 @@ paths:
     delete:
       tags:
         - Instructor
-      summary: Delete certain file
+      summary: Delete patient S3 files
       operationId: instructor_delete_patient_s3_DELETE
       parameters:
         - in: query
@@ -2344,59 +2235,27 @@ paths:
                 properties:
                   file_id:
                     type: string
-                    description: UUID of the file
                   patient_id:
                     type: string
-                    description: UUID of the patient
                   filetype:
                     type: string
-                    description: Type of the file
                   s3_bucket_reference:
                     type: string
-                    description: Reference to the S3 bucket
                   filepath:
                     type: string
-                    description: File path
                   filename:
                     type: string
-                    description: Name of the file
                   time_uploaded:
                     type: string
                     format: date-time
-                    description: Time when the file was uploaded
                   metadata:
                     type: string
-                    description: Updated metadata content
         "400":
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
         "404":
           description: File not found
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
         "500":
           description: Internal Server Error
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    description: Error message
       security:
         - instructorAuthorizer: []
       x-amazon-apigateway-integration:
@@ -2405,7 +2264,6 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
-  # Endpoint to retrieve instructor view empathy evaluation summary and scores for a student's session
   /instructor/empathy_summary:
     <<: *commonOptions
     get:
@@ -2420,10 +2278,10 @@ paths:
           description: ID of the simulation group
           schema:
             type: string
-        - name: student_email
+        - name: student_id
           in: query
           required: true
-          description: Email of the student
+          description: UUID of the student
           schema:
             type: string
       responses:
@@ -2531,12 +2389,6 @@ paths:
           description: New number for the patient
           schema:
             type: integer
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor making the change
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -2573,13 +2425,6 @@ paths:
         - Instructor
       summary: Create a new simulation group
       operationId: instructor_create_simulation_group_POST
-      parameters:
-        - in: query
-          name: instructor_email
-          required: true
-          schema:
-            type: string
-          description: Email of the instructor creating the group
       requestBody:
         required: true
         content:
@@ -2669,12 +2514,6 @@ paths:
           schema:
             type: string
         - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor creating the patient
-          schema:
-            type: string
-        - in: query
           name: voice_id
           required: false
           description: Voice ID for TTS
@@ -2727,12 +2566,6 @@ paths:
           name: persona_id
           required: true
           description: ID of the patient to be updated
-          schema:
-            type: string
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor updating the patient
           schema:
             type: string
         - in: query
@@ -2797,7 +2630,7 @@ paths:
     get:
       tags:
         - Instructor
-      summary: Retrieve all previous prompts for a specific group and instructor
+      summary: Retrieve all previous prompts for a specific group
       operationId: instructor_get_previous_prompts
       parameters:
         - in: query
@@ -2806,12 +2639,6 @@ paths:
           schema:
             type: string
           description: ID of the group
-        - in: query
-          name: instructor_email
-          required: true
-          schema:
-            type: string
-          description: Email of the instructor
       responses:
         "200":
           description: Successfully retrieved previous prompts
@@ -2856,11 +2683,11 @@ paths:
             type: string
           description: ID of the group
         - in: query
-          name: student_email
+          name: student_id
           required: true
           schema:
             type: string
-          description: Email of the student
+          description: UUID of the student
       responses:
         "200":
           description: Successfully retrieved student messages
@@ -2958,11 +2785,11 @@ paths:
             type: string
           description: ID of the group
         - in: query
-          name: student_email
+          name: student_id
           required: true
           schema:
             type: string
-          description: Email of the student
+          description: UUID of the student
       responses:
         "200":
           description: Successfully retrieved completion statuses for interactions
@@ -3138,12 +2965,6 @@ paths:
           description: ID of the group to update the prompt
           schema:
             type: string
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor updating the prompt
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -3191,6 +3012,25 @@ paths:
       responses:
         "200":
           description: Students retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: string
+                      description: UUID of the student
+                    user_email:
+                      type: string
+                      description: Email of the student
+                    username:
+                      type: string
+                    first_name:
+                      type: string
+                    last_name:
+                      type: string
         "400":
           description: Bad Request
         "401":
@@ -3221,18 +3061,18 @@ paths:
           description: ID of the group from which the student will be deleted
           schema:
             type: string
-        - in: query
-          name: user_email
-          required: true
-          description: Email of the student to be deleted
-          schema:
-            type: string
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor performing the deletion
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - user_email
+              properties:
+                user_email:
+                  type: string
+                  description: Email of the student to be removed
       responses:
         "200":
           description: Student deleted successfully
@@ -3385,12 +3225,6 @@ paths:
           name: simulation_group_id
           required: true
           description: ID of the group to update the debrief prompt
-          schema:
-            type: string
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor updating the debrief prompt
           schema:
             type: string
       requestBody:
@@ -3574,9 +3408,9 @@ paths:
           schema:
             type: string
         - in: query
-          name: student_email
+          name: student_id
           required: true
-          description: The email of the student
+          description: UUID of the student
           schema:
             type: string
       responses:
@@ -3598,7 +3432,6 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
-
   /instructor/question_bank:
     <<: *commonOptions
     get:
@@ -3875,13 +3708,10 @@ paths:
               properties:
                 weight_override:
                   type: number
-                  description: Updated weight override
                 max_score_override:
                   type: number
-                  description: Updated max score override
                 order:
                   type: integer
-                  description: Updated display order
       responses:
         "200":
           description: Assignment updated successfully
@@ -3922,9 +3752,9 @@ paths:
           schema:
             type: string
         - in: query
-          name: student_email
+          name: student_id
           required: false
-          description: Optional student email to filter by
+          description: Optional student UUID to filter by
           schema:
             type: string
       responses:
@@ -4266,13 +4096,18 @@ paths:
         - Admin
       summary: Elevate a user to instructor role
       operationId: admin_elevate_instructor_POST
-      parameters:
-        - in: query
-          name: email
-          required: true
-          description: Email of the user to be elevated
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  description: Email of the user to be elevated to instructor
       responses:
         "200":
           description: User role updated to instructor
@@ -4329,16 +4164,25 @@ paths:
         - Admin
       summary: Get all instructors
       operationId: admin_get_instructors_GET
-      parameters:
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the admin accessing the list of instructors
-          schema:
-            type: string
       responses:
         "200":
           description: List of instructors retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    user_id:
+                      type: string
+                      description: UUID of the instructor
+                    user_email:
+                      type: string
+                    first_name:
+                      type: string
+                    last_name:
+                      type: string
         "400":
           description: Bad Request
         "401":
@@ -4389,12 +4233,18 @@ paths:
           description: ID of the group to enroll the instructor in
           schema:
             type: string
-        - in: query
-          name: instructor_email
-          required: true
-          description: Email of the instructor to enroll
-          schema:
-            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - instructor_email
+              properties:
+                instructor_email:
+                  type: string
+                  description: Email of the instructor to enroll
       responses:
         "200":
           description: Enrollment created successfully
@@ -4521,12 +4371,12 @@ paths:
       summary: Get all groups for a given instructor where enrolment type is instructor
       operationId: admin_get_instructor_groups_GET
       parameters:
-        - name: instructor_email
+        - name: instructor_id
           in: query
-          required: true
+          required: false
           schema:
             type: string
-          description: Email of the instructor to find groups for
+          description: UUID of the instructor (or pass instructor_email instead)
       responses:
         "200":
           description: List of groups
@@ -4560,7 +4410,7 @@ paths:
     post:
       tags:
         - Admin
-      summary: update the access of a group
+      summary: Update the access of a group
       operationId: admin_re_enroll_instructor_POST
       parameters:
         - in: query
@@ -4694,13 +4544,18 @@ paths:
         - Admin
       summary: Delete all enrolments for an instructor
       operationId: admin_delete_instructor_enrolments_DELETE
-      parameters:
-        - in: query
-          name: instructor_email
-          required: true
-          schema:
-            type: string
-          description: Email of the instructor whose enrolments are to be deleted
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - instructor_email
+              properties:
+                instructor_email:
+                  type: string
+                  description: Email of the instructor whose enrolments are to be deleted
       responses:
         "200":
           description: Instructor enrolments deleted successfully
@@ -4721,7 +4576,7 @@ paths:
                 properties:
                   error:
                     type: string
-                    example: "instructor_email query parameter is required"
+                    example: "instructor_email is required"
         "500":
           description: Internal Server Error
       security:
@@ -4804,14 +4659,6 @@ paths:
                     example: "Group and related records deleted successfully."
         "400":
           description: Bad Request
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
-                    example: "simulation_group_id query parameter is required"
         "500":
           description: Internal Server Error
       security:
@@ -4829,13 +4676,18 @@ paths:
         - Admin
       summary: Lower an instructor to a student role
       operationId: admin_lower_instructor_POST
-      parameters:
-        - in: query
-          name: email
-          required: true
-          schema:
-            type: string
-          description: Email of the user to be lowered from instructor to student
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  description: Email of the user to be lowered from instructor to student
       responses:
         "200":
           description: Instructor role lowered to student
@@ -5175,7 +5027,6 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
-
   /admin/question_bank:
     <<: *commonOptions
     get:
@@ -6116,7 +5967,7 @@ components:
   securitySchemes:
     adminAuthorizer:
       type: "apiKey"
-      name: "Authorization" # The header name where the token is provided
+      name: "Authorization"
       in: "header"
       x-amazon-apigateway-authtype: "custom"
       x-amazon-apigateway-authorizer:
@@ -6127,7 +5978,7 @@ components:
         authorizerResultTtlInSeconds: 300
     studentAuthorizer:
       type: "apiKey"
-      name: "Authorization" # The header name where the token is provided
+      name: "Authorization"
       in: "header"
       x-amazon-apigateway-authtype: "custom"
       x-amazon-apigateway-authorizer:
@@ -6138,7 +5989,7 @@ components:
         authorizerResultTtlInSeconds: 300
     instructorAuthorizer:
       type: "apiKey"
-      name: "Authorization" # The header name where the token is provided
+      name: "Authorization"
       in: "header"
       x-amazon-apigateway-authtype: "custom"
       x-amazon-apigateway-authorizer:

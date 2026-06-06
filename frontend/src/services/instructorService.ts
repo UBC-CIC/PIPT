@@ -406,7 +406,7 @@ async function getSimulationGroups(): Promise<InstructorSimulationGroup[]> {
     if (!user?.email) throw new Error('Not authenticated');
 
     const data = await apiClient.request<any[]>(
-      `instructor/groups?email=${encodeURIComponent(user.email)}`
+      `instructor/groups`
     );
 
     return data.map((group, index) => ({
@@ -434,7 +434,7 @@ async function createSimulationGroup(data: { name: string; description: string; 
   if (!user?.email) throw new Error('Not authenticated');
 
   const result = await apiClient.request<any>(
-    `instructor/create_simulation_group?instructor_email=${encodeURIComponent(user.email)}`,
+    `instructor/create_simulation_group`,
     {
       method: 'POST',
       body: {
@@ -470,7 +470,7 @@ async function getCurrentUser(): Promise<UserData> {
     if (!user?.email) throw new Error('Not authenticated');
 
     const data = await apiClient.request<{ name: string }>(
-      `student/get_name?user_email=${encodeURIComponent(user.email)}`
+      `student/get_name`
     );
 
     return {
@@ -754,7 +754,6 @@ async function createPatient(simulationGroupId: string, patientData: PatientCrea
       persona_number: patientData.patient_number?.toString() || '1',
       persona_age: patientData.patient_age.toString(),
       persona_gender: patientData.patient_gender,
-      instructor_email: user.email,
     });
 
     if (patientData.voice_id) {
@@ -788,7 +787,6 @@ async function updatePatient(simulationGroupId: string, patientData: PatientUpda
 
     const queryParams = new URLSearchParams({
       persona_id: patientData.patient_id,
-      instructor_email: user.email,
       simulation_group_id: simulationGroupId,
     });
 
@@ -1045,7 +1043,7 @@ async function updatePatientLLMEvaluation(patientId: string, enabled: boolean): 
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `instructor/toggle_llm_completion?persona_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/toggle_llm_completion?persona_id=${encodeURIComponent(patientId)}`,
       {
         method: 'PUT',
         body: {
@@ -1076,7 +1074,6 @@ async function updatePatientVoiceEnabled(patientId: string, simulationGroupId: s
 
     const queryParams = new URLSearchParams({
       persona_id: patientId,
-      instructor_email: user.email,
       simulation_group_id: simulationGroupId,
     });
 
@@ -1105,7 +1102,7 @@ async function deletePatient(patientId: string): Promise<void> {
     if (!user?.email) throw new Error('Not authenticated');
 
     await apiClient.request(
-      `instructor/delete_patient?persona_id=${encodeURIComponent(patientId)}&instructor_email=${encodeURIComponent(user.email)}`,
+      `instructor/delete_patient?persona_id=${encodeURIComponent(patientId)}`,
       {
         method: 'DELETE',
       }
@@ -1209,7 +1206,7 @@ async function updateSystemPrompt(
   prompt: string
 ): Promise<void> {
   await apiClient.request(
-    `instructor/prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    `instructor/prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
     { method: 'PUT', body: { prompt } }
   );
 }
@@ -1223,7 +1220,7 @@ async function updateDebriefPrompt(
   prompt: string
 ): Promise<void> {
   await apiClient.request(
-    `instructor/debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}&instructor_email=${encodeURIComponent(instructorEmail)}`,
+    `instructor/debrief_prompt?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
     { method: 'PUT', body: { prompt } }
   );
 }
@@ -1301,6 +1298,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
   // Step 1: Get basic student info (name, email) from the students list
   let studentName = '';
   let studentEmail = '';
+  let studentUuid = '';
   let groupName = groupNameOverride || '';
 
   try {
@@ -1312,6 +1310,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
     }
     studentName = student.name;
     studentEmail = student.email;
+    studentUuid = student.id;
   } catch (error) {
     console.error('Failed to fetch students list:', error);
     return undefined;
@@ -1333,7 +1332,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
   let completedChats = 0;
   try {
     const patientData = await apiClient.request<Record<string, any[]>>(
-      `instructor/student_patients_messages?student_email=${encodeURIComponent(studentEmail)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/student_patients_messages?student_id=${encodeURIComponent(studentUuid)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     for (const pName of Object.keys(patientData)) {
@@ -1350,7 +1349,7 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
   const caseCompletionRate = totalChats > 0 ? Math.round((completedChats / totalChats) * 100) : 0;
 
   return {
-    id: studentId,
+    id: studentUuid,
     name: studentName,
     email: studentEmail,
     groupName,
@@ -1363,12 +1362,12 @@ async function getStudentDetails(studentId: string, simulationGroupId: string, g
  * Fetch all patient data for a student from the backend.
  * Returns structured data with patient names, chat attempts, messages, and notes.
  */
-async function getStudentPatientData(studentEmail: string, simulationGroupId: string): Promise<StudentPatientData> {
+async function getStudentPatientData(studentId: string, simulationGroupId: string): Promise<StudentPatientData> {
   const empty: StudentPatientData = { patientNames: [], attempts: {}, messages: {}, notes: {}, dtpSubmissions: {}, recommendationSubmissions: {} };
 
   try {
     const raw = await apiClient.request<Record<string, any[]>>(
-      `instructor/student_patients_messages?student_email=${encodeURIComponent(studentEmail)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      `instructor/student_patients_messages?student_id=${encodeURIComponent(studentId)}&simulation_group_id=${encodeURIComponent(simulationGroupId)}`
     );
 
     const patientNames = Object.keys(raw);

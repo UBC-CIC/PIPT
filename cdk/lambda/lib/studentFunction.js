@@ -107,86 +107,81 @@ exports.handler = async (event, context) => {
         }
         break;
       case "GET /student/get_user_roles":
-        if (
-          event.queryStringParameters &&
-          event.queryStringParameters.user_email
-        ) {
-          const user_email = event.queryStringParameters.user_email;
-          try {
-            // Retrieve roles for the user with the provided email
-            const userData = await sqlConnection`
-                SELECT roles
-                FROM "users"
-                WHERE user_email = ${user_email};
-              `;
-            if (userData.length > 0) {
-              response.body = JSON.stringify({ roles: userData[0].roles });
-            } else {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "User not found" });
-            }
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
-          }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "User email is required" });
-        }
-        break;
-      case "GET /student/get_name":
-        if (
-          event.queryStringParameters &&
-          event.queryStringParameters.user_email
-        ) {
-          const user_email = event.queryStringParameters.user_email;
-          try {
-            // Retrieve roles for the user with the provided email
-            const userData = await sqlConnection`
-                  SELECT first_name
+        {
+          const user_email = userEmailAttribute || (event.queryStringParameters && event.queryStringParameters.user_email);
+          if (user_email) {
+            try {
+              // Retrieve roles for the user with the provided email
+              const userData = await sqlConnection`
+                  SELECT roles
                   FROM "users"
                   WHERE user_email = ${user_email};
                 `;
-            if (userData.length > 0) {
-              response.body = JSON.stringify({ name: userData[0].first_name });
-            } else {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "User not found" });
+              if (userData.length > 0) {
+                response.body = JSON.stringify({ roles: userData[0].roles });
+              } else {
+                response.statusCode = 404;
+                response.body = JSON.stringify({ error: "User not found" });
+              }
+            } catch (err) {
+              response.statusCode = 500;
+              logger.error("Operation failed", { error: err.message, stack: err.stack });
+              response.body = JSON.stringify({ error: "Internal server error" });
             }
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
+          } else {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "User email is required" });
           }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "User email is required" });
+        }
+        break;
+      case "GET /student/get_name":
+        {
+          const user_email = userEmailAttribute || (event.queryStringParameters && event.queryStringParameters.user_email);
+          if (user_email) {
+            try {
+              // Retrieve first name for the user with the provided email
+              const userData = await sqlConnection`
+                    SELECT first_name
+                    FROM "users"
+                    WHERE user_email = ${user_email};
+                  `;
+              if (userData.length > 0) {
+                response.body = JSON.stringify({ name: userData[0].first_name });
+              } else {
+                response.statusCode = 404;
+                response.body = JSON.stringify({ error: "User not found" });
+              }
+            } catch (err) {
+              response.statusCode = 500;
+              logger.error("Operation failed", { error: err.message, stack: err.stack });
+              response.body = JSON.stringify({ error: "Internal server error" });
+            }
+          } else {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "User email is required" });
+          }
         }
         break;
       case "GET /student/simulation_group":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.email
-        ) {
-          const user_email = event.queryStringParameters.email;
-
-          try {
-            // Retrieve the user ID using the user_email
-            const userResult = await sqlConnection`
+        {
+          const user_email = userEmailAttribute || (event.queryStringParameters && event.queryStringParameters.email);
+          if (user_email) {
+            try {
+              // Retrieve the user ID using the user_email
+              const userResult = await sqlConnection`
                 SELECT user_id FROM "users" WHERE user_email = ${user_email};
               `;
 
-            if (userResult.length === 0) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "User not found" });
-              break;
-            }
+              if (userResult.length === 0) {
+                response.statusCode = 404;
+                response.body = JSON.stringify({ error: "User not found" });
+                break;
+              }
 
-            const user_id = userResult[0].user_id;
+              const user_id = userResult[0].user_id;
 
-            // Query to get simulation groups for the user
-            const data = await sqlConnection`
+              // Query to get simulation groups for the user
+              const data = await sqlConnection`
                 SELECT "simulation_groups".*
                 FROM "enrollments"
                 JOIN "simulation_groups" ON "simulation_groups".simulation_group_id = "enrollments".simulation_group_id
@@ -194,26 +189,32 @@ exports.handler = async (event, context) => {
                 AND "simulation_groups".group_student_access = TRUE
                 ORDER BY "simulation_groups".group_name, "simulation_groups".simulation_group_id;
               `;
-            response.body = JSON.stringify(data);
-          } catch (err) {
-            response.statusCode = 500;
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.body = JSON.stringify({ error: "Internal server error" });
+              response.body = JSON.stringify(data);
+            } catch (err) {
+              response.statusCode = 500;
+              logger.error("Operation failed", { error: err.message, stack: err.stack });
+              response.body = JSON.stringify({ error: "Internal server error" });
+            }
+          } else {
+            response.statusCode = 400;
+            response.body = "Invalid value";
           }
-        } else {
-          response.statusCode = 400;
-          response.body = "Invalid value";
         }
         break;
       case "GET /student/simulation_group_page":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id
         ) {
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = "Invalid value";
+            break;
+          }
 
           try {
             // Retrieve the user ID using the user_email
@@ -306,14 +307,19 @@ exports.handler = async (event, context) => {
       case "GET /student/patient":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.patient_id
         ) {
           const patientId = event.queryStringParameters.patient_id;
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Invalid value" });
+            break;
+          }
 
           try {
             // Step 1: Get the user ID using the student_email
@@ -414,15 +420,20 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.patient_id &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.session_name
         ) {
           const patientId = event.queryStringParameters.patient_id;
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
           const sessionName = event.queryStringParameters.session_name;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Invalid value" });
+            break;
+          }
 
           try {
             // Step 1: Get the user ID using the student_email
@@ -527,15 +538,23 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.session_id &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.patient_id
         ) {
           const sessionId = event.queryStringParameters.session_id;
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
           const patientId = event.queryStringParameters.patient_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error:
+                "session_id, email, simulation_group_id, and patient_id are required",
+            });
+            break;
+          }
 
           try {
             // Step 1: Get the user ID using the student_email
@@ -654,17 +673,24 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.session_id &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.patient_id &&
           event.body
         ) {
           const sessionId = event.queryStringParameters.session_id;
           const { message_content } = JSON.parse(event.body);
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
           const patientId = event.queryStringParameters.patient_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "session_id and message_content are required",
+            });
+            break;
+          }
 
           try {
             // Check message limit for this simulation group
@@ -758,17 +784,24 @@ exports.handler = async (event, context) => {
         if (
           event.queryStringParameters != null &&
           event.queryStringParameters.session_id &&
-          event.queryStringParameters.email &&
           event.queryStringParameters.simulation_group_id &&
           event.queryStringParameters.patient_id &&
           event.body
         ) {
           const sessionId = event.queryStringParameters.session_id;
           const { message_content } = JSON.parse(event.body);
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
           const simulationGroupId =
             event.queryStringParameters.simulation_group_id;
           const patientId = event.queryStringParameters.patient_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "session_id and message_content are required",
+            });
+            break;
+          }
 
           try {
             // Insert the new AI message into the Messages table with a generated UUID for message_id
@@ -838,11 +871,20 @@ exports.handler = async (event, context) => {
       case "POST /student/enroll_student":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.student_email &&
           event.queryStringParameters.group_access_code
         ) {
-          const { student_email, group_access_code } =
+          const student_email = userEmailAttribute || event.queryStringParameters.student_email;
+          const { group_access_code } =
             event.queryStringParameters;
+
+          if (!student_email) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error:
+                "student_email and group_access_code query parameters are required",
+            });
+            break;
+          }
 
           // Read optional enrollment_type, default to 'student'
           const VALID_ENROLLMENT_TYPES = ['student', 'preview'];
@@ -1365,11 +1407,18 @@ exports.handler = async (event, context) => {
       case "GET /student/get_debrief":
         if (
           event.queryStringParameters != null &&
-          event.queryStringParameters.session_id &&
-          event.queryStringParameters.email
+          event.queryStringParameters.session_id
         ) {
           const sessionId = event.queryStringParameters.session_id;
-          const studentEmail = event.queryStringParameters.email;
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "session_id and email are required",
+            });
+            break;
+          }
 
           try {
             // 1) Validate student exists

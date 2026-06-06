@@ -288,14 +288,12 @@ export class ApiServiceStack extends cdk.Stack {
       },
     });
 
-    // REVIEW: allowUnauthenticatedIdentities is true. While the unauthenticated role has no
-    // policies, this still allows anyone to obtain temporary AWS credentials. Set to false
-    // unless there is a specific use case for unauthenticated access.
+    // Unauthenticated identities disabled — the app requires sign-in for all functionality.
     this.identityPool = new cognito.CfnIdentityPool(
       this,
       `${id}-identity-pool`,
       {
-        allowUnauthenticatedIdentities: true,
+        allowUnauthenticatedIdentities: false,
         identityPoolName: `${id}-IdentityPool`,
         cognitoIdentityProviders: [
           {
@@ -796,6 +794,15 @@ export class ApiServiceStack extends cdk.Stack {
       AutoSignupLambda
     );
 
+    // Create 'admin' Cognito group for bootstrap admin access on fresh deployments.
+    // After deploying, run:
+    //   aws cognito-idp admin-add-user-to-group --user-pool-id <pool-id> --username <email> --group-name admin
+    new cognito.CfnUserPoolGroup(this, `${id}-AdminGroup`, {
+      userPoolId: this.userPool.userPoolId,
+      groupName: "admin",
+      description: "Organization administrators — grants admin API access via cognito:groups claim",
+    });
+
     // const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'genrxAuthorizer', {
     //   cognitoUserPools: [this.userPool],
     // });
@@ -831,7 +838,8 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Student Authorization endpoints
-     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=student,instructor,admin
+     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
+     * Role-based authorization is enforced in the Lambda handlers via the DB.
      */
     const authorizationFunction_student = new lambda.Function(
       this,
@@ -845,8 +853,6 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
-          AUTH_ROLES_CLAIM: "cognito:groups",
-          AUTH_ALLOWED_ROLES: "student,instructor,admin",
         },
         functionName: `${id}-studentLambdaAuthorizer`,
         memorySize: 128,
@@ -871,7 +877,8 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Instructor Authorization endpoints
-     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=instructor,admin
+     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
+     * Role-based authorization is enforced in the Lambda handlers via the DB.
      */
     const authorizationFunction_instructor = new lambda.Function(
       this,
@@ -885,8 +892,6 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
-          AUTH_ROLES_CLAIM: "cognito:groups",
-          AUTH_ALLOWED_ROLES: "instructor,admin",
         },
         functionName: `${id}-instructorLambdaAuthorizer`,
         memorySize: 128,
@@ -911,7 +916,8 @@ export class ApiServiceStack extends cdk.Stack {
     /**
      *
      * Create Lambda for Admin Authorization endpoints
-     * Single jwtAuthorizer codebase — deployed with AUTH_ALLOWED_ROLES=admin
+     * Pure authentication gate — validates JWT signature, issuer, audience, expiry.
+     * Role-based authorization is enforced in the Lambda handlers via the DB.
      */
     const authorizationFunction = new lambda.Function(
       this,
@@ -925,8 +931,6 @@ export class ApiServiceStack extends cdk.Stack {
           AUTH_JWKS_URI: authJwksUri,
           AUTH_ISSUER: authIssuer,
           AUTH_AUDIENCE: authAudience,
-          AUTH_ROLES_CLAIM: "cognito:groups",
-          AUTH_ALLOWED_ROLES: "admin",
         },
         functionName: `${id}-adminLambdaAuthorizer`,
         memorySize: 128,
