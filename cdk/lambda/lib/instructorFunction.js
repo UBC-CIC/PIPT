@@ -823,7 +823,6 @@ exports.handler = async (event, context) => {
           const { simulation_group_id } = event.queryStringParameters;
           const body = event.body ? JSON.parse(event.body) : {};
           const user_email = body.user_email || event.queryStringParameters.user_email;
-          const instructor_email = userEmailAttribute || event.queryStringParameters.instructor_email;
 
           if (!user_email) {
             response.statusCode = 400;
