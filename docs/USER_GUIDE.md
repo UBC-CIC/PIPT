@@ -11,6 +11,27 @@
 - [Admin Workflow](#admin-workflow)
 - [FAQ](#faq)
 
+# User Guide
+
+**Please ensure the application is deployed, instructions in the deployment guide here:**
+
+- [Deployment Guide] 
+
+Once you have deployed the solution, the following user guide will help you navigate the functions available.
+
+| Index | Description |
+| ----- | ----------- |
+| [Getting Started](#getting-started) | Open the app and start a conversation |
+| [Student View](#student-view) | The student can begin an interaction |
+| [Administrator View](#administrator-view) | Manage data sources, LLM settings, analytics, and chat history |
+
+---
+
+
+
+
+
+
 ## Getting Started
 
 ### Creating Your Account
