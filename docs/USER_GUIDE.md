@@ -56,7 +56,7 @@ Use the access code provided by your instructor (shared in class or via your ins
 
 Select a simulation group from your dashboard to view its available patient personas, then browse the list where each patient card displays the patient’s name, age, and gender to help you identify the scenario.
 
-
+<img width="1883" height="611" alt="Screenshot 2026-06-08 123616" src="https://github.com/user-attachments/assets/2191bdad-6414-4de0-9a0c-d441540e9ae3" />
 
 ### Starting a Chat Session
 
