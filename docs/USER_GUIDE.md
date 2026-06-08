@@ -53,7 +53,8 @@ As a student, you practice clinical assessment skills by interacting with AI-pow
 3. Enter the access code and confirm.
 4. The simulation group appears on your dashboard with its available patient personas.
 
-   <img width="941" height="409" alt="image" src="https://github.com/user-attachments/assets/48b25a5d-c509-4899-becb-9e06c05721e5" />
+<img width="1883" height="817" alt="Screenshot 2026-06-08 115437" src="https://github.com/user-attachments/assets/a62953fc-483f-45d5-862f-40a78c60a331" />
+
 
 ### Viewing Available Patients
 
