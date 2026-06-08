@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as amplify from "aws-cdk-lib/aws-amplify";
 import * as ssm from "aws-cdk-lib/aws-ssm";
+import * as route53 from "aws-cdk-lib/aws-route53";
 import { Construct } from "constructs";
 import { ApiServiceStack } from "./api-service-stack";
 import { getSocketUrlSsmParam } from "./ecs-socket-stack";
@@ -120,6 +121,33 @@ applications:
       branchName: "chat-playground",
       enableAutoBuild: true,
     });
+
+    // Custom domain — maps genrx2.cloud-inov.com to the main branch.
+    // Amplify provisions an SSL certificate and creates the required DNS records
+    // in Route 53 automatically via the enableAutoSubDomain setting.
+    const domainName = this.node.tryGetContext("SesVerifiedDomain");
+    if (domainName) {
+      const customDomain = new amplify.CfnDomain(this, `${id}-CustomDomain`, {
+        appId: amplifyApp.attrAppId,
+        domainName: domainName,
+        subDomainSettings: [
+          {
+            branchName: "main",
+            prefix: "", // root domain (genrx2.cloud-inov.com)
+          },
+          {
+            branchName: "main",
+            prefix: "www", // www.genrx2.cloud-inov.com → redirects to root
+          },
+        ],
+        enableAutoSubDomain: false,
+      });
+
+      new cdk.CfnOutput(this, "CustomDomainUrl", {
+        value: `https://${domainName}`,
+        description: "Custom domain URL for the frontend",
+      });
+    }
 
 
     // Output the Amplify App ID and default domain

@@ -16,5 +16,9 @@
     "us-east-1d",
     "us-east-1e",
     "us-east-1f"
-  ]
+  ],
+  "hosted-zone:account=808491096318:domainName=genrx2.cloud-inov.com:region=ca-central-1": {
+    "Id": "/hostedzone/Z075995536VNUGVD5TC03",
+    "Name": "genrx2.cloud-inov.com."
+  }
 }

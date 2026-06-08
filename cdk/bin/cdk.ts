@@ -20,6 +20,7 @@ const env = {
 
 const StackPrefix = app.node.tryGetContext("StackPrefix");
 const githubRepo = app.node.tryGetContext("githubRepo");
+const sesVerifiedDomain = app.node.tryGetContext("SesVerifiedDomain") || "";
 
 // CI/CD pipeline — creates ECR repos, CodeBuild projects, and CodePipeline
 const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
@@ -76,6 +77,7 @@ const apiStack = new ApiServiceStack(
   cicdStack.buildProjects["textGeneration"]?.projectName,
   cicdStack.buildProjects["dataIngestion"]?.projectName,
   cloudFrontWafStack.webAclArn,
+  sesVerifiedDomain || undefined,
   { env, crossRegionReferences: true }
 );
 const turnServerStack = new TurnServerStack(

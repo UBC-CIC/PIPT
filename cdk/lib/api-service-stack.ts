@@ -36,6 +36,8 @@ import * as cr from "aws-cdk-lib/custom-resources";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as ses from "aws-cdk-lib/aws-ses";
+import * as route53 from "aws-cdk-lib/aws-route53";
 
 export class ApiServiceStack extends cdk.Stack {
   private readonly api: apigateway.SpecRestApi;
@@ -73,6 +75,7 @@ export class ApiServiceStack extends cdk.Stack {
     textGenBuildProjectName?: string,
     dataIngestBuildProjectName?: string,
     cloudFrontWafArn?: string,
+    sesVerifiedDomain?: string,
     props?: cdk.StackProps
   ) {
     super(scope, id, props);
@@ -84,6 +87,7 @@ export class ApiServiceStack extends cdk.Stack {
       "https://*.amplifyapp.com",
       "http://localhost:5173",
       "http://localhost:5174",
+      ...(sesVerifiedDomain ? [`https://${sesVerifiedDomain}`, `https://www.${sesVerifiedDomain}`] : []),
     ];
 
     // Comma-separated string for Lambda/ECS environment variables
@@ -182,6 +186,33 @@ export class ApiServiceStack extends cdk.Stack {
     // Create Cognito user pool
 
     /**
+     * SES Email Identity for Cognito emails (verification codes, password resets).
+     * When SesVerifiedDomain is provided, CDK looks up the Route 53 hosted zone
+     * and creates an SES EmailIdentity with automatic DKIM/MAIL FROM DNS records.
+     *
+     * Without it, Cognito uses its built-in email (50/day sandbox limit).
+     */
+    if (sesVerifiedDomain) {
+      const hostedZone = route53.HostedZone.fromLookup(
+        this,
+        `${id}-HostedZone`,
+        { domainName: sesVerifiedDomain }
+      );
+
+      new ses.EmailIdentity(this, `${id}-SesIdentity`, {
+        identity: ses.Identity.publicHostedZone(hostedZone),
+      });
+    }
+
+    const emailConfig = sesVerifiedDomain
+      ? cognito.UserPoolEmail.withSES({
+          fromEmail: `noreply@${sesVerifiedDomain}`,
+          fromName: "GenRx",
+          sesVerifiedDomain: sesVerifiedDomain,
+        })
+      : cognito.UserPoolEmail.withCognito();
+
+    /**
      *
      * Create Cognito User Pool
      * Using verification code
@@ -267,6 +298,7 @@ export class ApiServiceStack extends cdk.Stack {
 </html>`,
         emailStyle: cognito.VerificationEmailStyle.CODE,
       },
+      email: emailConfig,
       passwordPolicy: {
         minLength: 8,
         requireLowercase: true,

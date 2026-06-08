@@ -288,6 +288,13 @@ export class EcsSocketStack extends Stack {
       value: this.socketUrl,
       description: "WebSocket server URL via CloudFront + NLB",
     });
+
+    // TEMPORARY: Keep the old cross-stack export alive until Amplify's deployed
+    // template no longer references it. After a successful --all deploy, remove this.
+    new CfnOutput(this, "ExportsOutputFnGetAttSocketDistro6CB9A510DomainName3741F4F7", {
+      value: distro.domainName,
+      exportName: `${Stack.of(this).stackName}:ExportsOutputFnGetAttSocketDistro6CB9A510DomainName3741F4F7`,
+    });
     
   }
 }
