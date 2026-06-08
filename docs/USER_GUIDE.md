@@ -55,7 +55,6 @@ As a student, you practice clinical assessment skills by interacting with AI-pow
 
 <img width="1883" height="817" alt="Screenshot 2026-06-08 115437" src="https://github.com/user-attachments/assets/a62953fc-483f-45d5-862f-40a78c60a331" />
 
-
 ### Viewing Available Patients
 
 1. Select a simulation group from your dashboard.
