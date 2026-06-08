@@ -48,10 +48,7 @@ As a student, you practice clinical assessment skills by interacting with AI-pow
 
 ### Joining a Simulation Group
 
-1. Obtain the access code from your instructor (shared in class or via your institution's LMS).
-2. From your **Student Dashboard**, click **Join Group**.
-3. Enter the access code and confirm.
-4. The simulation group appears on your dashboard with its available patient personas.
+Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from your **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear on your dashboard with its available patient personas.
 
 <img width="1883" height="817" alt="Screenshot 2026-06-08 115437" src="https://github.com/user-attachments/assets/a62953fc-483f-45d5-862f-40a78c60a331" />
 
