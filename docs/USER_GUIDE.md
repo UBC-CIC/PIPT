@@ -66,10 +66,7 @@ Click on a patient persona to open the patient dashboard, then select **Start Ch
 
 ### Using Voice Chat
 
-1. If voice is enabled for the patient, you see a **Voice** option on the chat interface.
-2. Click the voice button to initiate a voice session.
-3. Speak naturally — the AI patient responds with synthesized speech.
-4. You can switch between text and voice during the same session.
+If voice is enabled for the patient, a **Voice** option appears in the chat interface. Users can click the voice button to start a voice session, where they can speak naturally with the AI patient and receive responses through synthesized speech. Users can also switch between text and voice at any point within the same session.
 
 ### Concluding an Interaction
 
