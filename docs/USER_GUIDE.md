@@ -74,7 +74,7 @@ If voice is enabled for the patient, a **Voice** option appears in the chat inte
 
 After gathering all necessary information, click **Conclude Interaction**. Enter your clinical recommendation or diagnosis in the provided form, then submit to complete the session. A debrief will be generated to evaluate your interaction.
 
-<img width="673" height="323" alt="image" src="https://github.com/user-attachments/assets/3875dcc5-b672-4e79-8f9d-5bd16b5bc185" />
+<img width="956" height="399" alt="Screenshot 2026-06-09 png" src="https://github.com/user-attachments/assets/c5cabc4c-3ebc-4fbd-8f5c-11c8d87a3b58" />
 
 ### Viewing Your Debrief
 
