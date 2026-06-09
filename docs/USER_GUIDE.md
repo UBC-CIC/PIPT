@@ -88,9 +88,6 @@ From their dashboard, students can access past sessions, browse by simulation gr
 
 <img width="954" height="408" alt="image" src="https://github.com/user-attachments/assets/e9983277-16a1-4491-80f5-d8d49cabb0c5" />
 
-
----
-
 ## Instructor Workflow
 
 As an instructor, you design clinical simulation scenarios, manage student enrollment, and review performance analytics.
