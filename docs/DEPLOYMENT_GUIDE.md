@@ -52,7 +52,7 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 ### Optional
 
 - **Docker**: only needed if you want to manually build and push container images locally (not required for normal deployment).
-- **Custom domain**: if you want to use a custom domain for the Amplify-hosted frontend, configure it in the AWS Amplify console after deployment.
+- **Custom domain**: configured automatically via the `SesVerifiedDomain` CDK context variable. See [SES Email Setup](./SES_EMAIL_SETUP.md#amplify-custom-domain) for details.
 - **Amazon SES**: for production email sending (verification emails). By default, Cognito uses its built-in email service (limited to 50 emails/day).
 
 ---
@@ -483,6 +483,9 @@ The CDK app requires two context variables at deploy time:
 | `githubRepo` | Name of your GitHub repository (not the full URL) | Yes |
 | `githubBranch` | Branch to track for CI/CD (default: `main`) | No |
 | `voiceAgentArn` | ARN of a deployed Bedrock AgentCore voice agent (not needed for first deploy) | No |
+| `SesVerifiedDomain` | Domain with a Route 53 hosted zone for SES email + Amplify custom domain | No |
+| `SesIdentityVerified` | Set to `"true"` after SES domain is verified (see [SES Email Setup](./SES_EMAIL_SETUP.md)) | No |
+| `SesSkipIdentityCreation` | Set to `"true"` to skip SES identity creation (when it already exists) | No |
 
 Choose one of the following deployment options:
 
@@ -897,8 +900,10 @@ aws secretsmanager create-secret \
 
 ## Cross-References
 
-- [Security Overview](./SECURITY_OVERVIEW.md) : OWASP assessment and security remediation roadmap
 - [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) : Console-side voice agent configuration
 - [Database Migrations](./DATABASE_MIGRATIONS.md) : Creating and running schema changes
 - [Modification Guide](./MODIFICATION_GUIDE.md) : Customizing colors, API, LLM, and frontend
+
+### Optional Setup
+
 - [SES Email Setup](./SES_EMAIL_SETUP.md) : SES email delivery, custom domain, and Amplify custom domain
