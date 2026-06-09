@@ -44,11 +44,11 @@ Your role determines which dashboard you see after logging in. If you have quest
 
 ## Student Workflow
 
-As a student, you practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
+Students' are able to practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
 
 ### Joining a Simulation Group
 
-Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from your **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear on your dashboard with its available patient personas.
+Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from the **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear in the users dashboard with its available patient personas.
 
 <img width="1883" height="817" alt="Screenshot 2026-06-08 115437" src="https://github.com/user-attachments/assets/a62953fc-483f-45d5-862f-40a78c60a331" />
 
@@ -63,6 +63,11 @@ Select a simulation group from your dashboard to view its available patient pers
 Click on a patient persona to open the patient dashboard, then select **Start Chat** to begin a new conversation where you can enter your clinical questions and assessments in the message field. This enables simulated pharmacist–patient interactions, allowing you to practice clinical questioning and apply clinical reasoning, with the AI patient responding based on its configured case materials and persona.
 
 <img width="956" height="410" alt="Screenshot 2026-06-08 12583" src="https://github.com/user-attachments/assets/2fb6b4a3-fbad-4931-8c70-d9478a51b58d" />
+
+### Using Learning Media
+Students can engage with embedded media (e.g., H5P) within virtual patient scenarios to support the development of physical assessment and clinical skills.
+
+
 
 ### Using Voice Chat
 
