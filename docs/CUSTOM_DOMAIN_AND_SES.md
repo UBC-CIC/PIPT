@@ -229,3 +229,9 @@ Changing or removing the custom domain does not break email delivery, and vice v
 - **DKIM**: DomainKeys Identified Mail — a cryptographic signature added to emails so recipients can verify the email actually came from your domain and wasn't spoofed.
 - **SES (Simple Email Service)**: AWS's email sending service. Cognito uses it to send verification codes and password reset emails from your domain instead of a generic AWS address.
 - **SES Sandbox**: The default state for new SES accounts — you can only send emails to verified addresses. Production access removes this restriction.
+
+---
+
+## References
+
+- [Cognito User Pool Email Settings (AWS Docs)](https://docs.aws.amazon.com/cognito/latest/developerguide/user-pool-email.html)
