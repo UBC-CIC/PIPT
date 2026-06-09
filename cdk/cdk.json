@@ -69,8 +69,6 @@
 
     "StackPrefix": "rajrupa-empCDK",
     "githubRepo": "GenRx",
-    "githubBranch": "main",
-    "SesVerifiedDomain": "genrx2.cloud-inov.com",
-    "SesIdentityVerified": "true"
+    "githubBranch": "main"
   }
 }
