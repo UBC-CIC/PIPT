@@ -6,7 +6,7 @@
 #
 aiohappyeyeballs==2.6.1
     # via aiohttp
-aiohttp==3.13.3
+aiohttp==3.14.0
     # via langchain-community
 aiosignal==1.4.0
     # via aiohttp
@@ -202,6 +202,7 @@ tenacity==9.1.4
     #   langchain-core
 typing-extensions==4.15.0
     # via
+    #   aiohttp
     #   aiosignal
     #   anyio
     #   langchain-core
@@ -218,8 +219,6 @@ typing-inspection==0.4.2
     # via
     #   pydantic
     #   pydantic-settings
-tzdata==2026.2
-    # via psycopg
 urllib3==2.6.3
     # via
     #   botocore
