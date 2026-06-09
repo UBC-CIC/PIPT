@@ -72,19 +72,13 @@ If voice is enabled for the patient, a **Voice** option appears in the chat inte
 
 ### Concluding an Interaction
 
-After gathering all necessary information, click **Conclude Interaction**. Enter your clinical recommendation or diagnosis in the provided form, then submit to complete the session. A debrief will be generated to evaluate your interaction.
+After gathering all necessary information, click **Conclude Interaction**. Enter your clinical diagnosis, recommendations, and rationale in the provided form, then submit to complete the session. A debrief will be generated to evaluate your interaction.
 
-<img width="673" height="323" alt="image" src="https://github.com/user-attachments/assets/3875dcc5-b672-4e79-8f9d-5bd16b5bc185" />
+<img width="956" height="399" alt="Screenshot 2026-06-09 png" src="https://github.com/user-attachments/assets/c5cabc4c-3ebc-4fbd-8f5c-11c8d87a3b58" />
 
 ### Viewing Your Debrief
 
-1. After concluding an interaction, navigate to your **Chat History**.
-2. Select the completed session to view the AI-generated debrief.
-3. The debrief includes:
-   - A summary of your conversation
-   - Scores against key clinical questions
-   - Comparison with the answer key (if configured by your instructor)
-   - Areas for improvement
+The debrief includes an AI-generated summary and evaluation of the user’s clinical interview, including identifying gaps in clinical reasoning, highlighting missed opportunities, and evaluating student assessments. A notice is included indicating that this content is AI-generated and should be used as guidance alongside your own clinical judgment, with any questions directed to your instructor.
   
      <img width="481" height="361" alt="image" src="https://github.com/user-attachments/assets/66a28474-d7a6-4e5c-89a3-6436ea0b9591" />
 
