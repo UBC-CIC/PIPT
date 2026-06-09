@@ -74,7 +74,7 @@ If voice is enabled for the patient, a **Voice** option appears in the chat inte
 
 After gathering all necessary information, click **Conclude Interaction**. Enter your clinical recommendation or diagnosis in the provided form, then submit to complete the session. A debrief will be generated to evaluate your interaction.
 
-<img width="481" height="361" alt="image" src="https://github.com/user-attachments/assets/66a28474-d7a6-4e5c-89a3-6436ea0b9591" />
+<img width="673" height="323" alt="image" src="https://github.com/user-attachments/assets/3875dcc5-b672-4e79-8f9d-5bd16b5bc185" />
 
 ### Viewing Your Debrief
 
@@ -85,6 +85,8 @@ After gathering all necessary information, click **Conclude Interaction**. Enter
    - Scores against key clinical questions
    - Comparison with the answer key (if configured by your instructor)
    - Areas for improvement
+  
+     <img width="481" height="361" alt="image" src="https://github.com/user-attachments/assets/66a28474-d7a6-4e5c-89a3-6436ea0b9591" />
 
 ### Reviewing Chat History
 
