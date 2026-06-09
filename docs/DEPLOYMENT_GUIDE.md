@@ -52,7 +52,7 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 ### Optional
 
 - **Docker**: only needed if you want to manually build and push container images locally (not required for normal deployment).
-- **Custom domain**: configured automatically via the `SesVerifiedDomain` CDK context variable. See [SES Email Setup](./SES_EMAIL_SETUP.md#amplify-custom-domain) for details.
+- **Custom domain**: configured automatically via the `SesVerifiedDomain` CDK context variable. See [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md#amplify-custom-domain) for details.
 - **Amazon SES**: for production email sending (verification emails). By default, Cognito uses its built-in email service (limited to 50 emails/day).
 
 ---
@@ -484,7 +484,7 @@ The CDK app requires two context variables at deploy time:
 | `githubBranch` | Branch to track for CI/CD (default: `main`) | No |
 | `voiceAgentArn` | ARN of a deployed Bedrock AgentCore voice agent (not needed for first deploy) | No |
 | `SesVerifiedDomain` | Domain with a Route 53 hosted zone for SES email + Amplify custom domain | No |
-| `SesIdentityVerified` | Set to `"true"` after SES domain is verified (see [SES Email Setup](./SES_EMAIL_SETUP.md)) | No |
+| `SesIdentityVerified` | Set to `"true"` after SES domain is verified (see [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md)) | No |
 | `SesSkipIdentityCreation` | Set to `"true"` to skip SES identity creation (when it already exists) | No |
 
 Choose one of the following deployment options:
@@ -634,7 +634,7 @@ Once enabled, DynamoDB automatically deletes:
 
 ### Request SES Production Access (Optional)
 
-If you need to send more than 50 verification emails per day, SES is configured via CDK context variables. See [SES Email Setup](./SES_EMAIL_SETUP.md) for the full two-step deployment process, custom domain setup, and troubleshooting.
+If you need to send more than 50 verification emails per day, SES is configured via CDK context variables. See [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md) for the full two-step deployment process, custom domain setup, and troubleshooting.
 
 ### Build the Amplify App
 
@@ -906,4 +906,4 @@ aws secretsmanager create-secret \
 
 ### Optional Setup
 
-- [SES Email Setup](./SES_EMAIL_SETUP.md) : SES email delivery, custom domain, and Amplify custom domain
+- [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md) : SES email delivery, custom domain, and Amplify custom domain
