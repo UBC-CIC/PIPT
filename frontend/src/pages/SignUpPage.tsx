@@ -290,6 +290,23 @@ function SignUpPage() {
                 required
                 disabled={loading}
               />
+              {/* Live password criteria */}
+              {password.length > 0 && (
+                <ul className="mt-2 space-y-1 text-xs">
+                  <li style={{ color: password.length >= 8 ? '#16a34a' : UI_COLORS.text.muted }}>
+                    {password.length >= 8 ? '✓' : '○'} At least 8 characters
+                  </li>
+                  <li style={{ color: /[A-Z]/.test(password) ? '#16a34a' : UI_COLORS.text.muted }}>
+                    {/[A-Z]/.test(password) ? '✓' : '○'} One uppercase letter
+                  </li>
+                  <li style={{ color: /[a-z]/.test(password) ? '#16a34a' : UI_COLORS.text.muted }}>
+                    {/[a-z]/.test(password) ? '✓' : '○'} One lowercase letter
+                  </li>
+                  <li style={{ color: /\d/.test(password) ? '#16a34a' : UI_COLORS.text.muted }}>
+                    {/\d/.test(password) ? '✓' : '○'} One number
+                  </li>
+                </ul>
+              )}
             </div>
 
             <div>
