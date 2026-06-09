@@ -631,12 +631,7 @@ Once enabled, DynamoDB automatically deletes:
 
 ### Request SES Production Access (Optional)
 
-If you need to send more than 50 verification emails per day:
-
-1. Open the [SES console](https://console.aws.amazon.com/ses/).
-2. Navigate to **Account dashboard**.
-3. Click **Request production access**.
-4. Fill out the form describing your use case.
+If you need to send more than 50 verification emails per day, SES is configured via CDK context variables. See [SES Email Setup](./SES_EMAIL_SETUP.md) for the full two-step deployment process, custom domain setup, and troubleshooting.
 
 ### Build the Amplify App
 
@@ -906,3 +901,4 @@ aws secretsmanager create-secret \
 - [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) : Console-side voice agent configuration
 - [Database Migrations](./DATABASE_MIGRATIONS.md) : Creating and running schema changes
 - [Modification Guide](./MODIFICATION_GUIDE.md) : Customizing colors, API, LLM, and frontend
+- [SES Email Setup](./SES_EMAIL_SETUP.md) : SES email delivery, custom domain, and Amplify custom domain

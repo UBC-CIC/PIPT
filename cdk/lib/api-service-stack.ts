@@ -208,6 +208,12 @@ export class ApiServiceStack extends cdk.Stack {
         })
       : cognito.UserPoolEmail.withCognito();
 
+    // NOTE: emailConfig is applied to the UserPool ONLY after the SES identity is verified.
+    // On first deploy with a new domain, deploy once WITHOUT the email property on the UserPool
+    // to let SES verify the domain, then deploy again to wire Cognito to SES.
+    // Set this to true after the SES identity shows "Verified" in the console.
+    const sesIdentityVerified = this.node.tryGetContext("SesIdentityVerified") === "true";
+
     /**
      *
      * Create Cognito User Pool
@@ -294,7 +300,7 @@ export class ApiServiceStack extends cdk.Stack {
 </html>`,
         emailStyle: cognito.VerificationEmailStyle.CODE,
       },
-      email: emailConfig,
+      email: sesIdentityVerified ? emailConfig : cognito.UserPoolEmail.withCognito(),
       passwordPolicy: {
         minLength: 8,
         requireLowercase: true,

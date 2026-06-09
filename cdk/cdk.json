@@ -65,6 +65,12 @@
     "@aws-cdk/aws-codepipeline:defaultPipelineTypeToV2": true,
     "@aws-cdk/aws-kms:reduceCrossAccountRegionPolicyScope": true,
     "@aws-cdk/aws-eks:nodegroupNameAttribute": true,
-    "@aws-cdk/aws-ec2:ebsDefaultGp3Volume": true
+    "@aws-cdk/aws-ec2:ebsDefaultGp3Volume": true,
+
+    "StackPrefix": "rajrupa-empCDK",
+    "githubRepo": "GenRx",
+    "githubBranch": "main",
+    "SesVerifiedDomain": "genrx2.cloud-inov.com",
+    "SesIdentityVerified": "true"
   }
 }
