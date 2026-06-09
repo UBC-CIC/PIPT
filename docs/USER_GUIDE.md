@@ -32,9 +32,9 @@ GenRx supports three user roles, each with different capabilities:
 
 | Role | Description |
 |------|-------------|
-| **Student** | Join simulation groups, interact with virtual patients, view debriefs |
-| **Instructor** | Create and manage simulation groups, configure patients, review analytics |
-| **Admin** | Manage organizations, assign instructors, manage bank items |
+| **Student** | Join simulation groups, interact with virtual patients (text and voice), submit conclusions, view debriefs and chat history |
+| **Instructor** | Create and manage simulation groups, configure patients, include/exclude bank items, and review student work and analytics |
+| **Admin** | Everything instructors can do, plus: manage organizations, enroll/remove instructors, create/edit/delete bank items at the org level, manage prompts, and view student issues and feedback |
 
 Your role determines which dashboard you see after logging in. If you have questions about your assigned role, contact your institution's administrator.
 
@@ -42,11 +42,11 @@ Your role determines which dashboard you see after logging in. If you have quest
 
 ## Student Workflow
 
-Students are able to practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
+Students practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
 
 ### Joining a Simulation Group
 
-Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from the **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear in the user's dashboard with its available patient personas.
+Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from the **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear on your dashboard with its available patient personas.
 
 <img width="954" height="408" alt="image" src="media/student-dashboard.png" />
 
@@ -66,6 +66,8 @@ Click on a patient persona to open the patient dashboard, then select **Start Ne
 Students can engage with embedded media (e.g., H5P) within virtual patient scenarios to support the development of physical assessment and clinical skills.
 
 <img width="954" height="408" alt="image" src="media/student-chat-phys-assessment-tab-open.png" />
+
+> **Note:** All patient information displayed in the simulation (including Personal Health Numbers, names, addresses, and other identifying details) is entirely fictional and generated solely for educational purposes. No real patient data is used at any point in the platform.
 
 ### Using Voice Chat
 
@@ -87,7 +89,7 @@ The debrief includes an AI-generated summary and evaluation of the user’s clin
 
 ### Reviewing Chat History
 
-From their dashboard, students can access past sessions, browse by simulation group and patient, and select any session to review the full interaction transcript and debrief.
+From your dashboard, you can access past sessions, browse by simulation group and patient, and select any session to review the full interaction transcript and debrief.
 
 <img width="954" height="408" alt="image" src="media/student-view-chat-history.png" />
 
@@ -105,13 +107,13 @@ As an instructor, you design clinical simulation scenarios, manage student enrol
 
 <img width="954" height="408" alt="image" src="media/instructor-create-new-group.png" />
 
-As an instructor, users can either create a new group or be manually assigned to an existing group by an admin user. It should look like so:
+As an instructor, you can either create a new group or be manually assigned to an existing group by an admin. The dashboard should look like this:
 
 <img width="954" height="408" alt="image" src="media/instructor-sim-group-view.png" />
 
 ### Managing a Simulation Group
 
-Instructors can open an existing simulation group from their dashboard to view cohort level insights including analytics, patient and student information as well as the ability to include/exclude bank items (Key Questions, DTPs and Recommendations) to be associated with the current simulation group (global) or per-patient in the simulation group.
+Instructors can open an existing simulation group from their dashboard to view cohort-level insights including analytics, patient and student information, as well as the ability to include/exclude bank items (Key Questions, DTPs, and Recommendations) at the simulation group level (global) or per-patient.
 
 <img width="954" height="408" alt="image" src="media/instructor-analytics.png" />
 
@@ -154,23 +156,23 @@ Once all patient details, prompts, and materials are configured, click **Save** 
 
 ### Editing an Existing Patient
 
-To edit an existing patient, click the **Edit** button on the patient you want to modify. This opens the same patient creation form, pre-populated with the patient's existing information. You can update any field: demographics, voice settings, prompts, or uploaded materials — and save your changes.
+To edit an existing patient, click the **Edit** button on the patient you want to modify. This opens the same patient creation form, pre-populated with the patient's existing information. You can update any field (demographics, voice settings, prompts, or uploaded materials) and save your changes.
 
-In addition to the standard patient information fields, this form also allows instructors to inline edit patient-specific bank items including key questions, DTPs, and recommendations, as well as physical assessment materials for that patient.
+In addition to the standard patient information fields, this form also allows instructors to inline-edit patient-specific bank items including key questions, DTPs, and recommendations, as well as physical assessment materials for that patient.
 
 ### Managing Bank Items
 
 Bank items are the clinical content used to evaluate student interactions. There are three types:
 
-- **Key Questions** — questions students should ask during the patient interaction, used for semantic matching to detect when a topic is addressed
-- **Drug Therapy Problems (DTPs)** — clinical issues students should identify during the interaction
-- **Recommendations** — suggested actions or treatment plans students should propose to the patient
+- **Key Questions:** questions students should ask during the patient interaction, used for semantic matching to detect when a topic is addressed
+- **Drug Therapy Problems (DTPs):** clinical issues students should identify during the interaction
+- **Recommendations:** suggested actions or treatment plans students should propose to the patient
 
 Within a simulation group, navigate to the respective tabs on the sidebar where you can manage all three types: Question Bank, DTP Bank, Recommendations Bank. Each type follows the same workflow:
 
-1. **Switch between Global and Per-Patient tabs** — Global items apply across all patients in the group, while per-patient items are scoped to a specific persona.
-2. **Include or exclude items** — Checklist items on or off to control which ones are active for evaluation.
-3. **Expand items** — Click to expand any bank item to view its full content before deciding whether to include it.
+1. **Switch between Global and Per-Patient tabs:** Global items apply across all patients in the group, while per-patient items are scoped to a specific persona.
+2. **Include or exclude items:** Toggle items on or off to control which ones are active for evaluation.
+3. **Expand items:** Click to expand any bank item to view its full content before deciding whether to include it.
 
 #### Key Questions
 
@@ -188,11 +190,25 @@ The DTP bank displays available drug therapy problems. Expand any item to review
 
 <img width="954" height="408" alt="image" src="media/instructor-dtp-bank-accordion.png" />
 
+Each DTP item contains the following fields:
+
+- **Title:** A short label for quick reference when browsing the bank. Not used in evaluation.
+- **Expected DTP Text:** The core content of the drug therapy problem. This is the text that the system semantically matches against what the student identifies during the interaction. If a student's response is close enough in meaning to this field, the DTP is considered addressed.
+- **Clinical Intent:** Explains why this DTP is clinically relevant and what it tests. Provides context on what competency the student should demonstrate by identifying this problem.
+- **Evaluation Criteria:** Additional context provided to the LLM to guide how it assesses whether the student adequately identified or addressed the DTP during the interaction.
+
 #### Recommendations
 
-The recommendation bank works the same way — expand items to see full details and toggle inclusion as needed:
+The recommendation bank works the same way: expand items to see full details and toggle inclusion as needed.
 
 <img width="954" height="408" alt="image" src="media/instructor-rec-bank-accordion.png" />
+
+Each recommendation item contains the following fields:
+
+- **Title:** A short label for quick reference when browsing the bank. Not used in evaluation.
+- **Expected Recommendation Text:** The core content of the recommendation. This is the text that the system semantically matches against what the student proposes during the interaction. If a student's recommendation is close enough in meaning to this field, it is considered addressed.
+- **Evaluation Criteria:** Additional context provided to the LLM to guide how it assesses whether the student's recommendation was appropriate and sufficiently detailed.
+- **Rationale:** The gold-standard clinical reasoning that instructors or admins set to define the expected thought process behind the recommendation. For matched recommendations, the LLM uses this rationale to determine whether the student receives full credit or partial credit based on how closely their reasoning aligns with the intended clinical logic.
 
 ### Managing Enrollments and Reviewing Student Work
 
@@ -200,7 +216,7 @@ Share the access code with your students so they can join the simulation group. 
 
 <img width="954" height="408" alt="image" src="media/instructor-manage-students.png" />
 
-From here, instructors can drill into any individual student to view student-specific analytics including the number of cases completed and the percentage of interactions where a debrief was reached, as well as a list of all their interactions.
+From here, instructors can select any individual student to view student-specific analytics including the number of cases completed and the percentage of interactions where a debrief was reached, as well as a list of all their interactions.
 
 <img width="954" height="408" alt="image" src="media/instructor-manage-students-particular.png" />
 
@@ -218,15 +234,15 @@ From your simulation group page, access the **Analytics** section to view cohort
 
 <img width="954" height="408" alt="image" src="media/instructor-analytics.png" />
 
-Beyond the group overview, instructors can view more granular per-patient analytics. This includes the number of students who successfully asked each key question, giving insight into which clinical topics students are addressing or missing:
+Beyond the group overview, instructors can view more granular per-patient analytics including the number of students who successfully asked each key question, giving insight into which clinical topics students are addressing or missing:
 
 <img width="954" height="408" alt="image" src="media/instructor-patient-specific-analytics.png" />
 
-The message distribution chart shows the breakdown of student messages versus AI messages across interactions, helping instructors gauge how much students are actively engaging or if any interactions are going off the rails:
+The message distribution chart shows the breakdown of student messages versus AI messages across interactions, helping instructors gauge how actively students are engaging:
 
 <img width="954" height="408" alt="image" src="media/instructor-analytics-msg-dist.png" />
 
-Student progress status provides a snapshot of where students are in their workflow — how many haven't started, how many are in progress, and how many have reached a debrief. Instructors can also hover over any bar in the chart to see the names of the students in that category.
+Student progress status provides a snapshot of where students are in their workflow: how many have not started, how many are in progress, and how many have reached a debrief. Instructors can also hover over any bar in the chart to see the names of the students in that category.
 
 <img width="954" height="408" alt="image" src="media/instructor-analytics-student-progress-status.png" />
 
@@ -234,7 +250,7 @@ Student progress status provides a snapshot of where students are in their workf
 
 ## Admin Workflow
 
-As an admin, you have all the same capabilities as an instructor — creating and managing simulation groups, configuring patients, and reviewing student work. In addition, admins can manage instructors (enroll them and assign them to simulation groups) and create, edit, and delete bank items (key questions, DTPs, recommendations) at the organization level, making them available for inclusion/exclusion across all simulation groups.
+As an admin, you have all the same capabilities as an instructor: creating and managing simulation groups, configuring patients, and reviewing student work. In addition, admins can manage instructors (enroll them and assign them to simulation groups) and create, edit, and delete bank items (key questions, DTPs, recommendations) at the organization level, making them available for inclusion/exclusion across all simulation groups.
 
 ### Managing Organizations
 
@@ -259,8 +275,8 @@ Admins can manage bank items across all simulation groups within an organization
 From here, admins can create, edit, and delete items in each bank. All bank items are defined at the organization level, which means they're available for reuse across all simulation groups without needing to be re-created for every group.
 
 There are two scopes for applying bank items within a simulation group:
-- **Global** — applies to all patients in that sim group
-- **Patient-specific** — applies only to a particular patient
+- **Global:** applies to all patients in that sim group
+- **Patient-specific:** applies only to a particular patient
 
 This scoping happens from within a simulation group's sidebar tabs (Question Bank, DTP Bank, Recommendations Bank), where instructors or admins toggle which items to include or exclude at either the global level (across all patients in that simulation group) or the per-patient level.
 
@@ -278,7 +294,7 @@ This scoping happens from within a simulation group's sidebar tabs (Question Ban
 
 ### Viewing Simulation Groups
 
-Admins can navigate into any simulation group within an organization. The view is similar to the instructor experience, with additional admin-only options in the sidebar: managing instructors (adding and removing), viewing issues and feedback, and managing prompts.
+Admins can navigate into any simulation group within an organization. The view is similar to the instructor experience, with additional admin-only options in the sidebar: managing instructors, viewing issues and feedback, and managing prompts.
 
 <img width="954" height="408" alt="image" src="media/admin-sim-group-page.png" />
 
@@ -292,8 +308,8 @@ Within a simulation group, admins can add or remove instructors via the **Manage
 
 The **Issues & Feedback** section in the sidebar collects two types of student input:
 
-- **Issue Reports** — students can flag problems during their interactions with patient personas. For example, if the AI patient is not following the context from uploaded documents or something else went wrong during the session.
-- **Debrief Feedback** — students can share whether the debrief was helpful, along with an optional comment.
+- **Issue Reports:** Students can flag problems during their interactions with patient personas. For example, if the AI patient is not following the context from uploaded documents or something else went wrong during the session.
+- **Debrief Feedback:** Students can share whether the debrief was helpful, along with an optional comment.
 
 <img width="954" height="408" alt="image" src="media/admin-issues-reports.png" />
 
@@ -328,7 +344,7 @@ Each prompt also has a **Prompt Playground** where admins can test out changes b
 ### General
 
 **Q: Which browsers are supported?**
-A: GenRx works best in modern browsers including Chrome, Firefox, Safari, and Edge. Ensure your browser is up to date for the best experience. Note that voice chat is not supported in Firefox.
+A: GenRx works best in modern browsers including Chrome, Safari, and Edge. Ensure your browser is up to date for the best experience. **Voice chat does not work in Firefox.** Use Chromium-based browsers for voice interactions.
 
 **Q: I forgot my password. How do I reset it?**
 A: Click the **Forgot Password** link on the login page. Enter your email address and follow the instructions in the reset email.
@@ -345,7 +361,7 @@ A: Verify the code with your instructor. Access codes are case-sensitive. If the
 A: Yes. You can start a new chat session with the same patient at any time. Each session is tracked independently.
 
 **Q: How is my debrief score calculated?**
-A: The AI evaluates your conversation against the key questions configured by your instructor. It checks whether you addressed each clinical topic and compares your recommendation against the answer key.
+A: As you chat with the AI patient, the system compares the meaning of what you say against the key questions, DTPs, and recommendations configured by your instructor, even if you don't use the exact same wording. If what you ask or recommend is close enough in meaning to a bank item, it counts as addressed. Your debrief score reflects how many of these items you successfully covered, compared against the gold-standard answers set by your instructor or admin.
 
 **Q: Is voice chat available for all patients?**
 A: Voice chat availability depends on your instructor's configuration. If the voice option is not visible, it has not been enabled for that patient.
@@ -356,7 +372,7 @@ A: Voice chat availability depends on your instructor's configuration. If the vo
 A: There is no hard limit on the number of patients per group. Add as many scenarios as needed for your curriculum.
 
 **Q: Can I edit a patient after students have started interacting?**
-A: Yes, you can update patient prompts and case materials at any time. Changes apply to new sessions — existing conversations are not affected.
+A: Yes, you can update patient prompts and case materials at any time. Changes apply to new sessions; existing conversations are not affected.
 
 **Q: How do I upload case materials?**
 A: When creating or editing a patient, use the file upload area to attach PDF documents. The system processes these documents and makes them available to the AI during conversations.
@@ -367,7 +383,7 @@ A: When creating or editing a patient, use the file upload area to attach PDF do
 A: Yes. Navigate to the organization page and manage instructor assignments from there. Removing an instructor does not delete their simulation groups.
 
 **Q: How do question banks relate to individual patients?**
-A: Organization-level question banks provide a shared pool of questions. Instructors can also add patient-specific questions. Both are used for semantic matching during student interactions.
+A: Bank items (key questions, DTPs, recommendations) are created at the organization level by admins, giving all simulation groups in that organization access to a shared pool. Within a simulation group, instructors or admins can then include or exclude any of these items at two levels: global (applies to all patients in that sim group) or patient-specific (applies only to a particular patient). This means you define items once at the org level and selectively apply them where needed: globally for broad coverage, or per-patient for scenario-specific evaluations. During a student interaction, only the items that have been included (either globally or for that specific patient) are used to evaluate the student's performance.
 
 ---
 
