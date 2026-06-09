@@ -1,7 +1,7 @@
 # GenRx User Guide
 
 > **Type:** User Guide
-> **Last updated:** 2026-05-30
+> **Last updated:** 2026-06-09
 
 ## Table of Contents
 
@@ -10,8 +10,6 @@
 - [Instructor Workflow](#instructor-workflow)
 - [Admin Workflow](#admin-workflow)
 - [FAQ](#faq)
-
-# User Guidee
 
 ## Getting Started
 
@@ -34,9 +32,9 @@ GenRx supports three user roles, each with different capabilities:
 
 | Role | Description |
 |------|-------------|
-| **Student** | Join simulation groups, chat with AI patients, view debriefs |
+| **Student** | Join simulation groups, interact with virtual patients, view debriefs |
 | **Instructor** | Create and manage simulation groups, configure patients, review analytics |
-| **Admin** | Manage organizations, assign instructors, manage question banks |
+| **Admin** | Manage organizations, assign instructors, manage bank items |
 
 Your role determines which dashboard you see after logging in. If you have questions about your assigned role, contact your institution's administrator.
 
@@ -44,54 +42,54 @@ Your role determines which dashboard you see after logging in. If you have quest
 
 ## Student Workflow
 
-Students' are able to practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
+Students are able to practice clinical assessment skills by interacting with AI-powered patient personas in a safe, simulated environment.
 
 ### Joining a Simulation Group
 
-Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from the **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear in the users dashboard with its available patient personas.
+Use the access code provided by your instructor (shared in class or via your institution’s Learning Management System) to join a group from the **Student Dashboard** by clicking **Join Group**, entering the code, and confirming. Once completed, the simulation group will appear in the user's dashboard with its available patient personas.
 
-<img width="1883" height="817" alt="Screenshot 2026-06-08 115437" src="https://github.com/user-attachments/assets/a62953fc-483f-45d5-862f-40a78c60a331" />
+<img width="954" height="408" alt="image" src="docs/media/student-dashboard.png" />
 
 ### Viewing Available Patients
 
 Select a simulation group from your dashboard to view its available patient personas, then browse the list where each patient card displays the patient’s name, age, and gender to help you identify the scenario.
 
-<img width="1883" height="611" alt="Screenshot 2026-06-08 123616" src="https://github.com/user-attachments/assets/2191bdad-6414-4de0-9a0c-d441540e9ae3" />
+<img width="954" height="408" alt="image" src="docs/media/student-view-patients.png" />
 
 ### Starting a Chat Session
 
-Click on a patient persona to open the patient dashboard, then select **Start Chat** to begin a new conversation where you can enter your clinical questions and assessments in the message field. This enables simulated pharmacist–patient interactions, allowing you to practice clinical questioning and apply clinical reasoning, with the AI patient responding based on its configured case materials and persona.
+Click on a patient persona to open the patient dashboard, then select **Start New Interaction** to begin a new conversation where you can enter your clinical questions and assessments in the message field. This enables simulated pharmacist–patient interactions, allowing you to practice clinical questioning and apply clinical reasoning, with the AI patient responding based on its configured case materials and persona.
 
-<img width="956" height="410" alt="Screenshot 2026-06-08 12583" src="https://github.com/user-attachments/assets/2fb6b4a3-fbad-4931-8c70-d9478a51b58d" />
+<img width="954" height="408" alt="image" src="docs/media/student-chat-text-mode.png" />
 
 ### Using Learning Media
 Students can engage with embedded media (e.g., H5P) within virtual patient scenarios to support the development of physical assessment and clinical skills.
 
-
+<img width="954" height="408" alt="image" src="docs/media/student-chat-phys-assessment-tab-open.png" />
 
 ### Using Voice Chat
 
 If voice is enabled for the patient, a **Voice** option appears in the chat interface. Users can click the voice button to start a voice session, where they can speak naturally with the AI patient and receive responses through synthesized speech. Users can also switch between text and voice at any point within the same session.
 
-<img width="955" height="407" alt="image" src="https://github.com/user-attachments/assets/9cd25392-b6a7-41a3-a15d-8a86bd33c010" />
+<img width="954" height="408" alt="image" src="docs/media/student-chat-voice-mode.png" />
 
 ### Concluding an Interaction
 
 After gathering all necessary information, click **Conclude Interaction**. Enter your clinical diagnosis, recommendations, and rationale in the provided form, then submit to complete the session. A debrief will be generated to evaluate your interaction.
 
-<img width="956" height="399" alt="Screenshot 2026-06-09 png" src="https://github.com/user-attachments/assets/c5cabc4c-3ebc-4fbd-8f5c-11c8d87a3b58" />
+<img width="954" height="408" alt="image" src="docs/media/student-conclude-interactions.png" />
 
 ### Viewing Your Debrief
 
 The debrief includes an AI-generated summary and evaluation of the user’s clinical interview, including identifying gaps in clinical reasoning, highlighting missed opportunities, and evaluating student assessments. A notice is included indicating that this content is AI-generated and should be used as guidance alongside your own clinical judgment, with any questions directed to your instructor.
   
-<img width="956" height="406" alt="image" src="https://github.com/user-attachments/assets/90706a2d-40a7-437e-96ab-052f8af708d8" />
+<img width="954" height="408" alt="image" src="docs/media/student-chat-view-debrief.png" />
 
 ### Reviewing Chat History
 
 From their dashboard, students can access past sessions, browse by simulation group and patient, and select any session to review the full interaction transcript and debrief.
 
-<img width="954" height="408" alt="image" src="https://github.com/user-attachments/assets/e9983277-16a1-4491-80f5-d8d49cabb0c5" />
+<img width="954" height="408" alt="image" src="docs/media/student-view-chat-history.png" />
 
 ---
 
@@ -101,51 +99,136 @@ As an instructor, you design clinical simulation scenarios, manage student enrol
 
 ### Creating a Simulation Group
 
-1. From your **Instructor Dashboard**, click **Create Simulation Group**.
+1. From your **Instructor Dashboard**, click **Create New Group**.
 2. Provide a name and description for the group.
-3. Configure the system prompt that guides AI behavior for all patients in this group.
-4. Set an access code that students use to join.
-5. Save the group to make it available.
+3. Toggle the active status of the group to make it available.
 
-### Adding Patient Personas
+<img width="954" height="408" alt="image" src="docs\media\instructor-create-new-group.png" />
 
-1. Open an existing simulation group from your dashboard.
-2. Click **Add Patient** to create a new persona.
-3. Configure the patient details:
-   - **Name, Age, Gender**: Basic demographics for the scenario
-   - **Patient Prompt**: Instructions that define the patient's condition, personality, and responses
-   - **Case Materials**: Upload PDF documents (lab results, medical history) that the AI uses for context
-4. Save the patient persona.
+As an instructor, users can either create a new group or be manually assigned to an existing group by an admin user. It should look like so:
 
-### Configuring Key Questions
+<img width="954" height="408" alt="image" src="docs\media\instructor-sim-group-view.png" />
 
-1. Within a patient persona, navigate to the **Key Questions** section.
-2. Add questions that students should ask during the interaction.
-3. These questions are used for semantic matching — the system detects when students address each topic.
-4. Optionally, provide an answer key for debrief scoring.
+### Managing a Simulation Group
 
-### Managing Enrollments
+Instructors can open an existing simulation group from their dashboard to view cohort level insights including analytics, patient and student information as well as the ability to include/exclude bank items (Key Questions, DTPs and Recommendations) to be associated with the current simulation group (global) or per-patient in the simulation group.
 
-1. Share the access code with your students.
-2. View enrolled students from the simulation group page.
-3. Monitor which students have joined and their interaction status.
+<img width="954" height="408" alt="image" src="docs\media\instructor-analytics.png" />
 
-### Configuring Debrief Settings
 
-1. Open the simulation group settings.
-2. Customize the debrief prompt to control how AI evaluates student performance.
-3. Set message limits if you want to constrain interaction length.
-4. Enable or disable voice chat for specific patients.
+### Managing Patient Personas
+
+1. Within a simulation group, navigate to the Manage Patients tab in the sidebar. Instructors will be able to view and edit the patients configured in the current simulation group, as well as add new patients.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-manage-patients.png" />
+
+2. To create a new patient: click on **Create new Patient** to create a new persona.
+
+#### Patient Information
+
+Fill in the basic demographics for the scenario including the patient's name, age, and gender. These details are displayed to students on the patient card and help set the context for the clinical encounter.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-create-patient-info.png" />
+
+#### Voice Preview
+
+Configure the voice settings for the patient persona. Select a voice profile and preview how the patient will sound during voice-enabled interactions. This allows instructors to choose a voice that matches the patient's demographics and personality.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-create-patient-voice-preview.png" />
+
+#### Text and Voice Prompts
+
+Define the patient prompt that controls the AI patient's behavior during conversations. This includes instructions about the patient's personality and how they should respond to student questions. For voice-enabled patients, a separate voice prompt can be configured to tailor responses for spoken interactions.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-create-patient-prompts.png" />
+
+#### LLM Upload and Patient Information Upload
+
+Upload case materials (PDF documents such as lab results, medical history, or clinical notes) that the AI uses as context during conversations. Additionally, upload any supplementary patient information files that help define the scenario. These documents are processed and made available to the AI to ensure clinically accurate responses.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-create-new-patient-save.png" />
+
+#### Saving the Patient
+
+Once all patient details, prompts, and materials are configured, click **Save** to create the patient persona. The patient will then appear in the simulation group's patient list and be available to enrolled students.
+
+### Editing an Existing Patient
+
+To edit an existing patient, click the **Edit** button on the patient you want to modify. This opens the same patient creation form, pre-populated with the patient's existing information. You can update any field: demographics, voice settings, prompts, or uploaded materials — and save your changes.
+
+In addition to the standard patient information fields, this form also allows instructors to inline edit patient-specific bank items including key questions, DTPs, and recommendations, as well as physical assessment materials for that patient.
+
+### Managing Bank Items
+
+Bank items are the clinical content used to evaluate student interactions. There are three types:
+
+- **Key Questions** — questions students should ask during the patient interaction, used for semantic matching to detect when a topic is addressed
+- **Drug Therapy Problems (DTPs)** — clinical issues students should identify during the interaction
+- **Recommendations** — suggested actions or treatment plans students should propose to the patient
+
+Within a simulation group, navigate to the respective tabs on the sidebar where you can manage all three types: Question Bank, DTP Bank, Recommendations Bank. Each type follows the same workflow:
+
+1. **Switch between Global and Per-Patient tabs** — Global items apply across all patients in the group, while per-patient items are scoped to a specific persona.
+2. **Include or exclude items** — Checklist items on or off to control which ones are active for evaluation.
+3. **Expand items** — Click to expand any bank item to view its full content before deciding whether to include it.
+
+#### Key Questions
+
+The global tab shows all key questions available across the simulation group:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-sim-group-question-bank.png" />
+
+Switch to the patient-specific tab to manage key questions scoped to an individual patient:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-question-bank-patient-specific.png" />
+
+#### Drug Therapy Problems
+
+The DTP bank displays available drug therapy problems. Expand any item to review its full content before including or excluding it:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-dtp-bank-accordion.png" />
+
+#### Recommendations
+
+The recommendation bank works the same way — expand items to see full details and toggle inclusion as needed:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-rec-bank-accordion.png" />
+
+### Managing Enrollments and Reviewing Student Work
+
+Share the access code with your students so they can join the simulation group. Within the group, navigate to **Manage Students** to view a list of all enrolled students along with their email addresses.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-manage-students.png" />
+
+From here, instructors can drill into any individual student to view student-specific analytics including the number of cases completed and the percentage of interactions where a debrief was reached, as well as a list of all their interactions.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-manage-students-particular.png" />
+
+Select a particular interaction to review the full chat transcript between the student and the AI patient:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-manage-students-chat-history.png" />
+
+Instructors can also review student submissions and debriefs, and export chat transcripts and notes for record-keeping or further review:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-manage-students-submissions.png" />
 
 ### Reviewing Analytics
 
-1. From your simulation group page, access the **Analytics** section.
-2. View engagement metrics including:
-   - Student completion rates
-   - Average scores against key questions
-   - Time spent per interaction
-   - Question coverage across students
-3. Use these insights to identify areas where students need additional guidance.
+From your simulation group page, access the **Analytics** section to view cohort-level engagement metrics including student completion rates and overall interaction trends.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-analytics.png" />
+
+Beyond the group overview, instructors can view more granular per-patient analytics. This includes the number of students who successfully asked each key question, giving insight into which clinical topics students are addressing or missing:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-patient-specific-analytics.png" />
+
+The message distribution chart shows the breakdown of student messages versus AI messages across interactions, helping instructors gauge how much students are actively engaging or if any interactions are going off the rails:
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-analytics-msg-dist.png" />
+
+Student progress status provides a snapshot of where students are in their workflow — how many haven't started, how many are in progress, and how many have reached a debrief. Instructors can also hover over any bar in the chart to see the names of the students in that category.
+
+<img width="954" height="408" alt="image" src="docs/media/instructor-analytics-student-progress-status.png" />
 
 ---
 
