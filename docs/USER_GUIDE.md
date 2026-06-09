@@ -80,7 +80,7 @@ After gathering all necessary information, click **Conclude Interaction**. Enter
 
 The debrief includes an AI-generated summary and evaluation of the user’s clinical interview, including identifying gaps in clinical reasoning, highlighting missed opportunities, and evaluating student assessments. A notice is included indicating that this content is AI-generated and should be used as guidance alongside your own clinical judgment, with any questions directed to your instructor.
   
-     <img width="481" height="361" alt="image" src="https://github.com/user-attachments/assets/66a28474-d7a6-4e5c-89a3-6436ea0b9591" />
+<img width="956" height="406" alt="image" src="https://github.com/user-attachments/assets/90706a2d-40a7-437e-96ab-052f8af708d8" />
 
 ### Reviewing Chat History
 
