@@ -234,42 +234,92 @@ Student progress status provides a snapshot of where students are in their workf
 
 ## Admin Workflow
 
-As an administrator, you manage the organizational structure, assign roles, and maintain shared resources like question banks.
+As an admin, you have all the same capabilities as an instructor — creating and managing simulation groups, configuring patients, and reviewing student work. In addition, admins can manage instructors (enroll them and assign them to simulation groups) and create, edit, and delete bank items (key questions, DTPs, recommendations) at the organization level, making them available for inclusion/exclusion across all simulation groups.
 
 ### Managing Organizations
 
-1. From the **Admin Home**, select **Organizations**.
-2. Create a new organization or select an existing one.
-3. Configure organization details:
-   - Organization name and description
-   - Contact information
-   - Associated instructors
+From the **Admin Home Page**, admins can view all organizations they have access to.
 
-### Assigning Instructors
+<img width="954" height="408" alt="image" src="media/admin-view-all-organisations.png" />
 
-1. Navigate to the organization management page.
-2. Click **Assign Instructor** to add an instructor to the organization.
-3. Search for the instructor by email.
-4. Confirm the assignment — the instructor can now create simulation groups under this organization.
+To create a new organization, click **Create New Organization** and fill in the name, description, AI persona title, user title, and system prompt.
 
-### Managing Question Banks
+<img width="954" height="408" alt="image" src="media/admin-create-new-org.png" />
 
-1. From the Admin Home, select **Question Banks**.
-2. Create organization-level question banks that instructors can reference.
-3. Add questions with tags for categorization.
-4. Questions in the bank are available for semantic matching across all simulation groups in the organization.
+Once inside an organization, admins can view all simulation groups within that org. The **Manage Banks** button at the top right provides access to create, edit, and delete bank items (key questions, DTPs, recommendations) at the organization level. These are then available for inclusion/exclusion across all simulation groups in that organization.
 
-### Managing DTP Recommendation Banks
+<img width="954" height="408" alt="image" src="media/admin-pharmacy-org.png" />
 
-1. Navigate to **Recommendation Banks** from the Admin Home.
-2. Create and organize drug therapy problem (DTP) recommendations.
-3. These recommendations serve as reference material for debrief evaluations.
+### Managing Bank Items (Organization Level)
+
+Admins can manage bank items across all simulation groups within an organization. Navigate to **Manage Banks** from the organization page to access the question bank, DTP bank, and recommendations bank tabs.
+
+<img width="954" height="408" alt="image" src="media/admin-manage-banks.png" />
+
+From here, admins can create, edit, and delete items in each bank. All bank items are defined at the organization level, which means they're available for reuse across all simulation groups without needing to be re-created for every group.
+
+There are two scopes for applying bank items within a simulation group:
+- **Global** — applies to all patients in that sim group
+- **Patient-specific** — applies only to a particular patient
+
+This scoping happens from within a simulation group's sidebar tabs (Question Bank, DTP Bank, Recommendations Bank), where instructors or admins toggle which items to include or exclude at either the global level (across all patients in that simulation group) or the per-patient level.
+
+**Question Bank:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-banks-qb-global.png" />
+
+**DTP Bank:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-banks-dtp-global.png" />
+
+**Recommendations Bank:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-banks-recs-global.png" />
 
 ### Viewing Simulation Groups
 
-1. As an admin, you have visibility into all simulation groups across your organization.
-2. Navigate to any group to review its configuration, enrolled students, and analytics.
-3. Use this access for quality assurance and support purposes.
+Admins can navigate into any simulation group within an organization. The view is similar to the instructor experience, with additional admin-only options in the sidebar: managing instructors (adding and removing), viewing issues and feedback, and managing prompts.
+
+<img width="954" height="408" alt="image" src="media/admin-sim-group-page.png" />
+
+### Assigning Instructors
+
+Within a simulation group, admins can add or remove instructors via the **Manage Instructors** tab in the sidebar. Only users with verified accounts can be elevated to an instructor role. Once added, their name and email will appear in the Manage Instructors tab, along with an option to unenroll them.
+
+<img width="954" height="408" alt="image" src="media/admin-add-instructor.png" />
+
+### Issues and Feedback
+
+The **Issues & Feedback** section in the sidebar collects two types of student input:
+
+- **Issue Reports** — students can flag problems during their interactions with patient personas. For example, if the AI patient is not following the context from uploaded documents or something else went wrong during the session.
+- **Debrief Feedback** — students can share whether the debrief was helpful, along with an optional comment.
+
+<img width="954" height="408" alt="image" src="media/admin-issues-reports.png" />
+
+<img width="954" height="408" alt="image" src="media/admin-debrief-feedback.png" />
+
+### Managing Prompts
+
+From the **Manage Prompts** tab in the sidebar, admins can edit both the system prompt and the debrief prompt for the simulation group. Prompt history is maintained so admins can roll back to a previous version if needed.
+
+**System Prompt:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-prompts-system.png" />
+
+**Debrief Prompt:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-prompts-debrief.png" />
+
+Each prompt also has a **Prompt Playground** where admins can test out changes before applying them:
+
+**System Prompt Playground:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-prompts-sys-playground.png" />
+
+**Debrief Prompt Playground:**
+
+<img width="954" height="408" alt="image" src="media/admin-manage-prompts-debrief-playground.png" />
 
 ---
 
@@ -278,7 +328,7 @@ As an administrator, you manage the organizational structure, assign roles, and 
 ### General
 
 **Q: Which browsers are supported?**
-A: GenRx works best in modern browsers including Chrome, Firefox, Safari, and Edge. Ensure your browser is up to date for the best experience.
+A: GenRx works best in modern browsers including Chrome, Firefox, Safari, and Edge. Ensure your browser is up to date for the best experience. Note that voice chat is not supported in Firefox.
 
 **Q: I forgot my password. How do I reset it?**
 A: Click the **Forgot Password** link on the login page. Enter your email address and follow the instructions in the reset email.
