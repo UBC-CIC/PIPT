@@ -17,6 +17,7 @@ import { ConcludeModal } from '@/components/ConcludeModal';
 import type { UpdatedDebriefData, DebriefChunk1, DebriefChunk2 } from '@/services/studentService';
 import { useAuth } from '@/App';
 import { authService } from '@/lib/auth';
+import { supportsVoiceMode } from '@/lib/browser';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 import ResizeHandle from '@/components/ResizeHandle';
 import { extractDebriefFromRawJson } from '@/lib/debrief-parser';
@@ -1663,6 +1664,7 @@ function StudentChatPage() {
                 /* Text input mode */
                 <div className="flex items-center gap-3">
                   {patient.voice_enabled !== false && (
+                  <div className="relative">
                   <button
                     onClick={handleStartVoiceMode}
                     disabled={!sessionId || !patient?.name || patient.name === 'Loading...' || isAiResponding || messageLimitReached}
@@ -1671,10 +1673,20 @@ function StudentChatPage() {
                     onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover; }}
                     onMouseLeave={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary; }}
                     aria-label="Voice input"
-                    title={!sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : isAiResponding ? 'Waiting for AI response...' : 'Start voice mode'}
+                    title={!supportsVoiceMode() ? 'Voice works best on Chrome or Edge' : !sessionId ? 'Waiting for session...' : !patient?.name || patient.name === 'Loading...' ? 'Loading patient...' : isAiResponding ? 'Waiting for AI response...' : 'Start voice mode'}
                   >
                     <Mic className="w-5 h-5" />
                   </button>
+                  {!supportsVoiceMode() && (
+                    <span
+                      className="absolute -top-1 -right-1 w-3.5 h-3.5 flex items-center justify-center rounded-full text-[8px] font-bold"
+                      style={{ backgroundColor: '#f59e0b', color: '#ffffff' }}
+                      title="Voice mode works best on Chrome or Edge"
+                    >
+                      !
+                    </span>
+                  )}
+                  </div>
                   )}
                   
                   {messageLimitReached && (
