@@ -23,7 +23,7 @@ This prototype is a simulation platform for pharmacy education built on AWS. Stu
 
 ## High-Level Architecture
 
-![Architecture Diagram](docs/genrx_updated_architecture_diagram.png)
+![Architecture Diagram](docs/architecture-diagram-without-numberings.png)
 
 For a detailed breakdown of each component, data flows, and the full database schema, see the [Architecture Deep Dive](docs/ARCHITECTURE_DEEP_DIVE.md).
 
