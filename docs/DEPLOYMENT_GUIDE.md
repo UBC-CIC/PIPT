@@ -18,7 +18,7 @@
 - [Verification](#verification)
 - [Post-Deployment](#post-deployment)
   - [Push Initial Docker Images](#push-initial-docker-images)
-  - [Enable DynamoDB TTL](#enable-dynamodb-ttl)
+  - [DynamoDB Conversation Table & TTL](#dynamodb-conversation-table--ttl)
   - [Request SES Production Access (Optional)](#request-ses-production-access-optional)
   - [Build the Amplify App](#build-the-amplify-app)
   - [Deploy the Voice Agent](#deploy-the-voice-agent)
@@ -83,6 +83,8 @@ The application deploys to **`ca-central-1`** but makes cross-region calls to `u
 To verify access, open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/) and confirm these models appear under **Model access** as available. If any model shows as unavailable, enable it there.
 
 > **Note:** The CDK stacks deploy to `ca-central-1`, but the application routes LLM, embedding, and voice calls to `us-east-1` where these models are hosted. This cross-region routing is handled automatically by the application code.
+
+> **You are not limited to these regions.** The application can be deployed to any AWS region — `ca-central-1` is simply the default used by the team. To deploy elsewhere, change the region in `cdk/bin/cdk.ts`. The cross-region Bedrock calls to `us-east-1` will still work from any deployment region since the application explicitly targets `us-east-1` for model invocations regardless of where the stacks live.
 
 ### Step 3: Fork and Clone the Repository
 
@@ -475,6 +477,14 @@ cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
 
 ### Step 6: Deploy Stacks
 
+> **Optional — Rename the DynamoDB conversation table:** The default table name is `DynamoDB-Conversation-Table` (a legacy name from the forked codebase). If you're deploying fresh and want something more specific, change this one line in `cdk/lib/api-service-stack.ts` **before** deploying:
+>
+> ```typescript
+> this.dynamoTableName = "GenRx-Conversation-Table"; // or whatever you prefer
+> ```
+>
+> Everything else is parameterized from there — the custom resource creates whatever name you set, it gets written to the SSM parameter `/{id}/GenRx/TableName`, and the Python Lambdas read it from SSM at runtime. No other code changes needed.
+
 The CDK app requires two context variables at deploy time:
 
 | Context Variable | Description | Required |
@@ -583,11 +593,36 @@ Wait for the pipeline to complete successfully. Once done, the Lambda functions 
 
 > **Expected behavior:** Until the pipeline finishes pushing the `socketServer` image, the ECS socket service will show `STOPPED` tasks with `CannotPullContainerError`. This is normal on first deployment. The service retries automatically and will stabilize once the image is available in ECR (typically 10–15 minutes after the pipeline starts). Do not manually intervene or delete the service.
 
-### Enable DynamoDB TTL
+### DynamoDB Conversation Table & TTL
 
-The `DynamoDB-Conversation-Table` is created automatically on the first Lambda invocation. Enable TTL once per AWS account before users start using the app, otherwise early items will accumulate indefinitely.
+#### First-time deploy — no manual steps required
 
-> **Skip this step** if TTL is already enabled on the table (check in the DynamoDB console under the table's **Additional settings** tab).
+On a fresh deploy in a new account/region, everything is handled automatically:
+
+- A custom resource (`EnsureConversationTable`) creates the table during CloudFormation deployment.
+- TTL is enabled on the `expireAt` attribute as part of the same operation.
+- All downstream Lambdas have the table ready before they ever run.
+- Other DynamoDB tables in the account are **completely unaffected** — both the table creation and TTL enablement target this single table by name. The custom resource's IAM policy is scoped to `arn:aws:dynamodb:<region>:<account>:table/DynamoDB-Conversation-Table` only. TTL is a per-table setting in DynamoDB, not an account-wide setting — enabling it here does not touch any other table in your account.
+
+#### How it works
+
+The `DynamoDB-Conversation-Table` is **not owned by CDK**. This project was forked from an earlier codebase where the table was created manually in the AWS console and never linked to CloudFormation. Importing it into CDK (`cdk import`) was attempted but failed repeatedly, so CDK only **references** the table (via `Table.fromTableName(...)`) for IAM policies, Lambda environment variables, and CloudWatch alarms — it does not manage its lifecycle.
+
+To handle the case where the table doesn't exist yet (fresh deploy), the stack includes a custom resource that runs on every deploy:
+
+1. Calls `CreateTable` for the configured table name (passed via environment variable, not hardcoded) with PAY_PER_REQUEST billing and key = `SessionId`.
+2. If the table **already exists**, catches `ResourceInUseException` and does nothing — completely idempotent.
+3. If the table **does not exist**, creates it, waits for `ACTIVE` status, then enables TTL on `expireAt`.
+
+Because CDK doesn't own the table, `cdk destroy` will **not** delete it or its data.
+
+#### Legacy environments — manually enabling TTL
+
+This only applies if the table was created **before** the custom resource existed (i.e., it was manually created in the console without TTL). In that scenario the custom resource sees the table already exists, catches the exception, and skips everything — including TTL setup.
+
+**Check if TTL is already enabled:** DynamoDB console → select `DynamoDB-Conversation-Table` > **Additional settings** tab > look for "Time to live attribute: `expireAt` (Enabled)". If it shows enabled, you're done.
+
+If TTL is **not** enabled on a pre-existing table, run the following **once**:
 
 <details>
 <summary>macOS / Linux</summary>
@@ -628,9 +663,18 @@ aws dynamodb update-time-to-live ^
 
 </details>
 
-Once enabled, DynamoDB automatically deletes:
+#### What TTL does once enabled
+
+DynamoDB automatically deletes expired items in the background:
 - Question, DTP, and recommendation cache items after **7 days**
 - Chat history items after **90 days**
+
+#### Safety notes
+
+| Concern | Answer |
+|---------|--------|
+| Will this affect other DynamoDB tables in my account? | **No.** The Lambda's IAM policy only grants access to the configured table (default: `DynamoDB-Conversation-Table`). The table name is parameterized via an environment variable, not hardcoded. Every API call targets that single table by name. Other tables are untouched. |
+| Will `cdk destroy` delete the table? | **No.** CDK references it via `fromTableName`, it doesn't own the resource. The table and all its data survive stack deletion. |
 
 ### Request SES Production Access (Optional)
 
