@@ -82,7 +82,7 @@ Both text chat and voice flow through a Socket.IO server running on ECS Fargate.
 
 ### Data Persistence
 
-Amazon RDS PostgreSQL 16 (Multi-AZ, encrypted at rest) stores all application data. Three RDS Proxy instances (user, table creator, admin) pool connections. The `pgvector` extension enables semantic similarity search on document embeddings.
+Amazon RDS PostgreSQL 16 (encrypted at rest) stores all application data. Three RDS Proxy instances (user, table creator, admin) pool connections. The `pgvector` extension enables semantic similarity search on document embeddings.
 
 ### Object Storage
 
@@ -90,7 +90,7 @@ Amazon S3 stores uploaded persona documents (PDFs) and generated embeddings. Pre
 
 ### AI Services
 
-Amazon Bedrock provides LLM inference (Claude Sonnet 4.6 via cross-region inference profile `us.anthropic.claude-sonnet-4-6`), text embeddings (Cohere Embed v4 `cohere.embed-v4:0`), content evaluation (Nova Lite), and voice interactions (Nova Sonic 2.0). All model calls route to `us-east-1` regardless of deployment region.
+Amazon Bedrock provides LLM inference (Claude Sonnet 4.6 via cross-region inference profile `us.anthropic.claude-sonnet-4-6`), text embeddings (Cohere Embed v4 `cohere.embed-v4:0`) and voice interactions (Nova Sonic 2.0). All model calls route to `us-east-1` regardless of deployment region.
 
 A Docker Lambda (`text_generation`) handles chat, debrief generation, and semantic question matching via LangChain. A separate Docker Lambda (`data_ingestion`) processes uploaded PDFs into vector embeddings. See [Data Ingestion](./DATA_INGESTION.md) for pipeline details.
 

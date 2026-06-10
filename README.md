@@ -16,7 +16,7 @@ This prototype is a simulation platform for pharmacy education built on AWS. Stu
 | [Data Ingestion](docs/DATA_INGESTION.md) | Document processing pipeline for patient case materials |
 | [Bedrock Guardrails](docs/BEDROCK_GUARDRAILS.md) | AI safety guardrails configuration |
 | [Voice Agent Setup](docs/AGENTCORE_VOICE_AGENT_SETUP.md) | Bedrock AgentCore voice agent deployment |
-| [Voice Agent Deep Dive](docs/VOICE_AGENT_DEEP_DIVE.md) | Voice architecture, Nova Sonic integration, and WebRTC |
+| [Voice Agent Deep Dive](docs/VOICE_AGENT_DEEP_DIVE.md) | Voice architecture and Nova Sonic integration |
 | [Custom Domain & SES](docs/CUSTOM_DOMAIN_AND_SES.md) | Custom domain setup, SES email delivery, and Amplify hosting |
 | [Contributing to Docs](docs/CONTRIBUTING_DOCS.md) | Guidelines for writing and maintaining documentation |
 | [Changelog](docs/CHANGELOG.md) | Version history and release notes |
@@ -60,7 +60,7 @@ For a detailed breakdown of each component, data flows, and the full database sc
 | `/cdk/layers` | Lambda layers for shared dependencies (postgres, psycopg2, aws-jwt-verify, jose) |
 | `/cdk/text_generation` | AI text generation service — LangChain + Bedrock for chat, debriefs, question matching (Docker Lambda) |
 | `/cdk/data_ingestion` | Document processing pipeline — PDF ingestion into pgvector store (Docker Lambda) |
-| `/cdk/socket-server` | Real-time server — Socket.IO + WebRTC voice on ECS Fargate |
+| `/cdk/socket-server` | Real-time server — Socket.IO voice on ECS Fargate |
 | `/cdk/voice-agent` | Bedrock AgentCore voice agent with Nova Sonic |
 | `/frontend` | React 19 frontend application (TypeScript, Vite, Tailwind CSS, shadcn/ui) |
 | `/frontend/src/pages` | Page-level components organized by user role (student, instructor, admin) |
