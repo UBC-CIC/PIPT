@@ -1,6 +1,6 @@
 <mxfile host="app.diagrams.net" agent="DrawioJSAPI/1.0.0">
   <diagram id="diagram-1" name="GenRx Architecture">
-    <mxGraphModel dx="1447" dy="644" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
+    <mxGraphModel dx="1102" dy="541" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1100" pageHeight="850" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -57,36 +57,6 @@
         </mxCell>
         <mxCell id="ecr" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=#F78E04;gradientDirection=north;fillColor=#D05C17;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=10;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.ecr;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;&lt;b&gt;Amazon ECR&lt;/b&gt;&lt;/font&gt;" vertex="1">
           <mxGeometry height="58" width="58" x="441" y="867" as="geometry" />
-        </mxCell>
-        <mxCell id="step1" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="1" vertex="1">
-          <mxGeometry height="26" width="26" x="82" y="478" as="geometry" />
-        </mxCell>
-        <mxCell id="step2" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="2" vertex="1">
-          <mxGeometry height="26" width="26" x="360" y="476" as="geometry" />
-        </mxCell>
-        <mxCell id="step3" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="3" vertex="1">
-          <mxGeometry height="26" width="26" x="602" y="478" as="geometry" />
-        </mxCell>
-        <mxCell id="step4" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="4" vertex="1">
-          <mxGeometry height="26" width="26" x="700" y="390" as="geometry" />
-        </mxCell>
-        <mxCell id="step5" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="5" vertex="1">
-          <mxGeometry height="26" width="26" x="830" y="481" as="geometry" />
-        </mxCell>
-        <mxCell id="step6" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="6" vertex="1">
-          <mxGeometry height="26" width="26" x="963" y="481" as="geometry" />
-        </mxCell>
-        <mxCell id="step7" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="7" vertex="1">
-          <mxGeometry height="26" width="26" x="784" y="860" as="geometry" />
-        </mxCell>
-        <mxCell id="step8" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="8" vertex="1">
-          <mxGeometry height="26" width="26" x="690" y="810" as="geometry" />
-        </mxCell>
-        <mxCell id="step9" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=14;fontStyle=1;aspect=fixed;" value="9" vertex="1">
-          <mxGeometry height="26" width="26" x="690" y="963" as="geometry" />
-        </mxCell>
-        <mxCell id="step10" parent="1" style="ellipse;whiteSpace=wrap;html=1;fillColor=#232F3E;strokeColor=none;fontColor=#ffffff;fontSize=12;fontStyle=1;aspect=fixed;" value="10" vertex="1">
-          <mxGeometry height="26" width="26" x="610" y="860" as="geometry" />
         </mxCell>
         <mxCell id="e1" edge="1" parent="1" source="users" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#232F3E;strokeWidth=2;endArrow=block;endFill=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="security-group" value="">
           <mxGeometry relative="1" as="geometry" />
@@ -200,13 +170,37 @@
           <mxGeometry height="53" width="53" x="910" y="863.5" as="geometry" />
         </mxCell>
         <mxCell id="faHdvE8qU_qpsxCwOZP--14" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.codepipeline;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;&lt;b&gt;AWS CodePipeline&lt;/b&gt;&lt;/font&gt;" vertex="1">
-          <mxGeometry height="50" width="50" x="160" y="870" as="geometry" />
+          <mxGeometry height="50" width="50" x="176" y="870" as="geometry" />
         </mxCell>
         <mxCell id="faHdvE8qU_qpsxCwOZP--15" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#C925D1;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.codebuild;" value="&lt;font style=&quot;font-size: 12px;&quot;&gt;&lt;b&gt;AWS CodeBuild&lt;/b&gt;&lt;/font&gt;" vertex="1">
-          <mxGeometry height="54" width="54" x="300" y="868" as="geometry" />
+          <mxGeometry height="54" width="54" x="309" y="868" as="geometry" />
         </mxCell>
         <mxCell id="cognito" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#C7131F;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.cognito;points=[];" value="&lt;b&gt;AWS Cognito&lt;/b&gt;&lt;div&gt;Authentication&lt;/div&gt;" vertex="1">
           <mxGeometry height="48" width="48" x="476" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="email-dns-group" parent="1" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#232F3E;verticalAlign=top;fontStyle=1;fontSize=12;fontColor=#232F3E;dashed=1;dashPattern=8 4;strokeWidth=1.5;" value="Email and DNS" vertex="1">
+          <mxGeometry height="150" width="235" x="125" y="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ses" parent="1" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=#F54749;gradientDirection=north;fillColor=#C7131F;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.simple_email_service;" value="&lt;b&gt;Amazon SES&lt;/b&gt;&lt;div&gt;Verification Emails&lt;/div&gt;" vertex="1">
+          <mxGeometry height="48" width="48" x="277" y="175" as="geometry" />
+        </mxCell>
+        <mxCell id="e-r53-ses" edge="1" parent="1" source="LiIfCCTInBXXim5TNH-Z-1" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#232F3E;strokeWidth=2;endArrow=block;endFill=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" target="ses" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="260" y="200" />
+              <mxPoint x="260" y="200" />
+            </Array>
+            <mxPoint x="208" y="164" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e-ses-cognito" edge="1" parent="1" source="email-dns-group" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#232F3E;strokeWidth=2;endArrow=block;endFill=1;rounded=0;exitX=1.002;exitY=0.467;exitDx=0;exitDy=0;exitPerimeter=0;" target="cognito" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="499" y="200" />
+            </Array>
+            <mxPoint x="360.17499999999995" y="170" as="sourcePoint" />
+            <mxPoint x="499" y="240" as="targetPoint" />
+          </mxGeometry>
         </mxCell>
         <mxCell id="N56MUe86ZcEVYauoQow8-11" edge="1" parent="1" style="edgeStyle=orthogonalEdgeStyle;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#232F3E;strokeWidth=2;endArrow=block;endFill=1;rounded=0;entryX=0.442;entryY=1.014;entryDx=0;entryDy=0;entryPerimeter=0;" target="streaming-group" value="">
           <mxGeometry relative="1" as="geometry">
@@ -226,6 +220,9 @@
         </mxCell>
         <mxCell id="faHdvE8qU_qpsxCwOZP--22" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#01A88D;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.bedrock;" value="&lt;b&gt;Amazon Nova Sonic&lt;/b&gt;&lt;br&gt;Voice AI" vertex="1">
           <mxGeometry height="48" width="48" x="1240" y="250" as="geometry" />
+        </mxCell>
+        <mxCell id="LiIfCCTInBXXim5TNH-Z-1" parent="1" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=#232F3E;fillColor=#8C4FFF;strokeColor=#ffffff;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.route_53;" value="&lt;b&gt;Amazon Route 53&lt;/b&gt;&lt;div&gt;DNS and Domain&lt;/div&gt;" vertex="1">
+          <mxGeometry height="50" width="50" x="158" y="175" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

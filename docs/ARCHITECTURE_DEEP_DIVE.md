@@ -56,7 +56,7 @@
 
 The GenRx platform is a clinical simulation system for pharmacy education. Students interact with AI-powered patient personas through text and voice chat, practicing clinical assessment skills in a safe environment. The system is built on AWS using CDK for infrastructure-as-code, with a React SPA frontend, monolithic Lambda API handlers, real-time streaming via Socket.IO on ECS Fargate, and AI inference through Amazon Bedrock.
 
-![GenRx Architecture](./architecture-diagram-without-numberings.png)
+![GenRx Architecture](./architecture-diagram-no-numberings-with-ses.drawio.png)
 
 ## Component Breakdown
 
