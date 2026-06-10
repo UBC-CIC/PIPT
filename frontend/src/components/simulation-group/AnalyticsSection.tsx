@@ -8,6 +8,10 @@ import type {
   PatientAnalytics,
   KeyQuestionCoverage,
   KeyQuestionAnalytics,
+  DTPCoverage,
+  RecommendationCoverage,
+  DTPAnalytics,
+  RecommendationAnalytics,
   StudentProgressData,
   OrganizationLabels,
   InstructorSimulationGroup,
@@ -19,6 +23,10 @@ export interface AnalyticsSectionProps {
   onDateRangeChange: (range: { start: string; end: string }) => void;
   keyQuestionCoverage: KeyQuestionCoverage[];
   keyQuestionAnalytics: KeyQuestionAnalytics[];
+  dtpCoverage: DTPCoverage[];
+  recommendationCoverage: RecommendationCoverage[];
+  dtpAnalytics: DTPAnalytics[];
+  recommendationAnalytics: RecommendationAnalytics[];
   studentProgress: StudentProgressData[];
   selectedPatientId: string;
   onPatientSelect: (id: string) => void;
@@ -33,6 +41,10 @@ export function AnalyticsSection({
   onDateRangeChange,
   keyQuestionCoverage,
   keyQuestionAnalytics,
+  dtpCoverage,
+  recommendationCoverage,
+  dtpAnalytics,
+  recommendationAnalytics,
   studentProgress,
   selectedPatientId,
   onPatientSelect,
@@ -45,6 +57,13 @@ export function AnalyticsSection({
     aiPersonaPlural: aiPersonaLabelPlural,
     aiPersonaLower: aiPersonaLabelLower,
   } = labels;
+
+  // Color helper for coverage bars
+  const getCoverageColor = (coverage: number): string => {
+    if (coverage >= 75) return '#22c55e'; // green
+    if (coverage >= 55) return '#eab308'; // yellow
+    return '#ef4444';                      // red
+  };
 
   const simulationGroupName = simulationGroup?.group_name || 'Simulation Group';
 
@@ -306,10 +325,160 @@ export function AnalyticsSection({
               </div>
             </div>
           )}
+
+          {/* DTP Coverage per Patient - Horizontal Bar */}
+          {dtpCoverage.length > 0 && (
+            <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+              <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                DTP Coverage by {aiPersonaLabel}
+              </h3>
+              <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                Average percentage of DTPs correctly identified by students who completed their debrief.
+              </p>
+              <ResponsiveContainer width="100%" height={Math.max(250, dtpCoverage.length * 50)}>
+                <BarChart
+                  data={dtpCoverage.map(d => ({
+                    personaName: d.personaName,
+                    avgCoverage: Math.round(d.avgCoverage),
+                    studentsDebriefed: d.studentsDebriefed,
+                  }))}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                    tickFormatter={(val: number) => `${val}%`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="personaName"
+                    width={180}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: UI_COLORS.background.white,
+                      border: `1px solid ${UI_COLORS.border.default}`,
+                      borderRadius: '6px',
+                    }}
+                    formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
+                      `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                      'DTP Coverage',
+                    ]}
+                  />
+                  <Bar
+                    dataKey="avgCoverage"
+                    radius={[0, 4, 4, 0]}
+                    barSize={28}
+                  >
+                    {dtpCoverage.map((entry, index) => (
+                      <Cell
+                        key={`dtp-cov-${index}`}
+                        fill={getCoverageColor(entry.avgCoverage)}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-6 mt-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (&ge;75%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55&ndash;74%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Needs Improvement (&lt;55%)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recommendation Coverage per Patient - Horizontal Bar */}
+          {recommendationCoverage.length > 0 && (
+            <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
+              <h3 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                Recommendation Coverage by {aiPersonaLabel}
+              </h3>
+              <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                Average percentage of recommendations correctly identified by students who completed their debrief.
+              </p>
+              <ResponsiveContainer width="100%" height={Math.max(250, recommendationCoverage.length * 50)}>
+                <BarChart
+                  data={recommendationCoverage.map(r => ({
+                    personaName: r.personaName,
+                    avgCoverage: Math.round(r.avgCoverage),
+                    studentsDebriefed: r.studentsDebriefed,
+                  }))}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                  <XAxis
+                    type="number"
+                    domain={[0, 100]}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                    tickFormatter={(val: number) => `${val}%`}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="personaName"
+                    width={180}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: UI_COLORS.background.white,
+                      border: `1px solid ${UI_COLORS.border.default}`,
+                      borderRadius: '6px',
+                    }}
+                    formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
+                      `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                      'Recommendation Coverage',
+                    ]}
+                  />
+                  <Bar
+                    dataKey="avgCoverage"
+                    radius={[0, 4, 4, 0]}
+                    barSize={28}
+                  >
+                    {recommendationCoverage.map((entry, index) => (
+                      <Cell
+                        key={`rec-cov-${index}`}
+                        fill={getCoverageColor(entry.avgCoverage)}
+                      />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-6 mt-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#22c55e' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Good (&ge;75%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#eab308' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Average (55&ndash;74%)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: '#ef4444' }} />
+                  <span className="text-xs" style={{ color: UI_COLORS.text.muted }}>Needs Improvement (&lt;55%)</span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
-
-      {/* ===== PER-PATIENT TAB ===== */}
       {currentPatient && (
         <div className="border rounded-lg p-6" style={{ borderColor: UI_COLORS.border.default }}>
           <h3 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
@@ -372,6 +541,102 @@ export function AnalyticsSection({
                   <Bar
                     dataKey="studentsAnswered"
                     fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
+                    radius={[0, 4, 4, 0]}
+                    barSize={28}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* DTP Analytics - Horizontal Bar Graph (per persona) */}
+          {dtpAnalytics.length > 0 && (
+            <div className="mt-8">
+              <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                DTPs &mdash; Students Identified
+              </h4>
+              <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                Number of students who correctly identified each DTP for {currentPatient.patient_name}.
+              </p>
+              <ResponsiveContainer width="100%" height={Math.max(250, dtpAnalytics.length * 50)}>
+                <BarChart
+                  data={dtpAnalytics}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="title"
+                    width={180}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: UI_COLORS.background.white,
+                      border: `1px solid ${UI_COLORS.border.default}`,
+                      borderRadius: '6px',
+                    }}
+                    formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Matched']}
+                  />
+                  <Bar
+                    dataKey="studentsMatched"
+                    fill={SIMULATION_GROUP_COLOR_PALETTE[2]}
+                    radius={[0, 4, 4, 0]}
+                    barSize={28}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
+          {/* Recommendation Analytics - Horizontal Bar Graph (per persona) */}
+          {recommendationAnalytics.length > 0 && (
+            <div className="mt-8">
+              <h4 className="text-lg font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                Recommendations &mdash; Students Matched
+              </h4>
+              <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
+                Number of students who correctly identified each recommendation for {currentPatient.patient_name}.
+              </p>
+              <ResponsiveContainer width="100%" height={Math.max(250, recommendationAnalytics.length * 50)}>
+                <BarChart
+                  data={recommendationAnalytics}
+                  layout="vertical"
+                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                    allowDecimals={false}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="title"
+                    width={180}
+                    tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
+                    axisLine={{ stroke: UI_COLORS.border.default }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: UI_COLORS.background.white,
+                      border: `1px solid ${UI_COLORS.border.default}`,
+                      borderRadius: '6px',
+                    }}
+                    formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Matched']}
+                  />
+                  <Bar
+                    dataKey="studentsMatched"
+                    fill={SIMULATION_GROUP_COLOR_PALETTE[5]}
                     radius={[0, 4, 4, 0]}
                     barSize={28}
                   />

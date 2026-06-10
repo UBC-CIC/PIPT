@@ -3163,6 +3163,530 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
+      case "GET /instructor/dtp_coverage":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          const startDateStr = event.queryStringParameters.start_date || null;
+          const endDateStr = event.queryStringParameters.end_date || null;
+
+          try {
+            let data;
+            if (startDateStr && endDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_dtp_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                  AND d.created_at >= ${startDateStr}::timestamp
+                  AND d.created_at <= ${endDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else if (startDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_dtp_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                  AND d.created_at >= ${startDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else if (endDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_dtp_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                  AND d.created_at <= ${endDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'dtp_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_dtp_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "GET /instructor/recommendation_coverage":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          const startDateStr = event.queryStringParameters.start_date || null;
+          const endDateStr = event.queryStringParameters.end_date || null;
+
+          try {
+            let data;
+            if (startDateStr && endDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_recommendation_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                  AND d.created_at >= ${startDateStr}::timestamp
+                  AND d.created_at <= ${endDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else if (startDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_recommendation_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                  AND d.created_at >= ${startDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else if (endDateStr) {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_recommendation_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                  AND d.created_at <= ${endDateStr}::timestamp
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            } else {
+              data = await sqlConnection`
+                SELECT
+                  p.persona_id,
+                  p.persona_name,
+                  AVG(
+                    CASE WHEN (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                              jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed')) > 0
+                      THEN jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') * 100.0 /
+                           (jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'matched') +
+                            jsonb_array_length(d.generated_text::jsonb->'recommendations_comparison'->'missed'))
+                      ELSE 0
+                    END
+                  ) AS avg_recommendation_coverage,
+                  COUNT(DISTINCT d.student_id) AS students_debriefed
+                FROM "personas" p
+                LEFT JOIN "debriefs" d
+                  ON p.persona_id = d.persona_id
+                  AND d.simulation_group_id = ${simulation_group_id}
+                  AND d.generated_text IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison' IS NOT NULL
+                  AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                WHERE p.simulation_group_id = ${simulation_group_id}
+                GROUP BY p.persona_id, p.persona_name, p.persona_number
+                ORDER BY p.persona_number ASC, p.persona_name ASC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id is required",
+          });
+        }
+        break;
+      case "GET /instructor/patient_dtp_analytics":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.persona_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          const persona_id = event.queryStringParameters.persona_id;
+          const startDateStr = event.queryStringParameters.start_date || null;
+          const endDateStr = event.queryStringParameters.end_date || null;
+
+          try {
+            let data;
+            if (startDateStr && endDateStr) {
+              data = await sqlConnection`
+                WITH matched_dtps AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'dtp_comparison'->'matched')->>'instructor_id' AS dtp_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                    AND d.created_at >= ${startDateStr}::timestamp
+                    AND d.created_at <= ${endDateStr}::timestamp
+                )
+                SELECT
+                  db.dtp_id,
+                  db.title,
+                  COUNT(DISTINCT md.student_id) AS students_matched
+                FROM "dtp_bank" db
+                JOIN "simulation_group_dtps" sgd ON sgd.dtp_id = db.dtp_id
+                  AND sgd.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgd.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_dtps md ON md.dtp_id::uuid = db.dtp_id
+                GROUP BY db.dtp_id, db.title
+                ORDER BY students_matched DESC;
+              `;
+            } else if (startDateStr) {
+              data = await sqlConnection`
+                WITH matched_dtps AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'dtp_comparison'->'matched')->>'instructor_id' AS dtp_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                    AND d.created_at >= ${startDateStr}::timestamp
+                )
+                SELECT
+                  db.dtp_id,
+                  db.title,
+                  COUNT(DISTINCT md.student_id) AS students_matched
+                FROM "dtp_bank" db
+                JOIN "simulation_group_dtps" sgd ON sgd.dtp_id = db.dtp_id
+                  AND sgd.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgd.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_dtps md ON md.dtp_id::uuid = db.dtp_id
+                GROUP BY db.dtp_id, db.title
+                ORDER BY students_matched DESC;
+              `;
+            } else if (endDateStr) {
+              data = await sqlConnection`
+                WITH matched_dtps AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'dtp_comparison'->'matched')->>'instructor_id' AS dtp_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                    AND d.created_at <= ${endDateStr}::timestamp
+                )
+                SELECT
+                  db.dtp_id,
+                  db.title,
+                  COUNT(DISTINCT md.student_id) AS students_matched
+                FROM "dtp_bank" db
+                JOIN "simulation_group_dtps" sgd ON sgd.dtp_id = db.dtp_id
+                  AND sgd.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgd.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_dtps md ON md.dtp_id::uuid = db.dtp_id
+                GROUP BY db.dtp_id, db.title
+                ORDER BY students_matched DESC;
+              `;
+            } else {
+              data = await sqlConnection`
+                WITH matched_dtps AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'dtp_comparison'->'matched')->>'instructor_id' AS dtp_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'dtp_comparison'->'matched' IS NOT NULL
+                )
+                SELECT
+                  db.dtp_id,
+                  db.title,
+                  COUNT(DISTINCT md.student_id) AS students_matched
+                FROM "dtp_bank" db
+                JOIN "simulation_group_dtps" sgd ON sgd.dtp_id = db.dtp_id
+                  AND sgd.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgd.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_dtps md ON md.dtp_id::uuid = db.dtp_id
+                GROUP BY db.dtp_id, db.title
+                ORDER BY students_matched DESC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and persona_id are required",
+          });
+        }
+        break;
+      case "GET /instructor/patient_recommendation_analytics":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id &&
+          event.queryStringParameters.persona_id
+        ) {
+          const simulation_group_id = event.queryStringParameters.simulation_group_id;
+          const persona_id = event.queryStringParameters.persona_id;
+          const startDateStr = event.queryStringParameters.start_date || null;
+          const endDateStr = event.queryStringParameters.end_date || null;
+
+          try {
+            let data;
+            if (startDateStr && endDateStr) {
+              data = await sqlConnection`
+                WITH matched_recommendations AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'recommendations_comparison'->'matched')->>'instructor_id' AS recommendation_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                    AND d.created_at >= ${startDateStr}::timestamp
+                    AND d.created_at <= ${endDateStr}::timestamp
+                )
+                SELECT
+                  rb.recommendation_id,
+                  rb.title,
+                  COUNT(DISTINCT mr.student_id) AS students_matched
+                FROM "recommendations_bank" rb
+                JOIN "simulation_group_recommendations" sgr ON sgr.recommendation_id = rb.recommendation_id
+                  AND sgr.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgr.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_recommendations mr ON mr.recommendation_id::uuid = rb.recommendation_id
+                GROUP BY rb.recommendation_id, rb.title
+                ORDER BY students_matched DESC;
+              `;
+            } else if (startDateStr) {
+              data = await sqlConnection`
+                WITH matched_recommendations AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'recommendations_comparison'->'matched')->>'instructor_id' AS recommendation_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                    AND d.created_at >= ${startDateStr}::timestamp
+                )
+                SELECT
+                  rb.recommendation_id,
+                  rb.title,
+                  COUNT(DISTINCT mr.student_id) AS students_matched
+                FROM "recommendations_bank" rb
+                JOIN "simulation_group_recommendations" sgr ON sgr.recommendation_id = rb.recommendation_id
+                  AND sgr.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgr.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_recommendations mr ON mr.recommendation_id::uuid = rb.recommendation_id
+                GROUP BY rb.recommendation_id, rb.title
+                ORDER BY students_matched DESC;
+              `;
+            } else if (endDateStr) {
+              data = await sqlConnection`
+                WITH matched_recommendations AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'recommendations_comparison'->'matched')->>'instructor_id' AS recommendation_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                    AND d.created_at <= ${endDateStr}::timestamp
+                )
+                SELECT
+                  rb.recommendation_id,
+                  rb.title,
+                  COUNT(DISTINCT mr.student_id) AS students_matched
+                FROM "recommendations_bank" rb
+                JOIN "simulation_group_recommendations" sgr ON sgr.recommendation_id = rb.recommendation_id
+                  AND sgr.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgr.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_recommendations mr ON mr.recommendation_id::uuid = rb.recommendation_id
+                GROUP BY rb.recommendation_id, rb.title
+                ORDER BY students_matched DESC;
+              `;
+            } else {
+              data = await sqlConnection`
+                WITH matched_recommendations AS (
+                  SELECT
+                    d.student_id,
+                    jsonb_array_elements(d.generated_text::jsonb->'recommendations_comparison'->'matched')->>'instructor_id' AS recommendation_id
+                  FROM "debriefs" d
+                  WHERE d.simulation_group_id = ${simulation_group_id}
+                    AND d.persona_id = ${persona_id}
+                    AND d.generated_text IS NOT NULL
+                    AND d.generated_text::jsonb->'recommendations_comparison'->'matched' IS NOT NULL
+                )
+                SELECT
+                  rb.recommendation_id,
+                  rb.title,
+                  COUNT(DISTINCT mr.student_id) AS students_matched
+                FROM "recommendations_bank" rb
+                JOIN "simulation_group_recommendations" sgr ON sgr.recommendation_id = rb.recommendation_id
+                  AND sgr.simulation_group_id = ${simulation_group_id}
+                  AND COALESCE(sgr.persona_id, ${persona_id}) = ${persona_id}
+                LEFT JOIN matched_recommendations mr ON mr.recommendation_id::uuid = rb.recommendation_id
+                GROUP BY rb.recommendation_id, rb.title
+                ORDER BY students_matched DESC;
+              `;
+            }
+            response.statusCode = 200;
+            response.body = JSON.stringify(data);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "simulation_group_id and persona_id are required",
+          });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

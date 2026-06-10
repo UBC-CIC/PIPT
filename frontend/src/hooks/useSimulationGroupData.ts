@@ -3,6 +3,10 @@ import {
   instructorService,
   type KeyQuestionAnalytics,
   type KeyQuestionCoverage,
+  type DTPCoverage,
+  type RecommendationCoverage,
+  type DTPAnalytics,
+  type RecommendationAnalytics,
   type StudentProgressData,
   type UserData,
   type OrganizationLabels,
@@ -24,6 +28,8 @@ export interface UseSimulationGroupDataReturn {
   manageablePatients: any[];
   profilePictures: Record<string, string>;
   keyQuestionCoverage: KeyQuestionCoverage[];
+  dtpCoverage: DTPCoverage[];
+  recommendationCoverage: RecommendationCoverage[];
   labels: OrganizationLabels;
   user: UserData;
   loading: boolean;
@@ -32,6 +38,8 @@ export interface UseSimulationGroupDataReturn {
   analyticsDateRange: { start: string; end: string };
   setAnalyticsDateRange: React.Dispatch<React.SetStateAction<{ start: string; end: string }>>;
   keyQuestionAnalytics: KeyQuestionAnalytics[];
+  dtpAnalytics: DTPAnalytics[];
+  recommendationAnalytics: RecommendationAnalytics[];
   studentProgress: StudentProgressData[];
   selectedPatientId: string;
   setSelectedPatientId: (id: string) => void;
@@ -55,6 +63,8 @@ export function useSimulationGroupData({
   const [manageablePatients, setManageablePatients] = useState<any[]>([]);
   const [profilePictures, setProfilePictures] = useState<Record<string, string>>({});
   const [keyQuestionCoverage, setKeyQuestionCoverage] = useState<KeyQuestionCoverage[]>([]);
+  const [dtpCoverage, setDtpCoverage] = useState<DTPCoverage[]>([]);
+  const [recommendationCoverage, setRecommendationCoverage] = useState<RecommendationCoverage[]>([]);
   const [loading, setLoading] = useState(true);
 
   // User data - admin uses mock, instructor fetches from service
@@ -67,6 +77,8 @@ export function useSimulationGroupData({
   // Analytics filtering state
   const [analyticsDateRange, setAnalyticsDateRange] = useState({ start: '', end: '' });
   const [keyQuestionAnalytics, setKeyQuestionAnalytics] = useState<KeyQuestionAnalytics[]>([]);
+  const [dtpAnalytics, setDtpAnalytics] = useState<DTPAnalytics[]>([]);
+  const [recommendationAnalytics, setRecommendationAnalytics] = useState<RecommendationAnalytics[]>([]);
   const [studentProgress, setStudentProgress] = useState<StudentProgressData[]>([]);
   const [selectedPatientId, setSelectedPatientId] = useState<string>('overview');
 
@@ -92,7 +104,11 @@ export function useSimulationGroupData({
     setManageablePatients([]);
     setProfilePictures({});
     setKeyQuestionCoverage([]);
+    setDtpCoverage([]);
+    setRecommendationCoverage([]);
     setKeyQuestionAnalytics([]);
+    setDtpAnalytics([]);
+    setRecommendationAnalytics([]);
     setStudentProgress([]);
     setSelectedPatientId('overview');
     setLoading(true);
@@ -176,12 +192,16 @@ export function useSimulationGroupData({
     if (!groupId) return;
     const fetchFilteredAnalytics = async () => {
       try {
-        const [analyticsData, coverageData] = await Promise.all([
+        const [analyticsData, coverageData, dtpCoverageData, recCoverageData] = await Promise.all([
           instructorService.getPatientAnalytics(groupId, analyticsDateRange.start, analyticsDateRange.end),
           instructorService.getKeyQuestionCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
+          instructorService.getDTPCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
+          instructorService.getRecommendationCoverage(groupId, analyticsDateRange.start, analyticsDateRange.end),
         ]);
         setPatientAnalytics(analyticsData);
         setKeyQuestionCoverage(coverageData);
+        setDtpCoverage(dtpCoverageData);
+        setRecommendationCoverage(recCoverageData);
       } catch (error) {
         console.error('Error fetching filtered analytics:', error);
       }
@@ -195,11 +215,23 @@ export function useSimulationGroupData({
   useEffect(() => {
     const currentPatient = patientAnalytics.find(p => p.patient_id === selectedPatientId);
     if (currentPatient && groupId) {
-      instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end)
-        .then(setKeyQuestionAnalytics)
-        .catch(() => setKeyQuestionAnalytics([]));
+      Promise.all([
+        instructorService.getPatientKeyQuestionAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end),
+        instructorService.getPatientDTPAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end),
+        instructorService.getPatientRecommendationAnalytics(groupId, currentPatient.patient_id, analyticsDateRange.start, analyticsDateRange.end),
+      ]).then(([kqData, dtpData, recData]) => {
+        setKeyQuestionAnalytics(kqData);
+        setDtpAnalytics(dtpData);
+        setRecommendationAnalytics(recData);
+      }).catch(() => {
+        setKeyQuestionAnalytics([]);
+        setDtpAnalytics([]);
+        setRecommendationAnalytics([]);
+      });
     } else {
       setKeyQuestionAnalytics([]);
+      setDtpAnalytics([]);
+      setRecommendationAnalytics([]);
     }
   }, [selectedPatientId, patientAnalytics, groupId, analyticsDateRange.start, analyticsDateRange.end]);
 
@@ -221,12 +253,16 @@ export function useSimulationGroupData({
     manageablePatients,
     profilePictures,
     keyQuestionCoverage,
+    dtpCoverage,
+    recommendationCoverage,
     labels,
     user,
     loading,
     analyticsDateRange,
     setAnalyticsDateRange,
     keyQuestionAnalytics,
+    dtpAnalytics,
+    recommendationAnalytics,
     studentProgress,
     selectedPatientId,
     setSelectedPatientId,

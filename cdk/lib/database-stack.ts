@@ -90,7 +90,7 @@ export class DatabaseStack extends Stack {
             credentials: rds.Credentials.fromUsername(secret.secretValueFromJson("DB_Username").unsafeUnwrap(), {
                 secretName: this.secretPathAdminName,
             }),
-            multiAz: true,
+            multiAz: false,
             allocatedStorage: 100,
             maxAllocatedStorage: 115,
             allowMajorVersionUpgrade: false,

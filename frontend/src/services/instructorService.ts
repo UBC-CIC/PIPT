@@ -107,6 +107,44 @@ export interface KeyQuestionCoverage {
   studentsDebriefed: number;            // Number of students who reached debrief
 }
 
+/**
+ * Represents per-patient DTP coverage for debriefed students
+ */
+export interface DTPCoverage {
+  personaId: string;                    // Persona identifier
+  personaName: string;                  // Persona name
+  avgCoverage: number;                  // Average % of DTPs covered (0-100)
+  studentsDebriefed: number;            // Number of students who reached debrief
+}
+
+/**
+ * Represents per-patient recommendation coverage for debriefed students
+ */
+export interface RecommendationCoverage {
+  personaId: string;                    // Persona identifier
+  personaName: string;                  // Persona name
+  avgCoverage: number;                  // Average % of recommendations covered (0-100)
+  studentsDebriefed: number;            // Number of students who reached debrief
+}
+
+/**
+ * Represents per-DTP student match analytics
+ */
+export interface DTPAnalytics {
+  dtpId: string;                        // DTP bank item identifier
+  title: string;                        // DTP title from bank
+  studentsMatched: number;              // Number of distinct students who matched
+}
+
+/**
+ * Represents per-recommendation student match analytics
+ */
+export interface RecommendationAnalytics {
+  recommendationId: string;             // Recommendation bank item identifier
+  title: string;                        // Recommendation title from bank
+  studentsMatched: number;              // Number of distinct students who matched
+}
+
 // For Patient Specific Student Progress Status - how many students have not started vs. in progress vs. reached debrief.
 export interface StudentProgressStatus {
   status: 'Not Started' | 'In Progress' | 'Debrief Reached';
@@ -382,6 +420,10 @@ export interface InstructorDataService {
   getKeyQuestionAnalytics: (simulationGroupId: string) => Promise<KeyQuestionAnalytics[]>;
   getKeyQuestionCoverage: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionCoverage[]>;
   getPatientKeyQuestionAnalytics: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<KeyQuestionAnalytics[]>;
+  getDTPCoverage: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<DTPCoverage[]>;
+  getRecommendationCoverage: (simulationGroupId: string, startDate?: string, endDate?: string) => Promise<RecommendationCoverage[]>;
+  getPatientDTPAnalytics: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<DTPAnalytics[]>;
+  getPatientRecommendationAnalytics: (simulationGroupId: string, personaId: string, startDate?: string, endDate?: string) => Promise<RecommendationAnalytics[]>;
   getQuestionPerformanceScores: (simulationGroupId: string) => QuestionPerformanceScore[];
   getScoreDistribution: (simulationGroupId: string, patientId: string) => ScoreDistributionBucket[];
   getSimulationGroupQuestions: (simulationGroupId: string, personaId?: string) => Promise<any[]>;
@@ -635,6 +677,102 @@ async function getPatientKeyQuestionAnalytics(simulationGroupId: string, persona
     }));
   } catch (error) {
     console.error('Failed to fetch patient key question analytics:', error);
+    return [];
+  }
+}
+
+/**
+ * Get DTP coverage per persona for a simulation group
+ * Returns average DTP coverage percentage and students debriefed per persona
+ */
+async function getDTPCoverage(simulationGroupId: string, startDate: string = '', endDate: string = ''): Promise<DTPCoverage[]> {
+  try {
+    let url = `instructor/dtp_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      personaId: row.persona_id || '',
+      personaName: (row.persona_name || '').length > 30
+        ? row.persona_name.substring(0, 27) + '...'
+        : (row.persona_name || ''),
+      avgCoverage: Math.round(Number(row.avg_dtp_coverage) || 0),
+      studentsDebriefed: Number(row.students_debriefed) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch DTP coverage:', error);
+    return [];
+  }
+}
+
+/**
+ * Get recommendation coverage per persona for a simulation group
+ * Returns average recommendation coverage percentage and students debriefed per persona
+ */
+async function getRecommendationCoverage(simulationGroupId: string, startDate: string = '', endDate: string = ''): Promise<RecommendationCoverage[]> {
+  try {
+    let url = `instructor/recommendation_coverage?simulation_group_id=${encodeURIComponent(simulationGroupId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      personaId: row.persona_id || '',
+      personaName: (row.persona_name || '').length > 30
+        ? row.persona_name.substring(0, 27) + '...'
+        : (row.persona_name || ''),
+      avgCoverage: Math.round(Number(row.avg_recommendation_coverage) || 0),
+      studentsDebriefed: Number(row.students_debriefed) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch recommendation coverage:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-patient DTP analytics - count of distinct students who matched each DTP
+ */
+async function getPatientDTPAnalytics(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<DTPAnalytics[]> {
+  try {
+    let url = `instructor/patient_dtp_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      dtpId: row.dtp_id || '',
+      title: (row.title || '').length > 30
+        ? row.title.substring(0, 27) + '...'
+        : (row.title || ''),
+      studentsMatched: Number(row.students_matched) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch patient DTP analytics:', error);
+    return [];
+  }
+}
+
+/**
+ * Get per-patient recommendation analytics - count of distinct students who matched each recommendation
+ */
+async function getPatientRecommendationAnalytics(simulationGroupId: string, personaId: string, startDate: string = '', endDate: string = ''): Promise<RecommendationAnalytics[]> {
+  try {
+    let url = `instructor/patient_recommendation_analytics?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(personaId)}`;
+    if (startDate) url += `&start_date=${encodeURIComponent(startDate)}`;
+    if (endDate) url += `&end_date=${encodeURIComponent(endDate)}`;
+
+    const data = await apiClient.request<any[]>(url, { method: 'GET' });
+    return data.map((row: any) => ({
+      recommendationId: row.recommendation_id || '',
+      title: (row.title || '').length > 30
+        ? row.title.substring(0, 27) + '...'
+        : (row.title || ''),
+      studentsMatched: Number(row.students_matched) || 0,
+    }));
+  } catch (error) {
+    console.error('Failed to fetch patient recommendation analytics:', error);
     return [];
   }
 }
@@ -2138,6 +2276,10 @@ export const instructorService: InstructorDataService = {
   getKeyQuestionAnalytics,
   getKeyQuestionCoverage,
   getPatientKeyQuestionAnalytics,
+  getDTPCoverage,
+  getRecommendationCoverage,
+  getPatientDTPAnalytics,
+  getPatientRecommendationAnalytics,
   getQuestionPerformanceScores,
   getScoreDistribution,
   getSimulationGroupQuestions,

@@ -82,7 +82,8 @@ function AdminSimulationGroupPage() {
   // Destructure shared data
   const { labels, simulationGroup, setSimulationGroup, manageablePatients, profilePictures, students,
     patientAnalytics, analyticsDateRange, setAnalyticsDateRange, keyQuestionCoverage,
-    keyQuestionAnalytics, studentProgress, selectedPatientId, setSelectedPatientId, loading, user,
+    keyQuestionAnalytics, dtpCoverage, recommendationCoverage, dtpAnalytics, recommendationAnalytics,
+    studentProgress, selectedPatientId, setSelectedPatientId, loading, user,
   } = groupData;
 
   const { includedQuestionIds, setIncludedQuestionIds, questionBankTab,
@@ -835,7 +836,7 @@ function AdminSimulationGroupPage() {
         />
 
         <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'prompts', 'editPatient', 'viewStudent', 'issuesFeedback'].includes(activeSection) ? '0' : '2rem' }}>
-          {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
+          {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} dtpCoverage={dtpCoverage} recommendationCoverage={recommendationCoverage} dtpAnalytics={dtpAnalytics} recommendationAnalytics={recommendationAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
 
           {activeSection === 'patients' && (
             <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} onTogglePatientVoice={handleTogglePatientVoice} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (newValue) => {
