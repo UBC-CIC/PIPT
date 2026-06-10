@@ -236,9 +236,11 @@ From your simulation group page, access the **Analytics** section to view cohort
 
 <img width="954" height="408" alt="image" src="media/instructor-analytics.png" />
 
-Beyond the group overview, instructors can view more granular per-patient analytics including the number of students who successfully asked each key question, giving insight into which clinical topics students are addressing or missing:
+Beyond the group overview, instructors can view more granular per-patient analytics including the number of students who successfully asked each key question, and stated each required DTP and Recommendation giving insight into which clinical topics students are addressing or missing:
 
 <img width="954" height="408" alt="image" src="media/instructor-patient-specific-analytics.png" />
+<img width="954" height="408" alt="image" src="media/instructor-patient-specific-analytics-2.png" />
+
 
 The message distribution chart shows the breakdown of student messages versus AI messages across interactions, helping instructors gauge how actively students are engaging:
 

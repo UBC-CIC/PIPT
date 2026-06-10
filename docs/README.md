@@ -34,6 +34,3 @@
 - [Changelog](./CHANGELOG.md) — Notable changes log
 - [Contributing to Docs](./CONTRIBUTING_DOCS.md) — Documentation maintenance rules
 
----
-
-This documentation follows the GenRx Documentation Standards & Generation Guide.
