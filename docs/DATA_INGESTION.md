@@ -52,7 +52,7 @@ The pipeline consists of four layers:
 
 The pipeline supports two embedding model families, selected via the `EMBEDDING_MODEL_PARAM` SSM parameter:
 
-- **Amazon Titan** (`amazon.titan-embed-text-v2:0`) — Uses LangChain's `BedrockEmbeddings` class directly
+
 - **Cohere Embed v4** (`cohere.embed-v4:0`) — Uses a custom `CohereBedrockEmbeddings` wrapper that handles Cohere's distinct request/response format
 
 The embedding model is resolved at runtime from Parameter Store. When the model ID starts with `cohere.embed`, the pipeline instantiates the Cohere wrapper; otherwise it uses the standard Bedrock embeddings client.
