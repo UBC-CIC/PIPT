@@ -77,6 +77,7 @@ export class ApiServiceStack extends cdk.Stack {
     super(scope, id, props);
 
     this.layerList = {};
+    this.dynamoTableName = `${id}-DynamoDB-Conversation-Table`;
 
     const allowedOrigins = [
       "https://main.d3sunerinpg5un.amplifyapp.com",
@@ -445,7 +446,7 @@ export class ApiServiceStack extends cdk.Stack {
               "dynamodb:UpdateItem",
             ],
             [
-              `arn:aws:dynamodb:${this.region}:${this.account}:table/DynamoDB-Conversation-Table`,
+              `arn:aws:dynamodb:${this.region}:${this.account}:table/${this.dynamoTableName}`,
             ]
           ),
           // Bedrock permissions for Nova Sonic
@@ -989,7 +990,6 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
-    this.dynamoTableName = "DynamoDB-Conversation-Table";
     const dynamoTableName = this.dynamoTableName;
 
     // The conversation table is referenced by name rather than owned by CDK. It was created
