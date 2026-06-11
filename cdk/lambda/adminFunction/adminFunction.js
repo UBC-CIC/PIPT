@@ -17,6 +17,25 @@ const DEFAULT_DEBRIEF_PROMPT = fs.readFileSync(path.join(__dirname, "defaultDebr
 // SQL conneciton from global variable at libadmin.js
 let sqlConnectionTableCreator = global.sqlConnectionTableCreator;
 
+/**
+ * Validates a threshold value for an organization configuration field.
+ * @param {*} value - The value to validate
+ * @param {string} fieldName - The name of the field (used in error messages)
+ * @returns {number|null} - The validated number, or null if value is null/undefined
+ * @throws {{status: number, message: string}} - If validation fails
+ */
+function validateThreshold(value, fieldName) {
+  if (value === null || value === undefined) return null;
+  const num = Number(value);
+  if (isNaN(num) || typeof value === 'boolean') {
+    throw { status: 400, message: `${fieldName} must be a number` };
+  }
+  if (num < 0.0 || num > 1.0) {
+    throw { status: 400, message: `${fieldName} must be between 0.0 and 1.0` };
+  }
+  return num;
+}
+
 exports.handler = async (event, context) => {
   logger.init(event, context);
   logger.info("Admin handler invoked", { queryStringParameters: event.queryStringParameters });
@@ -1130,6 +1149,104 @@ exports.handler = async (event, context) => {
             response.statusCode = 500;
             logger.error("Operation failed", { error: err.message, stack: err.stack });
             response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      // ── Organization Thresholds ────────────────────────────────────────
+      case "GET /admin/organization_thresholds":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const org = await sqlConnectionTableCreator`
+              SELECT key_question_threshold, dtp_threshold, recommendation_threshold
+              FROM "organizations"
+              WHERE organization_id = ${organization_id};
+            `;
+            if (org.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Organization not found" });
+            } else {
+              response.body = JSON.stringify({
+                key_question_threshold: org[0].key_question_threshold,
+                dtp_threshold: org[0].dtp_threshold,
+                recommendation_threshold: org[0].recommendation_threshold,
+              });
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to fetch organization thresholds", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "PUT /admin/organization_thresholds":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id
+        ) {
+          try {
+            const { organization_id } = event.queryStringParameters;
+            const body = JSON.parse(event.body);
+
+            // Validate each provided field
+            const updates = {};
+            if ("key_question_threshold" in body) {
+              updates.key_question_threshold = validateThreshold(body.key_question_threshold, "key_question_threshold");
+            }
+            if ("dtp_threshold" in body) {
+              updates.dtp_threshold = validateThreshold(body.dtp_threshold, "dtp_threshold");
+            }
+            if ("recommendation_threshold" in body) {
+              updates.recommendation_threshold = validateThreshold(body.recommendation_threshold, "recommendation_threshold");
+            }
+
+            // If no valid fields provided, return 400
+            const fields = Object.keys(updates);
+            if (fields.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "At least one threshold field must be provided" });
+              break;
+            }
+
+            // Build dynamic UPDATE query with only provided fields
+            const setClauses = fields.map(
+              (field) => `${field} = ${updates[field] === null ? "NULL" : updates[field]}`
+            );
+            const updateResult = await sqlConnectionTableCreator`
+              UPDATE "organizations"
+              SET ${sqlConnectionTableCreator.unsafe(setClauses.join(", "))}
+              WHERE organization_id = ${organization_id}
+              RETURNING key_question_threshold, dtp_threshold, recommendation_threshold;
+            `;
+
+            if (updateResult.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Organization not found" });
+            } else {
+              response.body = JSON.stringify({
+                key_question_threshold: updateResult[0].key_question_threshold,
+                dtp_threshold: updateResult[0].dtp_threshold,
+                recommendation_threshold: updateResult[0].recommendation_threshold,
+              });
+            }
+          } catch (err) {
+            if (err.status && err.message) {
+              response.statusCode = err.status;
+              response.body = JSON.stringify({ error: err.message });
+            } else {
+              response.statusCode = 500;
+              logger.error("Failed to update organization thresholds", { error: err.message, stack: err.stack });
+              response.body = JSON.stringify({ error: "Internal server error" });
+            }
           }
         } else {
           response.statusCode = 400;

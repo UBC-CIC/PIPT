@@ -5,6 +5,7 @@ import DashboardHeader from '@/components/DashboardHeader';
 import { mockAdminDataService } from '@/services/adminService';
 import { useAuth } from '@/App';
 import { UI_COLORS } from '@/lib/colors';
+import ThresholdConfigSection from '@/components/ThresholdConfigSection';
 
 interface BankCard {
   title: string;
@@ -16,8 +17,8 @@ interface BankCard {
 /**
  * AdminManageBanksPage Component
  *
- * Landing page for bank management. Allows admins to choose between
- * Question Bank, DTP Bank, and Recommendations Bank.
+ * Landing page for scoring configuration and bank management. Allows admins to
+ * configure matching thresholds and manage Question Bank, DTP Bank, and Recommendations Bank.
  */
 function AdminManageBanksPage() {
   const navigate = useNavigate();
@@ -62,7 +63,7 @@ function AdminManageBanksPage() {
     <PageContainer>
       <DashboardHeader
         title="Admin Dashboard"
-        subtitle="Manage Banks"
+        subtitle="Scoring & Configuration"
         userName={user.name}
         userAvatarUrl={user.avatarUrl}
         onSignOut={handleSignOut}
@@ -83,7 +84,7 @@ function AdminManageBanksPage() {
         </div>
 
         <h2 className="text-xl font-semibold mb-6" style={{ color: UI_COLORS.text.heading }}>
-          Choose a Bank to Manage
+          Item Banks
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -107,6 +108,11 @@ function AdminManageBanksPage() {
               </p>
             </button>
           ))}
+        </div>
+
+        {/* Matching Thresholds Section */}
+        <div className="mt-10">
+          {organizationId && <ThresholdConfigSection organizationId={organizationId} />}
         </div>
       </main>
     </PageContainer>

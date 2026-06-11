@@ -286,7 +286,7 @@ function AdminDTPBankPage() {
                   onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  Back to Manage Banks
+                  Back to Scoring & Configuration
                 </Link>
               </div>
 
