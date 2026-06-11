@@ -345,6 +345,7 @@ def handler(event, context):
                 message_id=message_id,
                 embeddings_model=embeddings,
                 table_name=TABLE_NAME,
+                bedrock_llm_id=BEDROCK_LLM_ID,
             )
 
             return {
