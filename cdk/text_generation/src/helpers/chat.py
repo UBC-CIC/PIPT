@@ -12,6 +12,10 @@ logger.setLevel(logging.INFO)
 _matching_threads_lock = threading.Lock()
 _matching_threads: dict[str, list[threading.Thread]] = {}  # session_id -> [threads]
 
+# Default threshold value used when an organization has no custom configuration.
+# Matches the legacy hardcoded SUBMISSION_MATCH_THRESHOLD value.
+DEFAULT_MATCH_THRESHOLD = 0.55
+
 # Stream callback URL — when set, publish_stream_event() POSTs chunks here
 # instead of AppSync. Set by main.py from the stream_callback_url query param.
 _stream_callback_url: str | None = None
@@ -205,7 +209,8 @@ def get_response(
     embeddings_model=None,
     ddb_table_name: str = None,
     raw_prompt_mode: bool = False,
-    is_initial_prompt: bool = False
+    is_initial_prompt: bool = False,
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> dict:
     """
     Generates a response to a query using the LLM and a history-aware retriever for context.
@@ -242,6 +247,7 @@ def get_response(
                 embeddings_model=embeddings_model,
                 table_name=ddb_table_name,
                 bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
+                key_question_threshold=key_question_threshold,
             )
     
     completion_string = """
@@ -335,6 +341,7 @@ Use the documents provided as your medical history and symptoms. Be subtle and r
                 ddb_table_name=ddb_table_name,
                 is_initial_prompt=is_initial_prompt,
                 bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
+                key_question_threshold=key_question_threshold,
             )
         else:
             response = generate_response(
@@ -390,6 +397,7 @@ def generate_streaming_response(
     ddb_table_name: str = None,
     is_initial_prompt: bool = False,
     bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> str:
     """
     Streams an answer via AppSync as fast as possible.
@@ -442,6 +450,7 @@ def generate_streaming_response(
                     embeddings_model=embeddings_model,
                     table_name=ddb_table_name,
                     bedrock_llm_id=bedrock_llm_id,
+                    key_question_threshold=key_question_threshold,
                 )
 
         publish_to_appsync(session_id, {"type": "start", "content": ""})
@@ -725,6 +734,67 @@ def fetch_recommendation(session_id: str) -> str:
     except Exception as e:
         logger.error(f"Error fetching recommendation: {e}")
         return ""
+
+
+def fetch_org_thresholds(simulation_group_id: str) -> dict:
+    """Fetch organization-level matching thresholds for a simulation group.
+
+    Resolves organization_id via the simulation_groups table, then reads
+    threshold columns from the organizations table.
+
+    Returns:
+        {
+            "key_question_threshold": float,
+            "dtp_threshold": float,
+            "recommendation_threshold": float,
+        }
+    All values are resolved (NULL → DEFAULT_MATCH_THRESHOLD).
+    """
+    defaults = {
+        "key_question_threshold": DEFAULT_MATCH_THRESHOLD,
+        "dtp_threshold": DEFAULT_MATCH_THRESHOLD,
+        "recommendation_threshold": DEFAULT_MATCH_THRESHOLD,
+    }
+
+    try:
+        conn = _get_db_connection()
+    except Exception as e:
+        logger.error(f"DB connection failure fetching org thresholds: {e}")
+        return defaults
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT o.key_question_threshold, o.dtp_threshold, o.recommendation_threshold
+            FROM organizations o
+            JOIN simulation_groups sg ON sg.organization_id = o.organization_id
+            WHERE sg.simulation_group_id = %s
+            """,
+            (simulation_group_id,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if row is None:
+            logger.warning(
+                f"No organization found for simulation_group_id={simulation_group_id}; using default thresholds"
+            )
+            return defaults
+
+        return {
+            "key_question_threshold": float(row[0]) if row[0] is not None else DEFAULT_MATCH_THRESHOLD,
+            "dtp_threshold": float(row[1]) if row[1] is not None else DEFAULT_MATCH_THRESHOLD,
+            "recommendation_threshold": float(row[2]) if row[2] is not None else DEFAULT_MATCH_THRESHOLD,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching org thresholds for simulation_group_id={simulation_group_id}: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return defaults
 
 
 def fetch_student_submissions(session_id: str) -> dict:
@@ -2166,6 +2236,7 @@ def match_message_to_questions(
     embeddings_model,
     table_name: str,
     bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> list[dict]:
     """
     Decompose a student message into individual intents, embed each intent,
@@ -2175,11 +2246,11 @@ def match_message_to_questions(
     "What medications are you on and do you have any allergies?") correctly
     match against multiple key questions.
 
-    Classification tiers (calibrated for Cohere Embed v4 symmetric space):
-        >= 0.55  → "high"
-        0.45-0.54 → "moderate"
-        0.30-0.44 → "low" (logged but NOT counted as "addressed" in debrief)
-        < 0.30  → discarded
+    Classification tiers are derived from the configurable key_question_threshold:
+        >= key_question_threshold          → "high"
+        >= key_question_threshold - 0.10   → "moderate"
+        >= key_question_threshold - 0.25   → "low" (logged but NOT counted as "addressed" in debrief)
+        < key_question_threshold - 0.25    → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
@@ -2215,6 +2286,10 @@ def match_message_to_questions(
     #    Track best score per question (a question can only be matched once).
     best_matches: dict[str, dict] = {}  # question_id -> best match info
 
+    # Derive tier boundaries from the configurable threshold
+    moderate_threshold = key_question_threshold - 0.10
+    low_threshold = key_question_threshold - 0.25
+
     for intent_idx, (intent_text, intent_emb) in enumerate(zip(intents, intent_embeddings)):
         for q in cached_questions:
             embedding = q.get("embedding", [])
@@ -2225,15 +2300,15 @@ def match_message_to_questions(
                 f"🔍 Similarity: intent[{intent_idx}]='{intent_text[:50]}' vs question='{q.get('question_text', '')[:50]}' → score={score:.4f}"
             )
 
-            if score < 0.30:
+            if score < low_threshold:
                 continue
 
             qid = q["question_id"]
             # Keep the highest score for each question across all intents
             if qid not in best_matches or score > best_matches[qid]["similarity_score"]:
-                if score >= 0.55:
+                if score >= key_question_threshold:
                     confidence = "high"
-                elif score >= 0.45:
+                elif score >= moderate_threshold:
                     confidence = "moderate"
                 else:
                     confidence = "low"
@@ -2276,6 +2351,7 @@ def run_matching_async(
     embeddings_model,
     table_name: str,
     bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> None:
     """Run match_message_to_questions in a background daemon thread.
 
@@ -2294,6 +2370,7 @@ def run_matching_async(
                 embeddings_model=embeddings_model,
                 table_name=table_name,
                 bedrock_llm_id=bedrock_llm_id,
+                key_question_threshold=key_question_threshold,
             )
         except Exception:
             logger.exception(
@@ -3389,6 +3466,10 @@ def generate_debrief(
     # TODO(refactor): Extract _extract_json and _invoke_llm_json into module-level helper functions (duplicated in generate_test_debrief)
     # TODO(refactor): Extract the multi-step debrief pipeline (steps a-f) into a shared helper function (duplicated in generate_test_debrief)
 
+    # Fetch org-level thresholds once for the entire debrief generation.
+    # These are used for DTP and recommendation matching below.
+    org_thresholds = fetch_org_thresholds(simulation_group_id)
+
     # Wait for any in-flight matching threads so that all
     # matched_question_ids are persisted before we query for them.
     flush_matching_threads(session_id)
@@ -3585,6 +3666,7 @@ def generate_debrief(
                         student_texts=submissions["dtp_entries"],
                         instructor_items=cached_dtps,
                         embeddings_model=embeddings_model,
+                        threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
                     )
@@ -3599,6 +3681,7 @@ def generate_debrief(
                             student_texts=student_rec_texts,
                             instructor_items=cached_recs,
                             embeddings_model=embeddings_model,
+                            threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
                         )
@@ -3915,6 +3998,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                         student_texts=submissions["dtp_entries"],
                         instructor_items=cached_dtps,
                         embeddings_model=embeddings_model,
+                        threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
                     )
@@ -3933,6 +4017,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                             student_texts=student_rec_texts,
                             instructor_items=cached_recs,
                             embeddings_model=embeddings_model,
+                            threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
                         )
