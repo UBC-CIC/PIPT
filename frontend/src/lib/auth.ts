@@ -3,7 +3,7 @@
 // Roles are fetched from the database via GET /student/me, not from JWT claims
 // See: cdk/lambda/jwtAuthorizer/jwtAuthorizer.js for backend auth implementation
 
-import { signIn, signUp, signOut, fetchAuthSession, confirmSignUp, confirmSignIn } from 'aws-amplify/auth';
+import { signIn, signUp, signOut, fetchAuthSession, confirmSignUp, confirmSignIn, resetPassword, confirmResetPassword } from 'aws-amplify/auth';
 import { appConfig } from '@/config/aws-config';
 
 export interface AuthTokens {
@@ -98,6 +98,16 @@ class AuthService {
   async completeNewPassword(newPassword: string): Promise<AuthResult> {
     await confirmSignIn({ challengeResponse: newPassword });
     return this.buildAuthResult();
+  }
+
+  // Initiate forgot password flow — sends a verification code to the user's email
+  async forgotPassword(email: string): Promise<void> {
+    await resetPassword({ username: email });
+  }
+
+  // Confirm forgot password with verification code and new password
+  async confirmForgotPassword(email: string, code: string, newPassword: string): Promise<void> {
+    await confirmResetPassword({ username: email, confirmationCode: code, newPassword });
   }
 
   // Sign out and clear cached profile.
