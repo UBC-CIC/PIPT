@@ -241,6 +241,7 @@ def get_response(
                 message_id=student_message_id,
                 embeddings_model=embeddings_model,
                 table_name=ddb_table_name,
+                bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
             )
     
     completion_string = """
@@ -332,7 +333,8 @@ Use the documents provided as your medical history and symptoms. Be subtle and r
                 persona_id=persona_id,
                 embeddings_model=embeddings_model,
                 ddb_table_name=ddb_table_name,
-                is_initial_prompt=is_initial_prompt
+                is_initial_prompt=is_initial_prompt,
+                bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
             )
         else:
             response = generate_response(
@@ -386,7 +388,8 @@ def generate_streaming_response(
     persona_id: str = "",
     embeddings_model=None,
     ddb_table_name: str = None,
-    is_initial_prompt: bool = False
+    is_initial_prompt: bool = False,
+    bedrock_llm_id: str = "",
 ) -> str:
     """
     Streams an answer via AppSync as fast as possible.
@@ -438,6 +441,7 @@ def generate_streaming_response(
                     message_id=student_message_id,
                     embeddings_model=embeddings_model,
                     table_name=ddb_table_name,
+                    bedrock_llm_id=bedrock_llm_id,
                 )
 
         publish_to_appsync(session_id, {"type": "start", "content": ""})
@@ -2090,9 +2094,9 @@ def compute_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
-def decompose_message_intents(message_content: str) -> list[str]:
-    """Use a lightweight LLM call to decompose a student message into
-    individual clinical intents/questions.
+def decompose_message_intents(message_content: str, bedrock_llm_id: str) -> list[str]:
+    """Use the same LLM used for text generation to decompose a student
+    message into individual clinical intents/questions.
 
     If the message is short or contains a single intent, returns it as-is
     in a single-element list. This avoids unnecessary LLM calls for simple
@@ -2106,8 +2110,9 @@ def decompose_message_intents(message_content: str) -> list[str]:
         return [message_content]
 
     try:
-        deployment_region = os.environ.get("AWS_REGION", "us-east-1")
-        client = boto3.client("bedrock-runtime", region_name=deployment_region)
+        llm = get_bedrock_llm(bedrock_llm_id=bedrock_llm_id, streaming=False)
+
+        from langchain_core.messages import HumanMessage
 
         prompt = f"""Analyze this student message from a clinical simulation and decompose it into separate clinical intents or questions. Each intent should be a self-contained statement or question that addresses a single clinical topic.
 
@@ -2122,22 +2127,9 @@ Student message: "{message_content}"
 
 JSON array:"""
 
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": 300,
-            "temperature": 0,
-            "messages": [{"role": "user", "content": prompt}],
-        })
-
-        response = client.invoke_model(
-            modelId="anthropic.claude-3-haiku-20240307-v1:0",
-            body=body,
-            accept="application/json",
-            contentType="application/json",
-        )
-
-        result = json.loads(response["body"].read())
-        text = result["content"][0]["text"].strip()
+        resp = llm.invoke([HumanMessage(content=prompt)])
+        text = resp.content if hasattr(resp, 'content') else str(resp)
+        text = text.strip()
 
         # Parse the JSON array from the response
         # Handle cases where model wraps in markdown code block
@@ -2173,20 +2165,21 @@ def match_message_to_questions(
     message_id: str,
     embeddings_model,
     table_name: str,
+    bedrock_llm_id: str = "",
 ) -> list[dict]:
     """
     Decompose a student message into individual intents, embed each intent,
     compare against cached question embeddings, and persist matches.
 
-    Uses LLM-based intent decomposition so that multi-part messages (e.g.
+    Uses heuristic sentence splitting so that multi-part messages (e.g.
     "What medications are you on and do you have any allergies?") correctly
     match against multiple key questions.
 
-    Classification tiers:
-        >= 0.75  → "high"
-        0.60-0.74 → "moderate"
-        0.45-0.59 → "low" (logged but NOT counted as "addressed" in debrief)
-        < 0.45  → discarded
+    Classification tiers (calibrated for Cohere Embed v4 symmetric space):
+        >= 0.55  → "high"
+        0.45-0.54 → "moderate"
+        0.30-0.44 → "low" (logged but NOT counted as "addressed" in debrief)
+        < 0.30  → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
@@ -2204,7 +2197,7 @@ def match_message_to_questions(
         return matches
 
     # 2. Decompose message into individual intents
-    intents = decompose_message_intents(message_content)
+    intents = decompose_message_intents(message_content, bedrock_llm_id)
     logger.info(f"🧩 Matching {len(intents)} intent(s) against {len(cached_questions)} cached questions")
 
     # 3. Embed all intents in a single batch call for efficiency
@@ -2232,15 +2225,15 @@ def match_message_to_questions(
                 f"🔍 Similarity: intent[{intent_idx}]='{intent_text[:50]}' vs question='{q.get('question_text', '')[:50]}' → score={score:.4f}"
             )
 
-            if score < 0.45:
+            if score < 0.30:
                 continue
 
             qid = q["question_id"]
             # Keep the highest score for each question across all intents
             if qid not in best_matches or score > best_matches[qid]["similarity_score"]:
-                if score >= 0.75:
+                if score >= 0.55:
                     confidence = "high"
-                elif score >= 0.60:
+                elif score >= 0.45:
                     confidence = "moderate"
                 else:
                     confidence = "low"
@@ -2282,6 +2275,7 @@ def run_matching_async(
     message_id: str,
     embeddings_model,
     table_name: str,
+    bedrock_llm_id: str = "",
 ) -> None:
     """Run match_message_to_questions in a background daemon thread.
 
@@ -2299,6 +2293,7 @@ def run_matching_async(
                 message_id=message_id,
                 embeddings_model=embeddings_model,
                 table_name=table_name,
+                bedrock_llm_id=bedrock_llm_id,
             )
         except Exception:
             logger.exception(
@@ -3506,8 +3501,8 @@ def generate_debrief(
         # =====================================================================
 
         # Prepare rewrite candidates (same logic as before, just collected for batch call)
-        REWRITE_UPPER_BOUND = 0.70
-        REWRITE_LOWER_BOUND = 0.60
+        REWRITE_UPPER_BOUND = 0.55
+        REWRITE_LOWER_BOUND = 0.45
         question_map = {q["question_id"]: q for q in cached_questions}
 
         rewrite_candidates: list[dict] = []
@@ -4103,8 +4098,8 @@ def generate_test_debrief(
         # fall below the rewrite threshold. These are questions the student DID
         # address but phrased indirectly enough that a more targeted phrasing
         # would strengthen their interview.
-        REWRITE_UPPER_BOUND = 0.70  # Above this, the student's phrasing is strong enough — no rewrite needed
-        REWRITE_LOWER_BOUND = 0.60  # Below this, the match is too weak to be a meaningful rewrite candidate
+        REWRITE_UPPER_BOUND = 0.55  # Above this, the student's phrasing is strong enough — no rewrite needed
+        REWRITE_LOWER_BOUND = 0.45  # Below this, the match is too weak to be a meaningful rewrite candidate
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
 
