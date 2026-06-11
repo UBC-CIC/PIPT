@@ -833,10 +833,15 @@ def cache_key_questions(
         return []
 
     # 3. Compute embeddings in a single batch call to avoid per-question throttling
+    #    Use embed_symmetric (search_query input_type) so that cached question
+    #    embeddings live in the same vector space as student message intents.
     cached_questions = []
     try:
         texts = [q["question_text"] for q in questions]
-        embeddings = embeddings_model.embed_documents(texts)
+        if hasattr(embeddings_model, "embed_symmetric"):
+            embeddings = embeddings_model.embed_symmetric(texts)
+        else:
+            embeddings = embeddings_model.embed_documents(texts)
         for q, embedding in zip(questions, embeddings):
             cached_questions.append({
                 "question_id": q["question_id"],
@@ -883,6 +888,7 @@ def cache_key_questions(
         table.put_item(Item={
             "SessionId": f"QCACHE#{session_id}",
             "questions": serializable_questions,
+            "cache_version": 2,  # v2 = symmetric embedding space (search_query for both sides)
             "cached_at": datetime.now(timezone.utc).isoformat(),
             "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
@@ -911,6 +917,13 @@ def get_cached_key_questions(
         item = response.get("Item")
         if item is None:
             logger.info(f"Cache miss for session={session_id}")
+            return None
+
+        # Reject stale v1 cache entries that used the wrong embedding space
+        # (embed_documents / search_document). Returning None triggers a re-cache.
+        cache_version = item.get("cache_version", 1)
+        if cache_version < 2:
+            logger.info(f"Stale cache (v{cache_version}) for session={session_id}, will re-embed")
             return None
 
         questions = item.get("questions", [])
@@ -2067,6 +2080,83 @@ def compute_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def decompose_message_intents(message_content: str) -> list[str]:
+    """Use a lightweight LLM call to decompose a student message into
+    individual clinical intents/questions.
+
+    If the message is short or contains a single intent, returns it as-is
+    in a single-element list. This avoids unnecessary LLM calls for simple
+    messages while properly handling multi-part messages.
+
+    Returns a list of intent strings. On failure, returns the original
+    message as a single-element list (graceful degradation).
+    """
+    # Skip decomposition for very short messages — single intent is almost certain
+    if len(message_content.split()) <= 12:
+        return [message_content]
+
+    try:
+        deployment_region = os.environ.get("AWS_REGION", "us-east-1")
+        client = boto3.client("bedrock-runtime", region_name=deployment_region)
+
+        prompt = f"""Analyze this student message from a clinical simulation and decompose it into separate clinical intents or questions. Each intent should be a self-contained statement or question that addresses a single clinical topic.
+
+Rules:
+- If the message contains only ONE intent, return it as-is in the array.
+- Strip filler words and conversational padding — keep only the clinical substance.
+- Each intent should be a concise, complete statement (not a fragment).
+- Maximum 5 intents per message.
+- Return ONLY a JSON array of strings, no other text.
+
+Student message: "{message_content}"
+
+JSON array:"""
+
+        body = json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 300,
+            "temperature": 0,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+
+        response = client.invoke_model(
+            modelId="anthropic.claude-3-haiku-20240307-v1:0",
+            body=body,
+            accept="application/json",
+            contentType="application/json",
+        )
+
+        result = json.loads(response["body"].read())
+        text = result["content"][0]["text"].strip()
+
+        # Parse the JSON array from the response
+        # Handle cases where model wraps in markdown code block
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        intents = json.loads(text)
+
+        if not isinstance(intents, list) or len(intents) == 0:
+            logger.warning(f"Intent decomposition returned invalid format, using original message")
+            return [message_content]
+
+        # Ensure we have strings and cap at 5
+        intents = [str(i).strip() for i in intents[:5] if str(i).strip()]
+
+        if not intents:
+            return [message_content]
+
+        logger.info(f"🧩 Decomposed message into {len(intents)} intents: {[i[:40] for i in intents]}")
+        return intents
+
+    except Exception as e:
+        logger.warning(f"Intent decomposition failed, using original message: {e}")
+        return [message_content]
+
+
 def match_message_to_questions(
     message_content: str,
     session_id: str,
@@ -2075,8 +2165,12 @@ def match_message_to_questions(
     table_name: str,
 ) -> list[dict]:
     """
-    Compute embedding for a student message, compare against cached question
-    embeddings, and persist matches that exceed the 0.60 threshold.
+    Decompose a student message into individual intents, embed each intent,
+    compare against cached question embeddings, and persist matches.
+
+    Uses LLM-based intent decomposition so that multi-part messages (e.g.
+    "What medications are you on and do you have any allergies?") correctly
+    match against multiple key questions.
 
     Classification tiers:
         >= 0.75  → "high"
@@ -2089,50 +2183,76 @@ def match_message_to_questions(
     """
     matches: list[dict] = []
 
-    # 1. Embed the student message
-    try:
-        message_embedding = embeddings_model.embed_query(message_content)
-    except Exception as e:
-        logger.error(f"Failed to embed student message for matching: {e}")
-        return matches
-
-    # 2. Retrieve cached questions
+    # 1. Retrieve cached questions first — bail early if none exist.
+    #    Returns None if cache is missing or stale (v1 embedding space).
+    #    In chat mode, the cache is populated on first message. If it's
+    #    stale here, matching will skip — acceptable since old sessions
+    #    already have partially incorrect scores from the old embedding space.
     cached_questions = get_cached_key_questions(session_id, table_name)
     if cached_questions is None or len(cached_questions) == 0:
         logger.info(f"No cached questions for session={session_id}, skipping matching")
         return matches
 
-    # 3. Compute similarity and classify
-    for q in cached_questions:
-        embedding = q.get("embedding", [])
-        if not embedding:
-            continue
-        score = compute_cosine_similarity(message_embedding, embedding)
-        logger.info(
-            f"🔍 Similarity: message='{message_content[:60]}' vs question='{q.get('question_text', '')[:60]}' → score={score:.4f}"
-        )
-        if score >= 0.75:
-            confidence = "high"
-        elif score >= 0.60:
-            confidence = "moderate"
-        elif score >= 0.45:
-            confidence = "low"
-        else:
-            continue  # discard below threshold
-        matches.append({
-            "question_id": q["question_id"],
-            "similarity_score": round(score, 4),
-            "confidence": confidence,
-        })
+    # 2. Decompose message into individual intents
+    intents = decompose_message_intents(message_content)
+    logger.info(f"🧩 Matching {len(intents)} intent(s) against {len(cached_questions)} cached questions")
 
-    # 4. Write matched_question_ids to the messages table
+    # 3. Embed all intents in a single batch call for efficiency
+    try:
+        if hasattr(embeddings_model, "embed_symmetric"):
+            intent_embeddings = embeddings_model.embed_symmetric(intents)
+        else:
+            # Fallback for non-Cohere models (e.g. Titan) — use embed_query per intent
+            intent_embeddings = [embeddings_model.embed_query(i) for i in intents]
+    except Exception as e:
+        logger.error(f"Failed to embed intents for matching: {e}")
+        return matches
+
+    # 4. For each intent, compute similarity against all questions.
+    #    Track best score per question (a question can only be matched once).
+    best_matches: dict[str, dict] = {}  # question_id -> best match info
+
+    for intent_idx, (intent_text, intent_emb) in enumerate(zip(intents, intent_embeddings)):
+        for q in cached_questions:
+            embedding = q.get("embedding", [])
+            if not embedding:
+                continue
+            score = compute_cosine_similarity(intent_emb, embedding)
+            logger.info(
+                f"🔍 Similarity: intent[{intent_idx}]='{intent_text[:50]}' vs question='{q.get('question_text', '')[:50]}' → score={score:.4f}"
+            )
+
+            if score < 0.45:
+                continue
+
+            qid = q["question_id"]
+            # Keep the highest score for each question across all intents
+            if qid not in best_matches or score > best_matches[qid]["similarity_score"]:
+                if score >= 0.75:
+                    confidence = "high"
+                elif score >= 0.60:
+                    confidence = "moderate"
+                else:
+                    confidence = "low"
+                best_matches[qid] = {
+                    "question_id": qid,
+                    "similarity_score": round(score, 4),
+                    "confidence": confidence,
+                    "matched_intent": intent_text,
+                }
+
+    matches = list(best_matches.values())
+
+    # 5. Write matched_question_ids to the messages table
     if matches:
         try:
+            # Strip matched_intent before persisting (internal detail, not needed in DB)
+            db_matches = [{k: v for k, v in m.items() if k != "matched_intent"} for m in matches]
             conn = _get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
                 'UPDATE "messages" SET matched_question_ids = %s WHERE message_id = %s',
-                (json.dumps(matches), message_id),
+                (json.dumps(db_matches), message_id),
             )
             conn.commit()
             cursor.close()
