@@ -21,6 +21,13 @@
   - [Text Chat Flow](#text-chat-flow)
   - [Voice Interaction Flow](#voice-interaction-flow)
   - [Document Ingestion Flow](#document-ingestion-flow)
+- [Semantic Matching](#semantic-matching)
+  - [Key Question Matching](#key-question-matching-real-time-per-message)
+  - [DTP Matching](#dtp-matching-at-conclude-time)
+  - [Recommendation Matching](#recommendation-matching-at-conclude-time)
+  - [Configurable Thresholds](#configurable-thresholds)
+  - [Embedding Cache Strategy](#embedding-cache-strategy)
+  - [Key Functions](#key-functions)
 - [Database Schema](#database-schema)
   - [organizations](#organizations)
   - [users](#users)
@@ -181,6 +188,79 @@ sequenceDiagram
     Bedrock-->>DI: Vector embeddings
     DI->>RDS: Store in pgvector
 ```
+
+## Semantic Matching
+
+The platform uses embedding-based cosine similarity to evaluate student performance in real time. There are three types of semantic matching, all implemented in `cdk/text_generation/src/helpers/chat.py`.
+
+### Key Question Matching (Real-Time, Per-Message)
+
+Every time a student sends a message (text or voice), the text generation Lambda scores it against the session's key questions:
+
+1. **Intent decomposition** — If the message has >12 words, the AI decomposes it into individual clinical intents (max 5). Short messages are used as-is.
+2. **Batch embedding** — All intents are embedded in a single Cohere Embed v4 call (`embed_symmetric` mode).
+3. **Cosine similarity** — Each intent embedding is compared against all cached key question embeddings.
+4. **Tier classification** — Matches are classified based on the configurable `key_question_threshold` (default: 0.55):
+
+| Tier | Score Range | Meaning |
+|------|-------------|---------|
+| **high** | ≥ threshold (default ≥ 0.55) | Confidently addressed |
+| **moderate** | ≥ threshold − 0.10 (default ≥ 0.45) | Likely addressed |
+| **low** | ≥ threshold − 0.25 (default ≥ 0.30) | Logged but NOT counted as "addressed" in debrief |
+| discarded | < threshold − 0.25 | Ignored |
+
+5. **Best-match-per-question** — If multiple intents match the same question, only the highest score is kept.
+6. **Persist** — The `matched_question_ids` JSONB column on the `messages` table is updated with the match results.
+
+> **Critical:** Matching runs **synchronously** before returning 200 OK. AWS Lambda freezes execution on response, so async threads cannot reliably complete DB writes. This was the root cause of 0% debrief scores in the async implementation.
+
+### DTP Matching (At Conclude Time)
+
+When a student submits their Drug Therapy Problem recommendations:
+
+1. **Batch-embed student DTPs** — One Cohere API call for all student-submitted DTP texts.
+2. **Use pre-cached instructor embeddings** — Instructor-defined expected DTPs are cached in DynamoDB (`DTPCACHE#{group}#{persona}`) on first access.
+3. **Clinical contradiction filtering** — Before scoring, pairs containing opposing clinical actions (e.g., "continue naproxen" vs "discontinue naproxen") are excluded. 16+ medical action antonym pairs are checked.
+4. **Greedy one-to-one assignment** — Score matrix is sorted descending; each student/instructor item can only be matched once. Threshold: configurable `dtp_threshold` (default: 0.55).
+5. **Categorize results** — Returns `matched`, `missed` (instructor items unmatched), and `additional` (student items unmatched).
+
+### Recommendation Matching (At Conclude Time)
+
+Same algorithm as DTP matching but for recommendation text. Rationale is NOT used for matching — it is evaluated separately only for matched pairs. Uses configurable `recommendation_threshold` (default: 0.55).
+
+### Configurable Thresholds
+
+Thresholds are configurable per organization via the admin console:
+
+| Threshold | Default | Controls |
+|-----------|---------|----------|
+| `key_question_threshold` | 0.55 | Minimum score for "high" confidence tier in real-time matching |
+| `dtp_threshold` | 0.55 | Minimum score for DTP greedy assignment |
+| `recommendation_threshold` | 0.55 | Minimum score for recommendation greedy assignment |
+
+Stored as nullable `NUMERIC(5,4)` columns on the `organizations` table. NULL = use default (0.55). Thresholds are resolved by looking up the organization via `simulation_group_id → simulation_groups.organization_id`.
+
+### Embedding Cache Strategy
+
+| Cache Key | Scope | Created When | TTL |
+|-----------|-------|--------------|-----|
+| `QCACHE#{session_id}` | Per chat session | First student message | 7 days |
+| `DTPCACHE#{group}#{persona}` | Per group+persona | First conclude action | 7 days |
+| `RECCACHE#{group}#{persona}` | Per group+persona | First conclude action | 7 days |
+
+Embeddings are stored as binary-packed float arrays in DynamoDB. The cache includes a version field to detect stale embeddings from old embedding models — stale caches are ignored (matching skips gracefully).
+
+### Key Functions
+
+| Function | Purpose |
+|----------|---------|
+| `match_message_to_questions()` | Main key question matching: decompose → embed → compare → tier → persist |
+| `match_submissions()` | Generic DTP/recommendation matcher: batch embed students, greedy assign against cached instructor items |
+| `decompose_message_intents()` | Claude-based intent splitting for multi-part messages |
+| `compute_cosine_similarity()` | Pure math cosine similarity, handles zero-vectors |
+| `greedy_match_assignment()` | One-to-one assignment: sort by score desc, threshold-filter |
+| `are_clinically_contradictory()` | Checks for antonym pairs to prevent false matches |
+| `cache_key_questions()` | Fetches key questions from DB, embeds, stores in DynamoDB |
 
 ## Database Schema
 

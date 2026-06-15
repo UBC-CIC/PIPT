@@ -29,7 +29,7 @@ Once registered, your domain is ready to use — skip directly to the [Create a 
 
 ### Use a subdomain of an existing domain
 
-If your organization already owns a domain (e.g., `cloud-inov.com`) and you want to use a subdomain (e.g., `genrx2.cloud-inov.com`), follow the steps below to create a hosted zone and delegate it.
+If your organization already owns a domain (e.g., `example-domain.com`) and you want to use a subdomain (e.g., `app.example-domain.com`), follow the steps below to create a hosted zone and delegate it.
 
 ### Create a Route 53 Hosted Zone
 
@@ -105,28 +105,39 @@ Approval is usually within 24 hours.
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `SesVerifiedDomain` | Domain with a Route 53 hosted zone (e.g., `genrx2.cloud-inov.com`) | Yes (for SES) |
+| `SesVerifiedDomain` | Domain with a Route 53 hosted zone (e.g., `app.YOUR-DOMAIN.com`) | Yes (for SES) |
 | `SesIdentityVerified` | Set to `"true"` after the SES identity is verified | Yes (for Cognito to use SES) |
-| `SesSkipIdentityCreation` | Set to `"true"` to skip SES identity creation (when it already exists in the account) | No |
+| `SesSkipIdentityCreation` | Set to `"true"` **only** if the SES identity was created outside of this CDK stack (e.g., manually or by another stack). See warning below. | No |
 
 All are passed as `-c` context flags at deploy time. They are not set in `cdk.json` to avoid conflicts with first-time deployments that don't have a verified domain yet.
 
+> **⚠️ CRITICAL: Do NOT use `SesSkipIdentityCreation=true` if the SES identity was created by this CDK stack.**
+>
+> When you pass `SesSkipIdentityCreation=true`, CDK removes the `ses.EmailIdentity` resource from the CloudFormation template. CloudFormation interprets this as a resource deletion and **destroys the SES identity from your account**. This causes Cognito's SES email configuration to break, reverting sign-up emails back to the default Cognito sender (50/day limit).
+>
+> Only use this flag if the SES identity was created by a different stack or manually in the console — i.e., it was never part of this stack's CloudFormation template.
+
 ## Day-to-Day Deployment
 
-After initial setup, include the SES flags on every deploy:
+After initial setup, include the SES flags on **every** deploy:
 
 ```bash
 cdk deploy --all \
   -c StackPrefix=<PREFIX> \
   -c githubRepo=<REPO> \
-  -c githubBranch=main \
+  -c githubBranch=<BRANCH> \
   -c SesVerifiedDomain=<YOUR-DOMAIN> \
   -c SesIdentityVerified=true \
-  -c SesSkipIdentityCreation=true \
   --profile <PROFILE>
 ```
 
-> **Tip:** If your environment already owns the SES identity (created it on a prior deploy), always pass `-c SesSkipIdentityCreation=true` to avoid "already exists" errors.
+> **⚠️ You MUST pass `SesVerifiedDomain` and `SesIdentityVerified=true` on every deploy.** If you omit these flags, CDK will:
+> 1. Remove the SES identity resource → CloudFormation deletes it from your account
+> 2. Switch Cognito back to its built-in email sender (50 emails/day limit)
+>
+> There is no way to "lock in" SES — the flags must be present every time.
+
+> **Do NOT pass `SesSkipIdentityCreation=true`** on day-to-day deploys. The SES identity resource must stay in the CloudFormation template so CloudFormation does not delete it.
 
 ## What Gets Created
 
@@ -140,13 +151,13 @@ cdk deploy --all \
 ## How It Works
 
 - Cognito sends all emails (verification codes, password resets) through SES
-- Emails come from `noreply@genrx2.cloud-inov.com`
+- Emails come from `noreply@YOUR-DOMAIN.com`
 - DKIM ensures emails aren't flagged as spam
 - No Lambda functions call SES directly — all email is Cognito-managed
 
 ## CORS
 
-The custom domain (`genrx2.cloud-inov.com` and `www.genrx2.cloud-inov.com`) is automatically added to the API Gateway and Lambda CORS allowed origins when `SesVerifiedDomain` is set.
+The custom domain (`YOUR-DOMAIN.com` and `www.YOUR-DOMAIN.com`) is automatically added to the API Gateway and Lambda CORS allowed origins when `SesVerifiedDomain` is set.
 
 ## Troubleshooting
 
@@ -166,7 +177,7 @@ You're still in SES sandbox — emails only go to verified addresses. Request pr
 
 ## Amplify Custom Domain
 
-The `SesVerifiedDomain` context variable also configures a custom domain for the Amplify frontend. When set, users can access the app at `https://genrx2.cloud-inov.com` instead of the default `*.amplifyapp.com` URL.
+The `SesVerifiedDomain` context variable also configures a custom domain for the Amplify frontend. When set, users can access the app at `https://YOUR-DOMAIN.com` instead of the default `*.amplifyapp.com` URL.
 
 ### Prerequisites
 
@@ -184,14 +195,14 @@ The `SesVerifiedDomain` context variable also configures a custom domain for the
 1. Go to **Amplify Console** → your app → **Domain management**
 2. You'll see the domain progressing through: **Creating** → **Requesting certificate** → **Available**
 3. SSL provisioning takes 10-30 minutes
-4. Once status is **Available**, `https://genrx2.cloud-inov.com` serves your app
+4. Once status is **Available**, `https://YOUR-DOMAIN.com` serves your app
 
 ### Subdomain Mapping
 
 | Domain | Branch | Description |
 |--------|--------|-------------|
-| `genrx2.cloud-inov.com` | main | Root domain → main branch |
-| `www.genrx2.cloud-inov.com` | main | www redirect → root |
+| `YOUR-DOMAIN.com` | main | Root domain → main branch |
+| `www.YOUR-DOMAIN.com` | main | www redirect → root |
 
 ### Changing the Domain
 
@@ -222,7 +233,7 @@ Changing or removing the custom domain does not break email delivery, and vice v
 
 ## Glossary
 
-- **Domain**: A human-readable address like `genrx-clinic.com` or `genrx2.cloud-inov.com`. You either buy one or use a subdomain of one your organization already owns.
+- **Domain**: A human-readable address like `genrx-clinic.com` or `app.example-domain.com`. You either buy one or use a subdomain of one your organization already owns.
 - **Hosted Zone**: A Route 53 container that holds DNS records for your domain. Think of it as the phone book entry that tells the internet where your domain's services live.
 - **NS (Name Server) Records**: These tell the internet which DNS servers are authoritative for your domain. When you create a hosted zone, Route 53 gives you 4 NS records.
 - **Delegation**: If using a subdomain of an existing domain, the parent domain's DNS must add NS records pointing the subdomain to Route 53. This is how Route 53 gets "permission" to manage the subdomain.
