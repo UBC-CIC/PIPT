@@ -70,7 +70,7 @@ function DashboardHeader({
             onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            Manage Banks
+            Scoring & Configuration
           </Button>
         )}
         {showStudentViewButton && onStudentView && (

@@ -319,8 +319,11 @@ def handler(event, context):
                     "body": json.dumps("Missing required fields: message_id, message_content"),
                 }
 
-            from helpers.chat import match_message_to_questions, get_cached_key_questions, cache_key_questions
+            from helpers.chat import match_message_to_questions, get_cached_key_questions, cache_key_questions, fetch_org_thresholds
             
+            # Fetch org-level thresholds once per request
+            org_thresholds = fetch_org_thresholds(simulation_group_id)
+
             # Check cache first to save time and Bedrock API costs.
             # Use explicit None check — an empty list [] means the cache was
             # populated but there are no key questions for this patient, which
@@ -345,6 +348,8 @@ def handler(event, context):
                 message_id=message_id,
                 embeddings_model=embeddings,
                 table_name=TABLE_NAME,
+                bedrock_llm_id=BEDROCK_LLM_ID,
+                key_question_threshold=org_thresholds["key_question_threshold"],
             )
 
             return {
@@ -539,7 +544,10 @@ def handler(event, context):
 
     # Lazy imports for chat mode
     from helpers.vectorstore import get_vectorstore_retriever
-    from helpers.chat import get_response, cache_key_questions
+    from helpers.chat import get_response, cache_key_questions, fetch_org_thresholds
+
+    # Fetch org-level thresholds once per request for key question matching
+    org_thresholds = fetch_org_thresholds(simulation_group_id)
 
     # TODO(refactor): Extract system prompt and persona detail fetching into a helper function
     system_prompt = get_system_prompt(simulation_group_id)
@@ -727,7 +735,8 @@ def handler(event, context):
             persona_id=persona_id,
             embeddings_model=embeddings,
             ddb_table_name=TABLE_NAME,
-            is_initial_prompt=is_initial_prompt
+            is_initial_prompt=is_initial_prompt,
+            key_question_threshold=org_thresholds["key_question_threshold"],
         )
     except Exception as e:
         logger.error(f"Error getting response: {e}")

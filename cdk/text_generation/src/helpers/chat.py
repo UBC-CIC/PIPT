@@ -12,6 +12,10 @@ logger.setLevel(logging.INFO)
 _matching_threads_lock = threading.Lock()
 _matching_threads: dict[str, list[threading.Thread]] = {}  # session_id -> [threads]
 
+# Default threshold value used when an organization has no custom configuration.
+# Matches the legacy hardcoded SUBMISSION_MATCH_THRESHOLD value.
+DEFAULT_MATCH_THRESHOLD = 0.55
+
 # Stream callback URL — when set, publish_stream_event() POSTs chunks here
 # instead of AppSync. Set by main.py from the stream_callback_url query param.
 _stream_callback_url: str | None = None
@@ -205,7 +209,8 @@ def get_response(
     embeddings_model=None,
     ddb_table_name: str = None,
     raw_prompt_mode: bool = False,
-    is_initial_prompt: bool = False
+    is_initial_prompt: bool = False,
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> dict:
     """
     Generates a response to a query using the LLM and a history-aware retriever for context.
@@ -241,6 +246,8 @@ def get_response(
                 message_id=student_message_id,
                 embeddings_model=embeddings_model,
                 table_name=ddb_table_name,
+                bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
+                key_question_threshold=key_question_threshold,
             )
     
     completion_string = """
@@ -332,7 +339,9 @@ Use the documents provided as your medical history and symptoms. Be subtle and r
                 persona_id=persona_id,
                 embeddings_model=embeddings_model,
                 ddb_table_name=ddb_table_name,
-                is_initial_prompt=is_initial_prompt
+                is_initial_prompt=is_initial_prompt,
+                bedrock_llm_id=llm.model_id if hasattr(llm, 'model_id') else "",
+                key_question_threshold=key_question_threshold,
             )
         else:
             response = generate_response(
@@ -358,6 +367,10 @@ Use the documents provided as your medical history and symptoms. Be subtle and r
     result = get_llm_output(response, llm_completion)
     
     ai_message_id = save_message_to_db(session_id, persona_id, 'ai', result["llm_output"])
+
+    # Ensure matching threads complete before we return — Lambda freezes
+    # the execution environment on return, killing daemon threads.
+    flush_matching_threads(session_id, timeout=10.0)
     
     return result
 
@@ -382,7 +395,9 @@ def generate_streaming_response(
     persona_id: str = "",
     embeddings_model=None,
     ddb_table_name: str = None,
-    is_initial_prompt: bool = False
+    is_initial_prompt: bool = False,
+    bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> str:
     """
     Streams an answer via AppSync as fast as possible.
@@ -434,6 +449,8 @@ def generate_streaming_response(
                     message_id=student_message_id,
                     embeddings_model=embeddings_model,
                     table_name=ddb_table_name,
+                    bedrock_llm_id=bedrock_llm_id,
+                    key_question_threshold=key_question_threshold,
                 )
 
         publish_to_appsync(session_id, {"type": "start", "content": ""})
@@ -478,6 +495,11 @@ def generate_streaming_response(
 
         publish_to_appsync(session_id, {"type": "end", "content": full_response})
         ai_message_id = save_message_to_db(session_id, persona_id, 'ai', full_response)
+
+        # Ensure matching threads complete before we return — Lambda freezes
+        # the execution environment on return, killing daemon threads before
+        # they can write matched_question_ids to the DB.
+        flush_matching_threads(session_id, timeout=10.0)
 
         # Signal the frontend to lock the chat if the patient ended the session
         if "SESSION COMPLETED" in full_response:
@@ -714,6 +736,67 @@ def fetch_recommendation(session_id: str) -> str:
         return ""
 
 
+def fetch_org_thresholds(simulation_group_id: str) -> dict:
+    """Fetch organization-level matching thresholds for a simulation group.
+
+    Resolves organization_id via the simulation_groups table, then reads
+    threshold columns from the organizations table.
+
+    Returns:
+        {
+            "key_question_threshold": float,
+            "dtp_threshold": float,
+            "recommendation_threshold": float,
+        }
+    All values are resolved (NULL → DEFAULT_MATCH_THRESHOLD).
+    """
+    defaults = {
+        "key_question_threshold": DEFAULT_MATCH_THRESHOLD,
+        "dtp_threshold": DEFAULT_MATCH_THRESHOLD,
+        "recommendation_threshold": DEFAULT_MATCH_THRESHOLD,
+    }
+
+    try:
+        conn = _get_db_connection()
+    except Exception as e:
+        logger.error(f"DB connection failure fetching org thresholds: {e}")
+        return defaults
+
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT o.key_question_threshold, o.dtp_threshold, o.recommendation_threshold
+            FROM organizations o
+            JOIN simulation_groups sg ON sg.organization_id = o.organization_id
+            WHERE sg.simulation_group_id = %s
+            """,
+            (simulation_group_id,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        if row is None:
+            logger.warning(
+                f"No organization found for simulation_group_id={simulation_group_id}; using default thresholds"
+            )
+            return defaults
+
+        return {
+            "key_question_threshold": float(row[0]) if row[0] is not None else DEFAULT_MATCH_THRESHOLD,
+            "dtp_threshold": float(row[1]) if row[1] is not None else DEFAULT_MATCH_THRESHOLD,
+            "recommendation_threshold": float(row[2]) if row[2] is not None else DEFAULT_MATCH_THRESHOLD,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching org thresholds for simulation_group_id={simulation_group_id}: {e}")
+        try:
+            conn.close()
+        except Exception:
+            pass
+        return defaults
+
+
 def fetch_student_submissions(session_id: str) -> dict:
     """
     Fetch DTP and recommendation submissions from the chats table.
@@ -825,6 +908,7 @@ def cache_key_questions(
             table.put_item(Item={
                 "SessionId": f"QCACHE#{session_id}",
                 "questions": [],
+                "cache_version": 2,
                 "cached_at": datetime.now(timezone.utc).isoformat(),
                 "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
             })
@@ -833,10 +917,15 @@ def cache_key_questions(
         return []
 
     # 3. Compute embeddings in a single batch call to avoid per-question throttling
+    #    Use embed_symmetric (search_query input_type) so that cached question
+    #    embeddings live in the same vector space as student message intents.
     cached_questions = []
     try:
         texts = [q["question_text"] for q in questions]
-        embeddings = embeddings_model.embed_documents(texts)
+        if hasattr(embeddings_model, "embed_symmetric"):
+            embeddings = embeddings_model.embed_symmetric(texts)
+        else:
+            embeddings = embeddings_model.embed_documents(texts)
         for q, embedding in zip(questions, embeddings):
             cached_questions.append({
                 "question_id": q["question_id"],
@@ -883,6 +972,7 @@ def cache_key_questions(
         table.put_item(Item={
             "SessionId": f"QCACHE#{session_id}",
             "questions": serializable_questions,
+            "cache_version": 2,  # v2 = symmetric embedding space (search_query for both sides)
             "cached_at": datetime.now(timezone.utc).isoformat(),
             "expireAt": int(time.time()) + (7 * 24 * 60 * 60),
         })
@@ -911,6 +1001,13 @@ def get_cached_key_questions(
         item = response.get("Item")
         if item is None:
             logger.info(f"Cache miss for session={session_id}")
+            return None
+
+        # Reject stale v1 cache entries that used the wrong embedding space
+        # (embed_documents / search_document). Returning None triggers a re-cache.
+        cache_version = item.get("cache_version", 1)
+        if cache_version < 2:
+            logger.info(f"Stale cache (v{cache_version}) for session={session_id}, will re-embed")
             return None
 
         questions = item.get("questions", [])
@@ -2067,72 +2164,173 @@ def compute_cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
     return dot / (norm_a * norm_b)
 
 
+def decompose_message_intents(message_content: str, bedrock_llm_id: str) -> list[str]:
+    """Use the same LLM used for text generation to decompose a student
+    message into individual clinical intents/questions.
+
+    If the message is short or contains a single intent, returns it as-is
+    in a single-element list. This avoids unnecessary LLM calls for simple
+    messages while properly handling multi-part messages.
+
+    Returns a list of intent strings. On failure, returns the original
+    message as a single-element list (graceful degradation).
+    """
+    # Skip decomposition for very short messages — single intent is almost certain
+    if len(message_content.split()) <= 12:
+        return [message_content]
+
+    try:
+        llm = get_bedrock_llm(bedrock_llm_id=bedrock_llm_id, streaming=False)
+
+        from langchain_core.messages import HumanMessage
+
+        prompt = f"""Analyze this student message from a clinical simulation and decompose it into separate clinical intents or questions. Each intent should be a self-contained statement or question that addresses a single clinical topic.
+
+Rules:
+- If the message contains only ONE intent, return it as-is in the array.
+- Strip filler words and conversational padding — keep only the clinical substance.
+- Each intent should be a concise, complete statement (not a fragment).
+- Maximum 5 intents per message.
+- Return ONLY a JSON array of strings, no other text.
+
+Student message: "{message_content}"
+
+JSON array:"""
+
+        resp = llm.invoke([HumanMessage(content=prompt)])
+        text = resp.content if hasattr(resp, 'content') else str(resp)
+        text = text.strip()
+
+        # Parse the JSON array from the response
+        # Handle cases where model wraps in markdown code block
+        if text.startswith("```"):
+            text = text.split("```")[1]
+            if text.startswith("json"):
+                text = text[4:]
+            text = text.strip()
+
+        intents = json.loads(text)
+
+        if not isinstance(intents, list) or len(intents) == 0:
+            logger.warning(f"Intent decomposition returned invalid format, using original message")
+            return [message_content]
+
+        # Ensure we have strings and cap at 5
+        intents = [str(i).strip() for i in intents[:5] if str(i).strip()]
+
+        if not intents:
+            return [message_content]
+
+        logger.info(f"🧩 Decomposed message into {len(intents)} intents: {[i[:40] for i in intents]}")
+        return intents
+
+    except Exception as e:
+        logger.warning(f"Intent decomposition failed, using original message: {e}")
+        return [message_content]
+
+
 def match_message_to_questions(
     message_content: str,
     session_id: str,
     message_id: str,
     embeddings_model,
     table_name: str,
+    bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> list[dict]:
     """
-    Compute embedding for a student message, compare against cached question
-    embeddings, and persist matches that exceed the 0.60 threshold.
+    Decompose a student message into individual intents, embed each intent,
+    compare against cached question embeddings, and persist matches.
 
-    Classification tiers:
-        >= 0.75  → "high"
-        0.60-0.74 → "moderate"
-        0.45-0.59 → "low" (logged but NOT counted as "addressed" in debrief)
-        < 0.45  → discarded
+    Uses heuristic sentence splitting so that multi-part messages (e.g.
+    "What medications are you on and do you have any allergies?") correctly
+    match against multiple key questions.
+
+    Classification tiers are derived from the configurable key_question_threshold:
+        >= key_question_threshold          → "high"
+        >= key_question_threshold - 0.10   → "moderate"
+        >= key_question_threshold - 0.25   → "low" (logged but NOT counted as "addressed" in debrief)
+        < key_question_threshold - 0.25    → discarded
 
     Writes the matched_question_ids JSONB to the messages table for the given
     message_id and returns the list of match dicts.
     """
     matches: list[dict] = []
 
-    # 1. Embed the student message
-    try:
-        message_embedding = embeddings_model.embed_query(message_content)
-    except Exception as e:
-        logger.error(f"Failed to embed student message for matching: {e}")
-        return matches
-
-    # 2. Retrieve cached questions
+    # 1. Retrieve cached questions first — bail early if none exist.
+    #    Returns None if cache is missing or stale (v1 embedding space).
+    #    In chat mode, the cache is populated on first message. If it's
+    #    stale here, matching will skip — acceptable since old sessions
+    #    already have partially incorrect scores from the old embedding space.
     cached_questions = get_cached_key_questions(session_id, table_name)
     if cached_questions is None or len(cached_questions) == 0:
         logger.info(f"No cached questions for session={session_id}, skipping matching")
         return matches
 
-    # 3. Compute similarity and classify
-    for q in cached_questions:
-        embedding = q.get("embedding", [])
-        if not embedding:
-            continue
-        score = compute_cosine_similarity(message_embedding, embedding)
-        logger.info(
-            f"🔍 Similarity: message='{message_content[:60]}' vs question='{q.get('question_text', '')[:60]}' → score={score:.4f}"
-        )
-        if score >= 0.75:
-            confidence = "high"
-        elif score >= 0.60:
-            confidence = "moderate"
-        elif score >= 0.45:
-            confidence = "low"
-        else:
-            continue  # discard below threshold
-        matches.append({
-            "question_id": q["question_id"],
-            "similarity_score": round(score, 4),
-            "confidence": confidence,
-        })
+    # 2. Decompose message into individual intents
+    intents = decompose_message_intents(message_content, bedrock_llm_id)
+    logger.info(f"🧩 Matching {len(intents)} intent(s) against {len(cached_questions)} cached questions")
 
-    # 4. Write matched_question_ids to the messages table
+    # 3. Embed all intents in a single batch call for efficiency
+    try:
+        if hasattr(embeddings_model, "embed_symmetric"):
+            intent_embeddings = embeddings_model.embed_symmetric(intents)
+        else:
+            # Fallback for non-Cohere models (e.g. Titan) — use embed_query per intent
+            intent_embeddings = [embeddings_model.embed_query(i) for i in intents]
+    except Exception as e:
+        logger.error(f"Failed to embed intents for matching: {e}")
+        return matches
+
+    # 4. For each intent, compute similarity against all questions.
+    #    Track best score per question (a question can only be matched once).
+    best_matches: dict[str, dict] = {}  # question_id -> best match info
+
+    # Derive tier boundaries from the configurable threshold
+    moderate_threshold = key_question_threshold - 0.10
+    low_threshold = key_question_threshold - 0.25
+
+    for intent_idx, (intent_text, intent_emb) in enumerate(zip(intents, intent_embeddings)):
+        for q in cached_questions:
+            embedding = q.get("embedding", [])
+            if not embedding:
+                continue
+            score = compute_cosine_similarity(intent_emb, embedding)
+            logger.info(
+                f"🔍 Similarity: intent[{intent_idx}]='{intent_text[:50]}' vs question='{q.get('question_text', '')[:50]}' → score={score:.4f}"
+            )
+
+            if score < low_threshold:
+                continue
+
+            qid = q["question_id"]
+            # Keep the highest score for each question across all intents
+            if qid not in best_matches or score > best_matches[qid]["similarity_score"]:
+                if score >= key_question_threshold:
+                    confidence = "high"
+                elif score >= moderate_threshold:
+                    confidence = "moderate"
+                else:
+                    confidence = "low"
+                best_matches[qid] = {
+                    "question_id": qid,
+                    "similarity_score": round(score, 4),
+                    "confidence": confidence,
+                    "matched_intent": intent_text,
+                }
+
+    matches = list(best_matches.values())
+
+    # 5. Write matched_question_ids to the messages table
     if matches:
         try:
+            # Strip matched_intent before persisting (internal detail, not needed in DB)
+            db_matches = [{k: v for k, v in m.items() if k != "matched_intent"} for m in matches]
             conn = _get_db_connection()
             cursor = conn.cursor()
             cursor.execute(
                 'UPDATE "messages" SET matched_question_ids = %s WHERE message_id = %s',
-                (json.dumps(matches), message_id),
+                (json.dumps(db_matches), message_id),
             )
             conn.commit()
             cursor.close()
@@ -2152,6 +2350,8 @@ def run_matching_async(
     message_id: str,
     embeddings_model,
     table_name: str,
+    bedrock_llm_id: str = "",
+    key_question_threshold: float = DEFAULT_MATCH_THRESHOLD,
 ) -> None:
     """Run match_message_to_questions in a background daemon thread.
 
@@ -2169,6 +2369,8 @@ def run_matching_async(
                 message_id=message_id,
                 embeddings_model=embeddings_model,
                 table_name=table_name,
+                bedrock_llm_id=bedrock_llm_id,
+                key_question_threshold=key_question_threshold,
             )
         except Exception:
             logger.exception(
@@ -3264,6 +3466,10 @@ def generate_debrief(
     # TODO(refactor): Extract _extract_json and _invoke_llm_json into module-level helper functions (duplicated in generate_test_debrief)
     # TODO(refactor): Extract the multi-step debrief pipeline (steps a-f) into a shared helper function (duplicated in generate_test_debrief)
 
+    # Fetch org-level thresholds once for the entire debrief generation.
+    # These are used for DTP and recommendation matching below.
+    org_thresholds = fetch_org_thresholds(simulation_group_id)
+
     # Wait for any in-flight matching threads so that all
     # matched_question_ids are persisted before we query for them.
     flush_matching_threads(session_id)
@@ -3376,8 +3582,8 @@ def generate_debrief(
         # =====================================================================
 
         # Prepare rewrite candidates (same logic as before, just collected for batch call)
-        REWRITE_UPPER_BOUND = 0.70
-        REWRITE_LOWER_BOUND = 0.60
+        REWRITE_UPPER_BOUND = 0.55
+        REWRITE_LOWER_BOUND = 0.45
         question_map = {q["question_id"]: q for q in cached_questions}
 
         rewrite_candidates: list[dict] = []
@@ -3460,6 +3666,7 @@ def generate_debrief(
                         student_texts=submissions["dtp_entries"],
                         instructor_items=cached_dtps,
                         embeddings_model=embeddings_model,
+                        threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
                     )
@@ -3474,6 +3681,7 @@ def generate_debrief(
                             student_texts=student_rec_texts,
                             instructor_items=cached_recs,
                             embeddings_model=embeddings_model,
+                            threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
                         )
@@ -3790,6 +3998,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                         student_texts=submissions["dtp_entries"],
                         instructor_items=cached_dtps,
                         embeddings_model=embeddings_model,
+                        threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
                     )
@@ -3808,6 +4017,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                             student_texts=student_rec_texts,
                             instructor_items=cached_recs,
                             embeddings_model=embeddings_model,
+                            threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
                         )
@@ -3973,8 +4183,8 @@ def generate_test_debrief(
         # fall below the rewrite threshold. These are questions the student DID
         # address but phrased indirectly enough that a more targeted phrasing
         # would strengthen their interview.
-        REWRITE_UPPER_BOUND = 0.70  # Above this, the student's phrasing is strong enough — no rewrite needed
-        REWRITE_LOWER_BOUND = 0.60  # Below this, the match is too weak to be a meaningful rewrite candidate
+        REWRITE_UPPER_BOUND = 0.55  # Above this, the student's phrasing is strong enough — no rewrite needed
+        REWRITE_LOWER_BOUND = 0.45  # Below this, the match is too weak to be a meaningful rewrite candidate
         suggested_rewrites = []
         question_map = {q["question_id"]: q for q in cached_questions}
 

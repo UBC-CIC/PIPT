@@ -448,6 +448,42 @@ export async function deleteQuestionBankQuestion(
   );
 }
 
+// ─── Threshold Configuration ─────────────────────────────────────────────────
+
+export interface ThresholdConfig {
+  key_question_threshold: number | null;
+  dtp_threshold: number | null;
+  recommendation_threshold: number | null;
+}
+
+/**
+ * Get the matching thresholds configured for an organization.
+ * NULL values indicate "use system default (0.55)".
+ */
+export async function getOrganizationThresholds(organizationId: string): Promise<ThresholdConfig> {
+  return apiClient.request<ThresholdConfig>(
+    `admin/organization_thresholds?organization_id=${encodeURIComponent(organizationId)}`
+  );
+}
+
+/**
+ * Update matching thresholds for an organization.
+ * Supports partial updates — only provided fields are changed.
+ * Pass explicit null to reset a threshold to default behavior.
+ */
+export async function updateOrganizationThresholds(
+  organizationId: string,
+  params: Partial<ThresholdConfig>
+): Promise<ThresholdConfig> {
+  return apiClient.request<ThresholdConfig>(
+    `admin/organization_thresholds?organization_id=${encodeURIComponent(organizationId)}`,
+    {
+      method: 'PUT',
+      body: params,
+    }
+  );
+}
+
 // ─── Issue Reports & Debrief Feedback ────────────────────────────────────────
 
 export interface IssueReport {

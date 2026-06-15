@@ -35,8 +35,18 @@ class CohereBedrockEmbeddings(Embeddings):
         return self._embed([text], input_type="search_query")[0]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of document strings (for indexing)."""
+        """Embed a list of document strings (for indexing/RAG)."""
         return self._embed(texts, input_type="search_document")
+
+    def embed_symmetric(self, texts: list[str]) -> list[list[float]]:
+        """Embed texts for symmetric similarity comparison (batch).
+
+        Uses input_type="search_query" so both sides of a cosine
+        comparison live in the same vector space.  Use this when comparing
+        short text ↔ short text (e.g. student message intents vs key
+        questions) rather than the asymmetric query ↔ document scenario.
+        """
+        return self._embed(texts, input_type="search_query")
 
     def _embed(self, texts: list[str], input_type: str) -> list[list[float]]:
         """Call Bedrock invoke_model with Cohere Embed v4 request format."""

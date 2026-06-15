@@ -5235,6 +5235,88 @@ paths:
         passthroughBehavior: "when_no_match"
         httpMethod: "POST"
         type: "aws_proxy"
+  /admin/organization_thresholds:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Get matching thresholds for an organization
+      operationId: admin_organization_thresholds_GET
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Threshold configuration
+        "400":
+          description: Bad Request
+        "404":
+          description: Organization not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+    put:
+      tags:
+        - Admin
+      summary: Update matching thresholds for an organization
+      operationId: admin_organization_thresholds_PUT
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key_question_threshold:
+                  type: number
+                  nullable: true
+                  minimum: 0.0
+                  maximum: 1.0
+                dtp_threshold:
+                  type: number
+                  nullable: true
+                  minimum: 0.0
+                  maximum: 1.0
+                recommendation_threshold:
+                  type: number
+                  nullable: true
+                  minimum: 0.0
+                  maximum: 1.0
+      responses:
+        "200":
+          description: Updated threshold configuration
+        "400":
+          description: Bad Request - invalid threshold values
+        "404":
+          description: Organization not found
+        "500":
+          description: Internal Server Error
+      security:
+        - adminAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
   /admin/question_bank:
     <<: *commonOptions
     get:
