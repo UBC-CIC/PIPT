@@ -459,14 +459,14 @@ CDK must be bootstrapped in **two regions**: your deployment region and `us-east
 ```bash
 # Bootstrap your primary deployment region
 cdk bootstrap aws://<YOUR-ACCOUNT-ID>/<YOUR-REGION> \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
 
 # Bootstrap us-east-1 (required for the CloudFront WAF stack)
 cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -513,7 +513,7 @@ Choose one of the following deployment options:
 
 ```bash
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -524,8 +524,8 @@ cdk deploy --all \
 Stacks deploy in dependency order. If you only need to update a specific stack:
 
 ```bash
-cdk deploy GenRx-Api \
-  -c StackPrefix=GenRx \
+cdk deploy <YOUR-STACK-PREFIX>-Api \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -537,7 +537,7 @@ After completing the voice agent setup, you can pass the ARN explicitly on subse
 
 ```bash
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   -c voiceAgentArn="arn:aws:bedrock:us-east-1:123456789012:agent-runtime/XXXXXXXXXX" \
@@ -575,7 +575,7 @@ If you omit all VPC context variables, CDK creates a fresh VPC with:
 ```bash
 # Example: new VPC with high availability NAT Gateways
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c natGateways=2 \
   -c maxAzs=3 \
@@ -588,7 +588,7 @@ If your account was provisioned by AWS Control Tower (Account Factory), your VPC
 
 ```bash
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c existingVpcId=vpc-0abc123def456789a \
   -c controlTowerStackSet="StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
@@ -686,7 +686,7 @@ cdk deploy --all \
 While the stacks deploy, you can monitor progress in real time through the AWS Console:
 
 1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your deployment region.
-2. You will see each stack appear as it begins creating (e.g., `GenRx-VpcStack`, `GenRx-Database`, etc.).
+2. You will see each stack appear as it begins creating (e.g., `{StackPrefix}-VpcStack`, `{StackPrefix}-Database`, etc.).
 3. Click into any stack and go to the **Events** tab to see individual resource creation progress.
 4. A stack showing `CREATE_IN_PROGRESS` is still deploying. Wait for `CREATE_COMPLETE`.
 5. If a stack shows `ROLLBACK_IN_PROGRESS` or `CREATE_FAILED`, check the Events tab for the specific resource and error message that caused the failure. Do not attempt to delete or redeploy the stack until it reaches `ROLLBACK_COMPLETE`. CloudFormation must finish rolling back all provisioned resources before it can accept new operations on that stack.
@@ -892,8 +892,8 @@ aws ssm put-parameter ^
 Then redeploy the EcsSocket stack to pick up the new value:
 
 ```bash
-cdk deploy GenRx-EcsSocket \
-  -c StackPrefix=GenRx \
+cdk deploy <YOUR-STACK-PREFIX>-EcsSocket \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -913,7 +913,7 @@ Find the exact URL in the Amplify console or in the CDK stack outputs:
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name GenRx-Amplify \
+  --stack-name <YOUR-STACK-PREFIX>-Amplify \
   --query "Stacks[0].Outputs[?OutputKey=='AmplifyDefaultDomain'].OutputValue" \
   --output text \
   --region <YOUR-REGION>
@@ -949,7 +949,7 @@ The RDS instance itself also has deletion protection enabled (separate from stac
 
 ```bash
 cdk destroy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -960,15 +960,15 @@ cdk destroy --all \
 To delete individual stacks, destroy them in reverse dependency order:
 
 ```bash
-cdk destroy GenRx-Amplify -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-DBFlow -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-EcsSocket -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-TurnServer -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-Api -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-CloudFrontWaf -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-Database -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-VpcStack -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Amplify -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-DBFlow -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-EcsSocket -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-TurnServer -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Api -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-CloudFrontWaf -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Database -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-VpcStack -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 ```
 
 ---
