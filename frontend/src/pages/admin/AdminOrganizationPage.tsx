@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import SimulationGroupsSection from '@/components/SimulationGroupsSection';
@@ -165,20 +167,25 @@ function AdminOrganizationPage() {
     }
   };
 
+  const [deleteGroupConfirm, setDeleteGroupConfirm] = useState<{ open: boolean; groupId: string; groupName: string }>({
+    open: false, groupId: '', groupName: ''
+  });
+
   const handleDeleteGroup = async (groupId: string) => {
     const group = groups.find(g => g.simulation_group_id === groupId);
     const groupName = group ? group.group_name : 'this simulation group';
-    
-    const confirmed = window.confirm(`Are you sure you want to delete ${groupName}? This action cannot be undone.`);
-    if (!confirmed) return;
+    setDeleteGroupConfirm({ open: true, groupId, groupName });
+  };
 
+  const handleConfirmDeleteGroup = async () => {
     try {
-      await adminApi.deleteSimulationGroup(groupId);
+      await adminApi.deleteSimulationGroup(deleteGroupConfirm.groupId);
     } catch (error) {
       console.error('Error deleting group via API, removing locally:', error);
     }
     // Remove from state regardless (optimistic for mock, confirmed for real)
-    setGroups(prevGroups => prevGroups.filter(g => g.simulation_group_id !== groupId));
+    setGroups(prevGroups => prevGroups.filter(g => g.simulation_group_id !== deleteGroupConfirm.groupId));
+    setDeleteGroupConfirm({ open: false, groupId: '', groupName: '' });
   };
 
   const handleManageBanks = () => {
@@ -246,6 +253,22 @@ function AdminOrganizationPage() {
         role="admin"
         onCreate={handleCreateGroupSubmit}
       />
+
+      {/* Delete Simulation Group Confirmation Dialog */}
+      <Dialog open={deleteGroupConfirm.open} onOpenChange={(open) => setDeleteGroupConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Delete Simulation Group</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "{deleteGroupConfirm.groupName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteGroupConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmDeleteGroup} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageContainer>
   );
 }

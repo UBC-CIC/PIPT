@@ -61,6 +61,12 @@ export interface UsePatientEditorReturn {
   handleDisplayNameSave: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string, displayName: string) => Promise<void>;
   handlePhotoUpload: (e: React.ChangeEvent<HTMLInputElement>) => Promise<void>;
   handlePhotoDelete: () => Promise<void>;
+  photoDeletePending: boolean;
+  confirmPhotoDelete: () => Promise<void>;
+  cancelPhotoDelete: () => void;
+  fileDeletePending: { pending: boolean; fileType: 'llm' | 'patientInfo'; filename: string };
+  confirmFileDelete: () => Promise<void>;
+  cancelFileDelete: () => void;
 
   // Material CRUD
   handleAddNewCaseMaterial: () => Promise<void>;
@@ -342,11 +348,14 @@ export function usePatientEditor({
   };
 
   /**
-   * Handle photo delete
+   * Handle photo delete — sets pending state for confirmation dialog
    */
+  const [photoDeletePending, setPhotoDeletePending] = useState(false);
   const handlePhotoDelete = async () => {
+    setPhotoDeletePending(true);
+  };
+  const confirmPhotoDelete = async () => {
     if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
-    if (!confirm('Are you sure you want to remove this photo?')) return;
     try {
       await instructorService.deletePatientPhoto(groupId, selectedPatientForEdit);
       setProfilePictures(await instructorService.fetchProfilePictures(groupId));
@@ -354,7 +363,9 @@ export function usePatientEditor({
     } catch (error) {
       console.error('Failed to delete photo:', error);
     }
+    setPhotoDeletePending(false);
   };
+  const cancelPhotoDelete = () => { setPhotoDeletePending(false); };
 
   /**
    * Handle file upload (LLM documents, patient info)
@@ -394,17 +405,21 @@ export function usePatientEditor({
    * Handle file delete (remove file from S3, embeddings, and persona_data)
    */
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
+  const [fileDeletePending, setFileDeletePending] = useState<{ pending: boolean; fileType: 'llm' | 'patientInfo'; filename: string }>({
+    pending: false, fileType: 'llm', filename: ''
+  });
   const handleFileDelete = async (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => {
     if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
-    if (!confirm(`Are you sure you want to delete "${filename}"? This will also remove its embeddings.`)) return;
+    setFileDeletePending({ pending: true, fileType, filename });
+  };
+  const confirmFileDelete = async () => {
+    if (!selectedPatientForEdit || selectedPatientForEdit === 'new' || !groupId) return;
+    const { fileType, filename } = fileDeletePending;
 
     const lastDot = filename.lastIndexOf('.');
     const baseName = lastDot > 0 ? filename.substring(0, lastDot) : filename;
     const ext = lastDot > 0 ? filename.substring(lastDot + 1).toLowerCase() : '';
     const folderType = fileType === 'llm' ? 'documents' : 'info' as const;
-    /* Answer key folder mapping disabled:
-    const folderType = fileType === 'llm' ? 'documents' : fileType === 'patientInfo' ? 'info' : 'answer_key' as const;
-    */
 
     try {
       await instructorService.deletePatientFile(groupId, selectedPatientForEdit, baseName, ext, folderType);
@@ -416,7 +431,9 @@ export function usePatientEditor({
     } catch (error) {
       console.error('Failed to delete patient file', { fileType, filename, error });
     }
+    setFileDeletePending({ pending: false, fileType: 'llm', filename: '' });
   };
+  const cancelFileDelete = () => { setFileDeletePending({ pending: false, fileType: 'llm', filename: '' }); };
 
   /**
    * Add a new case material
@@ -522,6 +539,12 @@ export function usePatientEditor({
     handleDisplayNameSave,
     handlePhotoUpload,
     handlePhotoDelete,
+    photoDeletePending,
+    confirmPhotoDelete,
+    cancelPhotoDelete,
+    fileDeletePending,
+    confirmFileDelete,
+    cancelFileDelete,
 
     // Material CRUD
     handleAddNewCaseMaterial,
