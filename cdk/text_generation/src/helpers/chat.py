@@ -1461,7 +1461,6 @@ _CLINICAL_ANTONYM_PAIRS: list[tuple[str, str]] = [
     ("compliance", "noncompliance"),
     # Effective / ineffective
     ("effective", "ineffective"),
-    ("effective", "not"),     # "effective" vs "not effective"
     ("therapeutic", "subtherapeutic"),
     ("therapeutic", "supratherapeutic"),
     # Appropriate / inappropriate
@@ -1482,8 +1481,8 @@ def are_clinically_contradictory(text_a: str, text_b: str) -> bool:
     pair while the other text contains the paired antonym, indicating that the
     two submissions recommend opposite actions for the same drug/intervention.
     """
-    words_a = set(text_a.lower().split())
-    words_b = set(text_b.lower().split())
+    words_a = set(re.findall(r"[a-z]+", text_a.lower()))
+    words_b = set(re.findall(r"[a-z]+", text_b.lower()))
     for word1, word2 in _CLINICAL_ANTONYM_PAIRS:
         if (word1 in words_a and word2 in words_b) or (word2 in words_a and word1 in words_b):
             return True
