@@ -53,6 +53,55 @@ class LLM_evaluation(BaseModel):
     verdict: str = Field(description="'True' if the student has properly diagnosed the patient, 'False' otherwise.")
 
 
+class DegradedTracker:
+    """Accumulates degradation reasons throughout the debrief pipeline.
+
+    Each helper that catches an exception and returns a fallback value should
+    call tracker.record(...) so the final debrief response can indicate
+    whether the evaluation is trustworthy or was impacted by transient errors.
+    """
+
+    def __init__(self):
+        self._reasons: list[dict] = []
+        self._lock = threading.Lock()
+
+    def record(self, component: str, reason: str, impact: str = "score_may_be_affected"):
+        """Record a degradation event.
+
+        Args:
+            component: Which function/step failed (e.g. 'match_submissions').
+            reason: Short description (e.g. 'embedding_service_unavailable').
+            impact: Severity hint for the frontend:
+                - 'score_may_be_affected': scoring accuracy impacted
+                - 'data_incomplete': non-scoring data missing (e.g. rewrites)
+                - 'persistence_failed': results not saved to DB
+        """
+        with self._lock:
+            self._reasons.append({
+                "component": component,
+                "reason": reason,
+                "impact": impact,
+            })
+            logger.warning(f"⚠️ Degraded: [{component}] {reason} (impact={impact})")
+
+    @property
+    def is_degraded(self) -> bool:
+        return len(self._reasons) > 0
+
+    @property
+    def score_affected(self) -> bool:
+        """True if any recorded degradation may have impacted the score."""
+        return any(r["impact"] == "score_may_be_affected" for r in self._reasons)
+
+    def to_dict(self) -> dict:
+        """Return the evaluation integrity metadata for inclusion in the debrief response."""
+        return {
+            "evaluation_complete": not self.score_affected,
+            "degraded": self.is_degraded,
+            "degraded_reasons": list(self._reasons),
+        }
+
+
 
 def get_bedrock_llm(
     bedrock_llm_id: str,
@@ -700,7 +749,7 @@ def split_into_sentences(paragraph: str) -> list[str]:
 # =============================================================================
 
 
-def fetch_chat_transcript(session_id: str) -> list[dict]:
+def fetch_chat_transcript(session_id: str, tracker: DegradedTracker = None) -> list[dict]:
     """Fetch all messages for a chat session from the messages table."""
     try:
         conn = _get_db_connection()
@@ -715,10 +764,12 @@ def fetch_chat_transcript(session_id: str) -> list[dict]:
         return [{"sender": r[0], "content": r[1], "timestamp": str(r[2])} for r in rows]
     except Exception as e:
         logger.error(f"Error fetching chat transcript: {e}")
+        if tracker:
+            tracker.record("fetch_chat_transcript", f"db_error: {type(e).__name__}", "score_may_be_affected")
         return []
 
 
-def fetch_recommendation(session_id: str) -> str:
+def fetch_recommendation(session_id: str, tracker: DegradedTracker = None) -> str:
     """Fetch the student's recommendation from the chats table."""
     try:
         conn = _get_db_connection()
@@ -733,10 +784,12 @@ def fetch_recommendation(session_id: str) -> str:
         return result[0] if result and result[0] else ""
     except Exception as e:
         logger.error(f"Error fetching recommendation: {e}")
+        if tracker:
+            tracker.record("fetch_recommendation", f"db_error: {type(e).__name__}", "data_incomplete")
         return ""
 
 
-def fetch_org_thresholds(simulation_group_id: str) -> dict:
+def fetch_org_thresholds(simulation_group_id: str, tracker: DegradedTracker = None) -> dict:
     """Fetch organization-level matching thresholds for a simulation group.
 
     Resolves organization_id via the simulation_groups table, then reads
@@ -760,6 +813,8 @@ def fetch_org_thresholds(simulation_group_id: str) -> dict:
         conn = _get_db_connection()
     except Exception as e:
         logger.error(f"DB connection failure fetching org thresholds: {e}")
+        if tracker:
+            tracker.record("fetch_org_thresholds", f"db_connection_failed: {type(e).__name__}", "score_may_be_affected")
         return defaults
 
     try:
@@ -790,6 +845,8 @@ def fetch_org_thresholds(simulation_group_id: str) -> dict:
         }
     except Exception as e:
         logger.error(f"Error fetching org thresholds for simulation_group_id={simulation_group_id}: {e}")
+        if tracker:
+            tracker.record("fetch_org_thresholds", f"query_failed: {type(e).__name__}", "score_may_be_affected")
         try:
             conn.close()
         except Exception:
@@ -797,7 +854,7 @@ def fetch_org_thresholds(simulation_group_id: str) -> dict:
         return defaults
 
 
-def fetch_student_submissions(session_id: str) -> dict:
+def fetch_student_submissions(session_id: str, tracker: DegradedTracker = None) -> dict:
     """
     Fetch DTP and recommendation submissions from the chats table.
 
@@ -848,10 +905,12 @@ def fetch_student_submissions(session_id: str) -> dict:
 
     except Exception as e:
         logger.error(f"Error fetching student submissions for session={session_id}: {e}")
+        if tracker:
+            tracker.record("fetch_student_submissions", f"db_error: {type(e).__name__}", "score_may_be_affected")
         return {"dtp_entries": [], "rec_entries": []}
 
 
-def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]:
+def fetch_key_questions(simulation_group_id: str, persona_id: str, tracker: DegradedTracker = None) -> list[dict]:
     """Fetch key questions assigned to this persona/group from simulation_group_questions + question_bank."""
     try:
         conn = _get_db_connection()
@@ -879,6 +938,8 @@ def fetch_key_questions(simulation_group_id: str, persona_id: str) -> list[dict]
         } for r in rows]
     except Exception as e:
         logger.error(f"Error fetching key questions: {e}")
+        if tracker:
+            tracker.record("fetch_key_questions", f"db_error: {type(e).__name__}", "score_may_be_affected")
         return []
 
 
@@ -1507,6 +1568,7 @@ def match_submissions(
     threshold: float = SUBMISSION_MATCH_THRESHOLD,
     text_key: str = "expected_dtp_text",
     id_key: str = "dtp_id",
+    tracker: DegradedTracker = None,
 ) -> dict:
     """
     Match student submissions against pre-cached instructor items using
@@ -1558,6 +1620,8 @@ def match_submissions(
         student_embeddings = batch_embed_texts(student_texts, embeddings_model)
     except Exception as e:
         logger.error(f"Failed to batch-embed student submissions: {e}")
+        if tracker:
+            tracker.record("match_submissions", f"embedding_failed: {type(e).__name__}", "score_may_be_affected")
         # Fallback: can't match without embeddings — treat all as additional/missed
         return {
             "matched": [],
@@ -1632,6 +1696,7 @@ def evaluate_rationale(
     instructor_rationale: str,
     evaluation_criteria: str,
     llm: ChatBedrock,
+    tracker: DegradedTracker = None,
 ) -> dict:
     """
     Evaluate a single matched recommendation's rationale quality via LLM.
@@ -1737,6 +1802,8 @@ Return a JSON object:
 
     except Exception as e:
         logger.error(f"Rationale evaluation failed: {e}")
+        if tracker:
+            tracker.record("evaluate_rationale", f"llm_error: {type(e).__name__}", "score_may_be_affected")
         return FALLBACK
 
 
@@ -1746,6 +1813,7 @@ def evaluate_rationales_parallel(
     instructor_recs: list[dict],
     llm: ChatBedrock,
     max_workers: int = 5,
+    tracker: DegradedTracker = None,
 ) -> list[dict]:
     """
     Evaluate all matched recommendation rationales in parallel.
@@ -1798,6 +1866,7 @@ def evaluate_rationales_parallel(
             instructor_rationale=instructor_rationale,
             evaluation_criteria=evaluation_criteria,
             llm=llm,
+            tracker=tracker,
         )
 
         # Augment the matched recommendation dict with evaluation results
@@ -1823,6 +1892,7 @@ def generate_guidance_questions(
     missed_items: list[dict],
     patient_context: str,
     llm: ChatBedrock,
+    tracker: DegradedTracker = None,
 ) -> str:
     """
     Generate reflective guidance questions for a category of missed items.
@@ -1954,6 +2024,8 @@ Return a JSON object:
 
     except Exception as e:
         logger.error(f"Guidance question generation failed for category={category}: {e}")
+        if tracker:
+            tracker.record("generate_guidance_questions", f"llm_error: {type(e).__name__}", "data_incomplete")
         return config["fallback"]
 
 
@@ -2042,12 +2114,18 @@ def compute_section_scores(
 # =============================================================================
 
 
-def safe_result(future: Future, default=None, task_name: str = ""):
+def safe_result(future: Future, default=None, task_name: str = "", tracker: DegradedTracker = None):
     """Extract result from a future, returning default on any exception."""
     try:
         return future.result(timeout=30)
     except Exception as e:
         logger.error(f"Parallel task '{task_name}' failed: {e}")
+        if tracker:
+            # Determine impact based on task name
+            impact = "score_may_be_affected" if task_name in (
+                "summary", "dtp_matching", "rec_matching", "rationale_eval"
+            ) else "data_incomplete"
+            tracker.record(f"parallel_task_{task_name}", f"task_failed: {type(e).__name__}", impact)
         return default
 
 
@@ -2388,7 +2466,7 @@ def run_matching_async(
     )
 
 
-def flush_matching_threads(session_id: str, timeout: float = 30.0) -> None:
+def flush_matching_threads(session_id: str, timeout: float = 30.0, tracker: DegradedTracker = None) -> None:
     """Wait for all outstanding matching threads for a session to finish.
 
     Called at the start of debrief generation so that every student
@@ -2399,6 +2477,7 @@ def flush_matching_threads(session_id: str, timeout: float = 30.0) -> None:
         session_id: The chat/session id whose threads should be joined.
         timeout: Maximum seconds to wait *per thread*.  Threads that
                  exceed this are logged and abandoned.
+        tracker: Optional degradation tracker to record thread timeouts.
     """
     with _matching_threads_lock:
         threads = _matching_threads.pop(session_id, [])
@@ -2408,15 +2487,24 @@ def flush_matching_threads(session_id: str, timeout: float = 30.0) -> None:
         return
 
     logger.info(f"flush_matching_threads: joining {len(threads)} thread(s) for session={session_id}")
+    timed_out_count = 0
     for t in threads:
         t.join(timeout=timeout)
         if t.is_alive():
+            timed_out_count += 1
             logger.warning(
                 f"flush_matching_threads: thread {t.name} did not finish within {timeout}s"
             )
 
+    if timed_out_count > 0 and tracker:
+        tracker.record(
+            "flush_matching_threads",
+            f"{timed_out_count}_of_{len(threads)}_threads_timed_out",
+            "score_may_be_affected",
+        )
 
-def fetch_tagged_messages(session_id: str) -> list[dict]:
+
+def fetch_tagged_messages(session_id: str, tracker: DegradedTracker = None) -> list[dict]:
     """
     Fetch student messages with non-NULL matched_question_ids for a session.
     Returns list of {message_id, message_content, sender_type, sent_at, matched_question_ids}.
@@ -2449,6 +2537,8 @@ def fetch_tagged_messages(session_id: str) -> list[dict]:
         ]
     except Exception as e:
         logger.error(f"Error fetching tagged messages for session={session_id}: {e}")
+        if tracker:
+            tracker.record("fetch_tagged_messages", f"db_error: {type(e).__name__}", "score_may_be_affected")
         return []
 
 
@@ -3197,6 +3287,7 @@ def save_debrief_to_db(
     total_questions_asked: int,
     total_questions_missed: int,
     overall_score: float,
+    tracker: DegradedTracker = None,
 ) -> str:
     """Insert a row into the debriefs table and return the debrief_id."""
     try:
@@ -3232,6 +3323,8 @@ def save_debrief_to_db(
         return str(debrief_id)
     except Exception as e:
         logger.error(f"Error saving debrief: {e}")
+        if tracker:
+            tracker.record("save_debrief_to_db", f"db_error: {type(e).__name__}", "persistence_failed")
         return ""
 
 
@@ -3462,22 +3555,25 @@ def generate_debrief(
     """
     logger.info(f"📋 DEBRIEF GENERATION STARTED for session={session_id}")
 
+    # Initialize degradation tracker — accumulates any errors that may affect score accuracy
+    tracker = DegradedTracker()
+
     # TODO(refactor): Extract context gathering (transcript, recommendation, key questions, student_id) into a helper function
     # TODO(refactor): Extract _extract_json and _invoke_llm_json into module-level helper functions (duplicated in generate_test_debrief)
     # TODO(refactor): Extract the multi-step debrief pipeline (steps a-f) into a shared helper function (duplicated in generate_test_debrief)
 
     # Fetch org-level thresholds once for the entire debrief generation.
     # These are used for DTP and recommendation matching below.
-    org_thresholds = fetch_org_thresholds(simulation_group_id)
+    org_thresholds = fetch_org_thresholds(simulation_group_id, tracker=tracker)
 
     # Wait for any in-flight matching threads so that all
     # matched_question_ids are persisted before we query for them.
-    flush_matching_threads(session_id)
+    flush_matching_threads(session_id, tracker=tracker)
 
     # 1. Gather all context
-    transcript = fetch_chat_transcript(session_id)
-    recommendation = fetch_recommendation(session_id)
-    key_questions = fetch_key_questions(simulation_group_id, persona_id)
+    transcript = fetch_chat_transcript(session_id, tracker=tracker)
+    recommendation = fetch_recommendation(session_id, tracker=tracker)
+    key_questions = fetch_key_questions(simulation_group_id, persona_id, tracker=tracker)
     student_id = fetch_student_id_for_chat(session_id)
 
     if not transcript:
@@ -3491,7 +3587,7 @@ def generate_debrief(
     debrief_prompt = fetch_debrief_prompt(simulation_group_id)
 
     # 2. Check for tagged messages and decide which prompt path to use
-    tagged_messages = fetch_tagged_messages(session_id)
+    tagged_messages = fetch_tagged_messages(session_id, tracker=tracker)
 
     # --- Shared helpers for LLM JSON parsing ---
     from langchain_core.messages import SystemMessage, HumanMessage
@@ -3634,20 +3730,35 @@ def generate_debrief(
         cached_recs = None
         if patient_mode == "full_assessment" and embeddings_model and ddb_table_name:
             try:
-                submissions = fetch_student_submissions(session_id)
+                submissions = fetch_student_submissions(session_id, tracker=tracker)
                 if submissions["dtp_entries"] or submissions["rec_entries"]:
                     cached_dtps = get_cached_instructor_dtps(simulation_group_id, persona_id, ddb_table_name)
                     if cached_dtps is None:
                         cached_dtps = cache_instructor_dtp_embeddings(
                             simulation_group_id, persona_id, embeddings_model, ddb_table_name
                         )
+                    # Detect silent DTP embed failure: student submitted DTPs but no instructor items available
+                    if submissions["dtp_entries"] and not cached_dtps:
+                        tracker.record(
+                            "cache_instructor_dtp_embeddings",
+                            "returned_empty_despite_student_submissions",
+                            "score_may_be_affected",
+                        )
                     cached_recs = get_cached_instructor_recs(simulation_group_id, persona_id, ddb_table_name)
                     if cached_recs is None:
                         cached_recs = cache_instructor_rec_embeddings(
                             simulation_group_id, persona_id, embeddings_model, ddb_table_name
                         )
+                    # Detect silent Rec embed failure: student submitted recs but no instructor items available
+                    if submissions["rec_entries"] and not cached_recs:
+                        tracker.record(
+                            "cache_instructor_rec_embeddings",
+                            "returned_empty_despite_student_submissions",
+                            "score_may_be_affected",
+                        )
             except Exception as e:
                 logger.error(f"Failed to fetch submissions/cached items: {e}")
+                tracker.record("fetch_submissions_setup", f"error: {type(e).__name__}", "score_may_be_affected")
                 submissions = None
 
         # --- Parallel execution ---
@@ -3669,6 +3780,7 @@ def generate_debrief(
                         threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
+                        tracker=tracker,
                     )
                 if submissions["rec_entries"] and cached_recs:
                     student_rec_texts = [
@@ -3684,6 +3796,7 @@ def generate_debrief(
                             threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
+                            tracker=tracker,
                         )
 
             # Answer key comparison
@@ -3692,11 +3805,11 @@ def generate_debrief(
                 ak_future = executor.submit(_invoke_llm_json, ak_prompt)
 
             # Collect independent results
-            summary_data = safe_result(summary_future, default={}, task_name="summary")
-            rewrites_data = safe_result(rewrites_future, default=[], task_name="batch_rewrites")
-            dtp_comparison = safe_result(dtp_future, default=None, task_name="dtp_matching") if dtp_future else None
-            rec_comparison = safe_result(rec_future, default=None, task_name="rec_matching") if rec_future else None
-            answer_key_comparison = safe_result(ak_future, default={"answer_key_available": False}, task_name="answer_key") if ak_future else {"answer_key_available": False}
+            summary_data = safe_result(summary_future, default={}, task_name="summary", tracker=tracker)
+            rewrites_data = safe_result(rewrites_future, default=[], task_name="batch_rewrites", tracker=tracker)
+            dtp_comparison = safe_result(dtp_future, default=None, task_name="dtp_matching", tracker=tracker) if dtp_future else None
+            rec_comparison = safe_result(rec_future, default=None, task_name="rec_matching", tracker=tracker) if rec_future else None
+            answer_key_comparison = safe_result(ak_future, default={"answer_key_available": False}, task_name="answer_key", tracker=tracker) if ak_future else {"answer_key_available": False}
 
             # Ensure answer_key_available is set when we got a result
             if ak_future and answer_key_comparison and "answer_key_available" not in answer_key_comparison:
@@ -3722,28 +3835,29 @@ def generate_debrief(
                     submissions["rec_entries"],
                     cached_recs,
                     llm,
+                    tracker=tracker,
                 )
 
             # Guidance for missed items
             patient_context = f"{transcript[0]['content'][:200] if transcript else ''}"
             if questions_missed:
                 guidance_kq_future = executor.submit(
-                    generate_guidance_questions, "key_questions", questions_missed, patient_context, llm
+                    generate_guidance_questions, "key_questions", questions_missed, patient_context, llm, tracker=tracker
                 )
             if dtp_comparison and dtp_comparison.get("missed"):
                 guidance_dtp_future = executor.submit(
-                    generate_guidance_questions, "dtps", dtp_comparison["missed"], patient_context, llm
+                    generate_guidance_questions, "dtps", dtp_comparison["missed"], patient_context, llm, tracker=tracker
                 )
             if rec_comparison and rec_comparison.get("missed"):
                 guidance_rec_future = executor.submit(
-                    generate_guidance_questions, "recommendations", rec_comparison["missed"], patient_context, llm
+                    generate_guidance_questions, "recommendations", rec_comparison["missed"], patient_context, llm, tracker=tracker
                 )
 
             # Collect dependent results
-            rationale_results = safe_result(rationale_future, default=None, task_name="rationale_eval") if rationale_future else None
-            guidance_kq = safe_result(guidance_kq_future, default=None, task_name="guidance_kq") if guidance_kq_future else None
-            guidance_dtp = safe_result(guidance_dtp_future, default=None, task_name="guidance_dtp") if guidance_dtp_future else None
-            guidance_rec = safe_result(guidance_rec_future, default=None, task_name="guidance_rec") if guidance_rec_future else None
+            rationale_results = safe_result(rationale_future, default=None, task_name="rationale_eval", tracker=tracker) if rationale_future else None
+            guidance_kq = safe_result(guidance_kq_future, default=None, task_name="guidance_kq", tracker=tracker) if guidance_kq_future else None
+            guidance_dtp = safe_result(guidance_dtp_future, default=None, task_name="guidance_dtp", tracker=tracker) if guidance_dtp_future else None
+            guidance_rec = safe_result(guidance_rec_future, default=None, task_name="guidance_rec", tracker=tracker) if guidance_rec_future else None
 
         # --- Post-executor: assemble results ---
         logger.info(f"📋 Summary/feedback LLM call returned keys: {list(summary_data.keys())}")
@@ -3905,6 +4019,7 @@ The following is the instructor's answer key for this simulation case. Compare t
 
         if debrief_data is None:
             logger.error("All debrief LLM attempts failed to produce valid JSON — using fallback")
+            tracker.record("generate_debrief_llm", "all_json_parse_retries_exhausted", "score_may_be_affected")
             debrief_data = {
                 "summary": raw_output,
                 "questions_addressed": [],
@@ -3975,7 +4090,7 @@ The following is the instructor's answer key for this simulation case. Compare t
     if not tagged_messages and patient_mode == "full_assessment" and embeddings_model and ddb_table_name:
         try:
             # Fetch student submissions from the chats table
-            submissions = fetch_student_submissions(session_id)
+            submissions = fetch_student_submissions(session_id, tracker=tracker)
 
             if submissions["dtp_entries"] or submissions["rec_entries"]:
                 # Get pre-cached instructor DTP embeddings (lazy-cache on first use)
@@ -3985,11 +4100,27 @@ The following is the instructor's answer key for this simulation case. Compare t
                         simulation_group_id, persona_id, embeddings_model, ddb_table_name
                     )
 
+                # Detect silent DTP embed failure: student submitted DTPs but no instructor items available
+                if submissions["dtp_entries"] and not cached_dtps:
+                    tracker.record(
+                        "cache_instructor_dtp_embeddings",
+                        "returned_empty_despite_student_submissions",
+                        "score_may_be_affected",
+                    )
+
                 # Get pre-cached instructor Recommendation embeddings (lazy-cache on first use)
                 cached_recs = get_cached_instructor_recs(simulation_group_id, persona_id, ddb_table_name)
                 if cached_recs is None:
                     cached_recs = cache_instructor_rec_embeddings(
                         simulation_group_id, persona_id, embeddings_model, ddb_table_name
+                    )
+
+                # Detect silent Rec embed failure: student submitted recs but no instructor items available
+                if submissions["rec_entries"] and not cached_recs:
+                    tracker.record(
+                        "cache_instructor_rec_embeddings",
+                        "returned_empty_despite_student_submissions",
+                        "score_may_be_affected",
                     )
 
                 # Match DTPs
@@ -4001,6 +4132,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                         threshold=org_thresholds["dtp_threshold"],
                         text_key="expected_dtp_text",
                         id_key="dtp_id",
+                        tracker=tracker,
                     )
                     debrief_data["dtp_comparison"] = dtp_comparison
                     logger.info(f"📋 DTP matching: {len(dtp_comparison['matched'])} matched, "
@@ -4020,6 +4152,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                             threshold=org_thresholds["recommendation_threshold"],
                             text_key="recommendation_text",
                             id_key="recommendation_id",
+                            tracker=tracker,
                         )
                         debrief_data["recommendations_comparison"] = rec_comparison
                         logger.info(f"📋 Recommendation matching: {len(rec_comparison['matched'])} matched, "
@@ -4028,7 +4161,7 @@ The following is the instructor's answer key for this simulation case. Compare t
                 logger.info(f"📋 No DTP/Rec submissions found for session={session_id}, skipping matching")
         except Exception as e:
             logger.error(f"DTP/Rec matching failed for session={session_id}: {e}")
-            # Non-fatal — debrief still gets saved without DTP/Rec comparison
+            tracker.record("dtp_rec_matching_fallback", f"error: {type(e).__name__}", "score_may_be_affected")
 
     # 5. Write to debriefs table
     # TODO(refactor): Extract debrief persistence (save_debrief_to_db + save_question_interactions) into a helper function
@@ -4045,6 +4178,7 @@ The following is the instructor's answer key for this simulation case. Compare t
         total_questions_asked=total_asked,
         total_questions_missed=total_missed,
         overall_score=overall_score,
+        tracker=tracker,
     )
 
     # 6. Write per-question analytics
@@ -4070,7 +4204,10 @@ The following is the instructor's answer key for this simulation case. Compare t
     except Exception as e:
         logger.error(f"Failed to publish debrief to AppSync: {e}")
 
-    logger.info(f"✅ DEBRIEF GENERATION COMPLETE for session={session_id}, score={overall_score}")
+    # 8. Attach evaluation integrity metadata to the response
+    debrief_data["evaluation_integrity"] = tracker.to_dict()
+
+    logger.info(f"✅ DEBRIEF GENERATION COMPLETE for session={session_id}, score={overall_score}, degraded={tracker.is_degraded}")
     return debrief_data
 
 

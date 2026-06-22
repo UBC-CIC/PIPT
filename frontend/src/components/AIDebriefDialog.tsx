@@ -149,6 +149,32 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
 
         {/* Content */}
         <div className="p-6 space-y-6">
+          {/* Evaluation Integrity Warning Banner */}
+          {(() => {
+            const integrity = updatedDebriefData?.evaluationIntegrity ?? data?.evaluationIntegrity;
+            if (integrity && !integrity.evaluationComplete) {
+              return (
+                <div
+                  className="flex items-start gap-3 p-4 rounded-lg border"
+                  style={{ backgroundColor: '#fef3c7', borderColor: '#f59e0b' }}
+                  role="alert"
+                >
+                  <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#d97706' }} />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+                      This score may be incomplete
+                    </p>
+                    <p className="text-sm mt-1" style={{ color: '#92400e' }}>
+                      A temporary issue occurred during evaluation that may have affected scoring accuracy. 
+                      Please attempt a new interaction, or contact an instructor if the issue persists.
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          })()}
+
           <p className="text-base" style={{ color: UI_COLORS.text.body }}>
             AI generated summary and feedback on your clinical interview. Remember, this is AI generated and should be considered as suggestions. This system will always provide feedback, and it may be incorrect, so you must use your judgement when considering this feedback. If you have questions about the feedback provided to you in this debrief, please reach out to your instructor.
           </p>
