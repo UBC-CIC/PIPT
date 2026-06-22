@@ -67,15 +67,8 @@
     "@aws-cdk/aws-eks:nodegroupNameAttribute": true,
     "@aws-cdk/aws-ec2:ebsDefaultGp3Volume": true,
 
-    "StackPrefix": "genrx",
+    "StackPrefix": "rajrupa-empCDK",
     "githubRepo": "GenRx",
-    "githubBranch": "post-handover-fixes",
-    "existingVpcId": "vpc-0515a0d6ee4abcd8e",
-    "controlTowerStackSet": "StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-df80d055-f27d-4b9a-917f-f0db2da2ad91",
-    "existingVpcCidr": "172.31.0.0/16",
-    "publicSubnetCidr": "172.31.0.0/20",
-    "existingPublicSubnetId": "subnet-06ac23677ed4d4bc3",
-    "availabilityZones": ["ca-central-1a", "ca-central-1b", "ca-central-1d"],
-    "skipVpcEndpoints": true
+    "githubBranch": "post-handover-fixes"
   }
 }

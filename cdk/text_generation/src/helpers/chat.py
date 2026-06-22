@@ -16,6 +16,16 @@ _matching_threads: dict[str, list[threading.Thread]] = {}  # session_id -> [thre
 # Matches the legacy hardcoded SUBMISSION_MATCH_THRESHOLD value.
 DEFAULT_MATCH_THRESHOLD = 0.55
 
+# Tier offsets below the active key-question threshold.
+# "Moderate" matches (threshold − offset → threshold) count toward the score
+# but are flagged as rewrite candidates. "Low" matches (threshold − offset →
+# moderate boundary) are logged for analytics but do NOT count as addressed.
+# These gaps reflect embedding similarity distribution in clinical text:
+# 0.10 captures semantically equivalent but differently-phrased questions,
+# 0.25 captures topic-adjacent questions that share clinical domain vocabulary.
+_MODERATE_TIER_OFFSET = 0.10
+_LOW_TIER_OFFSET = 0.25
+
 # Stream callback URL — when set, publish_stream_event() POSTs chunks here
 # instead of AppSync. Set by main.py from the stream_callback_url query param.
 _stream_callback_url: str | None = None
@@ -2364,8 +2374,8 @@ def match_message_to_questions(
     best_matches: dict[str, dict] = {}  # question_id -> best match info
 
     # Derive tier boundaries from the configurable threshold
-    moderate_threshold = key_question_threshold - 0.10
-    low_threshold = key_question_threshold - 0.25
+    moderate_threshold = key_question_threshold - _MODERATE_TIER_OFFSET
+    low_threshold = key_question_threshold - _LOW_TIER_OFFSET
 
     for intent_idx, (intent_text, intent_emb) in enumerate(zip(intents, intent_embeddings)):
         for q in cached_questions:
