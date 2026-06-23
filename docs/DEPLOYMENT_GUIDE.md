@@ -1,7 +1,7 @@
 # Deployment Guide
 
 > **Type:** Procedural Guide
-> **Last updated:** 2026-06-08
+> **Last updated:** 2026-06-18
 
 ## Table of Contents
 
@@ -14,6 +14,7 @@
   - [Step 4: Upload Secrets and Parameters](#step-4-upload-secrets-and-parameters)
   - [Step 5: Bootstrap CDK](#step-5-bootstrap-cdk)
   - [Step 6: Deploy Stacks](#step-6-deploy-stacks)
+  - [VPC Configuration](#vpc-configuration)
   - [Monitoring the Deployment](#monitoring-the-deployment)
 - [Verification](#verification)
 - [Post-Deployment](#post-deployment)
@@ -98,6 +99,16 @@ npm install
 
 Before deploying, create the following secrets and parameters in AWS. These are referenced by the CDK stacks at synthesis time.
 
+> **⚠️ Important — Always pass `--profile`:** Every AWS CLI command in this guide requires the `--profile <YOUR-AWS-PROFILE>` flag to target the correct account. If you omit it, the CLI uses the default profile which may point to a different account.
+
+> **⚠️ Important — JSON secrets:** When creating secrets that contain JSON (like `GENRXSecrets` and `github-personal-access-token`), ensure the stored value has proper double quotes around keys and values. Shell escaping (especially on Windows) can silently corrupt JSON. After creating any JSON secret, verify it:
+>
+> ```bash
+> aws secretsmanager get-secret-value --secret-id <SECRET-NAME> --region <YOUR-REGION> --profile <YOUR-AWS-PROFILE> --query SecretString --output text
+> ```
+>
+> If the output doesn't look like valid JSON, fix it via the AWS Console (Secrets Manager → select the secret → Retrieve secret value → Edit → Plaintext tab → paste the correct JSON → Save).
+
 #### Secret 1: GENRXSecrets
 
 This secret contains the admin username for the RDS PostgreSQL instance. You choose this value; it becomes the master username for your database. The database stack reads `DB_Username` from this secret at deploy time.
@@ -109,7 +120,8 @@ This secret contains the admin username for the RDS PostgreSQL instance. You cho
 aws secretsmanager create-secret \
   --name GENRXSecrets \
   --secret-string '{"DB_Username": "<YOUR-DB-ADMIN-USERNAME>"}' \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -121,7 +133,8 @@ aws secretsmanager create-secret \
 aws secretsmanager create-secret `
   --name GENRXSecrets `
   --secret-string '{\"DB_Username\": \"<YOUR-DB-ADMIN-USERNAME>\"}' `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -133,7 +146,8 @@ aws secretsmanager create-secret `
 aws secretsmanager create-secret ^
   --name GENRXSecrets ^
   --secret-string "{\"DB_Username\": \"<YOUR-DB-ADMIN-USERNAME>\"}" ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -144,6 +158,8 @@ aws secretsmanager create-secret ^
 
 This secret is used by the CI/CD pipeline and Amplify to access your GitHub repository.
 
+> **⚠️ Important — JSON formatting:** The secret value must be valid JSON with double quotes around both the key and the value. It should look exactly like: `{"my-github-token": "ghp_xxxx..."}`. Shell escaping issues (especially on Windows) can silently corrupt the JSON. If the CLI gives you trouble, create/edit the secret via the AWS Console instead (see troubleshooting below).
+
 <details>
 <summary>macOS / Linux</summary>
 
@@ -151,7 +167,8 @@ This secret is used by the CI/CD pipeline and Amplify to access your GitHub repo
 aws secretsmanager create-secret \
   --name github-personal-access-token \
   --secret-string '{"my-github-token": "<YOUR-GITHUB-PAT>"}' \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -163,7 +180,8 @@ aws secretsmanager create-secret \
 aws secretsmanager create-secret `
   --name github-personal-access-token `
   --secret-string '{\"my-github-token\": \"<YOUR-GITHUB-PAT>\"}' `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -175,8 +193,24 @@ aws secretsmanager create-secret `
 aws secretsmanager create-secret ^
   --name github-personal-access-token ^
   --secret-string "{\"my-github-token\": \"<YOUR-GITHUB-PAT>\"}" ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
+
+</details>
+
+<details>
+<summary>Alternative: Create/fix via AWS Console (recommended if CLI escaping is problematic)</summary>
+
+1. Go to **Secrets Manager** in the AWS Console → find `github-personal-access-token`
+2. Click on it → scroll to **Secret value** section
+3. Click **Retrieve secret value**
+4. Click **Edit**
+5. Switch to the **Plaintext** tab
+6. Replace the content with exactly: `{"my-github-token": "<YOUR-GITHUB-PAT>"}`
+7. Click **Save**
+
+Make sure the key `my-github-token` and your token value both have double quotes around them.
 
 </details>
 
@@ -192,7 +226,8 @@ aws ssm put-parameter \
   --name "genrx-owner-name" \
   --value "<YOUR-GITHUB-USERNAME>" \
   --type String \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -205,7 +240,8 @@ aws ssm put-parameter `
   --name "genrx-owner-name" `
   --value "<YOUR-GITHUB-USERNAME>" `
   --type String `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -218,7 +254,8 @@ aws ssm put-parameter ^
   --name "genrx-owner-name" ^
   --value "<YOUR-GITHUB-USERNAME>" ^
   --type String ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -237,7 +274,8 @@ aws ssm put-parameter \
   --name "/GenRx/AllowedEmailDomains" \
   --value "<COMMA-SEPARATED-DOMAINS>" \
   --type SecureString \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -250,7 +288,8 @@ aws ssm put-parameter `
   --name "/GenRx/AllowedEmailDomains" `
   --value "<COMMA-SEPARATED-DOMAINS>" `
   --type SecureString `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -263,7 +302,8 @@ aws ssm put-parameter ^
   --name "/GenRx/AllowedEmailDomains" ^
   --value "<COMMA-SEPARATED-DOMAINS>" ^
   --type SecureString ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -284,7 +324,8 @@ aws ssm put-parameter \
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" \
   --value "placeholder" \
   --type String \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -297,7 +338,8 @@ aws ssm put-parameter `
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" `
   --value "placeholder" `
   --type String `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -310,7 +352,8 @@ aws ssm put-parameter ^
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" ^
   --value "placeholder" ^
   --type String ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -325,27 +368,32 @@ The API service stack uses CloudFront signed URLs to deliver patient documents s
 
 **Step 1: Generate an RSA 2048-bit key pair.**
 
+> **⚠️ Critical:** The private key **must** be in PKCS#1 format (starts with `-----BEGIN RSA PRIVATE KEY-----`). OpenSSL 3.x defaults to PKCS#8 format (`-----BEGIN PRIVATE KEY-----`) which will **not** work — the Lambda function will fail at runtime with `No PEM start marker found`. Always use the `-traditional` flag to force PKCS#1 output.
+
 <details>
-<summary>macOS / Linux</summary>
+<summary>macOS / Linux (or Git Bash on Windows)</summary>
 
 ```bash
-openssl genrsa -out private_key.pem 2048
+openssl genrsa -traditional -out private_key.pem 2048
 openssl rsa -pubout -in private_key.pem -out public_key.pem
 ```
 
 </details>
 
 <details>
-<summary>Windows (PowerShell)</summary>
+<summary>Windows — OpenSSL not available in PowerShell?</summary>
 
-```powershell
-openssl genrsa -out private_key.pem 2048
+If `openssl` is not recognized in PowerShell or CMD, **open a new terminal using Git Bash** (installed with [Git for Windows](https://gitforwindows.org/)) and run the macOS/Linux commands above. Git Bash includes OpenSSL out of the box.
+
+```bash
+# In Git Bash (NOT PowerShell):
+openssl genrsa -traditional -out private_key.pem 2048
 openssl rsa -pubout -in private_key.pem -out public_key.pem
 ```
 
-> **Note:** If `openssl` is not available, install it via [Git for Windows](https://gitforwindows.org/) (included in Git Bash) or [Win32/Win64 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html).
-
 </details>
+
+> **Verify the key format:** After generating, open `private_key.pem` and confirm the first line is exactly `-----BEGIN RSA PRIVATE KEY-----`. If it says `-----BEGIN PRIVATE KEY-----` (without "RSA"), you forgot the `-traditional` flag — regenerate it.
 
 **Step 2: Store the private key in Secrets Manager.**
 
@@ -359,7 +407,8 @@ aws secretsmanager create-secret \
   --name "GenRx/CloudFrontSigningKey" \
   --secret-string file://private_key.pem \
   --description "RSA private key for signing CloudFront document delivery URLs" \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -373,7 +422,8 @@ aws secretsmanager create-secret `
   --name "GenRx/CloudFrontSigningKey" `
   --secret-string $privateKey `
   --description "RSA private key for signing CloudFront document delivery URLs" `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -386,7 +436,8 @@ aws secretsmanager create-secret ^
   --name "GenRx/CloudFrontSigningKey" ^
   --secret-string file://private_key.pem ^
   --description "RSA private key for signing CloudFront document delivery URLs" ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -403,7 +454,8 @@ aws ssm put-parameter \
   --name "/GenRx/CloudFrontPublicKey" \
   --value file://public_key.pem \
   --type String \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -417,7 +469,8 @@ aws ssm put-parameter `
   --name "/GenRx/CloudFrontPublicKey" `
   --value $publicKey `
   --type String `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -430,7 +483,8 @@ aws ssm put-parameter ^
   --name "/GenRx/CloudFrontPublicKey" ^
   --value file://public_key.pem ^
   --type String ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -458,14 +512,14 @@ CDK must be bootstrapped in **two regions**: your deployment region and `us-east
 ```bash
 # Bootstrap your primary deployment region
 cdk bootstrap aws://<YOUR-ACCOUNT-ID>/<YOUR-REGION> \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
 
 # Bootstrap us-east-1 (required for the CloudFront WAF stack)
 cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -485,7 +539,7 @@ cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
 >
 > Everything else is parameterized from there — the custom resource creates whatever name you set, it gets written to the SSM parameter `/{id}/GenRx/TableName`, and the Python Lambdas read it from SSM at runtime. No other code changes needed.
 
-The CDK app requires two context variables at deploy time:
+The CDK app requires two context variables at deploy time, plus optional VPC configuration:
 
 | Context Variable | Description | Required |
 |-----------------|-------------|----------|
@@ -496,6 +550,15 @@ The CDK app requires two context variables at deploy time:
 | `SesVerifiedDomain` | Domain with a Route 53 hosted zone for SES email + Amplify custom domain | No |
 | `SesIdentityVerified` | Set to `"true"` after SES domain is verified (see [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md)) | No |
 | `SesSkipIdentityCreation` | Set to `"true"` to skip SES identity creation (when it already exists) | No |
+| `existingVpcId` | VPC ID to use an existing VPC instead of creating a new one (see [VPC Configuration](#vpc-configuration)) | No |
+| `controlTowerStackSet` | Control Tower StackSet name for importing subnet/route table exports | No |
+| `existingPublicSubnetId` | ID of an existing public subnet (skips creating a new one) | No |
+| `existingVpcCidr` | CIDR of the existing VPC (e.g., `172.31.128.0/20`) | No |
+| `publicSubnetCidr` | CIDR for the new public subnet — must be a small slice within the VPC range (e.g., `172.31.128.240/28`) | No |
+| `availabilityZones` | JSON array of AZ names (e.g., `["us-east-1a","us-east-1b","us-east-1c"]`) | No |
+| `vpcCidr` | CIDR for a new VPC (default: `10.0.0.0/16`) | No |
+| `maxAzs` | Number of availability zones for a new VPC (default: `2`) | No |
+| `natGateways` | Number of NAT Gateways for a new VPC (default: `1`; use `2` for prod HA) | No |
 
 Choose one of the following deployment options:
 
@@ -503,7 +566,7 @@ Choose one of the following deployment options:
 
 ```bash
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -514,8 +577,8 @@ cdk deploy --all \
 Stacks deploy in dependency order. If you only need to update a specific stack:
 
 ```bash
-cdk deploy GenRx-Api \
-  -c StackPrefix=GenRx \
+cdk deploy <YOUR-STACK-PREFIX>-Api \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -527,7 +590,7 @@ After completing the voice agent setup, you can pass the ARN explicitly on subse
 
 ```bash
 cdk deploy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   -c voiceAgentArn="arn:aws:bedrock:us-east-1:123456789012:agent-runtime/XXXXXXXXXX" \
@@ -550,12 +613,163 @@ The CDK app creates the following stacks in dependency order:
 
 > **Note:** `--all` handles the dependency order automatically. Deployment takes approximately 30–45 minutes on first run.
 
+### VPC Configuration
+
+By default, CDK creates a brand-new VPC with public, private, and isolated subnets. If you need to deploy into an **existing VPC** (e.g., one created by AWS Control Tower Account Factory, or a shared-services VPC), you can configure this entirely through context variables — no source code edits required.
+
+#### Option 1: New VPC (Default — No Extra Config Needed)
+
+If you omit all VPC context variables, CDK creates a fresh VPC with:
+- CIDR `10.0.0.0/16` (override with `-c vpcCidr=...`)
+- 2 availability zones (override with `-c maxAzs=3`)
+- 1 NAT Gateway (override with `-c natGateways=2` for production high availability)
+- Public, private (with egress), and isolated subnets
+
+```bash
+# Example: new VPC with high availability NAT Gateways
+cdk deploy --all \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
+  -c githubRepo=GenRx \
+  -c natGateways=2 \
+  -c maxAzs=3 \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+#### Option 2: Existing VPC with AWS Control Tower Exports
+
+If your account was provisioned by AWS Control Tower (Account Factory), your VPC's subnet IDs, route tables, and CIDRs are exported as CloudFormation outputs by a StackSet. Provide the VPC ID and StackSet name:
+
+```bash
+cdk deploy --all \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
+  -c githubRepo=GenRx \
+  -c existingVpcId=vpc-0abc123def456789a \
+  -c controlTowerStackSet="StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" \
+  -c publicSubnetCidr="172.31.128.240/28" \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+<details>
+<summary>Alternative: Put context variables in cdk.json instead of long CLI commands</summary>
+
+If you don't want to deal with a long deploy command every time, add the context variables to the `context` section of `cdk/cdk.json`:
+
+```jsonc
+{
+  "context": {
+    "StackPrefix": "<YOUR-STACK-PREFIX>",
+    "githubRepo": "<YOUR-GITHUB-REPO>",
+    "githubBranch": "<YOUR-BRANCH>",
+    "existingVpcId": "<YOUR-VPC-ID>",
+    "controlTowerStackSet": "<YOUR-CONTROL-TOWER-STACKSET-NAME>",
+    "existingVpcCidr": "<YOUR-VPC-CIDR>",
+    "publicSubnetCidr": "<YOUR-PUBLIC-SUBNET-CIDR>",
+    "existingPublicSubnetId": "",
+    "availabilityZones": ["<AZ-1>", "<AZ-2>", "<AZ-3>"],
+    "skipVpcEndpoints": true
+  }
+}
+```
+
+Then your deploy command becomes just:
+
+```bash
+cdk deploy --all --profile <YOUR-AWS-PROFILE>
+```
+
+</details>
+
+**How to find your Control Tower StackSet name:**
+1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/).
+2. Go to **Exports**.
+3. Look for exports matching the pattern `StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-*-PrivateSubnet1AID`.
+4. The prefix before `-PrivateSubnet1AID` is your StackSet name.
+
+**Required context variables for this option:**
+
+| Variable | Description |
+|----------|-------------|
+| `existingVpcId` | The VPC ID (e.g., `vpc-0abc123...`) |
+| `controlTowerStackSet` | Full StackSet name including the GUID suffix |
+| `publicSubnetCidr` | A small CIDR (e.g., `/28`) within your VPC range for the public subnet with IGW/NAT. **Must not overlap** with existing private subnets. |
+
+**Optional context variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `existingPublicSubnetId` | `""` (create new) | If a public subnet already exists, provide its ID to skip creating IGW/NAT resources |
+| `existingVpcCidr` | `172.31.128.0/20` | Your VPC's CIDR block (used for security group rules) |
+| `availabilityZones` | Derived from stack environment | JSON array of AZ names if auto-detection isn't available |
+
+#### Option 3: Existing VPC Without Control Tower
+
+If you have an existing VPC that was **not** created by Control Tower (no StackSet exports), you have two choices:
+
+1. **Create matching CloudFormation exports manually** that follow the Control Tower naming convention, then use Option 2.
+2. **Use the default new-VPC path** and peer/connect it to your existing networking as needed.
+
+> **Note:** A future enhancement will add `Vpc.fromLookup()` support which automatically discovers subnets and route tables without requiring CloudFormation exports. For now, Option 2 with manual exports is the supported path for existing VPCs.
+
+#### Important Notes
+
+- **`publicSubnetCidr` must be a small CIDR slice** (e.g., `/27` or `/28`), NOT the entire VPC CIDR. It needs to fit within the VPC range and must not overlap with existing subnets. For example, if your VPC is `172.31.128.0/20`, a good choice is `172.31.143.240/28` (the last 16 IPs in the range).
+- **Availability zones** are auto-detected from the stack's `env` (account + region). You only need to pass `availabilityZones` if CDK cannot resolve them (e.g., environment-agnostic synthesis without `-c` or `env`).
+- **The `StackPrefix` context variable is used for route naming** in the existing-VPC branch. Ensure it's consistent across deploys to avoid orphaned routes.
+
+#### Migrating from Source-Edited Deployments
+
+If you previously deployed by editing the hardcoded values in `vpc-stack.ts` directly, you can migrate to the context-driven approach with a no-op deploy:
+
+1. Add the values you previously hardcoded to your `cdk.json` context section:
+
+```jsonc
+{
+  "context": {
+    "StackPrefix": "GENRX-production",
+    "existingVpcId": "vpc-0abc123...",
+    "controlTowerStackSet": "StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-df80d055-...",
+    "existingVpcCidr": "172.31.128.0/20",
+    "publicSubnetCidr": "172.31.128.0/20"
+  }
+}
+```
+
+> **Note:** For existing deployments, set `publicSubnetCidr` to the same value that was previously used (the VPC CIDR). This ensures CloudFormation sees no change. On future fresh deployments, use a proper small CIDR instead.
+
+2. Run `cdk diff` to confirm **no changes** are detected:
+
+```bash
+cdk diff --all \
+  -c StackPrefix=GENRX-production \
+  -c githubRepo=GenRx \
+  -c existingVpcId=vpc-0abc123... \
+  -c controlTowerStackSet="StackSet-AWSControlTowerBP-..." \
+  -c existingVpcCidr="172.31.128.0/20" \
+  -c publicSubnetCidr="172.31.128.0/20" \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+3. If the diff is clean (no resource changes), deploy to confirm:
+
+```bash
+cdk deploy --all \
+  -c StackPrefix=GENRX-production \
+  -c githubRepo=GenRx \
+  -c existingVpcId=vpc-0abc123... \
+  -c controlTowerStackSet="StackSet-AWSControlTowerBP-..." \
+  -c existingVpcCidr="172.31.128.0/20" \
+  -c publicSubnetCidr="172.31.128.0/20" \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+4. Once confirmed, remove any manual edits from `vpc-stack.ts` and rely solely on context going forward.
+
 ### Monitoring the Deployment
 
 While the stacks deploy, you can monitor progress in real time through the AWS Console:
 
 1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your deployment region.
-2. You will see each stack appear as it begins creating (e.g., `GenRx-VpcStack`, `GenRx-Database`, etc.).
+2. You will see each stack appear as it begins creating (e.g., `{StackPrefix}-VpcStack`, `{StackPrefix}-Database`, etc.).
 3. Click into any stack and go to the **Events** tab to see individual resource creation progress.
 4. A stack showing `CREATE_IN_PROGRESS` is still deploying. Wait for `CREATE_COMPLETE`.
 5. If a stack shows `ROLLBACK_IN_PROGRESS` or `CREATE_FAILED`, check the Events tab for the specific resource and error message that caused the failure. Do not attempt to delete or redeploy the stack until it reaches `ROLLBACK_COMPLETE`. CloudFormation must finish rolling back all provisioned resources before it can accept new operations on that stack.
@@ -689,6 +903,64 @@ After the first deployment, Amplify needs to run its initial build:
 3. If the build has not triggered automatically, click **Run build** on the `main` branch.
 4. Wait for the build to complete (typically 3–5 minutes).
 
+#### Fallback: Amplify Console Can't Detect Branches
+
+If the Amplify Console UI fails to detect branches (common when using a PAT-based connection instead of the GitHub App integration), you can create the branch and trigger a build entirely via CLI:
+
+**Get your Amplify App ID:**
+
+```bash
+aws amplify list-apps \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE> \
+  --query "apps[?contains(name, '<YOUR-STACK-PREFIX>')].appId" \
+  --output text
+```
+
+**Create the branch:**
+
+```bash
+aws amplify create-branch \
+  --app-id <APP_ID> \
+  --branch-name <BRANCH_NAME> \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+**Trigger a build:**
+
+```bash
+aws amplify start-job \
+  --app-id <APP_ID> \
+  --branch-name <BRANCH_NAME> \
+  --job-type RELEASE \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+**Check build status:**
+
+```bash
+aws amplify list-jobs \
+  --app-id <APP_ID> \
+  --branch-name <BRANCH_NAME> \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+**Get the Amplify URL:**
+
+```bash
+aws amplify get-branch \
+  --app-id <APP_ID> \
+  --branch-name <BRANCH_NAME> \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE> \
+  --query "branch.displayName"
+```
+
+The app will be available at `https://<BRANCH_NAME>.<APP_ID>.amplifyapp.com`.
+
 ### Deploy the Voice Agent
 
 The voice agent runs on **Amazon Bedrock AgentCore** and is required for the voice mode functionality. It requires the CDK stacks to be deployed first (since the CI/CD pipeline builds and pushes the voice-agent Docker image to ECR). Follow this order of operations:
@@ -725,7 +997,8 @@ aws ssm put-parameter \
   --value "<YOUR-VOICE-AGENT-ARN>" \
   --type String \
   --overwrite \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -739,7 +1012,8 @@ aws ssm put-parameter `
   --value "<YOUR-VOICE-AGENT-ARN>" `
   --type String `
   --overwrite `
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> `
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -753,7 +1027,8 @@ aws ssm put-parameter ^
   --value "<YOUR-VOICE-AGENT-ARN>" ^
   --type String ^
   --overwrite ^
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> ^
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 </details>
@@ -761,8 +1036,8 @@ aws ssm put-parameter ^
 Then redeploy the EcsSocket stack to pick up the new value:
 
 ```bash
-cdk deploy GenRx-EcsSocket \
-  -c StackPrefix=GenRx \
+cdk deploy <YOUR-STACK-PREFIX>-EcsSocket \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
@@ -782,40 +1057,63 @@ Find the exact URL in the Amplify console or in the CDK stack outputs:
 
 ```bash
 aws cloudformation describe-stacks \
-  --stack-name GenRx-Amplify \
+  --stack-name <YOUR-STACK-PREFIX>-Amplify \
   --query "Stacks[0].Outputs[?OutputKey=='AmplifyDefaultDomain'].OutputValue" \
   --output text \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 ---
 
 ## Cleanup
 
-To tear down all deployed resources, run:
+To tear down all deployed resources, you must first disable termination protection on the critical stacks, then destroy them.
+
+### Step 1: Disable Stack Termination Protection
+
+The VPC, Database, and Api stacks have CloudFormation termination protection enabled. You must disable it before `cdk destroy` will work:
+
+1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your deployment region.
+2. For each of these stacks — `{StackPrefix}-VpcStack`, `{StackPrefix}-Database`, `{StackPrefix}-Api`:
+   - Select the stack.
+   - Click **Stack actions** → **Edit termination protection**.
+   - Set to **Disabled** and confirm.
+
+### Step 2: Disable RDS Deletion Protection
+
+The RDS instance itself also has deletion protection enabled (separate from stack termination protection):
+
+1. Open the [RDS console](https://console.aws.amazon.com/rds/).
+2. Select the database instance.
+3. Click **Modify**.
+4. Uncheck **Enable deletion protection**.
+5. Apply immediately.
+
+### Step 3: Destroy Stacks
 
 ```bash
 cdk destroy --all \
-  -c StackPrefix=GenRx \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=GenRx \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
 ```
 
-> **Warning:** The RDS instance has `deletionProtection: true`. You must disable deletion protection in the RDS console before the database stack can be deleted. The S3 bucket also has `removalPolicy: RETAIN`, so you need to empty and delete it manually after stack deletion.
+> **Note:** S3 buckets have `removalPolicy: RETAIN`, so you need to empty and delete them manually after stack deletion.
 
 To delete individual stacks, destroy them in reverse dependency order:
 
 ```bash
-cdk destroy GenRx-Amplify -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-DBFlow -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-EcsSocket -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-TurnServer -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-Api -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-CloudFrontWaf -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-Database -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-VpcStack -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
-cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Amplify -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-DBFlow -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-EcsSocket -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-TurnServer -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Api -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-CloudFrontWaf -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Database -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-VpcStack -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=GenRx -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 ```
 
 ---
@@ -824,16 +1122,13 @@ cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=
 
 ### Stack deletion fails for Database stack
 
-**Cause:** Deletion protection is enabled on the RDS instance.
+**Cause:** The Database, VPC, and Api stacks have CloudFormation termination protection enabled, and the RDS instance has deletion protection enabled.
 
 **Fix:**
 
-1. Open the [RDS console](https://console.aws.amazon.com/rds/).
-2. Select the database instance.
-3. Click **Modify**.
-4. Uncheck **Enable deletion protection**.
-5. Apply immediately.
-6. Retry `cdk destroy`.
+1. Disable termination protection on the stack (see [Step 1 in Cleanup](#step-1-disable-stack-termination-protection)).
+2. Disable RDS deletion protection (see [Step 2 in Cleanup](#step-2-disable-rds-deletion-protection)).
+3. Retry `cdk destroy`.
 
 ### RDS username constraint error
 
@@ -845,7 +1140,8 @@ cdk destroy GenRx-CICD -c StackPrefix=GenRx -c githubRepo=GenRx -c githubBranch=
 aws secretsmanager update-secret \
   --secret-id GENRXSecrets \
   --secret-string '{"DB_Username": "genrxadmin"}' \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 ### Amplify build fails
@@ -871,7 +1167,8 @@ aws secretsmanager update-secret \
 aws secretsmanager update-secret \
   --secret-id github-personal-access-token \
   --secret-string '{"my-github-token": "<NEW-TOKEN>"}' \
-  --region <YOUR-REGION>
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
 ```
 
 ### GitHub token secret not stored as valid JSON

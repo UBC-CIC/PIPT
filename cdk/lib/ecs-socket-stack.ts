@@ -97,7 +97,7 @@ export class EcsSocketStack extends Stack {
           "dynamodb:UpdateItem",
         ],
         resources: [
-          `arn:aws:dynamodb:${this.region}:${this.account}:table/DynamoDB-Conversation-Table`,
+          `arn:aws:dynamodb:${this.region}:${this.account}:table/${dynamoTableName}`,
         ],
       })
     );

@@ -73,7 +73,7 @@ function CreateSimulationGroupDialog({
   };
 
   const isValid = role === 'admin'
-    ? Boolean(name.trim() && description.trim() && selectedInstructors.length > 0)
+    ? Boolean(name.trim() && description.trim())
     : Boolean(name.trim() && description.trim());
 
   const handleCreate = async () => {
@@ -189,7 +189,7 @@ function CreateSimulationGroupDialog({
                 className="text-sm font-medium"
                 style={{ color: UI_COLORS.text.heading }}
               >
-                Add Instructors <span style={{ color: UI_COLORS.status.error }}>*</span>
+                Add Instructors
               </label>
               <div ref={dropdownRef} className="relative">
                 <button

@@ -442,11 +442,17 @@ function InstructorSimulationGroupPage() {
   };
 
   // ── Patient / student section handlers ──
+  const [deletePatientConfirm, setDeletePatientConfirm] = useState<{ open: boolean; patientId: string; patientName: string }>({
+    open: false, patientId: '', patientName: ''
+  });
   const handleDeletePatient = (patientId: string) => {
-    if (confirm(`Are you sure you want to delete this ${aiPersonaLabelLower}?`)) {
-      groupData.setManageablePatients(prev => prev.filter(p => p.id !== patientId));
-      instructorService.deletePatient(patientId);
-    }
+    const patient = manageablePatients.find(p => p.id === patientId || (p as any).patient_id === patientId);
+    setDeletePatientConfirm({ open: true, patientId, patientName: patient?.name || aiPersonaLabelLower });
+  };
+  const handleConfirmDeletePatient = () => {
+    groupData.setManageablePatients(prev => prev.filter(p => p.id !== deletePatientConfirm.patientId));
+    instructorService.deletePatient(deletePatientConfirm.patientId);
+    setDeletePatientConfirm({ open: false, patientId: '', patientName: '' });
   };
   const handleEditPatient = (patientId: string) => {
     patientEditor.startEditing(patientId);
@@ -696,6 +702,22 @@ function InstructorSimulationGroupPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAccessCodeDialogOpen(false)} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
             <Button onClick={async () => { setIsAccessCodeDialogOpen(false); await handleGenerateAccessCode(); }} style={{ backgroundColor: UI_COLORS.status.error, color: UI_COLORS.button.text }}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Patient Confirmation Dialog */}
+      <Dialog open={deletePatientConfirm.open} onOpenChange={(open) => setDeletePatientConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Delete {labels.aiPersona}</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "{deletePatientConfirm.patientName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePatientConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmDeletePatient} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Delete</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -359,11 +359,17 @@ function AdminSimulationGroupPage() {
   };
 
   // ── Patient / student handlers ──
+  const [deletePatientConfirm, setDeletePatientConfirm] = useState<{ open: boolean; patientId: string; patientName: string }>({
+    open: false, patientId: '', patientName: ''
+  });
   const handleDeletePatient = (patientId: string) => {
-    if (confirm(`Are you sure you want to delete this ${aiPersonaLabelLower}?`)) {
-      groupData.setManageablePatients(prev => prev.filter((p: any) => p.patient_id !== patientId));
-      mockInstructorDataService.deletePatient(patientId);
-    }
+    const patient = groupData.manageablePatients.find((p: any) => p.patient_id === patientId || p.id === patientId);
+    setDeletePatientConfirm({ open: true, patientId, patientName: (patient as any)?.name || aiPersonaLabelLower });
+  };
+  const handleConfirmDeletePatient = () => {
+    groupData.setManageablePatients(prev => prev.filter((p: any) => p.patient_id !== deletePatientConfirm.patientId));
+    mockInstructorDataService.deletePatient(deletePatientConfirm.patientId);
+    setDeletePatientConfirm({ open: false, patientId: '', patientName: '' });
   };
   const handleEditPatient = (patientId: string) => {
     patientEditor.startEditing(patientId);
@@ -418,14 +424,20 @@ function AdminSimulationGroupPage() {
       showNotification({ message, type: 'error' });
     }
   };
+  const [removeInstructorConfirm, setRemoveInstructorConfirm] = useState<{ open: boolean; email: string; displayName: string }>({
+    open: false, email: '', displayName: ''
+  });
   const handleRemoveInstructor = async (instructorEmail: string) => {
     if (!groupId) return;
     const instructor = instructors.find(i => i.user_email === instructorEmail);
     const displayName = instructor ? `${instructor.first_name} ${instructor.last_name}` : instructorEmail;
-    if (confirm(`Are you sure you want to remove ${displayName} from this group?`)) {
-      try { await adminApi.removeInstructorFromGroup(groupId, instructorEmail); setInstructors(await adminApi.getGroupInstructors(groupId)); }
-      catch (err) { console.error('Failed to remove instructor via API, removing locally:', err); setInstructors(prev => prev.filter(i => i.user_email !== instructorEmail)); }
-    }
+    setRemoveInstructorConfirm({ open: true, email: instructorEmail, displayName });
+  };
+  const handleConfirmRemoveInstructor = async () => {
+    if (!groupId) return;
+    try { await adminApi.removeInstructorFromGroup(groupId, removeInstructorConfirm.email); setInstructors(await adminApi.getGroupInstructors(groupId)); }
+    catch (err) { console.error('Failed to remove instructor via API, removing locally:', err); setInstructors(prev => prev.filter(i => i.user_email !== removeInstructorConfirm.email)); }
+    setRemoveInstructorConfirm({ open: false, email: '', displayName: '' });
   };
 
   // ── Prompt handlers ──
@@ -449,10 +461,15 @@ function AdminSimulationGroupPage() {
       showNotification({ message: 'Prompt saved successfully!', type: 'success' });
     } catch (error) { console.error('Failed to save prompt:', error); showNotification({ message: 'Failed to save prompt. Please try again.', type: 'error' }); }
   };
+  const [restorePromptConfirm, setRestorePromptConfirm] = useState<{ open: boolean; versionText: string }>({
+    open: false, versionText: ''
+  });
   const handleRestorePromptVersion = (versionText: string) => {
-    if (confirm('Are you sure you want to restore this version?')) {
-      if (selectedPromptType === 'system') { setSystemPromptText(versionText); } else { setEvaluationPromptText(versionText); }
-    }
+    setRestorePromptConfirm({ open: true, versionText });
+  };
+  const handleConfirmRestorePrompt = () => {
+    if (selectedPromptType === 'system') { setSystemPromptText(restorePromptConfirm.versionText); } else { setEvaluationPromptText(restorePromptConfirm.versionText); }
+    setRestorePromptConfirm({ open: false, versionText: '' });
   };
 
   // ── Rubric handlers ──
@@ -464,15 +481,21 @@ function AdminSimulationGroupPage() {
     if (!selectedQuestionId) return;
     setGlobalRubricQuestions(prev => prev.map(q => q.id === selectedQuestionId ? { ...q, [field]: value } : q));
   };
+  const [deleteQuestionConfirm, setDeleteQuestionConfirm] = useState<{ open: boolean; questionId: string; questionTitle: string }>({
+    open: false, questionId: '', questionTitle: ''
+  });
   const handleDeleteQuestion = () => {
     if (!selectedQuestionId) return;
-    if (confirm('Are you sure you want to remove this question from the global rubric? It will remain in the question bank.')) {
-      instructorService.deleteGlobalRubricQuestion(groupId || '1', selectedQuestionId);
-      const updated = instructorService.getGlobalRubricQuestions(groupId || '1');
-      setGlobalRubricQuestions(updated);
-      setSelectedQuestionId(updated[0]?.id || null);
-      setIncludedQuestionIds(prev => { const s = new Set(prev); s.delete(selectedQuestionId); return s; });
-    }
+    const question = globalRubricQuestions.find(q => q.id === selectedQuestionId);
+    setDeleteQuestionConfirm({ open: true, questionId: selectedQuestionId, questionTitle: question?.title || '' });
+  };
+  const handleConfirmDeleteQuestion = () => {
+    instructorService.deleteGlobalRubricQuestion(groupId || '1', deleteQuestionConfirm.questionId);
+    const updated = instructorService.getGlobalRubricQuestions(groupId || '1');
+    setGlobalRubricQuestions(updated);
+    setSelectedQuestionId(updated[0]?.id || null);
+    setIncludedQuestionIds(prev => { const s = new Set(prev); s.delete(deleteQuestionConfirm.questionId); return s; });
+    setDeleteQuestionConfirm({ open: false, questionId: '', questionTitle: '' });
   };
 
   // ── Question bank handlers ──
@@ -1106,6 +1129,70 @@ function AdminSimulationGroupPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAccessCodeDialogOpen(false)} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
             <Button onClick={async () => { setIsAccessCodeDialogOpen(false); await handleGenerateAccessCode(); }} style={{ backgroundColor: UI_COLORS.status.error, color: UI_COLORS.button.text }}>Confirm</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Patient Confirmation Dialog */}
+      <Dialog open={deletePatientConfirm.open} onOpenChange={(open) => setDeletePatientConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Delete {labels.aiPersona}</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "{deletePatientConfirm.patientName}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePatientConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmDeletePatient} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Delete</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Remove Instructor Confirmation Dialog */}
+      <Dialog open={removeInstructorConfirm.open} onOpenChange={(open) => setRemoveInstructorConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Remove Instructor</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove {removeInstructorConfirm.displayName} from this group?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveInstructorConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmRemoveInstructor} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Remove</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore Prompt Confirmation Dialog */}
+      <Dialog open={restorePromptConfirm.open} onOpenChange={(open) => setRestorePromptConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Restore Prompt Version</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to restore this version? Your current unsaved changes will be overwritten.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestorePromptConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmRestorePrompt} style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}>Restore</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Rubric Question Confirmation Dialog */}
+      <Dialog open={deleteQuestionConfirm.open} onOpenChange={(open) => setDeleteQuestionConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Remove Global Question</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove "{deleteQuestionConfirm.questionTitle}" from the global rubric? It will remain in the question bank.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteQuestionConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={handleConfirmDeleteQuestion} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Remove</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

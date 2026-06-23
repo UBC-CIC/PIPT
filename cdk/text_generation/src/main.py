@@ -4,6 +4,7 @@ import json
 import boto3
 import logging
 import psycopg
+from botocore.config import Config
 from langchain_aws import BedrockEmbeddings
 from helpers.cohere_embeddings import CohereBedrockEmbeddings
 
@@ -30,7 +31,14 @@ bedrock_runtime = boto3.client("bedrock-runtime", region_name=REGION)
 # Cohere Embed v4 cross-region inference (us.*) requires a US source region.
 # When deployed outside the US (e.g. ca-central-1), route embedding calls to us-east-1.
 BEDROCK_EMBEDDING_REGION = os.environ.get("BEDROCK_EMBEDDING_REGION", "us-east-1")
-bedrock_embedding_client = boto3.client("bedrock-runtime", region_name=BEDROCK_EMBEDDING_REGION)
+bedrock_embedding_client = boto3.client(
+    "bedrock-runtime",
+    region_name=BEDROCK_EMBEDDING_REGION,
+    config=Config(
+        retries={"max_attempts": 8, "mode": "adaptive"},
+        read_timeout=120,
+    ),
+)
 
 # Cached resources
 connection = None

@@ -77,6 +77,7 @@ export class ApiServiceStack extends cdk.Stack {
     super(scope, id, props);
 
     this.layerList = {};
+    this.dynamoTableName = `${id}-DynamoDB-Conversation-Table`;
 
     const allowedOrigins = [
       "https://main.d3sunerinpg5un.amplifyapp.com",
@@ -445,7 +446,7 @@ export class ApiServiceStack extends cdk.Stack {
               "dynamodb:UpdateItem",
             ],
             [
-              `arn:aws:dynamodb:${this.region}:${this.account}:table/DynamoDB-Conversation-Table`,
+              `arn:aws:dynamodb:${this.region}:${this.account}:table/${this.dynamoTableName}`,
             ]
           ),
           // Bedrock permissions for Nova Sonic
@@ -673,7 +674,7 @@ export class ApiServiceStack extends cdk.Stack {
         securityGroups: [apiLambdaSg],
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           USER_POOL_ID: this.userPool.userPoolId,
           EMBEDDING_STORAGE_BUCKET: embeddingStorageBucket.bucketName,
           ALLOWED_ORIGINS: allowedOriginsEnv,
@@ -814,7 +815,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: Duration.seconds(15),
         environment: {
           SM_DB_CREDENTIALS: db.secretPathTableCreator.secretName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpointTableCreator,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
         },
         vpc: vpcStack.vpc,
         securityGroups: [apiLambdaSg],
@@ -989,7 +990,6 @@ export class ApiServiceStack extends cdk.Stack {
       .defaultChild as lambda.CfnFunction;
     apiGW_authorizationFunction.overrideLogicalId("adminLambdaAuthorizer");
 
-    this.dynamoTableName = "DynamoDB-Conversation-Table";
     const dynamoTableName = this.dynamoTableName;
 
     // The conversation table is referenced by name rather than owned by CDK. It was created
@@ -1476,7 +1476,7 @@ export class ApiServiceStack extends cdk.Stack {
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpointAdmin,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           REGION: this.region,
           BEDROCK_LLM_PARAM: bedrockLLMParameter.parameterName,
           EMBEDDING_MODEL_PARAM: embeddingModelParameter.parameterName,
@@ -1822,7 +1822,7 @@ export class ApiServiceStack extends cdk.Stack {
         functionName: `${id}-DataIngestLambdaDockerFunction`,
         environment: {
           SM_DB_CREDENTIALS: db.secretPathAdminName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpointAdmin,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           BUCKET: dataIngestionBucket.bucketName,
           REGION: this.region,
           EMBEDDING_BUCKET_NAME: embeddingStorageBucket.bucketName,

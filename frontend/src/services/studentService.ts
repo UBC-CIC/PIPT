@@ -149,6 +149,11 @@ export interface AIDebriefData {
     incorrectElements?: string[];
     overallAlignment?: string;
   };
+  evaluationIntegrity?: {
+    evaluationComplete: boolean;
+    degraded: boolean;
+    degradedReasons: { component: string; reason: string; impact: string }[];
+  };
 }
 
 /**
@@ -620,6 +625,17 @@ export async function fetchDebrief(sessionId: string): Promise<AIDebriefData | n
           missingElements: debrief.answer_key_comparison.missing_elements,
           incorrectElements: debrief.answer_key_comparison.incorrect_elements,
           overallAlignment: debrief.answer_key_comparison.overall_alignment,
+        } : undefined,
+        evaluationIntegrity: debrief.evaluation_integrity ? {
+          evaluationComplete: debrief.evaluation_integrity.evaluation_complete ?? true,
+          degraded: debrief.evaluation_integrity.degraded ?? false,
+          degradedReasons: (debrief.evaluation_integrity.degraded_reasons || []).map(
+            (r: { component?: string; reason?: string; impact?: string }) => ({
+              component: r.component || '',
+              reason: r.reason || '',
+              impact: r.impact || '',
+            })
+          ),
         } : undefined,
       };
 
@@ -1229,6 +1245,11 @@ export interface UpdatedDebriefData {
   chunk2: DebriefChunk2 | null;
   dtpSubmission: string[] | null;
   recommendationSubmission: { recommendation: string; rationale: string }[] | null;
+  evaluationIntegrity?: {
+    evaluationComplete: boolean;
+    degraded: boolean;
+    degradedReasons: { component: string; reason: string; impact: string }[];
+  };
 }
 
 /**
@@ -1431,7 +1452,20 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
     const dtpSubmission = Array.isArray(data.dtp_submission) ? data.dtp_submission : null;
     const recommendationSubmission = Array.isArray(data.recommendation_submission) ? data.recommendation_submission : null;
 
-    return { chunk1, chunk2, dtpSubmission, recommendationSubmission };
+    // Map evaluation integrity metadata
+    const evaluationIntegrity = debrief.evaluation_integrity ? {
+      evaluationComplete: debrief.evaluation_integrity.evaluation_complete ?? true,
+      degraded: debrief.evaluation_integrity.degraded ?? false,
+      degradedReasons: (debrief.evaluation_integrity.degraded_reasons || []).map(
+        (r: { component?: string; reason?: string; impact?: string }) => ({
+          component: r.component || '',
+          reason: r.reason || '',
+          impact: r.impact || '',
+        })
+      ),
+    } : undefined;
+
+    return { chunk1, chunk2, dtpSubmission, recommendationSubmission, evaluationIntegrity };
   }
 
   throw new Error('Debrief generation timed out');

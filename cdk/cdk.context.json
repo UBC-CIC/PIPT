@@ -20,5 +20,10 @@
   "hosted-zone:account=808491096318:domainName=genrx2.cloud-inov.com:region=ca-central-1": {
     "Id": "/hostedzone/Z075995536VNUGVD5TC03",
     "Name": "genrx2.cloud-inov.com."
-  }
+  },
+  "availability-zones:account=148761648663:region=ca-central-1": [
+    "ca-central-1a",
+    "ca-central-1b",
+    "ca-central-1d"
+  ]
 }

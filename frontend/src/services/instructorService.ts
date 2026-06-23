@@ -1990,6 +1990,17 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
         incorrectElements: debrief.answer_key_comparison.incorrect_elements,
         overallAlignment: debrief.answer_key_comparison.overall_alignment,
       } : undefined,
+      evaluationIntegrity: debrief.evaluation_integrity ? {
+        evaluationComplete: debrief.evaluation_integrity.evaluation_complete ?? true,
+        degraded: debrief.evaluation_integrity.degraded ?? false,
+        degradedReasons: (debrief.evaluation_integrity.degraded_reasons || []).map(
+          (r: { component?: string; reason?: string; impact?: string }) => ({
+            component: r.component || '',
+            reason: r.reason || '',
+            impact: r.impact || '',
+          })
+        ),
+      } : undefined,
     };
 
     // Build chunk1 (key questions)
@@ -2037,7 +2048,7 @@ async function fetchInstructorDebrief(sessionId: string, simulationGroupId: stri
       };
     }
 
-    return { legacy, updated: { chunk1, chunk2, dtpSubmission: null, recommendationSubmission: null } };
+    return { legacy, updated: { chunk1, chunk2, dtpSubmission: null, recommendationSubmission: null, evaluationIntegrity: legacy.evaluationIntegrity } };
   } catch (error) {
     console.error('[fetchInstructorDebrief] failed', { sessionId, error });
     return null;

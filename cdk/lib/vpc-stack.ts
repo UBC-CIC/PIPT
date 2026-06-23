@@ -11,21 +11,39 @@ export class VpcStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const existingVpcId: string = ""; // CHANGE IF DEPLOYING WITH EXISTING VPC
+    // --- VPC configuration from CDK context (no source edits needed) ---
+    // Deploy with existing VPC:  cdk deploy -c existingVpcId=vpc-0abc123...
+    // All keys are optional; defaults preserve current behavior.
+    const existingVpcId: string =
+      this.node.tryGetContext("existingVpcId") ?? "";
 
     if (existingVpcId !== "") {
-      const AWSControlTowerStackSet =
-        "StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-df80d055-f27d-4b9a-917f-f0db2da2ad91"; // CHANGE TO YOUR CONTROL TOWER STACK SET
-      const existingPublicSubnetID: string = ""; // CHANGE IF DEPLOYING WITH EXISTING PUBLIC SUBNET
+      const AWSControlTowerStackSet: string =
+        this.node.tryGetContext("controlTowerStackSet") ??
+        "StackSet-AWSControlTowerBP-VPC-ACCOUNT-FACTORY-V1-df80d055-f27d-4b9a-917f-f0db2da2ad91";
 
-      const genrxPrefix = "GENRX-production";
+      const existingPublicSubnetID: string =
+        this.node.tryGetContext("existingPublicSubnetId") ?? "";
 
-      this.vpcCidrString = "172.31.128.0/20";
+      const genrxPrefix: string =
+        this.node.tryGetContext("StackPrefix") ?? "GENRX-production";
+
+      this.vpcCidrString =
+        this.node.tryGetContext("existingVpcCidr") ?? "172.31.128.0/20";
+
+      // Public subnet CIDR — should be a small slice, NOT the whole VPC range.
+      // Defaults to vpcCidrString for backward-compat with existing deployments.
+      const publicSubnetCidr: string =
+        this.node.tryGetContext("publicSubnetCidr") ?? this.vpcCidrString;
+
+      // Availability zones — derive from context or fall back to stack environment
+      const azs: string[] =
+        this.node.tryGetContext("availabilityZones") ?? this.availabilityZones;
 
       // VPC for application
       this.vpc = ec2.Vpc.fromVpcAttributes(this, `${id}-Vpc`, {
         vpcId: existingVpcId,
-        availabilityZones: ["ca-central-1a", "ca-central-1b", "ca-central-1d"],
+        availabilityZones: azs,
         privateSubnetIds: [
           Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet1AID`),
           Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet2AID`),
@@ -60,8 +78,8 @@ export class VpcStack extends Stack {
         // Create a public subnet
         const publicSubnet = new ec2.Subnet(this, `PublicSubnet`, {
           vpcId: this.vpc.vpcId,
-          availabilityZone: this.vpc.availabilityZones[0],
-          cidrBlock: this.vpcCidrString,
+          availabilityZone: azs[0],
+          cidrBlock: publicSubnetCidr,
           mapPublicIpOnLaunch: true,
         });
 
@@ -116,43 +134,48 @@ export class VpcStack extends Stack {
         );
       }
 
-      // Add interface endpoints for private subnets
-      this.vpc.addInterfaceEndpoint("SSM Endpoint", {
-        service: ec2.InterfaceVpcEndpointAwsService.SSM,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        privateDnsEnabled: true, // Enable private DNS for proper resolution
-      });
+      const skipVpcEndpoints: boolean =
+        (this.node.tryGetContext("skipVpcEndpoints") ?? false) === true;
 
-      this.vpc.addInterfaceEndpoint("Secrets Manager Endpoint", {
-        service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        privateDnsEnabled: true, // Enable private DNS for proper resolution
-      });
+      if (!skipVpcEndpoints) {
+        // Add interface endpoints for private subnets
+        this.vpc.addInterfaceEndpoint("SSM Endpoint", {
+          service: ec2.InterfaceVpcEndpointAwsService.SSM,
+          subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+          privateDnsEnabled: true, // Enable private DNS for proper resolution
+        });
 
-      this.vpc.addInterfaceEndpoint("RDS Endpoint", {
-        service: ec2.InterfaceVpcEndpointAwsService.RDS,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        privateDnsEnabled: true, // Enable private DNS for proper resolution
-      });
+        this.vpc.addInterfaceEndpoint("Secrets Manager Endpoint", {
+          service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+          subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+          privateDnsEnabled: true, // Enable private DNS for proper resolution
+        });
 
-      // Add API Gateway VPC endpoint
-      this.vpc.addInterfaceEndpoint("API Gateway Endpoint", {
-        service: ec2.InterfaceVpcEndpointAwsService.APIGATEWAY,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-        privateDnsEnabled: true,
-      });
+        // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
+        this.vpc.addGatewayEndpoint("DynamoDB Endpoint", {
+          service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+          subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
+        });
 
-      // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
-      this.vpc.addGatewayEndpoint("DynamoDB Endpoint", {
-        service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
-        subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
-      });
+        // Free gateway endpoint — routes S3 traffic within the AWS backbone instead of through NAT
+        this.vpc.addGatewayEndpoint("S3 Endpoint", {
+          service: ec2.GatewayVpcEndpointAwsService.S3,
+          subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
+        });
+      } else {
+        console.log("Skipping VPC endpoint creation — endpoints already exist on this VPC.");
+      }
 
       this.vpc.addFlowLog(`${id}-vpcFlowLog`);
 
 
     } else {
-      this.vpcCidrString = "10.0.0.0/16";
+      this.vpcCidrString =
+        this.node.tryGetContext("vpcCidr") ?? "10.0.0.0/16";
+      const maxAzs: number =
+        this.node.tryGetContext("maxAzs") ?? 2;
+      const natGateways: number =
+        this.node.tryGetContext("natGateways") ?? 1;
 
     // REVIEW: A single NAT Gateway is a single point of failure. If the AZ hosting the NAT GW
     // goes down, all private-subnet Lambda functions and ECS tasks lose internet access.
@@ -164,8 +187,8 @@ export class VpcStack extends Stack {
       this.vpc = new ec2.Vpc(this, "genrx-Vpc", {
         ipAddresses: ec2.IpAddresses.cidr(this.vpcCidrString),
         natGatewayProvider: natGatewayProvider,
-        natGateways: 1,
-        maxAzs: 2,
+        natGateways: natGateways,
+        maxAzs: maxAzs,
         subnetConfiguration: [
           {
             name: "public-subnet-1",
@@ -184,15 +207,12 @@ export class VpcStack extends Stack {
 
       this.vpc.addFlowLog("genrx-vpcFlowLog");
 
+      // Populate private subnet CIDRs for downstream security-group rules (e.g., DatabaseStack)
+      this.privateSubnetsCidrStrings = this.vpc.privateSubnets.map(s => s.ipv4CidrBlock);
+
       // Add secrets manager endpoint to VPC
       this.vpc.addInterfaceEndpoint(`${id}-Secrets Manager Endpoint`, {
         service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
-        subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
-      });
-
-      // Add RDS endpoint to VPC
-      this.vpc.addInterfaceEndpoint(`${id}-RDS Endpoint`, {
-        service: ec2.InterfaceVpcEndpointAwsService.RDS,
         subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
       });
 
@@ -205,6 +225,12 @@ export class VpcStack extends Stack {
       // Free gateway endpoint — routes DynamoDB traffic within the AWS backbone instead of through NAT
       this.vpc.addGatewayEndpoint(`${id}-DynamoDB Endpoint`, {
         service: ec2.GatewayVpcEndpointAwsService.DYNAMODB,
+        subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
+      });
+
+      // Free gateway endpoint — routes S3 traffic within the AWS backbone instead of through NAT
+      this.vpc.addGatewayEndpoint(`${id}-S3 Endpoint`, {
+        service: ec2.GatewayVpcEndpointAwsService.S3,
         subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
       });
     }

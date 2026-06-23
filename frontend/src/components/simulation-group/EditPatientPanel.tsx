@@ -3,6 +3,7 @@ import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Load
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import UserAvatar from '@/components/UserAvatar';
 import VoicePreview from '@/components/prompt-playground/VoicePreview';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
@@ -214,6 +215,41 @@ function InfoTab({
 
   return (
     <div className="space-y-6 max-w-2xl">
+      {/* Photo Delete Confirmation Dialog */}
+      <Dialog open={patientEditor.photoDeletePending} onOpenChange={(open) => { if (!open) patientEditor.cancelPhotoDelete(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Remove Photo</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove this photo?
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button onClick={patientEditor.cancelPhotoDelete} variant="outline" style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={patientEditor.confirmPhotoDelete} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Remove</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* File Delete Confirmation Dialog */}
+      <Dialog open={patientEditor.fileDeletePending.pending} onOpenChange={(open) => { if (!open) patientEditor.cancelFileDelete(); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Delete File</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "<span className="font-medium">{patientEditor.fileDeletePending.filename}</span>"? This will also remove its embeddings.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button onClick={patientEditor.cancelFileDelete} variant="outline" style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button onClick={patientEditor.confirmFileDelete} style={{ backgroundColor: '#ef4444', color: '#fff' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}>Delete</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
         {patientEditor.selectedPatientForEdit === 'new' ? `Create ${labels.aiPersona} Information` : `Edit ${labels.aiPersona} Information`}
       </h3>
@@ -687,8 +723,53 @@ function QuestionsTab({
   onSaveCaseQuestion: (patientId: string, question: GlobalRubricQuestion) => void;
   onDeleteCaseQuestion: (patientId: string, questionId: string) => void;
 }) {
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; questionId: string; questionTitle: string }>({
+    open: false, questionId: '', questionTitle: ''
+  });
+
+  const handleConfirmDeleteCaseQuestion = () => {
+    if (patientEditor.selectedPatientForEdit && deleteConfirm.questionId) {
+      onDeleteCaseQuestion(patientEditor.selectedPatientForEdit, deleteConfirm.questionId);
+      patientEditor.setCaseSpecificQuestions(patientEditor.caseSpecificQuestions.filter(q => q.id !== deleteConfirm.questionId));
+    }
+    setDeleteConfirm({ open: false, questionId: '', questionTitle: '' });
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Remove Case Question
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove "<span className="font-medium">{deleteConfirm.questionTitle}</span>" from this patient? This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmDeleteCaseQuestion}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
         Case-Specific Key Questions
       </h2>
@@ -903,8 +984,7 @@ function QuestionsTab({
                     <Button
                       onClick={() => {
                         if (patientEditor.selectedPatientForEdit) {
-                          onDeleteCaseQuestion(patientEditor.selectedPatientForEdit, question.id);
-                          patientEditor.setCaseSpecificQuestions(patientEditor.caseSpecificQuestions.filter(q => q.id !== question.id));
+                          setDeleteConfirm({ open: true, questionId: question.id, questionTitle: question.title });
                         }
                       }}
                       variant="outline"
@@ -1043,8 +1123,58 @@ function MaterialsTab({
   filteredMaterials: CaseMaterial[];
 }) {
   const { showNotification } = useNotification();
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; materialId: string; materialTitle: string }>({
+    open: false, materialId: '', materialTitle: ''
+  });
+
+  const handleConfirmDeleteMaterial = async () => {
+    if (patientEditor.selectedPatientForEdit && deleteConfirm.materialId) {
+      try {
+        await instructorService.deleteCaseMaterial(patientEditor.selectedPatientForEdit, deleteConfirm.materialId);
+        patientEditor.setCaseMaterials(patientEditor.caseMaterials.filter(m => m.id !== deleteConfirm.materialId));
+        showNotification({ message: 'Material deleted successfully', type: 'success' });
+      } catch (error) {
+        console.error('Failed to delete material:', error);
+        showNotification({ message: 'Failed to delete material', type: 'error' });
+      }
+    }
+    setDeleteConfirm({ open: false, materialId: '', materialTitle: '' });
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Delete Material
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to delete "<span className="font-medium">{deleteConfirm.materialTitle}</span>"? This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmDeleteMaterial}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Delete
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
         Physical Assessment Materials
       </h2>
@@ -1308,17 +1438,8 @@ function MaterialsTab({
                       Save
                     </Button>
                     <Button
-                      onClick={async () => {
-                        if (patientEditor.selectedPatientForEdit) {
-                          try {
-                            await instructorService.deleteCaseMaterial(patientEditor.selectedPatientForEdit, material.id);
-                            patientEditor.setCaseMaterials(patientEditor.caseMaterials.filter(m => m.id !== material.id));
-                            showNotification({ message: 'Material deleted successfully', type: 'success' });
-                          } catch (error) {
-                            console.error('Failed to delete material:', error);
-                            showNotification({ message: 'Failed to delete material', type: 'error' });
-                          }
-                        }
+                      onClick={() => {
+                        setDeleteConfirm({ open: true, materialId: material.id, materialTitle: material.title });
                       }}
                       variant="outline"
                       className="px-8 py-3 text-base font-medium transition-colors text-white"
@@ -1387,7 +1508,12 @@ function PatientDTPsTab({
   const handleDelete = async (groupDtpId: string) => {
     if (!patientId || !onDeletePatientDTP) return;
     await onDeletePatientDTP(patientId, groupDtpId);
+    setDeleteConfirm({ open: false, groupDtpId: '', dtpTitle: '' });
   };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; groupDtpId: string; dtpTitle: string }>({
+    open: false, groupDtpId: '', dtpTitle: ''
+  });
 
   const handleSaveExisting = async (dtp: DTPAssignment) => {
     if (!onUpdatePatientDTP || !dtp.dtpId) return;
@@ -1412,6 +1538,39 @@ function PatientDTPsTab({
 
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Remove DTP
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove "<span className="font-medium">{deleteConfirm.dtpTitle}</span>" from this patient? This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleDelete(deleteConfirm.groupDtpId)}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
         Patient-Specific DTPs
       </h2>
@@ -1529,7 +1688,7 @@ function PatientDTPsTab({
                         Save
                       </Button>
                       <Button
-                        onClick={() => handleDelete(dtp.groupDtpId)}
+                        onClick={() => setDeleteConfirm({ open: true, groupDtpId: dtp.groupDtpId, dtpTitle: dtp.title || 'Untitled DTP' })}
                         variant="outline"
                         className="px-8 py-3 text-base font-medium transition-colors text-white"
                         style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }}
@@ -1653,7 +1812,12 @@ function PatientRecommendationsTab({
   const handleDelete = async (groupRecommendationId: string) => {
     if (!patientId || !onDeletePatientRecommendation) return;
     await onDeletePatientRecommendation(patientId, groupRecommendationId);
+    setDeleteConfirm({ open: false, groupRecommendationId: '', recTitle: '' });
   };
+
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; groupRecommendationId: string; recTitle: string }>({
+    open: false, groupRecommendationId: '', recTitle: ''
+  });
 
   const handleSaveExisting = async (rec: RecommendationAssignment) => {
     if (!onUpdatePatientRecommendation || !rec.recommendationId) return;
@@ -1676,6 +1840,39 @@ function PatientRecommendationsTab({
 
   return (
     <div className="max-w-5xl mx-auto p-8 space-y-6">
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteConfirm.open} onOpenChange={(open) => setDeleteConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>
+              Remove Recommendation
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm" style={{ color: UI_COLORS.text.body }}>
+              Are you sure you want to remove "<span className="font-medium">{deleteConfirm.recTitle}</span>" from this patient? This action cannot be undone.
+            </p>
+          </div>
+          <div className="flex justify-end gap-3 pt-2 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+            <Button
+              onClick={() => setDeleteConfirm(prev => ({ ...prev, open: false }))}
+              variant="outline"
+              style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => handleDelete(deleteConfirm.groupRecommendationId)}
+              style={{ backgroundColor: '#ef4444', color: '#fff' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+            >
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>
         Patient-Specific Recommendations
       </h2>
@@ -1777,7 +1974,7 @@ function PatientRecommendationsTab({
                         Save
                       </Button>
                       <Button
-                        onClick={() => handleDelete(rec.groupRecommendationId)}
+                        onClick={() => setDeleteConfirm({ open: true, groupRecommendationId: rec.groupRecommendationId, recTitle: rec.title || 'Untitled Recommendation' })}
                         variant="outline"
                         className="px-8 py-3 text-base font-medium transition-colors text-white"
                         style={{ backgroundColor: SIMULATION_GROUP_COLOR_PALETTE[0], borderColor: SIMULATION_GROUP_COLOR_PALETTE[0] }}

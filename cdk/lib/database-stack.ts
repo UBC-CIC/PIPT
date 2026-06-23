@@ -5,9 +5,8 @@ import { Duration } from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ec2 from "aws-cdk-lib/aws-ec2";
-import * as secretmanager from 'aws-cdk-lib/aws-secretsmanager';  // NOTE: duplicate import — 'secretmanager' and 'secretsmanager' both reference the same module
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager'; // NOTE: this is the same module as 'secretmanager' above — consolidate to one alias
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 
 import { VpcStack } from './vpc-stack';
 
@@ -17,8 +16,6 @@ export class DatabaseStack extends Stack {
     public readonly secretPathUser: secretsmanager.Secret;
     public readonly secretPathTableCreator: secretsmanager.Secret;
     public readonly rdsProxyEndpoint: string;
-    public readonly rdsProxyEndpointTableCreator: string;
-    public readonly rdsProxyEndpointAdmin: string;
     public readonly dbSecurityGroup: ec2.ISecurityGroup;
 
     constructor(scope: Construct, id: string, vpcStack: VpcStack, props?: StackProps) {
@@ -34,7 +31,7 @@ export class DatabaseStack extends Stack {
         /**
          * Retrieve a secret from Secret Manager
          */
-        const secret = secretmanager.Secret.fromSecretNameV2(this, "ImportedSecrets", "GENRXSecrets");
+        const secret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecrets", "GENRXSecrets");
 
         /**
          * Create Secrets for various users
@@ -128,11 +125,11 @@ export class DatabaseStack extends Stack {
             assumedBy: new iam.ServicePrincipal('rds.amazonaws.com')
         });
 
-        // REVIEW: rds-db:connect on '*' is overly broad. Scope this to the specific
-        // RDS instance ARN and database user, e.g.:
-        //   `arn:aws:rds-db:${this.region}:${this.account}:dbuser:${dbInstance.instanceResourceId}/app_rw`
+        // Scope rds-db:connect to the specific RDS instance
         rdsProxyRole.addToPolicy(new iam.PolicyStatement({
-            resources: ['*'],
+            resources: [
+                `arn:aws:rds-db:${this.region}:${this.account}:dbuser:${this.dbInstance.instanceIdentifier}/*`
+            ],
             actions: [
                 'rds-db:connect',
             ],
@@ -145,31 +142,17 @@ export class DatabaseStack extends Stack {
          * The Api stack has been updated to only use rdsProxyEndpoint — once all environments
          * have deployed this code, a follow-up PR will consolidate to a single proxy.
          */
-        const secretPathAdmin = secretmanager.Secret.fromSecretNameV2(this, 'AdminSecret', this.secretPathAdminName);
+        const secretPathAdmin = secretsmanager.Secret.fromSecretNameV2(this, 'AdminSecret', this.secretPathAdminName);
 
         const rdsProxy = this.dbInstance.addProxy(id + '-proxy', {
-            secrets: [this.secretPathUser!],
+            secrets: [this.secretPathUser!, this.secretPathTableCreator!, secretPathAdmin],
             vpc: vpcStack.vpc,
             role: rdsProxyRole,
             securityGroups: this.dbInstance.connections.securityGroups,
             requireTLS: true,
         });
 
-        const rdsProxyTableCreator = this.dbInstance.addProxy(id + '+proxy', {
-            secrets: [this.secretPathTableCreator!],
-            vpc: vpcStack.vpc,
-            role: rdsProxyRole,
-            securityGroups: this.dbInstance.connections.securityGroups,
-            requireTLS: true,
-        });
 
-        const rdsProxyAdmin = this.dbInstance.addProxy(id + '-proxy-admin', {
-            secrets: [secretPathAdmin],
-            vpc: vpcStack.vpc,
-            role: rdsProxyRole,
-            securityGroups: this.dbInstance.connections.securityGroups,
-            requireTLS: true,
-        });
 
         /**
          * Workaround for TargetGroupName not being set automatically by CDK.
@@ -180,24 +163,12 @@ export class DatabaseStack extends Stack {
         }) as rds.CfnDBProxyTargetGroup;
         targetGroup.addPropertyOverride('TargetGroupName', 'default');
 
-        let targetGroupTableCreator = rdsProxyTableCreator.node.children.find((child: any) => {
-            return child instanceof rds.CfnDBProxyTargetGroup;
-        }) as rds.CfnDBProxyTargetGroup;
-        targetGroupTableCreator.addPropertyOverride('TargetGroupName', 'default');
-
-        let targetGroupAdmin = rdsProxyAdmin.node.children.find((child: any) => {
-            return child instanceof rds.CfnDBProxyTargetGroup;
-        }) as rds.CfnDBProxyTargetGroup;
-        targetGroupAdmin.addPropertyOverride('TargetGroupName', 'default');
-
         /**
          * Grant the role permission to connect to the database
          */
         this.dbInstance.grantConnect(rdsProxyRole);
 
         this.rdsProxyEndpoint = rdsProxy.endpoint;
-        this.rdsProxyEndpointTableCreator = rdsProxyTableCreator.endpoint;
-        this.rdsProxyEndpointAdmin = rdsProxyAdmin.endpoint;
     }
 
 }
