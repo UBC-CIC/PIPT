@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const { spawn } = require("child_process");
 const WebSocket = require("ws");
 const { verifyToken, getStsCredentials } = require("./auth");
+const { verifySessionOwnership } = require("./session-auth");
 const { SignatureV4 } = require("@smithy/signature-v4");
 const { HttpRequest } = require("@smithy/protocol-http");
 const { defaultProvider } = require("@aws-sdk/credential-provider-node");
@@ -144,7 +145,11 @@ const _smClient = new SecretsManagerClient({ region: process.env.AWS_REGION || "
 app.use(express.json());
 
 app.post("/stream-callback", (req, res) => {
-  if (streamCallbackToken && req.headers["x-callback-token"] !== streamCallbackToken) {
+  // Fail-closed: reject all requests if the callback token was never loaded
+  if (!streamCallbackToken) {
+    return res.status(503).json({ error: "Stream callback authentication not configured" });
+  }
+  if (req.headers["x-callback-token"] !== streamCallbackToken) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
@@ -251,6 +256,17 @@ io.on("connection", (socket) => {
     if (now - lastNovaSonicStart < 2000) return;
     lastNovaSonicStart = now;
     console.log("🚀 Starting Nova Sonic session for client:", socket.id);
+
+    // ── Session ownership verification ────────────────────────────────────
+    const sessionId = config.session_id;
+    if (sessionId && socket.userEmail) {
+      const ownership = await verifySessionOwnership(sessionId, socket.userEmail);
+      if (!ownership.authorized) {
+        console.warn("🚫 Session ownership denied for start-nova-sonic:", socket.userEmail, "session:", sessionId);
+        socket.emit("nova-error", { error: "Access denied: you do not own this session" });
+        return;
+      }
+    }
 
     audioStarted = false;
 
@@ -612,6 +628,20 @@ io.on("connection", (socket) => {
     console.log("🚀 Text generation request:", data);
 
     const sessionId = data.session_id;
+
+    // ── Session ownership verification ────────────────────────────────────
+    if (sessionId && socket.userEmail) {
+      const ownership = await verifySessionOwnership(sessionId, socket.userEmail);
+      if (!ownership.authorized) {
+        console.warn("🚫 Session ownership denied for text-generation:", socket.userEmail, "session:", sessionId);
+        socket.emit("text-stream", {
+          type: "error",
+          content: "Access denied: you do not own this session",
+        });
+        textGenInFlight = false;
+        return;
+      }
+    }
 
     // Register this socket so /stream-callback can find it
     textStreamSockets.set(sessionId, socket);

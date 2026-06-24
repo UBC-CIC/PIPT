@@ -18,6 +18,19 @@ logger.setLevel(logging.INFO)
 # Environment variables
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
 REGION = os.environ["REGION"]
+
+# CORS: Use ALLOWED_ORIGINS env var (comma-separated) instead of wildcard
+_ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("ALLOWED_ORIGINS", "*").split(",") if o.strip()]
+
+def _get_cors_origin(event):
+    """Return the Access-Control-Allow-Origin value based on the request origin."""
+    if "*" in _ALLOWED_ORIGINS:
+        return "*"
+    origin = (event.get("headers") or {}).get("origin") or (event.get("headers") or {}).get("Origin") or ""
+    if origin in _ALLOWED_ORIGINS:
+        return origin
+    # Fallback: return first allowed origin (won't match but is safe)
+    return _ALLOWED_ORIGINS[0] if _ALLOWED_ORIGINS else ""
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
 BEDROCK_LLM_PARAM = os.environ["BEDROCK_LLM_PARAM"]
 EMBEDDING_MODEL_PARAM = os.environ["EMBEDDING_MODEL_PARAM"]
@@ -254,7 +267,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps("Missing required parameters: simulation_group_id, session_id, or persona_id")
@@ -288,7 +301,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps(debrief_result, default=str),
@@ -301,7 +314,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({"error": "Internal server error"}),
@@ -321,7 +334,7 @@ def handler(event, context):
                     "headers": {
                         "Content-Type": "application/json",
                         "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Origin": _get_cors_origin(event),
                         "Access-Control-Allow-Methods": "*",
                     },
                     "body": json.dumps("Missing required fields: message_id, message_content"),
@@ -365,7 +378,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({"status": "matching_started"}),
@@ -377,7 +390,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({"error": "Internal server error"}),
@@ -396,7 +409,7 @@ def handler(event, context):
                     "headers": {
                         "Content-Type": "application/json",
                         "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Origin": _get_cors_origin(event),
                         "Access-Control-Allow-Methods": "*",
                     },
                     "body": json.dumps({"error": "debrief_prompt is required"}),
@@ -417,7 +430,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps(result, default=str),
@@ -430,7 +443,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({"error": "Internal server error"}),
@@ -451,7 +464,7 @@ def handler(event, context):
                     "headers": {
                         "Content-Type": "application/json",
                         "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Origin": _get_cors_origin(event),
                         "Access-Control-Allow-Methods": "*",
                     },
                     "body": json.dumps({"error": "system_prompt is required"}),
@@ -464,7 +477,7 @@ def handler(event, context):
                     "headers": {
                         "Content-Type": "application/json",
                         "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": "*",
+                        "Access-Control-Allow-Origin": _get_cors_origin(event),
                         "Access-Control-Allow-Methods": "*",
                     },
                     "body": json.dumps({"error": "Persona not found"}),
@@ -525,7 +538,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({
@@ -540,7 +553,7 @@ def handler(event, context):
                 "headers": {
                     "Content-Type": "application/json",
                     "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
                     "Access-Control-Allow-Methods": "*",
                 },
                 "body": json.dumps({"error": "Internal server error"}),
@@ -566,7 +579,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Error fetching system prompt')
@@ -580,7 +593,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Error fetching persona details')
@@ -643,7 +656,7 @@ def handler(event, context):
                         "headers": {
                             "Content-Type": "application/json",
                             "Access-Control-Allow-Headers": "*",
-                            "Access-Control-Allow-Origin": "*",
+                            "Access-Control-Allow-Origin": _get_cors_origin(event),
                             "Access-Control-Allow-Methods": "*",
                         },
                         'body': json.dumps({
@@ -671,7 +684,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Error getting LLM from Bedrock')
@@ -696,7 +709,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Error retrieving vectorstore config')
@@ -717,7 +730,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps('Error creating history-aware retriever')
@@ -754,7 +767,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             'body': json.dumps("Internal server error")
@@ -772,7 +785,7 @@ def handler(event, context):
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps(response),
@@ -785,7 +798,7 @@ def handler(event, context):
             "headers": {
                 "Content-Type": "application/json",
                 "Access-Control-Allow-Headers": "*",
-                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Origin": _get_cors_origin(event),
                 "Access-Control-Allow-Methods": "*",
             },
             "body": json.dumps({

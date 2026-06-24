@@ -8,6 +8,7 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity": "^3.0.0",
     "@aws-sdk/client-secrets-manager": "^3.0.0",
+    "postgres": "^3.4.4",
     "@aws-sdk/client-sts": "^3.0.0",
     "@aws-sdk/credential-provider-node": "^3.0.0",
     "@smithy/protocol-http": "^3.0.0",

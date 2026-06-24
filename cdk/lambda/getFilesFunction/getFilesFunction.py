@@ -161,8 +161,40 @@ def get_file_metadata_from_db(persona_id, file_name, file_type):
         connection.rollback()
         return None, None
 
+def verify_enrollment(user_email, simulation_group_id):
+    """Verify the requesting user is enrolled in the simulation group or is an admin/instructor."""
+    conn = connect_to_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT u.roles FROM "users" u
+               WHERE u.user_email = %s
+               AND (
+                 'admin' = ANY(u.roles)
+                 OR 'instructor' = ANY(u.roles)
+                 OR EXISTS (
+                   SELECT 1 FROM "enrollments" e
+                   WHERE e.user_id = u.user_id AND e.simulation_group_id = %s
+                 )
+               )""",
+            (user_email, simulation_group_id)
+        )
+        result = cur.fetchone()
+        cur.close()
+        if result is None:
+            return None
+        return result[0]  # Return the roles array
+    except Exception as e:
+        cur.close()
+        logger.error(f"Error verifying enrollment: {e}")
+        return None
+
+
 @logger.inject_lambda_context
 def lambda_handler(event, context):
+    # Extract user identity from authorizer context
+    user_email = event.get("requestContext", {}).get("authorizer", {}).get("email", "")
+
     query_params = event.get("queryStringParameters", {})
 
     simulation_group_id = query_params.get("simulation_group_id", "")
@@ -178,6 +210,22 @@ def lambda_handler(event, context):
             "headers": get_cors_headers(event),
             'body': json.dumps('Missing required parameters: simulation_group_id or persona_id')
         }
+
+    # Verify enrollment/authorization
+    user_roles = verify_enrollment(user_email, simulation_group_id)
+    if user_roles is None:
+        logger.warning("Unauthorized access attempt to getFiles", extra={
+            "user_email": user_email,
+            "simulation_group_id": simulation_group_id
+        })
+        return {
+            'statusCode': 403,
+            "headers": get_cors_headers(event),
+            'body': json.dumps('Forbidden: You are not enrolled in this simulation group')
+        }
+
+    # Determine if caller is a student (not admin or instructor)
+    is_student = 'admin' not in user_roles and 'instructor' not in user_roles
 
     try:
         document_prefix = f"{simulation_group_id}/{persona_id}/documents/"
@@ -238,13 +286,16 @@ def lambda_handler(event, context):
             "profile_picture": profile_picture_url,
         })
 
+        # Exclude answer_key_files from student responses
+        response_answer_key_files = {} if is_student else answer_key_files_urls
+
         return {
             'statusCode': 200,
             "headers": get_cors_headers(event),
             'body': json.dumps({
                 'document_files': document_files_urls,
                 'info_files': info_files_urls,
-                'answer_key_files': answer_key_files_urls,
+                'answer_key_files': response_answer_key_files,
                 'profile_picture_url': profile_picture_url,
             })
         }

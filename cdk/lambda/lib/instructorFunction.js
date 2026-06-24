@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { initializeConnection } = require("./lib.js");
 const { getCorsHeaders } = require("./cors.js");
+const { verifyGroupOwnership, verifyPersonaOwnership, isAdmin } = require("./authz.js");
 const logger = require("./logger");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
@@ -714,6 +715,17 @@ exports.handler = async (event, context) => {
             const instructor_email = userEmailAttribute || event.queryStringParameters.instructor_email;
             const { prompt } = JSON.parse(event.body);
 
+            // Authorization: verify group ownership (admin bypasses)
+            if (!userRoles.includes("admin")) {
+              const groupAuthz = await verifyGroupOwnership(sqlConnection, simulation_group_id, userEmailAttribute);
+              if (!groupAuthz.authorized) {
+                logger.warn("Forbidden: instructor does not own group", { simulation_group_id, userEmailAttribute });
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden: you do not own this resource" });
+                break;
+              }
+            }
+
             // Retrieve the current system prompt
             const currentPromptResult = await sqlConnection`
               SELECT system_prompt
@@ -940,6 +952,17 @@ exports.handler = async (event, context) => {
           const personaId = event.queryStringParameters.persona_id;
 
           try {
+            // Authorization: verify persona ownership (admin bypasses)
+            if (!userRoles.includes("admin")) {
+              const personaAuthz = await verifyPersonaOwnership(sqlConnection, personaId, userEmailAttribute);
+              if (!personaAuthz.authorized) {
+                logger.warn("Forbidden: instructor does not own persona", { personaId, userEmailAttribute });
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden: you do not own this resource" });
+                break;
+              }
+            }
+
             // Delete the patient from the patients table
             await sqlConnection`
                     DELETE FROM "personas"
@@ -1306,6 +1329,17 @@ exports.handler = async (event, context) => {
             event.queryStringParameters.simulation_group_id;
 
           try {
+            // Authorization: verify group ownership (admin bypasses)
+            if (!userRoles.includes("admin")) {
+              const groupAuthz = await verifyGroupOwnership(sqlConnection, simulationGroupId, userEmailAttribute);
+              if (!groupAuthz.authorized) {
+                logger.warn("Forbidden: instructor does not own group", { simulationGroupId, userEmailAttribute });
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden: you do not own this resource" });
+                break;
+              }
+            }
+
             // Query to get the access code
             const accessCode = await sqlConnection`
               SELECT group_access_code

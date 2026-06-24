@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,63 @@ function SignUpPage() {
   const [error, setError] = useState('');
   const [emailError, setEmailError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendMessage, setResendMessage] = useState('');
+  const [showResend, setShowResend] = useState(false);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Show the resend option after 30 seconds on the verification screen
+  useEffect(() => {
+    if (!showConfirmation) return;
+    const timer = setTimeout(() => setShowResend(true), 30000);
+    return () => clearTimeout(timer);
+  }, [showConfirmation]);
+
+  // Clean up cooldown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
+
+  /**
+   * Start a cooldown timer (30 seconds) to prevent resend spam
+   */
+  const startResendCooldown = () => {
+    setResendCooldown(30);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setResendCooldown((prev) => {
+        if (prev <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  /**
+   * Handle resend verification code
+   */
+  const handleResendCode = async () => {
+    if (resendCooldown > 0 || loading) return;
+    setResendMessage('');
+    setError('');
+
+    try {
+      await authService.resendSignUpCode(email);
+      setResendMessage('A new verification code has been sent to your email.');
+      startResendCooldown();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to resend code';
+      if (message.includes('LimitExceededException')) {
+        setError('Too many attempts. Please wait a few minutes before trying again.');
+      } else {
+        setError(message);
+      }
+    }
+  };
 
   /**
    * Validate email format
@@ -167,6 +224,15 @@ function SignUpPage() {
             </div>
           )}
 
+          {resendMessage && (
+            <div 
+              className="mb-6 p-4 rounded-lg text-sm"
+              style={{ backgroundColor: '#DCFCE7', color: '#166534', borderWidth: '1px', borderStyle: 'solid', borderColor: '#BBF7D0' }}
+            >
+              {resendMessage}
+            </div>
+          )}
+
           <form onSubmit={handleConfirm} className="space-y-6">
             <div>
               <Input
@@ -195,6 +261,24 @@ function SignUpPage() {
               Verify & Sign In
             </Button>
           </form>
+
+          <div className="mt-4 text-center">
+            {showResend && (
+              <>
+                <p className="text-sm mb-2" style={{ color: UI_COLORS.text.muted }}>
+                  Didn't receive a code?
+                </p>
+                <button
+                  onClick={handleResendCode}
+                  disabled={resendCooldown > 0 || loading}
+                  className="underline font-medium hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                  style={{ color: SIMULATION_GROUP_COLOR_PALETTE[2] }}
+                >
+                  {resendCooldown > 0 ? `Resend code (${resendCooldown}s)` : 'Resend code'}
+                </button>
+              </>
+            )}
+          </div>
 
           <div className="mt-6 text-center">
             <button

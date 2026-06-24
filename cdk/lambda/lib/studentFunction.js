@@ -1,6 +1,7 @@
 const { initializeConnection } = require("./lib.js");
 const { getCorsHeaders } = require("./cors.js");
 const logger = require("./logger");
+const { verifySessionOwnership, verifyEnrollment, isAdmin } = require("./authz.js");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
 // SQL conneciton from global variable at lib.js
@@ -550,6 +551,17 @@ exports.handler = async (event, context) => {
           }
 
           try {
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUser = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUser) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Step 1: Get the user ID using the student_email
             const userResult = await sqlConnection`
                     SELECT user_id
@@ -642,6 +654,17 @@ exports.handler = async (event, context) => {
           try {
             const sessionId = event.queryStringParameters.session_id;
 
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUser = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUser) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Query to get all messages in the given session, sorted by time_sent in ascending order (oldest to newest)
             const data = await sqlConnection`
                       SELECT *
@@ -686,6 +709,17 @@ exports.handler = async (event, context) => {
           }
 
           try {
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUserMsg = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUserMsg) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Check message limit for this simulation group
             const groupSettings = await sqlConnection`
               SELECT max_messages_per_chat FROM "simulation_groups"
@@ -797,6 +831,17 @@ exports.handler = async (event, context) => {
           }
 
           try {
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUserAi = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUserAi) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Insert the new AI message into the Messages table with a generated UUID for message_id
             const messageData = await sqlConnection`
                       INSERT INTO "messages" (message_id, chat_id, user_id, sender_type, message_content, sent_at)
@@ -1066,6 +1111,17 @@ exports.handler = async (event, context) => {
             const llmVerdict =
               event.queryStringParameters.llm_verdict === "true"; // Convert to boolean
 
+            // Authorization: verify enrollment in simulation group (admins bypass)
+            const isAdminUserScore = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUserScore) {
+              const enrollment = await verifyEnrollment(sqlConnection, simulationGroupId, userEmailAttribute);
+              if (!enrollment.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Retrieve user_id from the Users table
             const userData = await sqlConnection`
                     SELECT user_id
@@ -1150,6 +1206,17 @@ exports.handler = async (event, context) => {
           const sessionId = event.queryStringParameters.session_id;
 
           try {
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUser = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUser) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Query to get the notes for the session
             const notesData = await sqlConnection`
                     SELECT notes 
@@ -1218,6 +1285,17 @@ exports.handler = async (event, context) => {
           const { notes } = JSON.parse(event.body);
 
           try {
+            // Authorization: verify session ownership (admins bypass)
+            const isAdminUser = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUser) {
+              const ownership = await verifySessionOwnership(sqlConnection, sessionId, userEmailAttribute);
+              if (!ownership.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Update the notes for the session
             const updateResult = await sqlConnection`
                     UPDATE "chats" 
@@ -1303,6 +1381,17 @@ exports.handler = async (event, context) => {
             event.queryStringParameters;
 
           try {
+            // Authorization: verify enrollment in simulation group (admins bypass)
+            const isAdminUserCtx = await isAdmin(sqlConnection, userEmailAttribute);
+            if (!isAdminUserCtx) {
+              const enrollment = await verifyEnrollment(sqlConnection, simulation_group_id, userEmailAttribute);
+              if (!enrollment.authorized) {
+                response.statusCode = 403;
+                response.body = JSON.stringify({ error: "Forbidden" });
+                break;
+              }
+            }
+
             // Get system prompt
             const systemPromptResult = await sqlConnection`
               SELECT system_prompt 
