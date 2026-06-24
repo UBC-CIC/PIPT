@@ -138,6 +138,8 @@ function ManageInstructorsSection() {
   const [users, setUsers] = useState<RegisteredUser[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 5;
 
   useEffect(() => {
     loadUsers();
@@ -200,6 +202,16 @@ function ManageInstructorsSection() {
     return fullName.includes(query) || u.user_email.toLowerCase().includes(query);
   });
 
+  // Reset to page 1 when search changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.ceil(filteredUsers.length / PAGE_SIZE);
+  const startIndex = (currentPage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
@@ -232,10 +244,14 @@ function ManageInstructorsSection() {
           <LoadingIndicator message="Loading users..." />
         </div>
       ) : (
-        <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
+        <>
+          <p className="text-sm mb-3" style={{ color: UI_COLORS.text.muted }}>
+            {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} · {filteredUsers.filter(u => u.roles.includes('instructor')).length} instructor{filteredUsers.filter(u => u.roles.includes('instructor')).length !== 1 ? 's' : ''}
+          </p>
+          <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
           {/* Table Header */}
           <div
-            className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-4 py-3 text-sm font-medium"
+            className="grid grid-cols-[2fr_2fr_100px_160px] gap-4 px-4 py-3 text-sm font-medium"
             style={{ backgroundColor: '#f9fafb', color: UI_COLORS.text.body }}
           >
             <span>Name</span>
@@ -251,12 +267,12 @@ function ManageInstructorsSection() {
             </div>
           ) : (
             <div className="divide-y" style={{ borderColor: UI_COLORS.border.light }}>
-              {filteredUsers.map((user) => {
+              {paginatedUsers.map((user) => {
                 const isInstructor = user.roles.includes('instructor');
                 return (
                   <div
                     key={user.user_id}
-                    className="grid grid-cols-[1fr_1fr_auto_auto] gap-4 px-4 py-3 items-center text-sm"
+                    className="grid grid-cols-[2fr_2fr_100px_160px] gap-4 px-4 py-3 items-center text-sm"
                   >
                     <div className="flex items-center gap-2">
                       {isInstructor && (
@@ -306,7 +322,43 @@ function ManageInstructorsSection() {
               })}
             </div>
           )}
+
+          {/* Pagination Footer */}
+          {filteredUsers.length > 0 && (
+            <div
+              className="flex items-center justify-between px-4 py-3 border-t text-sm"
+              style={{ borderColor: UI_COLORS.border.light, color: UI_COLORS.text.muted }}
+            >
+              <span>
+                Showing {startIndex + 1}–{Math.min(endIndex, filteredUsers.length)} of {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  className="text-xs cursor-pointer"
+                >
+                  Previous
+                </Button>
+                <span className="text-xs">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  className="text-xs cursor-pointer"
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
+        </>
       )}
     </div>
   );
