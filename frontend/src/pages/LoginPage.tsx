@@ -10,7 +10,7 @@ import ChangelogButton from '@/components/ChangelogButton';
 /**
  * LoginPage Component
  * 
- * Authentication page for GENRx - AI Supported Interview Evaluation 2.0
+ * Authentication page for PIPT - AI Supported Interview Evaluation 2.0
  * Connects to Cognito via AWS Amplify for real authentication
  */
 function LoginPage() {
@@ -478,7 +478,7 @@ function LoginPage() {
         <div className="max-w-md text-center">
           <h1 className="text-4xl font-bold leading-tight">
             Welcome to<br />
-            GENRx - AI Supported<br />
+            PIPT - AI Supported<br />
             Interview Evaluation 2.0
           </h1>
         </div>

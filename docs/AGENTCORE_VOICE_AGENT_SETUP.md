@@ -1,4 +1,4 @@
-# GenRx Bedrock AgentCore Voice Agent Setup
+# Patient Interaction Practice Tool Bedrock AgentCore Voice Agent Setup
 
 > **Document Type:** Supplementary Procedural Guide
 > **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
@@ -6,7 +6,7 @@
 
 **Date:** April 27, 2026
 **Scope:** Console-side configuration of the Bedrock AgentCore voice agent and how it connects to the CDK deployment
-**Audience:** Developers deploying or maintaining the GenRx voice feature
+**Audience:** Developers deploying or maintaining the Patient Interaction Practice Tool voice feature
 
 ---
 
@@ -25,7 +25,7 @@
 
 ## 1. Overview
 
-The GenRx voice feature uses **Amazon Bedrock AgentCore** to host the voice agent container. Both text and voice chat flow through the ECS Socket.IO server — this unified WebSocket approach replaced the earlier Lambda + AppSync design for text chat, giving both modalities consistent low-latency streaming and a single connection point for the frontend. Voice additionally requires a connection from the socket server to the AgentCore runtime for bidirectional audio streaming with Nova Sonic 2.0. AgentCore provides the managed runtime for this: it hosts the container, handles health checks, and exposes a SigV4-authenticated WebSocket endpoint that the socket server connects to.
+The Patient Interaction Practice Tool voice feature uses **Amazon Bedrock AgentCore** to host the voice agent container. Both text and voice chat flow through the ECS Socket.IO server — this unified WebSocket approach replaced the earlier Lambda + AppSync design for text chat, giving both modalities consistent low-latency streaming and a single connection point for the frontend. Voice additionally requires a connection from the socket server to the AgentCore runtime for bidirectional audio streaming with Nova Sonic 2.0. AgentCore provides the managed runtime for this: it hosts the container, handles health checks, and exposes a SigV4-authenticated WebSocket endpoint that the socket server connects to.
 
 The voice agent container itself is built and pushed to ECR by the CI/CD pipeline (`cdk/voice-agent/`), but the **AgentCore runtime** that hosts it must be created and configured in the AWS Console. The CDK deployment then references the AgentCore runtime ARN so the socket server knows where to route voice traffic.
 
@@ -62,7 +62,7 @@ Before configuring AgentCore in the console, ensure the following are in place:
 
 3. **Bedrock model access** - Nova Sonic 2.0 (`amazon.nova-2-sonic-v1:0`) must be enabled in the **us-east-1** region. The voice agent always connects to us-east-1 for Nova Sonic regardless of the deployment region. Request access via the Bedrock console > Model access if not already enabled.
 
-4. **VPC and subnets** - The GenRx VPC must be deployed (`cdk deploy {StackPrefix}-VpcStack`). You will need the VPC ID and **private subnet IDs** when configuring the AgentCore network settings.
+4. **VPC and subnets** - The Patient Interaction Practice Tool VPC must be deployed (`cdk deploy {StackPrefix}-VpcStack`). You will need the VPC ID and **private subnet IDs** when configuring the AgentCore network settings.
 
 5. **ECS socket service deployed** - The ECS socket stack should be deployed (`{StackPrefix}-EcsSocket`) because you will need its security group during the AgentCore networking setup.
 
@@ -72,7 +72,7 @@ Before configuring AgentCore in the console, ensure the following are in place:
 
 ### 4.1 Navigate to the Host Agent/Tool Page
 
-1. Open the **AWS Console** in the region where GenRx is deployed (e.g. `ca-central-1`).
+1. Open the **AWS Console** in the region where Patient Interaction Practice Tool is deployed (e.g. `ca-central-1`).
 2. Go to **Amazon Bedrock** > **AgentCore**.
 3. In the left sidebar under **Build**, click **Runtime**.
 4. You will see the **Runtime resources** page. Click **Host agent/tool**.
@@ -84,7 +84,7 @@ This opens the **Host agent or tool** configuration page where you will fill in 
 | Setting | Value | Notes |
 |---------|-------|-------|
 | Name | `genrx-voice-agent` | Or any descriptive name for your environment |
-| Description | *(optional)* | e.g. `GenRx voice agent for Nova Sonic patient simulation` |
+| Description | *(optional)* | e.g. `Patient Interaction Practice Tool voice agent for Nova Sonic patient simulation` |
 
 ### 4.3 Agent Source
 
@@ -118,7 +118,7 @@ No changes needed. Skip this section.
 - Set this to **VPC**. Do NOT leave it as Public. The voice agent needs to be inside the VPC to reach RDS Proxy and Secrets Manager.
 
 **VPC:**
-- Select the GenRx VPC. It will be named based on your deployment stack prefix (e.g. `{StackPrefix}-VpcStack/...`).
+- Select the Patient Interaction Practice Tool VPC. It will be named based on your deployment stack prefix (e.g. `{StackPrefix}-VpcStack/...`).
 
 **Subnets:**
 - Select the **private subnets** associated with your stack prefix. Do NOT select public subnets and do NOT select isolated subnets.

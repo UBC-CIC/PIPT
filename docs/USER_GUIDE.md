@@ -1,4 +1,4 @@
-# GenRx User Guide
+# Patient Interaction Practice Tool User Guide
 
 > **Type:** User Guide
 > **Last updated:** 2026-06-09
@@ -15,20 +15,20 @@
 
 ### Creating Your Account
 
-1. Navigate to the GenRx sign-up page provided by your institution.
+1. Navigate to the Patient Interaction Practice Tool sign-up page provided by your institution.
 2. Enter your email address and create a password that meets the security requirements.
 3. Verify your email address by clicking the confirmation link sent to your inbox.
 4. Log in with your credentials to access the platform.
 
 ### Logging In
 
-1. Open the GenRx application URL in your browser.
+1. Open the Patient Interaction Practice Tool application URL in your browser.
 2. Enter your registered email and password.
 3. Click **Sign In** to access your role-specific dashboard.
 
 ### Understanding Your Role
 
-GenRx supports three user roles, each with different capabilities:
+Patient Interaction Practice Tool supports three user roles, each with different capabilities:
 
 | Role | Description |
 |------|-------------|
@@ -348,7 +348,7 @@ Each prompt also has a **Prompt Playground** where admins can test out changes b
 ### General
 
 **Q: Which browsers are supported?**
-A: GenRx works best in modern browsers including Chrome, Safari, and Edge. Ensure your browser is up to date for the best experience. **Voice chat does not work in Firefox.** Use Chromium-based browsers for voice interactions.
+A: Patient Interaction Practice Tool works best in modern browsers including Chrome, Safari, and Edge. Ensure your browser is up to date for the best experience. **Voice chat does not work in Firefox.** Use Chromium-based browsers for voice interactions.
 
 **Q: I forgot my password. How do I reset it?**
 A: Click the **Forgot Password** link on the login page. Enter your email address and follow the instructions in the reset email.

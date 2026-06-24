@@ -30,7 +30,7 @@
 
 ## Overview
 
-GenRx uses a two-tier dependency management approach:
+Patient Interaction Practice Tool uses a two-tier dependency management approach:
 
 - **Python services** (Docker Lambda & ECS): `requirements.in` → `pip-compile` → `requirements.txt` for reproducible builds
 - **Node.js services** (Lambda layers, socket server): `package.json` → `npm ci` → `package-lock.json` for deterministic installs

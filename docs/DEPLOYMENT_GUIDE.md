@@ -32,7 +32,7 @@
 
 ## Overview
 
-This guide walks you through deploying GenRx from scratch. You will set up AWS prerequisites, configure secrets, deploy CDK stacks, and verify the deployment. The process covers the full lifecycle from initial setup through post-deployment configuration and teardown.
+This guide walks you through deploying Patient Interaction Practice Tool from scratch. You will set up AWS prerequisites, configure secrets, deploy CDK stacks, and verify the deployment. The process covers the full lifecycle from initial setup through post-deployment configuration and teardown.
 
 ---
 
@@ -45,7 +45,7 @@ This guide walks you through deploying GenRx from scratch. You will set up AWS p
 - **Node.js 22+** and npm
 - **AWS CDK CLI** installed globally: `npm install -g aws-cdk`
 - **Git** installed
-- **GitHub account** with a fork of the GenRx repository
+- **GitHub account** with a fork of the Patient Interaction Practice Tool repository
 - **OpenSSL** for generating the RSA key pair used in CloudFront signed URLs (pre-installed on macOS/Linux; on Windows, available via [Git Bash](https://gitforwindows.org/) or [Win32 OpenSSL](https://slproweb.com/products/Win32OpenSSL.html))
 
 > **Note:** Docker is **not** required locally. All Docker images are built in the cloud by CodePipeline/CodeBuild. Python is also not required locally since the Python Lambda functions and voice agent run in containers built remotely.
@@ -71,7 +71,7 @@ The CI/CD pipeline and Amplify app use a GitHub PAT to pull source code.
 
 ### Step 2: Verify Bedrock Model Availability
 
-GenRx uses several Amazon Bedrock models. These models are available by default (no manual access request is needed). However, verify they are accessible in the regions used by the application.
+Patient Interaction Practice Tool uses several Amazon Bedrock models. These models are available by default (no manual access request is needed). However, verify they are accessible in the regions used by the application.
 
 The application deploys to **`ca-central-1`** but makes cross-region calls to `us-east-1` for certain models that are only available there:
 

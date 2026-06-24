@@ -1,4 +1,4 @@
-# GenRx REST API Documentation
+# Patient Interaction Practice Tool REST API Documentation
 
 ## Table of Contents
 

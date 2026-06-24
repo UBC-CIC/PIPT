@@ -20,7 +20,7 @@
 
 ## Overview
 
-This guide provides step-by-step instructions for customizing GenRx — colors, local development setup, email templates, API extension, frontend assets, and LLM configuration. Each section covers a specific modification type with prerequisites, instructions, and verification steps.
+This guide provides step-by-step instructions for customizing Patient Interaction Practice Tool — colors, local development setup, email templates, API extension, frontend assets, and LLM configuration. Each section covers a specific modification type with prerequisites, instructions, and verification steps.
 
 ---
 
@@ -29,8 +29,8 @@ This guide provides step-by-step instructions for customizing GenRx — colors, 
 Before making any modifications, ensure you have:
 
 - Node.js 22+ and npm installed
-- Access to the GenRx repository
-- A deployed GenRx backend (API endpoint, Cognito, and Socket URLs)
+- Access to the Patient Interaction Practice Tool repository
+- A deployed Patient Interaction Practice Tool backend (API endpoint, Cognito, and Socket URLs)
 - AWS CDK CLI installed (`npm install -g aws-cdk`)
 - Appropriate AWS credentials configured for deployment
 
@@ -38,7 +38,7 @@ Before making any modifications, ensure you have:
 
 ## Modifying Colors and Styles
 
-GenRx uses CSS custom properties (variables) defined in `frontend/src/index.css`. The design system is built on shadcn/ui with Tailwind CSS 4.
+Patient Interaction Practice Tool uses CSS custom properties (variables) defined in `frontend/src/index.css`. The design system is built on shadcn/ui with Tailwind CSS 4.
 
 ### Color Variables
 
@@ -119,7 +119,7 @@ All colors are defined as `rgb()` values in the `:root` selector. The `.dark` cl
 
 - Node.js 22+
 - npm
-- A deployed GenRx backend (you need the API endpoint, Cognito, and Socket URLs)
+- A deployed Patient Interaction Practice Tool backend (you need the API endpoint, Cognito, and Socket URLs)
 
 ### Step-by-Step Instructions
 
@@ -216,7 +216,7 @@ The email is a full HTML document with:
 
 - Responsive design (mobile-friendly)
 - Dark mode support via `@media (prefers-color-scheme: dark)`
-- GenRx branding (green gradient header)
+- Patient Interaction Practice Tool branding (green gradient header)
 - Verification code display using `{####}` placeholder
 
 ### Step-by-Step Instructions
@@ -312,12 +312,12 @@ export async function myNewEndpoint(param1: string, param2: number) {
 
 ### Application Name and Branding Text
 
-The application name "GENRx" appears in:
+The application name "Patient Interaction Practice Tool" appears in:
 
 - `frontend/src/pages/LoginPage.tsx` — Login page heading
 - `frontend/src/pages/SignUpPage.tsx` — Sign-up page heading
 
-Search for "GENRx" across the frontend to find all instances.
+Search for "Patient Interaction Practice Tool" across the frontend to find all instances.
 
 ### Logo and Icons
 
@@ -330,7 +330,7 @@ Search for "GENRx" across the frontend to find all instances.
 
 1. To change the app icon, replace `frontend/public/stethoscope_icon.png` with your new icon file.
 2. Update `frontend/index.html` if the filename changes.
-3. To change branding text, search for "GENRx" in the `frontend/src/` directory and update each occurrence.
+3. To change branding text, search for "Patient Interaction Practice Tool" in the `frontend/src/` directory and update each occurrence.
 
 ### Component-Level Customization
 

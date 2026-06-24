@@ -1,4 +1,4 @@
-# GenRx Documentation
+# Patient Interaction Practice Tool Documentation
 
 > **Type:** Documentation Index
 > **Last updated:** 2026-05-30

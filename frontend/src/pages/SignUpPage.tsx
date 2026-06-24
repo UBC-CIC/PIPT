@@ -9,7 +9,7 @@ import { useAuth } from '@/App';
 /**
  * SignUpPage Component
  * 
- * Account creation page for GENRx - AI Supported Interview Evaluation 2.0
+ * Account creation page for PIPT - AI Supported Interview Evaluation 2.0
  * Handles registration and email confirmation via Cognito
  */
 function SignUpPage() {
@@ -447,7 +447,7 @@ function SignUpPage() {
         <div className="max-w-md text-center">
           <h1 className="text-4xl font-bold leading-tight">
             Welcome to<br />
-            GENRx - AI Supported<br />
+            PIPT - AI Supported<br />
             Interview Evaluation 2.0
           </h1>
         </div>

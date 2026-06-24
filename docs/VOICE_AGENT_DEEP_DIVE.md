@@ -1,4 +1,4 @@
-# GenRx Voice Agent Deep Dive
+# Patient Interaction Practice Tool Voice Agent Deep Dive
 
 > **Document Type:** Supplementary Technical Reference
 > **Relationship:** This document supplements the core documentation set. See [Documentation Index](./README.md) for the full document listing.
@@ -6,7 +6,7 @@
 
 **Date:** April 27, 2026
 **Scope:** Architecture, code walkthrough, runtime flow, debrief integration, and design decisions for the voice agent pipeline
-**Audience:** Developers working on or maintaining the GenRx voice feature
+**Audience:** Developers working on or maintaining the Patient Interaction Practice Tool voice feature
 
 ---
 

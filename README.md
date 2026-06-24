@@ -1,4 +1,4 @@
-# Case Interaction Evaluation Tool
+# Patient Interaction Practice Tool
 
 This prototype is a simulation platform for pharmacy education built on AWS. Students interact with AI-powered patient personas through text and voice chat, practicing clinical assessment and communication skills in a safe, repeatable environment. Instructors create simulation groups with configurable patient scenarios, and the system generates AI-powered debriefs evaluating student performance against key clinical questions.
 

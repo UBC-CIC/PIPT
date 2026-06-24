@@ -2,7 +2,7 @@
 
 ## Overview
 
-GenRx uses Amazon SES for Cognito email delivery (verification codes, password resets). SES replaces Cognito's default email sender which is limited to 50 emails/day.
+Patient Interaction Practice Tool uses Amazon SES for Cognito email delivery (verification codes, password resets). SES replaces Cognito's default email sender which is limited to 50 emails/day.
 
 ## Current state
 
