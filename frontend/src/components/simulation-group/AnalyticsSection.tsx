@@ -235,7 +235,7 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined) => [`${value ?? 0}%`, 'Completed']}
+                    formatter={(value) => [`${value ?? 0}%`, 'Completed']}
                   />
                   <Bar
                     dataKey="completionPercentage"
@@ -286,8 +286,8 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
-                      `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                    formatter={(value, _name, props) => [
+                      `${value ?? 0}% avg (${(props as any).payload?.studentsDebriefed ?? 0} students debriefed)`,
                       'Coverage',
                     ]}
                   />
@@ -366,8 +366,8 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
-                      `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                    formatter={(value, _name, props) => [
+                      `${value ?? 0}% avg (${(props as any).payload?.studentsDebriefed ?? 0} students debriefed)`,
                       'DTP Coverage',
                     ]}
                   />
@@ -442,8 +442,8 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined, _name: string | undefined, props: { payload?: { studentsDebriefed?: number } }) => [
-                      `${value ?? 0}% avg (${props.payload?.studentsDebriefed ?? 0} students debriefed)`,
+                    formatter={(value, _name, props) => [
+                      `${value ?? 0}% avg (${(props as any).payload?.studentsDebriefed ?? 0} students debriefed)`,
                       'Recommendation Coverage',
                     ]}
                   />
@@ -536,7 +536,7 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Asked']}
+                    formatter={(value) => [`${value ?? 0} students`, 'Asked']}
                   />
                   <Bar
                     dataKey="studentsAnswered"
@@ -584,7 +584,7 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Matched']}
+                    formatter={(value) => [`${value ?? 0} students`, 'Matched']}
                   />
                   <Bar
                     dataKey="studentsMatched"
@@ -632,7 +632,7 @@ export function AnalyticsSection({
                       border: `1px solid ${UI_COLORS.border.default}`,
                       borderRadius: '6px',
                     }}
-                    formatter={(value: number | undefined) => [`${value ?? 0} students`, 'Matched']}
+                    formatter={(value) => [`${value ?? 0} students`, 'Matched']}
                   />
                   <Bar
                     dataKey="studentsMatched"
@@ -672,7 +672,7 @@ export function AnalyticsSection({
                     border: `1px solid ${UI_COLORS.border.default}`,
                     borderRadius: '6px',
                   }}
-                  formatter={(value: number | undefined, name: string | undefined) => [`${value ?? 0} messages`, name ?? '']}
+                  formatter={(value, name) => [`${value ?? 0} messages`, name ?? '']}
                 />
                 <Legend wrapperStyle={{ color: UI_COLORS.text.body }} />
                 {/* Center text */}
