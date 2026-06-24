@@ -1486,6 +1486,7 @@ export class ApiServiceStack extends cdk.Stack {
           APPSYNC_API_ID: this.appSyncApi.apiId,
           EMBEDDING_STORAGE_BUCKET: embeddingStorageBucket.bucketName,
           SM_STREAM_CALLBACK_SECRET: this.streamCallbackSecret.secretName,
+          ALLOWED_ORIGINS: allowedOriginsEnv,
         },
       }
     );

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { ArrowLeft, Search, Camera, Trash2, Upload, Plus, Eye, CheckCircle, Loader2, XCircle, FileText, Mic, MessageSquareText, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1383,7 +1384,7 @@ function MaterialsTab({
                             borderStyle: 'solid',
                             borderColor: UI_COLORS.border.default,
                           }}
-                          dangerouslySetInnerHTML={{ __html: material.embedLink }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(material.embedLink, { ALLOWED_TAGS: ['iframe'], ALLOWED_ATTR: ['src', 'width', 'height', 'frameborder', 'allow', 'allowfullscreen', 'title', 'style'] }) }}
                         />
                       ) : (
                         <div

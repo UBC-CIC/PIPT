@@ -145,7 +145,11 @@ const _smClient = new SecretsManagerClient({ region: process.env.AWS_REGION || "
 app.use(express.json());
 
 app.post("/stream-callback", (req, res) => {
-  if (streamCallbackToken && req.headers["x-callback-token"] !== streamCallbackToken) {
+  // Fail-closed: reject all requests if the callback token was never loaded
+  if (!streamCallbackToken) {
+    return res.status(503).json({ error: "Stream callback authentication not configured" });
+  }
+  if (req.headers["x-callback-token"] !== streamCallbackToken) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
