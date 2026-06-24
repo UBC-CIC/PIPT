@@ -209,7 +209,7 @@ export class ApiServiceStack extends cdk.Stack {
     const emailConfig = sesVerifiedDomain
       ? cognito.UserPoolEmail.withSES({
           fromEmail: `noreply@${sesVerifiedDomain}`,
-          fromName: "GenRx",
+          fromName: "PIPT",
           sesVerifiedDomain: sesVerifiedDomain,
         })
       : cognito.UserPoolEmail.withCognito();
@@ -237,7 +237,7 @@ export class ApiServiceStack extends cdk.Stack {
         email: true,
       },
       userVerification: {
-        emailSubject: "Confirm your email for GenRx",
+        emailSubject: "Confirm your email for PIPT",
         emailBody: `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -279,12 +279,12 @@ export class ApiServiceStack extends cdk.Stack {
       <td>
         <div class="container">
           <div class="header-bar">
-            <div class="brand">GenRx</div>
+            <div class="brand">PIPT</div>
           </div>
           <div class="panel rounded shadow">
             <div class="p">
               <h1>Confirm your email</h1>
-              <p>Welcome to <strong>GenRx</strong>!</p>
+              <p>Welcome to <strong>PIPT</strong>!</p>
               <p>Use the verification code below to complete your sign up:</p>
               <div class="code-wrap">
                 <div class="code-label">Your verification code</div>
