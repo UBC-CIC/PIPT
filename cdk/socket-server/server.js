@@ -361,10 +361,15 @@ io.on("connection", (socket) => {
           }
         });
 
-        agentWs.on("close", () => {
-          console.log("🔚 Voice agent WebSocket closed");
+        agentWs.on("close", (code, reason) => {
+          console.log("🔚 Voice agent WebSocket closed (code=%s reason=%s)", code, reason);
           socket.agentWs = null;
           novaReady = false;
+          // Notify the frontend so it can exit voice mode gracefully
+          socket.emit("voice-session-ended", {
+            reason: "session_limit",
+            message: "Voice session timed out. Close this panel and tap the mic again to reconnect — your conversation will continue where you left off."
+          });
         });
 
         agentWs.on("error", (err) => {

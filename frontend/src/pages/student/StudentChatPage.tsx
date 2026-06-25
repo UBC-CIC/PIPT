@@ -213,6 +213,16 @@ function StudentChatPage() {
         }
         setVoiceSessionState('error');
       },
+      onSessionEnded: (_reason, message) => {
+        // Server closed the voice session (e.g. Bedrock 60s timeout)
+        setIsVoiceModeActive(false);
+        setVoiceSessionState('idle');
+        setVoiceError(message || 'Voice session timed out. Close this panel and tap the mic again to reconnect — your conversation will continue where you left off.');
+        audioClientRef.current = null;
+        // Reset voice bubble tracking so next session starts fresh
+        currentVoiceBubbleRef.current = null;
+        lastVoiceRoleRef.current = null;
+      },
       onTurnStart: (role) => {
         // Only create a new bubble when the role actually changes
         if (role === lastVoiceRoleRef.current) return;

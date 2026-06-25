@@ -26,6 +26,8 @@ export interface SocketIOAudioClientConfig {
   onError: (error: Error) => void;
   onTextMessage?: (text: string, role: 'user' | 'assistant') => void;
   onTurnStart?: (role: 'user' | 'assistant') => void;
+  /** Called when the server ends the voice session (e.g. Bedrock 60s timeout). */
+  onSessionEnded?: (reason: string, message: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -47,6 +49,7 @@ export class SocketIOAudioClient {
   private boundOnNovaError: ((...args: unknown[]) => void) | null = null;
   private boundOnTextMessage: ((...args: unknown[]) => void) | null = null;
   private boundOnTurnStart: ((...args: unknown[]) => void) | null = null;
+  private boundOnSessionEnded: ((...args: unknown[]) => void) | null = null;
 
   constructor(config: SocketIOAudioClientConfig) {
     this.config = config;
@@ -103,6 +106,17 @@ export class SocketIOAudioClient {
       this.config.socket.on('nova-started', this.boundOnNovaStarted);
       this.config.socket.on('audio-chunk', this.boundOnAudioChunk);
       this.config.socket.on('nova-error', this.boundOnNovaError);
+
+      // Listen for server-side session end (e.g. Bedrock 60s timeout)
+      this.boundOnSessionEnded = (data: unknown) => {
+        const msg = data as { reason: string; message: string };
+        this.cleanup();
+        this.setState('disconnected');
+        if (this.config.onSessionEnded) {
+          this.config.onSessionEnded(msg.reason || 'unknown', msg.message || 'Voice session ended');
+        }
+      };
+      this.config.socket.on('voice-session-ended', this.boundOnSessionEnded);
 
       // Listen for voice transcription text messages
       if (this.config.onTextMessage) {
@@ -337,6 +351,10 @@ export class SocketIOAudioClient {
     if (this.boundOnTurnStart) {
       this.config.socket.off('turn-start', this.boundOnTurnStart);
       this.boundOnTurnStart = null;
+    }
+    if (this.boundOnSessionEnded) {
+      this.config.socket.off('voice-session-ended', this.boundOnSessionEnded);
+      this.boundOnSessionEnded = null;
     }
 
     this.muted = false;
