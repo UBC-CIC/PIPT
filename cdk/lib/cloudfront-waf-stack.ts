@@ -13,7 +13,7 @@ export class CloudFrontWafStack extends cdk.Stack {
     super(scope, id, props);
 
     const webAcl = new wafv2.CfnWebACL(this, `${id}-CloudFrontWaf`, {
-      description: "WAF for GenRx CloudFront document delivery",
+      description: "WAF for CloudFront document delivery",
       scope: "CLOUDFRONT",
       defaultAction: { allow: {} },
       visibilityConfig: {

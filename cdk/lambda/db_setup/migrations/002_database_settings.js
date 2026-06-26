@@ -19,11 +19,11 @@
 exports.config = { transaction: false };
 
 exports.up = (pgm) => {
-  pgm.sql(`ALTER DATABASE genrx SET statement_timeout = '30s'`);
-  pgm.sql(`ALTER DATABASE genrx SET idle_in_transaction_session_timeout = '60s'`);
+  pgm.sql(`ALTER DATABASE pipt SET statement_timeout = '30s'`);
+  pgm.sql(`ALTER DATABASE pipt SET idle_in_transaction_session_timeout = '60s'`);
 };
 
 exports.down = (pgm) => {
-  pgm.sql(`ALTER DATABASE genrx RESET statement_timeout`);
-  pgm.sql(`ALTER DATABASE genrx RESET idle_in_transaction_session_timeout`);
+  pgm.sql(`ALTER DATABASE pipt RESET statement_timeout`);
+  pgm.sql(`ALTER DATABASE pipt RESET idle_in_transaction_session_timeout`);
 };

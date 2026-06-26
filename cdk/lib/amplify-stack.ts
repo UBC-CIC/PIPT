@@ -25,7 +25,7 @@ export class AmplifyStack extends cdk.Stack {
     // GitHub owner name from SSM
     const githubOwner = cdk.aws_ssm.StringParameter.valueForStringParameter(
       this,
-      "genrx-owner-name"
+      "pipt-owner-name"
     );
 
     // TEMPORARY: Using GitHub PAT instead of CodeStar Connections.
@@ -121,7 +121,7 @@ applications:
       enableAutoBuild: true,
     });
 
-    // Custom domain — maps genrx2.cloud-inov.com to the main branch.
+    // Custom domain — maps the verified SES domain to the main branch.
     // Amplify provisions an SSL certificate and creates the required DNS records
     // in Route 53 automatically via the enableAutoSubDomain setting.
     const domainName = this.node.tryGetContext("SesVerifiedDomain");
@@ -132,11 +132,11 @@ applications:
         subDomainSettings: [
           {
             branchName: "main",
-            prefix: "", // root domain (genrx2.cloud-inov.com)
+            prefix: "", // root domain
           },
           {
             branchName: "main",
-            prefix: "www", // www.genrx2.cloud-inov.com → redirects to root
+            prefix: "www", // www subdomain → redirects to root
           },
         ],
         enableAutoSubDomain: false,

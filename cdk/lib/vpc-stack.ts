@@ -25,8 +25,8 @@ export class VpcStack extends Stack {
       const existingPublicSubnetID: string =
         this.node.tryGetContext("existingPublicSubnetId") ?? "";
 
-      const genrxPrefix: string =
-        this.node.tryGetContext("StackPrefix") ?? "GENRX-production";
+      const stackPrefix: string =
+        this.node.tryGetContext("StackPrefix") ?? "PIPT-production";
 
       this.vpcCidrString =
         this.node.tryGetContext("existingVpcCidr") ?? "172.31.128.0/20";
@@ -111,19 +111,19 @@ export class VpcStack extends Stack {
         });
 
         // Update route table for private subnets
-        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute1`, {
+        new ec2.CfnRoute(this, `${stackPrefix}PrivateSubnetRoute1`, {
           routeTableId: this.vpc.privateSubnets[0].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
-        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute2`, {
+        new ec2.CfnRoute(this, `${stackPrefix}PrivateSubnetRoute2`, {
           routeTableId: this.vpc.privateSubnets[1].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
-        new ec2.CfnRoute(this, `${genrxPrefix}PrivateSubnetRoute3`, {
+        new ec2.CfnRoute(this, `${stackPrefix}PrivateSubnetRoute3`, {
           routeTableId: this.vpc.privateSubnets[2].routeTable.routeTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
@@ -184,7 +184,7 @@ export class VpcStack extends Stack {
     const natGatewayProvider = ec2.NatProvider.gateway();
 
       // VPC for application
-      this.vpc = new ec2.Vpc(this, "genrx-Vpc", {
+      this.vpc = new ec2.Vpc(this, `${id}-Vpc`, {
         ipAddresses: ec2.IpAddresses.cidr(this.vpcCidrString),
         natGatewayProvider: natGatewayProvider,
         natGateways: natGateways,
@@ -205,7 +205,7 @@ export class VpcStack extends Stack {
         ],
       });
 
-      this.vpc.addFlowLog("genrx-vpcFlowLog");
+      this.vpc.addFlowLog(`${id}-vpcFlowLog`);
 
       // Populate private subnet CIDRs for downstream security-group rules (e.g., DatabaseStack)
       this.privateSubnetsCidrStrings = this.vpc.privateSubnets.map(s => s.ipv4CidrBlock);

@@ -31,13 +31,13 @@ export class DatabaseStack extends Stack {
         /**
          * Retrieve a secret from Secret Manager
          */
-        const secret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecrets", "GENRXSecrets");
+        const secret = secretsmanager.Secret.fromSecretNameV2(this, "ImportedSecrets", "PIPTSecrets");
 
         /**
          * Create Secrets for various users
          */
-        this.secretPathAdminName = `${id}-GenRx/credentials/rdsDbCredential`;
-        const secretPathUserName = `${id}-GenRx/userCredentials/rdsDbCredential`;
+        this.secretPathAdminName = `${id}/credentials/rdsDbCredential`;
+        const secretPathUserName = `${id}/userCredentials/rdsDbCredential`;
         this.secretPathUser = new secretsmanager.Secret(this, secretPathUserName, {
             secretName: secretPathUserName,
             description: "Secrets for clients to connect to RDS",
@@ -48,7 +48,7 @@ export class DatabaseStack extends Stack {
             }
         });
 
-        const secretPathTableCreator = `${id}-GenRx/userCredentials/TableCreator`;
+        const secretPathTableCreator = `${id}/userCredentials/TableCreator`;
         this.secretPathTableCreator = new secretsmanager.Secret(this, secretPathTableCreator, {
             secretName: secretPathTableCreator,
             description: "Secrets for TableCreator to connect to RDS",
@@ -95,7 +95,7 @@ export class DatabaseStack extends Stack {
             backupRetention: Duration.days(7),
             deleteAutomatedBackups: true,
             deletionProtection: true,
-            databaseName: "genrx",
+            databaseName: "pipt",
             publiclyAccessible: false,
             cloudwatchLogsRetention: logs.RetentionDays.INFINITE,
             storageEncrypted: true, // storage encryption at rest

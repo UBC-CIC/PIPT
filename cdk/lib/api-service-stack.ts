@@ -76,6 +76,8 @@ export class ApiServiceStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
+    const stackPrefix = this.node.tryGetContext("StackPrefix") ?? "PIPT";
+
     this.layerList = {};
     this.dynamoTableName = `${id}-DynamoDB-Conversation-Table`;
 
@@ -344,7 +346,7 @@ export class ApiServiceStack extends cdk.Stack {
       }
     );
 
-    const secretsName = `${id}-GenRx_Cognito_Secrets`;
+    const secretsName = `${id}-Cognito_Secrets`;
 
     this.streamCallbackSecret = new secretsmanager.Secret(this, `${id}-StreamCallbackSecret`, {
       secretName: `${id}-StreamCallbackSecret`,
@@ -843,7 +845,7 @@ export class ApiServiceStack extends cdk.Stack {
       description: "Organization administrators — grants admin API access via cognito:groups claim",
     });
 
-    // const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'genrxAuthorizer', {
+    // const authorizer = new apigateway.CognitoUserPoolsAuthorizer(this, 'apiAuthorizer', {
     //   cognitoUserPools: [this.userPool],
     // });
     new cdk.CfnOutput(this, `${id}-UserPoolIdOutput`, {
@@ -857,7 +859,7 @@ export class ApiServiceStack extends cdk.Stack {
       handler: "preSignup.handler",
       timeout: Duration.seconds(15),
       environment: {
-        ALLOWED_EMAIL_DOMAINS: "/GenRx/AllowedEmailDomains",
+        ALLOWED_EMAIL_DOMAINS: `/${stackPrefix}/AllowedEmailDomains`,
       },
       vpc: vpcStack.vpc,
       functionName: `${id}-preSignupLambda`,
@@ -1131,7 +1133,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       "BedrockLLMParameter",
       {
-        parameterName: `/${id}/GenRx/BedrockLLMId`,
+        parameterName: `/${id}/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
         stringValue: "us.anthropic.claude-sonnet-4-6",
       }
@@ -1141,7 +1143,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       "EmbeddingModelParameter",
       {
-        parameterName: `/${id}/GenRx/EmbeddingModelId`,
+        parameterName: `/${id}/EmbeddingModelId`,
         description: "Parameter containing the Embedding Model ID",
         stringValue: "cohere.embed-v4:0",
       }
@@ -1151,7 +1153,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       "TableNameParameter",
       {
-        parameterName: `/${id}/GenRx/TableName`,
+        parameterName: `/${id}/TableName`,
         description: "Parameter containing the DynamoDB table name",
         stringValue: dynamoTableName,
       }
@@ -1210,13 +1212,13 @@ export class ApiServiceStack extends cdk.Stack {
      * denied topics, and word filters appropriate for a medical simulation platform.
      */
     const guardrail = new bedrock.CfnGuardrail(this, `${id}-BedrockGuardrail`, {
-      name: `${id}-GenRxGuardrail`,
+      name: `${id}-Guardrail`,
       blockedInputMessaging:
         "I'm sorry, I can't process that input. Please rephrase your message and try again.",
       blockedOutputsMessaging:
         "I'm sorry, I'm unable to provide that response. Let's continue with the clinical encounter.",
       description:
-        "Guardrail for GenRx medical simulation platform — enforces patient-only role, blocks harmful content, and prevents role reversal or jailbreak attempts.",
+        "Guardrail for PIPT medical simulation platform — enforces patient-only role, blocks harmful content, and prevents role reversal or jailbreak attempts.",
 
       // Content policy — block harmful categories
       contentPolicyConfig: {
@@ -1363,7 +1365,7 @@ export class ApiServiceStack extends cdk.Stack {
       `${id}-BedrockGuardrailVersion`,
       {
         guardrailIdentifier: guardrail.attrGuardrailId,
-        description: "Initial guardrail version for GenRx medical simulation",
+        description: "Initial guardrail version for PIPT medical simulation",
       }
     );
 
@@ -1372,8 +1374,8 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       "GuardrailIdParameter",
       {
-        parameterName: `/${id}/GenRx/BedrockGuardrailId`,
-        description: "Bedrock Guardrail ID for GenRx",
+        parameterName: `/${id}/BedrockGuardrailId`,
+        description: "Bedrock Guardrail ID for PIPT",
         stringValue: guardrail.attrGuardrailId,
       }
     );
@@ -1644,7 +1646,7 @@ export class ApiServiceStack extends cdk.Stack {
     // Read the public key from SSM (stored during pre-deploy setup)
     const cfPublicKeyPem = ssm.StringParameter.valueForStringParameter(
       this,
-      "/GenRx/CloudFrontPublicKey"
+      `/${stackPrefix}/CloudFrontPublicKey`
     );
 
     const cfPublicKey = new cloudfront.PublicKey(
@@ -1661,7 +1663,7 @@ export class ApiServiceStack extends cdk.Stack {
       `${id}-CfSigningKeyGroup`,
       {
         items: [cfPublicKey],
-        comment: "Key group for GenRx document delivery signed URLs",
+        comment: "Key group for document delivery signed URLs",
       }
     );
 
@@ -1688,7 +1690,7 @@ export class ApiServiceStack extends cdk.Stack {
       `${id}-DocsCorsHeadersPolicy`,
       {
         responseHeadersPolicyName: `${id}-DocsCorsHeadersPolicy`,
-        comment: "CORS headers for GenRx document/profile picture delivery",
+        comment: "CORS headers for document/profile picture delivery",
         corsBehavior: {
           accessControlAllowCredentials: false,
           accessControlAllowHeaders: ["*"],
@@ -1704,7 +1706,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-DocsDistribution`,
       {
-        comment: "GenRx document delivery CDN",
+        comment: "Document delivery CDN",
         defaultBehavior: {
           origin: origins.S3BucketOrigin.withOriginAccessControl(dataIngestionBucket),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
@@ -2027,7 +2029,7 @@ export class ApiServiceStack extends cdk.Stack {
           REGION: this.region,
           CLOUDFRONT_DOMAIN: docsDistribution.domainName,
           CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
-          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
+          SM_CLOUDFRONT_PRIVATE_KEY: `${stackPrefix}/CloudFrontSigningKey`,
           ALLOWED_ORIGINS: allowedOriginsEnv,
         },
         functionName: `${id}-GetFilesFunction`,
@@ -2087,7 +2089,7 @@ export class ApiServiceStack extends cdk.Stack {
           REGION: this.region,
           CLOUDFRONT_DOMAIN: docsDistribution.domainName,
           CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
-          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
+          SM_CLOUDFRONT_PRIVATE_KEY: `${stackPrefix}/CloudFrontSigningKey`,
           ALLOWED_ORIGINS: allowedOriginsEnv,
         },
         functionName: `${id}-GetFilesFunctionStudent`,
@@ -2147,7 +2149,7 @@ export class ApiServiceStack extends cdk.Stack {
           REGION: this.region,
           CLOUDFRONT_DOMAIN: docsDistribution.domainName,
           CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
-          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
+          SM_CLOUDFRONT_PRIVATE_KEY: `${stackPrefix}/CloudFrontSigningKey`,
           ALLOWED_ORIGINS: allowedOriginsEnv,
         },
         functionName: `${id}-GetProfilePictures`,
@@ -2204,7 +2206,7 @@ export class ApiServiceStack extends cdk.Stack {
           REGION: this.region,
           CLOUDFRONT_DOMAIN: docsDistribution.domainName,
           CLOUDFRONT_KEY_PAIR_ID: cfPublicKey.publicKeyId,
-          SM_CLOUDFRONT_PRIVATE_KEY: "GenRx/CloudFrontSigningKey",
+          SM_CLOUDFRONT_PRIVATE_KEY: `${stackPrefix}/CloudFrontSigningKey`,
           ALLOWED_ORIGINS: allowedOriginsEnv,
         },
         functionName: `${id}-GetProfilePicturesStudent`,
@@ -2428,7 +2430,7 @@ export class ApiServiceStack extends cdk.Stack {
 
     // Waf Firewall
     const waf = new wafv2.CfnWebACL(this, `${id}-waf`, {
-      description: "GenRx waf",
+      description: "API WAF",
       scope: "REGIONAL",
       defaultAction: { allow: {} },
       visibilityConfig: {
