@@ -90,8 +90,8 @@ To verify access, open the [Bedrock console in us-east-1](https://us-east-1.cons
 ### Step 3: Fork and Clone the Repository
 
 ```bash
-git clone https://github.com/<YOUR-GITHUB-USERNAME>/genrx.git
-cd genrx/cdk
+git clone https://github.com/<YOUR-GITHUB-USERNAME>/GenRx.git
+cd GenRx/cdk
 npm install
 ```
 
@@ -101,7 +101,7 @@ Before deploying, create the following secrets and parameters in AWS. These are 
 
 > **⚠️ Important — Always pass `--profile`:** Every AWS CLI command in this guide requires the `--profile <YOUR-AWS-PROFILE>` flag to target the correct account. If you omit it, the CLI uses the default profile which may point to a different account.
 
-> **⚠️ Important — JSON secrets:** When creating secrets that contain JSON (like `GENRXSecrets` and `github-personal-access-token`), ensure the stored value has proper double quotes around keys and values. Shell escaping (especially on Windows) can silently corrupt JSON. After creating any JSON secret, verify it:
+> **⚠️ Important — JSON secrets:** When creating secrets that contain JSON (like `PIPTSecrets` and `github-personal-access-token`), ensure the stored value has proper double quotes around keys and values. Shell escaping (especially on Windows) can silently corrupt JSON. After creating any JSON secret, verify it:
 >
 > ```bash
 > aws secretsmanager get-secret-value --secret-id <SECRET-NAME> --region <YOUR-REGION> --profile <YOUR-AWS-PROFILE> --query SecretString --output text
@@ -109,7 +109,7 @@ Before deploying, create the following secrets and parameters in AWS. These are 
 >
 > If the output doesn't look like valid JSON, fix it via the AWS Console (Secrets Manager → select the secret → Retrieve secret value → Edit → Plaintext tab → paste the correct JSON → Save).
 
-#### Secret 1: GENRXSecrets
+#### Secret 1: PIPTSecrets
 
 This secret contains the admin username for the RDS PostgreSQL instance. You choose this value; it becomes the master username for your database. The database stack reads `DB_Username` from this secret at deploy time.
 
@@ -118,7 +118,7 @@ This secret contains the admin username for the RDS PostgreSQL instance. You cho
 
 ```bash
 aws secretsmanager create-secret \
-  --name GENRXSecrets \
+  --name PIPTSecrets \
   --secret-string '{"DB_Username": "<YOUR-DB-ADMIN-USERNAME>"}' \
   --region <YOUR-REGION> \
   --profile <YOUR-AWS-PROFILE>
@@ -131,7 +131,7 @@ aws secretsmanager create-secret \
 
 ```powershell
 aws secretsmanager create-secret `
-  --name GENRXSecrets `
+  --name PIPTSecrets `
   --secret-string '{\"DB_Username\": \"<YOUR-DB-ADMIN-USERNAME>\"}' `
   --region <YOUR-REGION> `
   --profile <YOUR-AWS-PROFILE>
@@ -144,7 +144,7 @@ aws secretsmanager create-secret `
 
 ```cmd
 aws secretsmanager create-secret ^
-  --name GENRXSecrets ^
+  --name PIPTSecrets ^
   --secret-string "{\"DB_Username\": \"<YOUR-DB-ADMIN-USERNAME>\"}" ^
   --region <YOUR-REGION> ^
   --profile <YOUR-AWS-PROFILE>
@@ -214,7 +214,7 @@ Make sure the key `my-github-token` and your token value both have double quotes
 
 </details>
 
-#### Parameter 1: genrx-owner-name
+#### Parameter 1: pipt-owner-name
 
 Create an SSM parameter containing your GitHub username (the owner of the forked repository).
 
@@ -223,7 +223,7 @@ Create an SSM parameter containing your GitHub username (the owner of the forked
 
 ```bash
 aws ssm put-parameter \
-  --name "genrx-owner-name" \
+  --name "pipt-owner-name" \
   --value "<YOUR-GITHUB-USERNAME>" \
   --type String \
   --region <YOUR-REGION> \
@@ -237,7 +237,7 @@ aws ssm put-parameter \
 
 ```powershell
 aws ssm put-parameter `
-  --name "genrx-owner-name" `
+  --name "pipt-owner-name" `
   --value "<YOUR-GITHUB-USERNAME>" `
   --type String `
   --region <YOUR-REGION> `
@@ -251,7 +251,7 @@ aws ssm put-parameter `
 
 ```cmd
 aws ssm put-parameter ^
-  --name "genrx-owner-name" ^
+  --name "pipt-owner-name" ^
   --value "<YOUR-GITHUB-USERNAME>" ^
   --type String ^
   --region <YOUR-REGION> ^
@@ -260,7 +260,7 @@ aws ssm put-parameter ^
 
 </details>
 
-#### Parameter 2: /GenRx/AllowedEmailDomains
+#### Parameter 2: /{StackPrefix}/AllowedEmailDomains
 
 Create a comma-separated list of email domains allowed to sign up (e.g., `gmail.com,ubc.ca`). The Cognito pre-signup Lambda reads this parameter to block registrations from unauthorized domains. Store it as a `SecureString` since it controls access.
 
@@ -271,7 +271,7 @@ Create a comma-separated list of email domains allowed to sign up (e.g., `gmail.
 
 ```bash
 aws ssm put-parameter \
-  --name "/GenRx/AllowedEmailDomains" \
+  --name "/<YOUR-STACK-PREFIX>/AllowedEmailDomains" \
   --value "<COMMA-SEPARATED-DOMAINS>" \
   --type SecureString \
   --region <YOUR-REGION> \
@@ -285,7 +285,7 @@ aws ssm put-parameter \
 
 ```powershell
 aws ssm put-parameter `
-  --name "/GenRx/AllowedEmailDomains" `
+  --name "/<YOUR-STACK-PREFIX>/AllowedEmailDomains" `
   --value "<COMMA-SEPARATED-DOMAINS>" `
   --type SecureString `
   --region <YOUR-REGION> `
@@ -299,7 +299,7 @@ aws ssm put-parameter `
 
 ```cmd
 aws ssm put-parameter ^
-  --name "/GenRx/AllowedEmailDomains" ^
+  --name "/<YOUR-STACK-PREFIX>/AllowedEmailDomains" ^
   --value "<COMMA-SEPARATED-DOMAINS>" ^
   --type SecureString ^
   --region <YOUR-REGION> ^
@@ -358,13 +358,13 @@ aws ssm put-parameter ^
 
 </details>
 
-> **Example:** If your `StackPrefix` is `GenRx`, the parameter name is `/GenRx/voiceAgentArn`. Voice features will not function with the placeholder value (they require the real ARN set up in post-deployment), but the placeholder prevents the deployment from failing.
+> **Example:** If your `StackPrefix` is `PIPT`, the parameter name is `/PIPT/voiceAgentArn`. Voice features will not function with the placeholder value (they require the real ARN set up in post-deployment), but the placeholder prevents the deployment from failing.
 
-#### Secret 3: GenRx/CloudFrontSigningKey
+#### Secret 3: {StackPrefix}/CloudFrontSigningKey
 
-The API service stack uses CloudFront signed URLs to deliver patient documents securely. This requires an RSA key pair: the private key signs download URLs, and the public key lets CloudFront verify them. Without these, the `{StackPrefix}-Api` stack will fail to deploy because it reads `/GenRx/CloudFrontPublicKey` from SSM and references `GenRx/CloudFrontSigningKey` from Secrets Manager at synthesis time.
+The API service stack uses CloudFront signed URLs to deliver patient documents securely. This requires an RSA key pair: the private key signs download URLs, and the public key lets CloudFront verify them. Without these, the `{StackPrefix}-Api` stack will fail to deploy because it reads `/{StackPrefix}/CloudFrontPublicKey` from SSM and references `{StackPrefix}/CloudFrontSigningKey` from Secrets Manager at synthesis time.
 
-**Why this is required:** In `cdk/lib/api-service-stack.ts`, the stack calls `ssm.StringParameter.valueForStringParameter(this, "/GenRx/CloudFrontPublicKey")` to create a CloudFront `PublicKey` resource, and Lambda functions reference the `GenRx/CloudFrontSigningKey` secret at runtime to generate signed URLs. If either is missing, deployment fails.
+**Why this is required:** In `cdk/lib/api-service-stack.ts`, the stack calls `ssm.StringParameter.valueForStringParameter(this, "/{StackPrefix}/CloudFrontPublicKey")` to create a CloudFront `PublicKey` resource, and Lambda functions reference the `{StackPrefix}/CloudFrontSigningKey` secret at runtime to generate signed URLs. If either is missing, deployment fails.
 
 **Step 1: Generate an RSA 2048-bit key pair.**
 
@@ -404,7 +404,7 @@ This is the signing key that Lambda functions use at runtime to generate time-li
 
 ```bash
 aws secretsmanager create-secret \
-  --name "GenRx/CloudFrontSigningKey" \
+  --name "<YOUR-STACK-PREFIX>/CloudFrontSigningKey" \
   --secret-string file://private_key.pem \
   --description "RSA private key for signing CloudFront document delivery URLs" \
   --region <YOUR-REGION> \
@@ -419,7 +419,7 @@ aws secretsmanager create-secret \
 ```powershell
 $privateKey = Get-Content -Raw private_key.pem
 aws secretsmanager create-secret `
-  --name "GenRx/CloudFrontSigningKey" `
+  --name "<YOUR-STACK-PREFIX>/CloudFrontSigningKey" `
   --secret-string $privateKey `
   --description "RSA private key for signing CloudFront document delivery URLs" `
   --region <YOUR-REGION> `
@@ -433,7 +433,7 @@ aws secretsmanager create-secret `
 
 ```cmd
 aws secretsmanager create-secret ^
-  --name "GenRx/CloudFrontSigningKey" ^
+  --name "<YOUR-STACK-PREFIX>/CloudFrontSigningKey" ^
   --secret-string file://private_key.pem ^
   --description "RSA private key for signing CloudFront document delivery URLs" ^
   --region <YOUR-REGION> ^
@@ -451,7 +451,7 @@ CDK reads this at synthesis time to create the CloudFront `PublicKey` resource t
 
 ```bash
 aws ssm put-parameter \
-  --name "/GenRx/CloudFrontPublicKey" \
+  --name "/<YOUR-STACK-PREFIX>/CloudFrontPublicKey" \
   --value file://public_key.pem \
   --type String \
   --region <YOUR-REGION> \
@@ -466,7 +466,7 @@ aws ssm put-parameter \
 ```powershell
 $publicKey = Get-Content -Raw public_key.pem
 aws ssm put-parameter `
-  --name "/GenRx/CloudFrontPublicKey" `
+  --name "/<YOUR-STACK-PREFIX>/CloudFrontPublicKey" `
   --value $publicKey `
   --type String `
   --region <YOUR-REGION> `
@@ -480,7 +480,7 @@ aws ssm put-parameter `
 
 ```cmd
 aws ssm put-parameter ^
-  --name "/GenRx/CloudFrontPublicKey" ^
+  --name "/<YOUR-STACK-PREFIX>/CloudFrontPublicKey" ^
   --value file://public_key.pem ^
   --type String ^
   --region <YOUR-REGION> ^
@@ -495,12 +495,12 @@ aws ssm put-parameter ^
 
 | Name | Type | Key/Value | Used By |
 |------|------|-----------|---------|
-| `GENRXSecrets` | Secrets Manager | `{"DB_Username": "..."}` | Database stack (RDS admin credentials) |
+| `PIPTSecrets` | Secrets Manager | `{"DB_Username": "..."}` | Database stack (RDS admin credentials) |
 | `github-personal-access-token` | Secrets Manager | `{"my-github-token": "..."}` | CI/CD stack, Amplify stack |
-| `GenRx/CloudFrontSigningKey` | Secrets Manager | RSA private key (PEM) | Api stack (Lambda signed URL generation) |
-| `genrx-owner-name` | SSM Parameter (String) | GitHub username | CI/CD stack, Amplify stack |
-| `/GenRx/AllowedEmailDomains` | SSM Parameter (SecureString) | Comma-separated email domains | Cognito pre-signup Lambda |
-| `/GenRx/CloudFrontPublicKey` | SSM Parameter (String) | RSA public key (PEM) | Api stack (CloudFront PublicKey resource) |
+| `{StackPrefix}/CloudFrontSigningKey` | Secrets Manager | RSA private key (PEM) | Api stack (Lambda signed URL generation) |
+| `pipt-owner-name` | SSM Parameter (String) | GitHub username | CI/CD stack, Amplify stack |
+| `/{StackPrefix}/AllowedEmailDomains` | SSM Parameter (SecureString) | Comma-separated email domains | Cognito pre-signup Lambda |
+| `/{StackPrefix}/CloudFrontPublicKey` | SSM Parameter (String) | RSA public key (PEM) | Api stack (CloudFront PublicKey resource) |
 | `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | `placeholder` (updated post-deployment) | EcsSocket stack |
 
 ### Step 5: Bootstrap CDK
@@ -534,16 +534,16 @@ cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
 > **Optional — Rename the DynamoDB conversation table:** The default table name is `DynamoDB-Conversation-Table` (a legacy name from the forked codebase). If you're deploying fresh and want something more specific, change this one line in `cdk/lib/api-service-stack.ts` **before** deploying:
 >
 > ```typescript
-> this.dynamoTableName = "GenRx-Conversation-Table"; // or whatever you prefer
+> this.dynamoTableName = `${id}-DynamoDB-Conversation-Table`; // parameterized with your StackPrefix
 > ```
 >
-> Everything else is parameterized from there — the custom resource creates whatever name you set, it gets written to the SSM parameter `/{id}/GenRx/TableName`, and the Python Lambdas read it from SSM at runtime. No other code changes needed.
+> Everything else is parameterized from there — the custom resource creates whatever name you set, it gets written to the SSM parameter `/{id}/TableName`, and the Python Lambdas read it from SSM at runtime. No other code changes needed.
 
 The CDK app requires two context variables at deploy time, plus optional VPC configuration:
 
 | Context Variable | Description | Required |
 |-----------------|-------------|----------|
-| `StackPrefix` | Prefix for all stack and resource names (e.g., `GenRx`) | Yes |
+| `StackPrefix` | Prefix for all stack and resource names (e.g., `PIPT`) | Yes |
 | `githubRepo` | Name of your GitHub repository (not the full URL) | Yes |
 | `githubBranch` | Branch to track for CI/CD (default: `main`) | No |
 | `voiceAgentArn` | ARN of a deployed Bedrock AgentCore voice agent (not needed for first deploy) | No |
@@ -1132,14 +1132,14 @@ cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githu
 
 ### RDS username constraint error
 
-**Cause:** The `DB_Username` value in `GENRXSecrets` uses a reserved word or invalid characters.
+**Cause:** The `DB_Username` value in `PIPTSecrets` uses a reserved word or invalid characters.
 
 **Fix:** Update the secret with a valid username (starts with a letter, alphanumeric only, 1–63 chars):
 
 ```bash
 aws secretsmanager update-secret \
-  --secret-id GENRXSecrets \
-  --secret-string '{"DB_Username": "genrxadmin"}' \
+  --secret-id PIPTSecrets \
+  --secret-string '{"DB_Username": "piptadmin"}' \
   --region <YOUR-REGION> \
   --profile <YOUR-AWS-PROFILE>
 ```

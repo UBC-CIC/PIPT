@@ -68,7 +68,7 @@
     "@aws-cdk/aws-ec2:ebsDefaultGp3Volume": true,
 
     "StackPrefix": "rajrupa-empCDK",
-    "githubRepo": "patient-interaction-practice-tool",
+    "githubRepo": "GenRx",
     "githubBranch": "post-handover-fixes"
   }
 }
