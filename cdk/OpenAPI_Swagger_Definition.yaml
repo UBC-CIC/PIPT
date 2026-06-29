@@ -5404,12 +5404,6 @@ paths:
           description: ID of the organization
           schema:
             type: string
-        - in: query
-          name: created_by
-          required: true
-          description: User ID of the admin creating the question
-          schema:
-            type: string
       requestBody:
         required: true
         content:
