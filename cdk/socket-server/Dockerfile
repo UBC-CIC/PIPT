@@ -19,6 +19,7 @@ RUN pip3 install --break-system-packages -r requirements.txt
 COPY server.js ./
 COPY auth.js ./
 COPY media-bridge.js ./
+COPY session-auth.js ./
 
 ENV AWS_DEFAULT_REGION=us-east-1
 

@@ -1,5 +1,5 @@
 --
--- GenRx Baseline Schema
+-- PIPT Baseline Schema
 -- Generated from pg_dump of production database, cleaned for idempotent deployment.
 -- Note: "public." prefix on all objects is pg_dump's default output style — functionally
 -- identical to unqualified names since public is the default schema.
