@@ -112,6 +112,13 @@ const corsOriginConfig = allowedOrigins.includes("*")
 
 const io = new Server(server, {
   cors: { origin: corsOriginConfig, methods: ["GET", "POST"] },
+  // Keep WebSocket alive through CloudFront/NLB layers.
+  // Ping every 15s with a 10s grace period — ensures traffic flows at least
+  // every 25s, well within CloudFront's idle timeout window.
+  pingInterval: 15000,
+  pingTimeout: 10000,
+  // Allow up to 60s for the initial HTTP→WS upgrade (covers cold starts)
+  connectTimeout: 60000,
 });
 
 // ─── Health Check ─────────────────────────────────────────────────────────────

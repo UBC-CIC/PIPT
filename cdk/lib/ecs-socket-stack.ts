@@ -265,6 +265,7 @@ export class EcsSocketStack extends Stack {
       defaultBehavior: {
         origin: origins.VpcOrigin.withNetworkLoadBalancer(nlb, {
           protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+          readTimeout: Duration.seconds(60),
         }),
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
         cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,

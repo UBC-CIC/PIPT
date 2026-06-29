@@ -2446,7 +2446,14 @@ export class ApiServiceStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
-              excludedRules: [{ name: "SizeRestrictions_BODY" }],
+              // SizeRestrictions_BODY: large document/prompt payloads exceed the default size limit.
+              // GenericLFI_BODY: clinical free-text (e.g. question bank entries asking for PHN, dosages,
+              // path-like tokens) false-positives as local file inclusion. Backend uses parameterized
+              // queries, so body inspection here adds little protection. Set to Count instead of Block.
+              excludedRules: [
+                { name: "SizeRestrictions_BODY" },
+                { name: "GenericLFI_BODY" },
+              ],
             },
           },
           overrideAction: { none: {} },

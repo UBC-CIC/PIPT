@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { UI_COLORS } from '@/lib/colors';
+import { ZoomIn, ZoomOut, RotateCcw, ExternalLink } from 'lucide-react';
 import type { PersonaMedia } from '@/services/studentService';
 
 interface PhysicalAssessmentContentProps {
@@ -107,6 +108,90 @@ function extractAspectRatio(html: string): string | null {
 }
 
 /**
+ * Renders a zoomable image with zoom in/out/reset controls.
+ */
+function ImageViewer({ url, title }: { url: string; title: string }) {
+  const [scale, setScale] = useState(1);
+
+  const zoomIn = () => setScale((s) => Math.min(s + 0.25, 4));
+  const zoomOut = () => setScale((s) => Math.max(s - 0.25, 0.5));
+  const resetZoom = () => setScale(1);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <button
+          onClick={zoomOut}
+          className="p-1.5 rounded transition-colors"
+          style={{ backgroundColor: UI_COLORS.background.hoverLight, border: 'none', cursor: 'pointer' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+          aria-label="Zoom out"
+        >
+          <ZoomOut className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+        </button>
+        <span className="text-xs min-w-[3rem] text-center" style={{ color: UI_COLORS.text.muted }}>
+          {Math.round(scale * 100)}%
+        </span>
+        <button
+          onClick={zoomIn}
+          className="p-1.5 rounded transition-colors"
+          style={{ backgroundColor: UI_COLORS.background.hoverLight, border: 'none', cursor: 'pointer' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+          aria-label="Zoom in"
+        >
+          <ZoomIn className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+        </button>
+        <button
+          onClick={resetZoom}
+          className="p-1.5 rounded transition-colors"
+          style={{ backgroundColor: UI_COLORS.background.hoverLight, border: 'none', cursor: 'pointer' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+          aria-label="Reset zoom"
+        >
+          <RotateCcw className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="p-1.5 rounded transition-colors ml-auto"
+          style={{ backgroundColor: UI_COLORS.background.hoverLight, cursor: 'pointer' }}
+          onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+          onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+          aria-label="Open image in new tab"
+        >
+          <ExternalLink className="w-4 h-4" style={{ color: UI_COLORS.text.body }} />
+        </a>
+      </div>
+      <div
+        className="rounded-lg overflow-auto"
+        style={{
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor: UI_COLORS.border.default,
+          maxHeight: '500px',
+        }}
+      >
+        <img
+          src={url}
+          alt={title}
+          style={{
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            transition: 'transform 0.2s ease',
+            display: 'block',
+            maxWidth: scale <= 1 ? '100%' : 'none',
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Renders a single embed — either from raw embed HTML or a plain URL.
  */
 function EmbedRenderer({ url, title }: { url: string; title: string }) {
@@ -190,16 +275,36 @@ function PhysicalAssessmentContent({ materials, loading }: PhysicalAssessmentCon
     <div className="space-y-6">
       {materials.map((material) => (
         <div key={material.media_id} className="space-y-2">
-          <h3 className="text-sm font-semibold" style={{ color: UI_COLORS.text.heading }}>
-            {material.title}
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold" style={{ color: UI_COLORS.text.heading }}>
+              {material.title}
+            </h3>
+            {material.url && material.media_type !== 'image' && !isEmbedCode(material.url) && (
+              <a
+                href={material.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors no-underline"
+                style={{ backgroundColor: UI_COLORS.background.hoverLight, color: UI_COLORS.text.body }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hover}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.background.hoverLight}
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open in new tab
+              </a>
+            )}
+          </div>
           {material.description && (
             <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
               {material.description}
             </p>
           )}
           {material.url && (
-            <EmbedRenderer url={material.url} title={material.title} />
+            material.media_type === 'image' ? (
+              <ImageViewer url={material.url} title={material.title} />
+            ) : (
+              <EmbedRenderer url={material.url} title={material.title} />
+            )
           )}
         </div>
       ))}

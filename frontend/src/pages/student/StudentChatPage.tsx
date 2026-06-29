@@ -169,6 +169,11 @@ function StudentChatPage() {
         socketRef.current = io(socketUrl, {
           transports: ['websocket'],
           auth: { token: token || '' },
+          reconnection: true,
+          reconnectionAttempts: 10,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 10000,
+          timeout: 60000,
         });
         startAudioClient();
       }).catch(() => {
@@ -530,11 +535,21 @@ function StudentChatPage() {
       const socket = io(socketUrl, {
         transports: ['websocket'],
         auth: { token: token || '' },
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 60000,
       });
       socketRef.current = socket;
 
       socket.on('connect', () => {
         if (!cancelled) setSocketConnected(true);
+      });
+
+      socket.on('disconnect', (reason) => {
+        setSocketConnected(false);
+        console.warn('Socket disconnected:', reason);
       });
 
       socket.on('connect_error', (err) => {
@@ -620,7 +635,7 @@ function StudentChatPage() {
               message_id: aiGreetingId,
               chat_id: chatId,
               sender_type: 'ai',
-              message_content: fullText || 'Hello! How can I help you today?',
+              message_content: fullText || 'Hi there. I\'m here for my appointment.',
               sent_at: new Date().toISOString(),
             }]);
           } else {
@@ -640,7 +655,7 @@ function StudentChatPage() {
             message_id: aiGreetingId,
             chat_id: chatId,
             sender_type: 'ai',
-            message_content: 'Hello! How can I help you today?',
+            message_content: 'I\'m having trouble connecting right now. Please try starting the conversation again.',
             sent_at: new Date().toISOString(),
           }]);
           setIsAiResponding(false);
@@ -656,7 +671,7 @@ function StudentChatPage() {
         message_id: aiGreetingId,
         chat_id: chatId,
         sender_type: 'ai',
-        message_content: 'Hello! How can I help you today?',
+        message_content: 'I\'m having trouble connecting right now. Please try starting the conversation again.',
         sent_at: new Date().toISOString(),
       }]);
       setIsAiResponding(false);
