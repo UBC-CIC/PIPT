@@ -430,16 +430,31 @@ function PatientDashboardPage() {
                 >
                   {selectedPatientFile ? (
                     <div className="flex flex-col">
-                      <button
-                        onClick={() => setSelectedPatientFile(null)}
-                        className="flex items-center gap-1 text-sm mb-3 bg-transparent border-0 cursor-pointer p-0 transition-colors"
-                        style={{ color: UI_COLORS.text.body }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
-                        onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
-                      >
-                        <ArrowLeftIcon className="w-4 h-4" />
-                        Back to files
-                      </button>
+                      <div className="flex items-center justify-between mb-3">
+                        <button
+                          onClick={() => setSelectedPatientFile(null)}
+                          className="flex items-center gap-1 text-sm bg-transparent border-0 cursor-pointer p-0 transition-colors"
+                          style={{ color: UI_COLORS.text.body }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = UI_COLORS.text.heading}
+                          onMouseLeave={(e) => e.currentTarget.style.color = UI_COLORS.text.body}
+                        >
+                          <ArrowLeftIcon className="w-4 h-4" />
+                          Back to files
+                        </button>
+                        {selectedPatientFile.url && (
+                          <a
+                            href={selectedPatientFile.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-sm px-3 py-1 rounded transition-colors no-underline"
+                            style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                          >
+                            Open in new tab
+                          </a>
+                        )}
+                      </div>
                       <h4 className="font-semibold text-sm mb-2" style={{ color: UI_COLORS.text.heading }}>
                         {selectedPatientFile.filename}
                       </h4>
