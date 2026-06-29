@@ -610,7 +610,7 @@ function StudentChatPage() {
               message_id: aiGreetingId,
               chat_id: chatId,
               sender_type: 'ai',
-              message_content: fullText || 'Hello! How can I help you today?',
+              message_content: fullText || 'Hi there. I\'m here for my appointment.',
               sent_at: new Date().toISOString(),
             }]);
           } else {
@@ -630,7 +630,7 @@ function StudentChatPage() {
             message_id: aiGreetingId,
             chat_id: chatId,
             sender_type: 'ai',
-            message_content: 'Hello! How can I help you today?',
+            message_content: 'I\'m having trouble connecting right now. Please try starting the conversation again.',
             sent_at: new Date().toISOString(),
           }]);
           setIsAiResponding(false);
@@ -646,7 +646,7 @@ function StudentChatPage() {
         message_id: aiGreetingId,
         chat_id: chatId,
         sender_type: 'ai',
-        message_content: 'Hello! How can I help you today?',
+        message_content: 'I\'m having trouble connecting right now. Please try starting the conversation again.',
         sent_at: new Date().toISOString(),
       }]);
       setIsAiResponding(false);
