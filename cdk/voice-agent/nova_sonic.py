@@ -842,6 +842,19 @@ class NovaSonic:
 
         except Exception as e:
             logger.error("Error in _process_responses: %s", e)
+            # Notify the frontend that the stream died
+            error_str = str(e)
+            if "Timed out" in error_str or "531" in error_str:
+                msg = "Voice timed out due to inactivity. Please reconnect to continue where you left off."
+                error_code = "session_timeout"
+            else:
+                msg = "Voice had an issue. Please reconnect to continue where you left off."
+                error_code = "stream_error"
+            try:
+                await self._emit({"type": "error", "error": error_code, "message": msg})
+            except Exception:
+                pass  # WebSocket may already be closed
+            self.is_active = False
 
     async def _handle_event(self, json_data):
         """Dispatch a single Nova Sonic event to the appropriate handler.

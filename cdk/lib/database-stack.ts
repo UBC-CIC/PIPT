@@ -61,7 +61,7 @@ export class DatabaseStack extends Stack {
 
         const parameterGroup = new rds.ParameterGroup(this, `${id}-rdsParameterGroup`, {
             engine: rds.DatabaseInstanceEngine.postgres({
-                version: rds.PostgresEngineVersion.VER_16_10,
+                version: rds.PostgresEngineVersion.of('16.14', '16'),
             }),
             description: "Empty parameter group",
             parameters: {
@@ -78,7 +78,7 @@ export class DatabaseStack extends Stack {
                 subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
             },
             engine: rds.DatabaseInstanceEngine.postgres({
-                version: rds.PostgresEngineVersion.VER_16_10,
+                version: rds.PostgresEngineVersion.of('16.14', '16'),
             }),
             instanceType: ec2.InstanceType.of(
                 ec2.InstanceClass.BURSTABLE4_GRAVITON,

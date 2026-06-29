@@ -362,16 +362,27 @@ io.on("connection", (socket) => {
               if (msg.verdict) {
                 socket.emit("diagnosis-complete", { message: "Session completed successfully" });
               }
+            } else if (msg.type === "error" && (msg.error === "session_timeout" || msg.error === "stream_error")) {
+              console.log("⏰ Voice session ended:", msg.error, msg.message);
+              socket.emit("voice-session-ended", {
+                reason: msg.error,
+                message: msg.message || "Voice had an issue. Please reconnect to continue where you left off."
+              });
             }
           } catch (err) {
             console.warn("⚠️ Failed to parse agent message:", err.message);
           }
         });
 
-        agentWs.on("close", () => {
-          console.log("🔚 Voice agent WebSocket closed");
+        agentWs.on("close", (code, reason) => {
+          console.log("🔚 Voice agent WebSocket closed (code=%s reason=%s)", code, reason);
           socket.agentWs = null;
           novaReady = false;
+          // Notify the frontend so it can exit voice mode gracefully
+          socket.emit("voice-session-ended", {
+            reason: "session_limit",
+            message: "Voice had an issue. Please reconnect to continue where you left off."
+          });
         });
 
         agentWs.on("error", (err) => {

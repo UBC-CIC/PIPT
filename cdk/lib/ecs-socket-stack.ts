@@ -225,6 +225,7 @@ export class EcsSocketStack extends Stack {
       desiredCount: 1, // Single task — textStreamSockets map is in-memory, requires all traffic on one container
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
       securityGroups: [socketServiceSg],
+      circuitBreaker: { enable: true, rollback: true },
     });
 
     // 5.1) Allow the internal NLB to reach the service on port 80 (VPC traffic only)
