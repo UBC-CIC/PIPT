@@ -7,6 +7,9 @@
 .env.local
 .env.*.local
 
+# AgentCore generated, environment-specific config (contains account IDs)
+cdk/voice-agent/agentcore/aws-targets.json
+
 # Dependencies
 node_modules/
 
