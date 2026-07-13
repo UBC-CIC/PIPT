@@ -266,6 +266,7 @@ def insert_file_into_db(persona_id, file_name, file_type, file_path, bucket_name
 
         connection.commit()
         cur.close()
+        return None
     except Exception as e:
         if cur:
             cur.close()

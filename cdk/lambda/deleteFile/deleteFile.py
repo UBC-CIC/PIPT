@@ -122,6 +122,7 @@ def delete_file_from_db(persona_id, file_name, file_type):
         logger.info(f"Successfully deleted file {file_name}.{file_type} for persona {persona_id}.")
 
         cur.close()
+        return None
     except Exception as e:
         if cur:
             cur.close()
