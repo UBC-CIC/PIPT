@@ -57,7 +57,7 @@ const vpcStack = new VpcStack(app, `${StackPrefix}-VpcStack`, {
 });
 const dbStack = new DatabaseStack(app, `${StackPrefix}-Database`, vpcStack, {
   env,
-  terminationProtection: true,
+  terminationProtection: false,
 });
 
 // CloudFront WAF must be in us-east-1 (AWS requirement for CLOUDFRONT scope)

@@ -176,6 +176,7 @@ app.post("/stream-callback", (req, res) => {
 });
 
 // ─── TURN Credential Generation (RFC 5389) ───────────────────────────────────
+// NOTE: Currently unused — retained for future TURN server integration.
 /**
  * Generate time-limited TURN credentials using HMAC-SHA1.
  * @param {string} username — unique identifier (e.g. socket.userId)
@@ -183,7 +184,7 @@ app.post("/stream-callback", (req, res) => {
  * @param {number} ttlSeconds — credential lifetime (max 24 hours)
  * @returns {{ username: string, credential: string }}
  */
-function generateTurnCredentials(username, sharedSecret, ttlSeconds = 86400) {
+function generateTurnCredentials(username, sharedSecret, ttlSeconds = 86400) { // eslint-disable-line no-unused-vars
   const timestamp = Math.floor(Date.now() / 1000) + ttlSeconds;
   const turnUsername = `${timestamp}:${username}`;
   const hmac = crypto.createHmac("sha1", sharedSecret);

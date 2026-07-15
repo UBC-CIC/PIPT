@@ -65,7 +65,7 @@ export class ApiServiceStack extends cdk.Stack {
     id: string,
     db: DatabaseStack,
     vpcStack: VpcStack,
-    ecsSocketStack: any = null,
+    ecsSocketStack: any = null, // eslint-disable-line @typescript-eslint/no-unused-vars — reserved for future cross-stack wiring
     textGenRepo?: ecr.IRepository,
     dataIngestRepo?: ecr.IRepository,
     textGenBuildProjectName?: string,
