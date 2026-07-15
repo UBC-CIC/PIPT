@@ -22,11 +22,14 @@ export class DatabaseStack extends Stack {
         super(scope, id, props);
 
         /**
-         * Create the RDS service-linked role if it doesn't exist
+         * Create the RDS service-linked role for new accounts that don't have one yet.
+         * Pass -c createRdsServiceLinkedRole=true on first deploy to a fresh account.
          */
-        // new iam.CfnServiceLinkedRole(this, `${id}-RDSServiceLinkedRole`, {
-        //     awsServiceName: 'rds.amazonaws.com',
-        // });
+        if (this.node.tryGetContext('createRdsServiceLinkedRole') === 'true') {
+            new iam.CfnServiceLinkedRole(this, `${id}-RDSServiceLinkedRole`, {
+                awsServiceName: 'rds.amazonaws.com',
+            });
+        }
 
         /**
          * Retrieve a secret from Secret Manager

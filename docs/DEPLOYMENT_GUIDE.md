@@ -550,6 +550,7 @@ The CDK app requires two context variables at deploy time, plus optional VPC con
 | `SesVerifiedDomain` | Domain with a Route 53 hosted zone for SES email + Amplify custom domain | No |
 | `SesIdentityVerified` | Set to `"true"` after SES domain is verified (see [Custom Domain & SES](./CUSTOM_DOMAIN_AND_SES.md)) | No |
 | `SesSkipIdentityCreation` | Set to `"true"` to skip SES identity creation (when it already exists) | No |
+| `createRdsServiceLinkedRole` | Set to `"true"` on first deploy to a fresh AWS account that has never used RDS (creates the RDS service-linked role) | No |
 | `existingVpcId` | VPC ID to use an existing VPC instead of creating a new one (see [VPC Configuration](#vpc-configuration)) | No |
 | `controlTowerStackSet` | Control Tower StackSet name for importing subnet/route table exports | No |
 | `existingPublicSubnetId` | ID of an existing public subnet (skips creating a new one) | No |
@@ -571,6 +572,8 @@ cdk deploy --all \
   -c githubBranch=main \
   --profile <YOUR-AWS-PROFILE>
 ```
+
+> **First deploy to a brand-new AWS account?** If this account has never used RDS before, add `-c createRdsServiceLinkedRole=true` to the command above. This creates the required `AWSServiceRoleForRDS` service-linked role. Omit this flag on subsequent deploys or if the account already has RDS resources.
 
 #### Option B: Deploy Individual Stacks (Incremental Updates)
 
@@ -1072,10 +1075,10 @@ To tear down all deployed resources, you must first disable termination protecti
 
 ### Step 1: Disable Stack Termination Protection
 
-The VPC, Database, and Api stacks have CloudFormation termination protection enabled. You must disable it before `cdk destroy` will work:
+The VPC and Api stacks have CloudFormation termination protection enabled. You must disable it before `cdk destroy` will work:
 
 1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your deployment region.
-2. For each of these stacks — `{StackPrefix}-VpcStack`, `{StackPrefix}-Database`, `{StackPrefix}-Api`:
+2. For each of these stacks — `{StackPrefix}-VpcStack`, `{StackPrefix}-Api`:
    - Select the stack.
    - Click **Stack actions** → **Edit termination protection**.
    - Set to **Disabled** and confirm.
@@ -1122,13 +1125,12 @@ cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githu
 
 ### Stack deletion fails for Database stack
 
-**Cause:** The Database, VPC, and Api stacks have CloudFormation termination protection enabled, and the RDS instance has deletion protection enabled.
+**Cause:** The RDS instance has deletion protection enabled, which prevents CloudFormation from deleting it.
 
 **Fix:**
 
-1. Disable termination protection on the stack (see [Step 1 in Cleanup](#step-1-disable-stack-termination-protection)).
-2. Disable RDS deletion protection (see [Step 2 in Cleanup](#step-2-disable-rds-deletion-protection)).
-3. Retry `cdk destroy`.
+1. Disable RDS deletion protection (see [Step 2 in Cleanup](#step-2-disable-rds-deletion-protection)).
+2. Retry `cdk destroy`.
 
 ### RDS username constraint error
 
