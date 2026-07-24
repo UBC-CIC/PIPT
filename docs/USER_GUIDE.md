@@ -256,6 +256,8 @@ Student progress status provides a snapshot of where students are in their workf
 
 As an admin, you have all the same capabilities as an instructor: creating and managing simulation groups, configuring patients, and reviewing student work. In addition, admins can manage instructors (enroll them and assign them to simulation groups) and create, edit, and delete bank items (key questions, DTPs, recommendations) at the organization level, making them available for inclusion/exclusion across all simulation groups.
 
+> **Note:** The very first admin on a new deployment is provisioned during setup by whoever deployed the infrastructure — see [Create the First Admin User](./DEPLOYMENT_GUIDE.md#create-the-first-admin-user) in the Deployment Guide. Once that first admin exists, additional roles are managed from within the app.
+
 ### Managing Organizations
 
 From the **Admin Home Page**, admins can view all organizations they have access to.

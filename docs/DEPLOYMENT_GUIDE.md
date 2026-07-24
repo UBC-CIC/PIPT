@@ -22,6 +22,7 @@
   - [DynamoDB Conversation Table & TTL](#dynamodb-conversation-table--ttl)
   - [Request SES Production Access (Optional)](#request-ses-production-access-optional)
   - [Build the Amplify App](#build-the-amplify-app)
+  - [Create the First Admin User](#create-the-first-admin-user)
   - [Deploy the Voice Agent](#deploy-the-voice-agent)
   - [Visit the Web App](#visit-the-web-app)
 - [Cleanup](#cleanup)
@@ -563,6 +564,8 @@ The CDK app requires two context variables at deploy time, plus optional VPC con
 
 Choose one of the following deployment options:
 
+> **Tip: Avoid long, clunky deploy commands.** Rather than passing every context variable on the CLI each time, you can put them once in the `context` section of `cdk/cdk.json` and then run a short deploy command (`cdk deploy --all --profile <YOUR-AWS-PROFILE>`). This is the recommended approach for repeated deploys — see the "Put context variables in cdk.json instead of long CLI commands" note under [VPC Configuration](#vpc-configuration). The `-c` flags shown in the options below are equivalent to setting those same keys in `cdk.json`.
+
 #### Option A: Deploy All Stacks (Recommended for First Deployment)
 
 ```bash
@@ -628,12 +631,13 @@ If you omit all VPC context variables, CDK creates a fresh VPC with:
 - 1 NAT Gateway (override with `-c natGateways=2` for production high availability)
 - Public, private (with egress), and isolated subnets
 
+> **NAT Gateway count.** A single NAT Gateway is the default and is sufficient for this app. Only set `natGateways=2` if you have a specific high-availability requirement.
+
 ```bash
-# Example: new VPC with high availability NAT Gateways
+# Example: new VPC (single NAT Gateway is sufficient for this app)
 cdk deploy --all \
   -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=<REPO NAME HERE> \
-  -c natGateways=2 \
   -c maxAzs=3 \
   --profile <YOUR-AWS-PROFILE>
 ```
@@ -963,6 +967,50 @@ aws amplify get-branch \
 ```
 
 The app will be available at `https://<BRANCH_NAME>.<APP_ID>.amplifyapp.com`.
+
+### Create the First Admin User
+
+On a fresh deployment there are no admin users. Every account that signs up through the app is automatically assigned the **student** role by the post-confirmation Lambda. The CDK Api stack creates an `admin` Cognito group, but it starts empty — so the person who deployed the infrastructure must promote the first admin manually. There is no admin yet to do this from inside the app, so it has to be done from the AWS console (or CLI).
+
+Once the first admin exists, they can promote existing users to instructors and manage the platform from the app UI — see the [Admin Workflow](./USER_GUIDE.md#admin-workflow) in the User Guide.
+
+**Steps:**
+
+1. **Sign up through the app.** Open the deployed app URL and create the account you want to become the admin (using an email on one of your `AllowedEmailDomains`). Confirm the email and log in once so the user is fully created in Cognito. This account starts as a **student**.
+
+2. **Open the Cognito user pool.** In the AWS console, go to **Amazon Cognito** > **User pools** and select the pool named `{StackPrefix}-UserPool`.
+
+3. **Add the user to the `admin` group.** Open the **Groups** tab, click the **admin** group, choose **Add user to group**, and select the user you just created.
+
+4. **Log out and log back in.** The role is carried in the `cognito:groups` claim of the user's token, which is only refreshed at login. The user **must** sign out of the app and sign back in for the admin role to take effect. Until they re-authenticate they'll still be treated as a student.
+
+<details>
+<summary>Alternative: promote via AWS CLI</summary>
+
+Look up the user pool ID (or grab it from the `{StackPrefix}-Api-UserPoolIdOutput` CloudFormation output), then add the user to the `admin` group:
+
+```bash
+# Find the user pool ID
+aws cognito-idp list-user-pools \
+  --max-results 60 \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE> \
+  --query "UserPools[?contains(Name, '<YOUR-STACK-PREFIX>')].{Name:Name,Id:Id}"
+
+# Add the user to the admin group
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id <USER_POOL_ID> \
+  --username <USER-EMAIL> \
+  --group-name admin \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+The user still needs to log out and log back in for the change to take effect.
+
+</details>
+
+> **Note: this is the only place the Cognito `admin` group is used.** It exists purely to bootstrap the first admin. When the user logs back in, the app detects the `admin` group claim once and persists `admin` into the database `users.roles` array. From that point on, the **database is the single source of truth** for authorization — all role checks (admin, instructor, student) read from `users.roles`, not from Cognito groups. Subsequent admins and instructors are managed entirely in-app and written to the database; you do not need to touch Cognito groups again. Removing a user from the Cognito `admin` group after bootstrap does **not** revoke their admin access, since the role now lives in the database.
 
 ### Deploy the Voice Agent
 
