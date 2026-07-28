@@ -88,7 +88,7 @@ function CreateOrganizationDialog({
             </label>
             <Input
               id="org-name"
-              placeholder="Academic Advising"
+              placeholder="Pharmacy Practice"
               value={name}
               onChange={(e) => setName(e.target.value)}
               maxLength={100}
@@ -112,7 +112,7 @@ function CreateOrganizationDialog({
             </label>
             <Input
               id="org-description"
-              placeholder="Simulating interactions between students and academic advisors"
+              placeholder="Simulating interactions between pharmacy students and patients"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={250}
@@ -136,7 +136,7 @@ function CreateOrganizationDialog({
             </label>
             <Input
               id="ai-persona-title"
-              placeholder="Student"
+              placeholder="Patient"
               value={aiPersonaTitle}
               onChange={(e) => setAiPersonaTitle(e.target.value)}
               maxLength={50}
@@ -160,7 +160,7 @@ function CreateOrganizationDialog({
             </label>
             <Input
               id="user-role-title"
-              placeholder="Academic Advisor"
+              placeholder="Pharmacy Student"
               value={userRoleTitle}
               onChange={(e) => setUserRoleTitle(e.target.value)}
               maxLength={50}
@@ -218,7 +218,7 @@ function CreateOrganizationDialog({
             }}
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
           >
-            {isSubmitting ? 'Creating...' : 'Create Organisation'}
+            {isSubmitting ? 'Creating...' : 'Create Organization'}
           </Button>
         </div>
       </DialogContent>

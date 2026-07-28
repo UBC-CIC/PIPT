@@ -60,7 +60,7 @@ function AdminHomePage() {
     }
   };
 
-  const handleUseOrganisation = (organizationId: string) => {
+  const handleUseOrganization = (organizationId: string) => {
     try {
       console.log(`Using organization: ${organizationId}`);
       // Navigate to organization page
@@ -168,7 +168,7 @@ function AdminHomePage() {
                 userRole={org.user_role}
                 icon="building"
                 iconColor={org.icon_color || getSimulationGroupColor(index)}
-                onUseOrganisation={() => handleUseOrganisation(org.organization_id)}
+                onUseOrganization={() => handleUseOrganization(org.organization_id)}
                 onDelete={() => setDeleteConfirm({ open: true, orgId: org.organization_id, orgName: org.name })}
               />
             ))}

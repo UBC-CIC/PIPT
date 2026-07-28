@@ -7,7 +7,7 @@ interface OrganizationCardProps {
   userRole: string;
   icon: 'building';
   iconColor: string;
-  onUseOrganisation: () => void;
+  onUseOrganization: () => void;
   onDelete?: () => void;
 }
 
@@ -21,7 +21,7 @@ function OrganizationCard({
   aiPersona,
   userRole,
   iconColor,
-  onUseOrganisation,
+  onUseOrganization,
   onDelete,
 }: OrganizationCardProps) {
   return (
@@ -65,10 +65,10 @@ function OrganizationCard({
 
       {/* Action button */}
       <Button
-        onClick={onUseOrganisation}
+        onClick={onUseOrganization}
         className="w-full bg-gray-900 hover:bg-gray-800 text-white"
       >
-        Use Organisation
+        Use Organization
       </Button>
     </div>
   );
