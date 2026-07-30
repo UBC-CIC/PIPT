@@ -221,6 +221,128 @@ Changing or removing the custom domain does not break email delivery, and vice v
 
 ---
 
+## Alternative: Third-Party DNS with Imported SSL Certificate
+
+If your organization manages DNS outside of Route 53 (e.g., university DNS) or requires using an organization-issued SSL certificate, use this path instead of the Route 53 approach above. This is common in enterprise/academic environments where you receive a subdomain (e.g., `pipt.yourorg.edu`) but don't have full DNS delegation authority.
+
+> **⚠️ CDK Conflict Warning:** If you use this manual approach, do **NOT** pass `SesVerifiedDomain` on your CDK deploys. The CDK's `CfnDomain` block will attempt to create an Amplify custom domain resource that conflicts with your manually configured domain. If you've already deployed with `SesVerifiedDomain` set, you'll need to either:
+> - Remove the manual console domain and let CDK manage it (Route 53 path), OR
+> - Run one deploy with `SesVerifiedDomain` omitted to remove the CDK-managed domain resource, then configure manually in the console
+>
+> Pick one path and stick with it. Mixing CDK-managed and console-managed domains on the same Amplify app will cause deploy failures.
+
+### Phase 1: Import your organization's SSL certificate into ACM
+
+Your organization's CA will provide: the certificate body (PEM), the private key, and the certificate chain (intermediate/CA bundle).
+
+**Requirements:**
+- RSA (1024/2048/3072/4096-bit) or ECDSA (256-bit, prime256v1)
+- Must cover your subdomain — a wildcard like `*.yourorg.edu` works
+- Certificate must not be expired
+
+**Steps:**
+
+1. Open the **ACM console** in **us-east-1 (N. Virginia)** — this region is mandatory for Amplify custom domains regardless of where your app is deployed.
+2. Click **Import a certificate**.
+3. Paste the **certificate body** (PEM format, begins with `-----BEGIN CERTIFICATE-----`).
+4. Paste the **private key** (begins with `-----BEGIN PRIVATE KEY-----` or `-----BEGIN RSA PRIVATE KEY-----`).
+5. Paste the **certificate chain** (intermediate and root CA certificates, concatenated).
+6. Click **Import**.
+7. Confirm the status shows **Issued**. Copy the **certificate ARN** — you'll need it in Phase 2.
+
+> **Renewal responsibility:** Imported certificates do NOT auto-renew. Set a calendar reminder to re-import the renewed certificate before expiry. When you re-import into the same ACM certificate ARN, Amplify picks up the new cert automatically — no app changes needed.
+
+Reference: [Importing certificates into ACM](https://docs.aws.amazon.com/acm/latest/userguide/import-certificate.html)
+
+### Phase 2: Add the custom domain in Amplify Console
+
+1. Open the **Amplify Console** → select the PIPT app.
+2. Go to **Hosting** → **Custom domains** → **Add domain**.
+3. Enter your subdomain (e.g., `pipt.yourorg.edu`). Use a subdomain, not an apex domain, so you only need a CNAME record.
+4. Amplify will detect it's not a Route 53 domain → choose **Manual configuration**.
+5. Map the subdomain to the **main** branch. Remove the extra `www` entry unless you want it.
+6. For **SSL certificate**, choose **Custom SSL certificate** → select the ACM certificate you imported in Phase 1.
+7. Click **Add domain**.
+
+Reference: [Adding a custom domain managed by a third-party DNS provider](https://docs.aws.amazon.com/amplify/latest/userguide/to-add-a-custom-domain-managed-by-a-third-party-dns-provider.html)
+
+### Phase 3: Add DNS records at your organization's DNS provider
+
+After adding the domain, Amplify will show you the DNS records you need to create.
+
+1. In Amplify, go to **Actions** → **View DNS records**. You'll see two CNAME records.
+2. Send these to your organization's DNS administrator:
+
+| Record Type | Host | Value | Purpose |
+|-------------|------|-------|---------|
+| CNAME | `_abc123.pipt` (validation) | `_abc123...acm-validations.aws` | Proves domain ownership to ACM |
+| CNAME | `pipt` (routing) | `<branch>.<app-id>.amplifyapp.com` | Routes traffic to Amplify |
+
+> **Timing matters:** Add these records promptly. ACM validation retries with exponential backoff — delays can leave the domain stuck in **Pending Verification** for hours. If this happens, delete the domain in Amplify and re-add it to restart the validation process.
+
+### Phase 4: Verify
+
+1. Wait for the Amplify domain status to reach **Available**. DNS propagation + ACM validation typically takes 15–60 minutes, but can take up to 24 hours in some environments.
+2. Browse to `https://pipt.yourorg.edu` and confirm:
+   - The site loads correctly
+   - The padlock shows your organization's certificate (not an AWS-issued one)
+
+### Ongoing maintenance
+
+| Task | Frequency | What to do |
+|------|-----------|------------|
+| Certificate renewal | Before expiry (annually for most org CAs) | Re-import the renewed cert into the same ACM certificate in us-east-1. Amplify refreshes automatically. |
+| CDK deploys | Every deploy | Do NOT pass `SesVerifiedDomain` — this prevents CDK from creating a competing `CfnDomain` resource. SES email can still be configured separately if needed. |
+| Branch changes | As needed | Update the subdomain mapping in Amplify Console if you change the production branch. |
+
+### Deploy commands for this path
+
+When using the third-party DNS / manual SSL approach, your CDK deploy commands **must omit** the `SesVerifiedDomain` and `SesIdentityVerified` flags entirely. This prevents CDK from creating SES identities or Amplify domains that would conflict with your manual console configuration.
+
+**Standard deploy (no SES, no CDK-managed domain):**
+
+```bash
+cdk deploy --all -c StackPrefix=<PREFIX> -c githubRepo=<REPO> -c githubBranch=main --profile <PROFILE>
+```
+
+**If you also want SES email but set it up manually in the SES console:**
+
+Deploy the same way (no SES flags), then configure SES separately:
+1. Go to **SES Console** → **Verified identities** → **Create identity**
+2. Choose **Domain** and enter your domain
+3. SES will give you DKIM CNAME records — send these to your org DNS admin
+4. Once verified, configure Cognito to use SES via the Cognito console:
+   - **User Pool** → **Messaging** → **Email** → select SES and enter the verified domain
+5. This keeps SES completely outside of CloudFormation, so deploys never touch it
+
+**If you previously deployed WITH `SesVerifiedDomain` and need to switch to manual:**
+
+You need one transitional deploy to remove the CDK-managed SES identity and Amplify domain from CloudFormation's state:
+
+```bash
+# This removes the SES identity and CfnDomain from the stack (CloudFormation will delete them)
+cdk deploy --all -c StackPrefix=<PREFIX> -c githubRepo=<REPO> -c githubBranch=main --profile <PROFILE>
+```
+
+After this deploy completes:
+- The SES identity created by CDK will be deleted — recreate it manually in the SES console if needed
+- The Amplify custom domain will be removed — add it back manually via Phase 2 above
+- All future deploys use the simple command (no SES flags)
+
+> **⚠️ This means a brief interruption:** Cognito will fall back to its default email sender (50/day limit) until you manually configure SES. Plan accordingly — do this during a low-usage window.
+
+### Separating SES email from the manual domain
+
+If you want SES email (for Cognito verification emails) but are managing the Amplify domain manually:
+- You can still set up SES manually in the SES console for your domain
+- Create the DKIM records at your org DNS provider (same process as the routing CNAME above)
+- Configure Cognito to use SES via the API or console, independent of CDK
+- Alternatively, use a different domain/subdomain for email (e.g., `mail.yourorg.edu`) that IS in Route 53, while keeping the app domain manual
+
+Reference: [Using SSL/TLS certificates with Amplify](https://docs.aws.amazon.com/amplify/latest/userguide/using-certificates.html)
+
+---
+
 ## Files
 
 | File | SES-related content |
