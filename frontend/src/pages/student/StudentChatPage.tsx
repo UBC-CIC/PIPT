@@ -543,6 +543,17 @@ function StudentChatPage() {
       });
       socketRef.current = socket;
 
+      // Refresh the auth token before each reconnection attempt so expired
+      // tokens don't cause 502s or auth rejections on reconnect.
+      socket.on('reconnect_attempt', () => {
+        authService.getIdToken().then((freshToken) => {
+          socket.auth = { token: freshToken || '' };
+        }).catch(() => {
+          // If token refresh fails, reconnect will use the stale token —
+          // server will reject it and the user will need to re-login.
+        });
+      });
+
       socket.on('connect', () => {
         if (!cancelled) setSocketConnected(true);
       });
