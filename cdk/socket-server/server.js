@@ -113,10 +113,14 @@ const corsOriginConfig = allowedOrigins.includes("*")
 const io = new Server(server, {
   cors: { origin: corsOriginConfig, methods: ["GET", "POST"] },
   // Keep WebSocket alive through CloudFront/NLB layers.
-  // Ping every 15s with a 10s grace period — ensures traffic flows at least
-  // every 25s, well within CloudFront's idle timeout window.
+  // A PING is still sent every 15s (traffic flows well within CloudFront's
+  // idle timeout window), but the PONG grace period is 25s. The old 10s grace
+  // was too tight: spawning the Nova child process and heavy synchronous JSON
+  // logging can briefly block the Node event loop, delaying PONGs and causing
+  // spurious "ping timeout" disconnects (which then forced non-streaming
+  // fallback on the client).
   pingInterval: 15000,
-  pingTimeout: 10000,
+  pingTimeout: 25000,
   // Allow up to 60s for the initial HTTP→WS upgrade (covers cold starts)
   connectTimeout: 60000,
 });

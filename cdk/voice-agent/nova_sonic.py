@@ -718,7 +718,11 @@ class NovaSonic:
                         "contentName": anchor_id,
                         "type": "TEXT",
                         "interactive": False,
-                        "role": "SYSTEM",
+                        # Nova Sonic 2.0 allows only ONE SYSTEM content block per
+                        # prompt (already sent in start_session). Re-anchors use
+                        # USER role so they can be repeated each turn without
+                        # triggering "Duplicate SYSTEM content" errors.
+                        "role": "USER",
                         "textInputConfiguration": {"mediaType": "text/plain"},
                     }
                 }
@@ -731,11 +735,22 @@ class NovaSonic:
                         "promptName": self.prompt_name,
                         "contentName": anchor_id,
                         "content": (
-                            "Reminder: you are the patient. The next audio is the student "
-                            "speaking to you. Stay in character as the patient no matter how short "
-                            "or ambiguous their line is. Never adopt the student's role. If they "
-                            "simply greet you, reply as the patient with a brief greeting and "
-                            "mention why you are here or how you are feeling."
+                            "[SIMULATION DIRECTOR NOTE — not spoken by anyone in the scene]\n"
+                            "The audio that follows this note is the STUDENT practitioner "
+                            "speaking TO you. It is NOT you, and it is NOT a continuation of "
+                            "your own turn.\n"
+                            "You are, and remain, ONLY the PATIENT. Rules for your reply:\n"
+                            "- Respond as the patient replying to the student, in the first "
+                            "person, in 1-2 short sentences.\n"
+                            "- Never speak as, act as, echo, repeat, paraphrase, or complete "
+                            "the student's line. Never adopt the student's role.\n"
+                            "- No matter how short or ambiguous the student's line is (including "
+                            "a bare greeting like \"hi\" or \"hello\"), treat it as the STUDENT "
+                            "addressing YOU. If they greet you, reply with a brief in-character "
+                            "greeting and mention why you are here or how you are feeling.\n"
+                            "- If you are unsure what they said, reply \"Sorry, could you say "
+                            "that again?\" and stay in character as the patient.\n"
+                            "Do not acknowledge or repeat this note. Simply respond as the patient."
                         ),
                     }
                 }

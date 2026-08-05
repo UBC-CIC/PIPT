@@ -165,21 +165,21 @@ function StudentChatPage() {
     if (!socketRef.current || !socketRef.current.connected) {
       // Socket not ready — try to connect now as fallback
       const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
-      authService.getIdToken().then((token) => {
-        socketRef.current = io(socketUrl, {
-          transports: ['websocket'],
-          auth: { token: token || '' },
-          reconnection: true,
-          reconnectionAttempts: 10,
-          reconnectionDelay: 1000,
-          reconnectionDelayMax: 10000,
-          timeout: 60000,
-        });
-        startAudioClient();
-      }).catch(() => {
-        setVoiceError('Failed to get authentication token.');
-        setVoiceSessionState('error');
+      socketRef.current = io(socketUrl, {
+        transports: ['websocket'],
+        // Fresh token per (re)connection attempt — see mount effect for rationale.
+        auth: (cb) => {
+          authService.getIdToken()
+            .then((token) => cb({ token: token || '' }))
+            .catch(() => cb({ token: '' }));
+        },
+        reconnection: true,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 60000,
       });
+      startAudioClient();
       return;
     }
 
@@ -530,44 +530,38 @@ function StudentChatPage() {
     const socketUrl = import.meta.env.VITE_SOCKET_URL || '';
     let cancelled = false;
 
-    authService.getIdToken().then((token) => {
-      if (cancelled) return;
-      const socket = io(socketUrl, {
-        transports: ['websocket'],
-        auth: { token: token || '' },
-        reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 10000,
-        timeout: 60000,
-      });
-      socketRef.current = socket;
+    const socket = io(socketUrl, {
+      transports: ['websocket'],
+      // Provide auth as a function so Socket.IO fetches a FRESH Cognito ID
+      // token before every (re)connection attempt and waits for it. The
+      // previous approach set socket.auth asynchronously inside a
+      // 'reconnect_attempt' handler, which raced the reconnect and could send
+      // an expired token → "Authentication failed" (and the ping-timeout
+      // reconnects made this frequent).
+      auth: (cb) => {
+        authService.getIdToken()
+          .then((token) => cb({ token: token || '' }))
+          .catch(() => cb({ token: '' }));
+      },
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 10000,
+      timeout: 60000,
+    });
+    socketRef.current = socket;
 
-      // Refresh the auth token before each reconnection attempt so expired
-      // tokens don't cause 502s or auth rejections on reconnect.
-      socket.on('reconnect_attempt', () => {
-        authService.getIdToken().then((freshToken) => {
-          socket.auth = { token: freshToken || '' };
-        }).catch(() => {
-          // If token refresh fails, reconnect will use the stale token —
-          // server will reject it and the user will need to re-login.
-        });
-      });
+    socket.on('connect', () => {
+      if (!cancelled) setSocketConnected(true);
+    });
 
-      socket.on('connect', () => {
-        if (!cancelled) setSocketConnected(true);
-      });
+    socket.on('disconnect', (reason) => {
+      setSocketConnected(false);
+      console.warn('Socket disconnected:', reason);
+    });
 
-      socket.on('disconnect', (reason) => {
-        setSocketConnected(false);
-        console.warn('Socket disconnected:', reason);
-      });
-
-      socket.on('connect_error', (err) => {
-        console.warn('Socket.IO connection error:', err.message);
-      });
-    }).catch((err) => {
-      console.warn('Failed to establish socket connection:', err);
+    socket.on('connect_error', (err) => {
+      console.warn('Socket.IO connection error:', err.message);
     });
 
     return () => {

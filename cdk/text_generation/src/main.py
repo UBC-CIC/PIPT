@@ -113,28 +113,95 @@ def initialize_constants():
     
 
 
+def _open_connection():
+    """Open a fresh psycopg connection to the RDS proxy.
+
+    autocommit=True is deliberate: this Lambda only runs read-only SELECTs.
+    With autocommit disabled, every SELECT implicitly opened a transaction
+    that was never committed, leaving the session "idle in transaction".
+    Because the connection is cached across warm Lambda invocations, the
+    database (or RDS proxy) eventually terminated that idle-in-transaction
+    session, and the next reuse failed with "the connection is lost".
+    autocommit=True means no open transaction lingers between invocations.
+    """
+    secret = get_secret(DB_SECRET_NAME)
+    conn = psycopg.connect(
+        host=RDS_PROXY_ENDPOINT,
+        port=secret["port"],
+        dbname=secret["dbname"],
+        user=secret["username"],
+        password=secret["password"],
+        autocommit=True,
+        sslmode="require",
+    )
+    logger.info("Connected to the database!")
+    return conn
+
+
+def _connection_is_alive(conn):
+    """Cheap liveness probe. `conn.closed` only reflects client-side state and
+    won't detect a server-side termination (idle timeout, proxy reaping, etc.),
+    so we actively ping with SELECT 1."""
+    if conn is None or conn.closed:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        return True
+    except Exception:
+        return False
+
+
 def connect_to_db():
     global connection
-    if connection is None or connection.closed:
+    # Reuse the cached connection only if it's actually alive. This guards
+    # against stale connections that were terminated server-side between warm
+    # Lambda invocations (the root cause of intermittent "connection is lost").
+    if _connection_is_alive(connection):
+        return connection
+
+    # Cached connection is dead or missing — discard and reconnect.
+    if connection is not None:
         try:
-            secret = get_secret(DB_SECRET_NAME)
-            connection = psycopg.connect(
-                host=RDS_PROXY_ENDPOINT,
-                port=secret["port"],
-                dbname=secret["dbname"],
-                user=secret["username"],
-                password=secret["password"],
-                autocommit=False,
-                sslmode="require",
-            )
-            logger.info("Connected to the database!")
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            if connection:
-                connection.rollback()
+            connection.close()
+        except Exception:
+            pass
+        connection = None
+
+    try:
+        connection = _open_connection()
+    except Exception as e:
+        logger.error(f"Failed to connect to database: {e}")
+        if connection:
+            try:
                 connection.close()
-            raise
+            except Exception:
+                pass
+            connection = None
+        raise
     return connection
+
+def _safe_cleanup_after_error(cur):
+    """Close the cursor and drop the cached connection if it has died.
+
+    On a lost/terminated connection we must clear the module-level cache so the
+    next connect_to_db() call opens a fresh one instead of reusing a dead socket.
+    """
+    global connection
+    if cur is not None:
+        try:
+            cur.close()
+        except Exception:
+            pass
+    if not _connection_is_alive(connection):
+        if connection is not None:
+            try:
+                connection.close()
+            except Exception:
+                pass
+        connection = None
+
 
 def get_system_prompt(simulation_group_id):
     connection = connect_to_db()
@@ -169,9 +236,7 @@ def get_system_prompt(simulation_group_id):
 
     except Exception as e:
         logger.error(f"Error fetching system prompt: {e}")
-        if cur:
-            cur.close()
-        connection.rollback()
+        _safe_cleanup_after_error(locals().get("cur"))
         return None
 
 
@@ -210,9 +275,7 @@ def get_persona_details(persona_id):
 
     except Exception as e:
         logger.error(f"Error fetching persona details: {e}")
-        if cur:
-            cur.close()
-        connection.rollback()
+        _safe_cleanup_after_error(locals().get("cur"))
         return None, None, None, None
 
 
