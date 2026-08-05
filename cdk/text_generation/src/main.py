@@ -78,20 +78,6 @@ def get_secret(secret_name, expect_json=True):
     return db_secret
 
 
-def invalidate_secret_cache():
-    """Clear the cached DB secret so the next get_secret() call fetches fresh
-    credentials from Secrets Manager.
-
-    Called when a connection attempt fails with an authentication error, which
-    typically means Secrets Manager has rotated the password but the running
-    process still holds the old one in memory.
-    """
-    global db_secret
-    if db_secret is not None:
-        logger.info("Invalidating cached DB secret — will re-fetch from Secrets Manager on next attempt")
-        db_secret = None
-
-
 def get_parameter(param_name, cached_var):
     """
     Fetch a parameter value from Systems Manager Parameter Store.
@@ -137,42 +123,19 @@ def _open_connection():
     database (or RDS proxy) eventually terminated that idle-in-transaction
     session, and the next reuse failed with "the connection is lost".
     autocommit=True means no open transaction lingers between invocations.
-
-    If the connection attempt fails with an authentication error (e.g. after a
-    Secrets Manager rotation), the cached secret is invalidated and a single
-    retry is made with freshly-fetched credentials.
     """
     secret = get_secret(DB_SECRET_NAME)
-    try:
-        conn = psycopg.connect(
-            host=RDS_PROXY_ENDPOINT,
-            port=secret["port"],
-            dbname=secret["dbname"],
-            user=secret["username"],
-            password=secret["password"],
-            autocommit=True,
-            sslmode="require",
-        )
-        logger.info("Connected to the database!")
-        return conn
-    except psycopg.OperationalError as e:
-        err_msg = str(e).lower()
-        if "password authentication failed" in err_msg or "authentication" in err_msg:
-            logger.warning("Authentication failed — cached credentials may be stale after rotation. Refreshing secret...")
-            invalidate_secret_cache()
-            secret = get_secret(DB_SECRET_NAME)
-            conn = psycopg.connect(
-                host=RDS_PROXY_ENDPOINT,
-                port=secret["port"],
-                dbname=secret["dbname"],
-                user=secret["username"],
-                password=secret["password"],
-                autocommit=True,
-                sslmode="require",
-            )
-            logger.info("Connected to the database after credential refresh!")
-            return conn
-        raise
+    conn = psycopg.connect(
+        host=RDS_PROXY_ENDPOINT,
+        port=secret["port"],
+        dbname=secret["dbname"],
+        user=secret["username"],
+        password=secret["password"],
+        autocommit=True,
+        sslmode="require",
+    )
+    logger.info("Connected to the database!")
+    return conn
 
 
 def _connection_is_alive(conn):

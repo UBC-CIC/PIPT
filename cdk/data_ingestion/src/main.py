@@ -55,15 +55,6 @@ def get_secret():
             raise
     return db_secret
 
-
-def invalidate_secret_cache():
-    """Clear the cached DB secret so the next get_secret() call fetches fresh
-    credentials from Secrets Manager after a rotation."""
-    global db_secret
-    if db_secret is not None:
-        logger.info("Invalidating cached DB secret — will re-fetch from Secrets Manager")
-        db_secret = None
-
 def get_parameter():
     """
     Fetch a parameter value from Systems Manager Parameter Store.
@@ -94,29 +85,6 @@ def connect_to_db():
             connection = psycopg2.connect(**connection_params)
             connection.autocommit = True
             logger.info("Connected to the database!")
-        except psycopg2.OperationalError as e:
-            err_msg = str(e).lower()
-            if "password authentication failed" in err_msg or "authentication" in err_msg:
-                logger.warning("Authentication failed — cached credentials may be stale after rotation. Refreshing secret...")
-                invalidate_secret_cache()
-                secret = get_secret()
-                connection_params = {
-                    'dbname': secret["dbname"],
-                    'user': secret["username"],
-                    'password': secret["password"],
-                    'host': RDS_PROXY_ENDPOINT,
-                    'port': secret["port"],
-                    'sslmode': 'require'
-                }
-                connection = psycopg2.connect(**connection_params)
-                connection.autocommit = True
-                logger.info("Connected to the database after credential refresh!")
-            else:
-                logger.error(f"Failed to connect to database: {e}")
-                if connection:
-                    connection.rollback()
-                    connection.close()
-                raise
         except Exception as e:
             logger.error(f"Failed to connect to database: {e}")
             if connection:
