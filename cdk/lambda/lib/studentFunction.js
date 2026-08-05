@@ -1540,9 +1540,9 @@ exports.handler = async (event, context) => {
               break;
             }
 
-            // 3a) Fetch student's own submissions from chats table
+            // 3a) Fetch student's own submissions + status from chats table
             const chatRow = await sqlConnection`
-              SELECT dtp_submission, recommendation_submission
+              SELECT dtp_submission, recommendation_submission, status
               FROM "chats"
               WHERE chat_id = ${sessionId}
               LIMIT 1;
@@ -1556,6 +1556,24 @@ exports.handler = async (event, context) => {
             };
             const dtpSubmission = normalize(rawDtp);
             const recommendationSubmission = normalize(rawRec);
+
+            // If the session hasn't been concluded, there is no debrief and none
+            // is being generated. Return a terminal (non-"generating") status so
+            // the client does NOT enter its retry/poll loop. Previously this path
+            // fell through and returned status "generating", causing get_debrief
+            // to be polled repeatedly for active, never-concluded sessions — and
+            // the backend also wasted ~18s in the retry loop below on each call.
+            const isConcluded = chatRow[0]?.status === 'concluded';
+            if (!isConcluded) {
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                status: "not_concluded",
+                generated_text: null,
+                dtp_submission: dtpSubmission,
+                recommendation_submission: recommendationSubmission,
+              });
+              break;
+            }
 
             // 3b) Retry for race condition (debrief inserted async after conclude)
             const maxRetries = 6;

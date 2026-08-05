@@ -2465,10 +2465,18 @@ export class ApiServiceStack extends cdk.Stack {
               // SizeRestrictions_BODY: large document/prompt payloads exceed the default size limit.
               // GenericLFI_BODY: clinical free-text (e.g. question bank entries asking for PHN, dosages,
               // path-like tokens) false-positives as local file inclusion. Backend uses parameterized
-              // queries, so body inspection here adds little protection. Set to Count instead of Block.
-              excludedRules: [
-                { name: "SizeRestrictions_BODY" },
-                { name: "GenericLFI_BODY" },
+              // queries, so body inspection here adds little protection.
+              // CrossSiteScripting_BODY: physical-assessment materials (persona_media) legitimately
+              // contain <iframe> embed codes submitted by instructors, which this rule flags as XSS.
+              // The stored HTML is sanitized on render with DOMPurify (iframe-only allowlist) and React
+              // auto-escapes everywhere else, so XSS is controlled at the app layer. Scoping this rule to
+              // a single path would require a second CommonRuleSet (700 WCU) that exceeds the 1500 WCU
+              // WebACL limit, so it is counted API-wide here.
+              // All are set to Count (via ruleActionOverrides) instead of Block — still logged for visibility.
+              ruleActionOverrides: [
+                { name: "SizeRestrictions_BODY", actionToUse: { count: {} } },
+                { name: "GenericLFI_BODY", actionToUse: { count: {} } },
+                { name: "CrossSiteScripting_BODY", actionToUse: { count: {} } },
               ],
             },
           },
