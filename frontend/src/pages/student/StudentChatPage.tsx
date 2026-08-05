@@ -503,11 +503,23 @@ function StudentChatPage() {
           }
         }
       });
-      studentService.fetchDebrief(routeChatId).then((data) => {
-        if (!cancelled && data) {
-          setDebriefData(data);
-          setSessionStatus('concluded');
-        }
+      // Only fetch the debrief if this session was actually concluded.
+      // Previously fetchDebrief ran unconditionally on every resume, and its
+      // internal retry-on-'generating' loop then polled get_debrief repeatedly
+      // for sessions that were never concluded. Gate on the chat's concluded
+      // status from the patient session list first.
+      studentService.fetchChatHistory(groupId, patientId).then((history) => {
+        if (cancelled) return;
+        const entry = history.find((h) => h.id === routeChatId);
+        if (entry?.completionStatus !== 'Complete') return; // not concluded — no debrief yet
+        setSessionStatus('concluded');
+        studentService.fetchDebrief(routeChatId).then((data) => {
+          if (!cancelled && data) {
+            setDebriefData(data);
+          }
+        });
+      }).catch((err) => {
+        console.warn('Failed to check session status before fetching debrief:', err);
       });
     } else if (!sessionCreationRef.current) {
       // New chat — create a fresh session (guarded against StrictMode double-mount)
