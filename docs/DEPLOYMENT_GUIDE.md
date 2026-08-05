@@ -24,6 +24,7 @@
   - [Build the Amplify App](#build-the-amplify-app)
   - [Create the First Admin User](#create-the-first-admin-user)
   - [Deploy the Voice Agent](#deploy-the-voice-agent)
+  - [Rotating the CloudFront Signing Keys](#rotating-the-cloudfront-signing-keys)
   - [Visit the Web App](#visit-the-web-app)
 - [Cleanup](#cleanup)
 - [Troubleshooting](#troubleshooting)
@@ -491,6 +492,8 @@ aws ssm put-parameter ^
 </details>
 
 > **Security note:** After uploading, delete the local key files (`rm private_key.pem public_key.pem`). The private key is sensitive: anyone with access to it can generate signed URLs that bypass CloudFront access controls.
+
+> **Rotating these keys later?** Regenerating the RSA key pair after the initial deploy is **not** a simple overwrite — CloudFront public keys are immutable and a naive redeploy deadlocks. See [Rotating the CloudFront Signing Keys](#rotating-the-cloudfront-signing-keys) in Post-Deployment for the safe procedure.
 
 #### Summary of Required Secrets and Parameters
 
@@ -1095,6 +1098,50 @@ cdk deploy <YOUR-STACK-PREFIX>-EcsSocket \
 ```
 
 > **Note:** Voice features will not work until all four steps are complete. The ECS socket server uses the stored ARN to establish a SigV4-signed WebSocket connection to the AgentCore runtime.
+
+### Rotating the CloudFront Signing Keys
+
+At some point you may need to regenerate the RSA key pair set up in [Step 4, Secret 3](#secret-3-stackprefixcloudfrontsigningkey) (routine rotation, or because the private key was exposed). This is **not** as simple as overwriting the two stored values — CloudFront public keys are **immutable**, so changing them requires care.
+
+**Why a naive rotation deadlocks:** If you only update the SSM public key and Secrets Manager private key and then run `cdk deploy`, CloudFormation must *replace* the `PublicKey` resource (its encoded key can't be changed in place). That replacement gets stuck because:
+
+- A public key that belongs to a key group **cannot be deleted**, and
+- A key group **cannot be emptied** (it must contain at least one key).
+
+The deploy fails, and trying to fix it by hand in the console hits the same wall: deleting the key reports "it's part of a key group," and dissociating it reports "at least one key must be associated."
+
+**How the stack avoids this:** `cdk/lib/api-service-stack.ts` names the `PublicKey` resource with a version suffix driven by a `cfKeyVersion` value (default `1`):
+
+```typescript
+const cfKeyVersion =
+  this.node.tryGetContext("cfKeyVersion") ?? process.env.CF_KEY_VERSION ?? "1";
+
+const cfPublicKey = new cloudfront.PublicKey(
+  this,
+  `${id}-CfSigningPublicKey-v${cfKeyVersion}`,
+  { encodedKey: cfPublicKeyPem, /* ... */ }
+);
+```
+
+Bumping `cfKeyVersion` makes CloudFormation create a **new** `PublicKey` resource, repoint the key group to it, update the distribution and the Lambda `CLOUDFRONT_KEY_PAIR_ID`, and only then delete the old key — sidestepping the deadlock entirely.
+
+**Rotation steps:**
+
+1. **Generate a new key pair** using the same commands as [Step 4, Secret 3, Step 1](#secret-3-stackprefixcloudfrontsigningkey) (remember the `-traditional` flag for PKCS#1 format).
+2. **Update both stored values** so they remain a matching pair:
+   - Overwrite Secrets Manager `{StackPrefix}/CloudFrontSigningKey` with the new **private** key (use `aws secretsmanager put-secret-value`).
+   - Overwrite SSM `/{StackPrefix}/CloudFrontPublicKey` with the new **public** key (use `aws ssm put-parameter --overwrite`).
+   - Verify they match: `openssl rsa -in private_key.pem -pubout` should equal the stored public key.
+3. **Deploy the Api stack with an incremented version** (same command format as [Option B](#option-b-deploy-individual-stacks-incremental-updates), with the added `cfKeyVersion` flag):
+
+   ```bash
+   cdk deploy <YOUR-STACK-PREFIX>-Api -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main -c cfKeyVersion=2 --profile <YOUR-AWS-PROFILE>
+   ```
+
+   Increment `cfKeyVersion` on every subsequent rotation (`3`, `4`, ...).
+4. **Verify** by requesting a document or profile picture in the app — signed URLs should return `200`, not `403`. You can also confirm the key group now points to the new key ID: `aws cloudfront list-key-groups --query "KeyGroupList.Items[].KeyGroup.KeyGroupConfig" --profile <YOUR-AWS-PROFILE>`.
+
+> **⚠️ Keep the pair consistent.** The private key (Secrets Manager) and the public key (SSM/CloudFront) must always be two halves of the same pair. If you update one without the other — for example, changing the secret via the console but not completing the deploy — signed URLs will fail with `403` because the signature no longer matches the public key CloudFront trusts. If you need delivery restored immediately before you can deploy, revert the secret to the previous private key so it matches the public key still deployed in CloudFront.
 
 ### Visit the Web App
 

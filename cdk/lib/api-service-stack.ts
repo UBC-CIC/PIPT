@@ -1649,12 +1649,28 @@ export class ApiServiceStack extends cdk.Stack {
       `/${stackPrefix}/CloudFrontPublicKey`
     );
 
+    // CloudFront public keys are immutable — the encoded key cannot be updated in
+    // place. Rotating the signing key pair therefore requires CloudFormation to
+    // REPLACE the PublicKey resource. Because a public key that belongs to a key
+    // group cannot be deleted, and a key group cannot be emptied, an in-place
+    // replacement deadlocks ("key is part of a key group" / "at least one must be
+    // associated"). To rotate safely, bump `cfKeyVersion` whenever you regenerate
+    // the key pair (SSM public key + Secrets Manager private key). Changing it
+    // creates a NEW PublicKey resource with a new name, lets the key group repoint
+    // to it, and only then deletes the old key — avoiding the deadlock.
+    //
+    //   cdk deploy -c cfKeyVersion=2   (or set CF_KEY_VERSION=2)
+    const cfKeyVersion =
+      this.node.tryGetContext("cfKeyVersion") ??
+      process.env.CF_KEY_VERSION ??
+      "1";
+
     const cfPublicKey = new cloudfront.PublicKey(
       this,
-      `${id}-CfSigningPublicKey`,
+      `${id}-CfSigningPublicKey-v${cfKeyVersion}`,
       {
         encodedKey: cfPublicKeyPem,
-        comment: "RSA public key for CloudFront signed URL verification",
+        comment: `RSA public key (v${cfKeyVersion}) for CloudFront signed URL verification`,
       }
     );
 
