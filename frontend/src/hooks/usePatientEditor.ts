@@ -29,6 +29,7 @@ export interface UsePatientEditorReturn {
   editPatientVoiceId: string;
   editVoicePersonaPrompt: string;
   uploadStatus: Record<string, 'idle' | 'uploading' | 'success' | 'error'>;
+  filesLoading: boolean;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   uploadedFiles: Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>;
   editPatientProfilePicUrl: string | null;
@@ -93,6 +94,7 @@ export function usePatientEditor({
   const [editPatientVoiceId, setEditPatientVoiceId] = useState('');
   const [editVoicePersonaPrompt, setEditVoicePersonaPrompt] = useState('');
   const [uploadStatus, setUploadStatus] = useState<Record<string, 'idle' | 'uploading' | 'success' | 'error'>>({});
+  const [filesLoading, setFilesLoading] = useState(false);
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   const [uploadedFiles, setUploadedFiles] = useState<Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>>({ llm: [], patientInfo: [] /* , answerKey: [] */ });
   const [editPatientProfilePicUrl, setEditPatientProfilePicUrl] = useState<string | null>(null);
@@ -136,6 +138,7 @@ export function usePatientEditor({
       setEditPatientProfilePicUrl(null);
       return;
     }
+    setFilesLoading(true);
     try {
       const result = await instructorService.fetchPatientUploadedFiles(groupId, patientId);
       // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
@@ -145,6 +148,8 @@ export function usePatientEditor({
     } catch {
       setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
       setEditPatientProfilePicUrl(null);
+    } finally {
+      setFilesLoading(false);
     }
   };
 
@@ -238,6 +243,7 @@ export function usePatientEditor({
   const stopEditing = () => {
     setSelectedPatientForEdit(null);
     setUploadStatus({});
+    setFilesLoading(false);
     // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
     setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
     setEditPatientProfilePicUrl(null);
@@ -509,6 +515,7 @@ export function usePatientEditor({
     editPatientVoiceId,
     editVoicePersonaPrompt,
     uploadStatus,
+    filesLoading,
     uploadedFiles,
     editPatientProfilePicUrl,
     caseMaterials,

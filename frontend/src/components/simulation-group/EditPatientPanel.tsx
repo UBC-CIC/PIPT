@@ -453,6 +453,12 @@ function InfoTab({
 
       {/* File Upload Sections */}
       <div className="space-y-4">
+        {patientEditor.filesLoading && (
+          <div className="flex items-center gap-2 p-3 rounded-lg" style={{ backgroundColor: UI_COLORS.background.tableHeader }}>
+            <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+            <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Loading patient files…</span>
+          </div>
+        )}
         {([
           { label: 'LLM Upload', type: 'llm' as const, description: 'Document used by the AI to roleplay as this patient.' },
           { label: 'Patient Information', type: 'patientInfo' as const, description: 'Medical record for this patient. This document is visible to students.' },
@@ -472,11 +478,12 @@ function InfoTab({
                 {patientEditor.uploadStatus[type] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
                 {patientEditor.uploadStatus[type] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
                 {patientEditor.uploadStatus[type] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
-                <label className={`cursor-pointer ${patientEditor.uploadStatus[type] === 'uploading' ? 'pointer-events-none opacity-50' : ''}`}>
+                <label className={`cursor-pointer ${(patientEditor.uploadStatus[type] === 'uploading' || patientEditor.filesLoading) ? 'pointer-events-none opacity-50' : ''}`}>
                   <input
                     type="file"
                     onChange={(e) => patientEditor.handleFileUpload(type, e)}
                     className="hidden"
+                    disabled={patientEditor.filesLoading}
                   />
                   <div
                     className="p-2 rounded-lg transition-colors flex items-center gap-2"
