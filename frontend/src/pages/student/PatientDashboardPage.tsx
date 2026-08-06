@@ -2,7 +2,7 @@ import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
-import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon, MessageCircle, Loader2 } from 'lucide-react';
 import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useState, useEffect } from 'react';
@@ -38,10 +38,12 @@ function PatientDashboardPage() {
   const [deleteTargetChatId, setDeleteTargetChatId] = useState<string | null>(null);
   
   // Load patient data from API
-  const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: 'Loading...', age: 0, gender: '' });
+  const [patient, setPatient] = useState<PatientDetail>({ id: patientId, name: '', age: 0, gender: '' });
+  const [patientLoading, setPatientLoading] = useState(true);
 
   // Patient Information files
   const [patientFiles, setPatientFiles] = useState<PatientFile[]>([]);
+  const [patientFilesLoading, setPatientFilesLoading] = useState(true);
   const [selectedPatientFile, setSelectedPatientFile] = useState<PatientFile | null>(null);
   const [isPatientInfoOpen, setIsPatientInfoOpen] = useState(true);
 
@@ -53,12 +55,20 @@ function PatientDashboardPage() {
   useEffect(() => {
     if (!groupId || !patientId) return;
     let cancelled = false;
+    setPatientLoading(true);
+    setPatientFilesLoading(true);
     studentService.fetchPatientDetail(groupId, patientId).then((data) => {
-      if (!cancelled) setPatient(data);
-    });
+      if (!cancelled) {
+        setPatient(data);
+        setPatientLoading(false);
+      }
+    }).catch(() => { if (!cancelled) setPatientLoading(false); });
     studentService.fetchPatientFiles(groupId, patientId).then((data) => {
-      if (!cancelled) setPatientFiles(data);
-    });
+      if (!cancelled) {
+        setPatientFiles(data);
+        setPatientFilesLoading(false);
+      }
+    }).catch(() => { if (!cancelled) setPatientFilesLoading(false); });
     return () => { cancelled = true; };
   }, [groupId, patientId]);
 
@@ -256,7 +266,7 @@ function PatientDashboardPage() {
               No attempts yet
             </h2>
             <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-              Start your first chat with {patient.name} to begin the simulation.
+              Start your first chat with {patientLoading ? 'this patient' : patient.name} to begin the simulation.
             </p>
             <Button
               onClick={handleStartNewChat}
@@ -278,38 +288,47 @@ function PatientDashboardPage() {
             {/* Patient Info Card */}
             <div className="flex items-start gap-4 mb-8">
               <UserAvatar
-                name={patient.name}
+                name={patientLoading ? '...' : patient.name}
                 imageUrl={patient.avatarUrl}
                 size="large"
               />
               <div className="flex flex-col gap-1">
-                <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-                  {patient.name}
-                </h3>
-                {patient.pronouns && (
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    Pronouns: {patient.pronouns}
-                  </p>
-                )}
-                {!!patient.age && (
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    Age: {patient.age}
-                  </p>
-                )}
-                {patient.gender && (
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    Gender: {patient.gender}
-                  </p>
-                )}
-                {patient.sex && (
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    Sex: {patient.sex}
-                  </p>
-                )}
-                {patient.primaryComplaint && (
-                  <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
-                    Primary Complaint: {patient.primaryComplaint}
-                  </p>
+                {patientLoading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+                    <span className="text-base" style={{ color: UI_COLORS.text.muted }}>Loading patient info…</span>
+                  </div>
+                ) : (
+                  <>
+                    <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+                      {patient.name}
+                    </h3>
+                    {patient.pronouns && (
+                      <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                        Pronouns: {patient.pronouns}
+                      </p>
+                    )}
+                    {!!patient.age && (
+                      <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                        Age: {patient.age}
+                      </p>
+                    )}
+                    {patient.gender && (
+                      <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                        Gender: {patient.gender}
+                      </p>
+                    )}
+                    {patient.sex && (
+                      <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                        Sex: {patient.sex}
+                      </p>
+                    )}
+                    {patient.primaryComplaint && (
+                      <p className="text-base" style={{ color: UI_COLORS.text.muted }}>
+                        Primary Complaint: {patient.primaryComplaint}
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -469,6 +488,11 @@ function PatientDashboardPage() {
                       ) : (
                         <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No preview available for this file.</p>
                       )}
+                    </div>
+                  ) : patientFilesLoading ? (
+                    <div className="flex items-center gap-2 py-2">
+                      <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+                      <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Loading patient files…</span>
                     </div>
                   ) : (
                     <div className="space-y-3">
