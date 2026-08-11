@@ -2858,25 +2858,50 @@ paths:
             type: string
           description: ID of the group
         - in: query
-          name: patient_id
+          name: persona_id
           required: true
           schema:
             type: string
-          description: ID of the patient
+          description: ID of the patient (persona)
       responses:
         "200":
-          description: Successfully retrieved ingestion_status of LLM files for specific patient in simulation group
+          description: Successfully retrieved ingestion_status of uploaded files for specific patient in simulation group
           content:
             application/json:
               schema:
                 type: object
+                description: >-
+                  Top-level keys are documents-folder filenames (flat map, kept
+                  for backward compatibility). The 'byFolder' object groups
+                  status by folder so filenames cannot collide across sections.
+                properties:
+                  byFolder:
+                    type: object
+                    properties:
+                      documents:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      info:
+                        type: object
+                        additionalProperties:
+                          type: string
+                      answer_key:
+                        type: object
+                        additionalProperties:
+                          type: string
                 additionalProperties:
                   type: string
-                  description: Map containing filenames as keys and ingestion_status as values.
+                  description: Map containing documents-folder filenames as keys and ingestion_status as values.
                 example:
-                  "Patient_Record_1.pdf": "Processing"
-                  "Patient_Record_2.pdf": "Completed"
-                  "Patient_Record_3.pdf": "Failed"
+                  "Patient_Record_1.pdf": "processing"
+                  byFolder:
+                    documents:
+                      "Patient_Record_1.pdf": "processing"
+                      "Patient_Record_2.pdf": "completed"
+                    info:
+                      "History.pdf": "completed"
+                    answer_key: {}
         "400":
           description: Bad Request - Missing query parameters
         "500":

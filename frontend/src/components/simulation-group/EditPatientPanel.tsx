@@ -536,6 +536,7 @@ function InfoTab({
                         key={file.filename}
                         file={file}
                         fileType={type}
+                        ingestionStatus={patientEditor.ingestionStatus[type]?.[file.filename]}
                         onSaveDisplayName={patientEditor.handleDisplayNameSave}
                         onDelete={patientEditor.handleFileDelete}
                         onPreview={setPreviewFile}
@@ -622,11 +623,52 @@ function PromptGuidanceToggle({ mode }: { mode: 'text' | 'voice' }) {
 }
 
 
+/* ─── Ingestion Status Badge ─── */
+
+function IngestionStatusBadge({
+  status,
+}: {
+  status?: import('@/services/instructorService').IngestionStatusOrQueued;
+}) {
+  // 'not processing' means the file isn't part of the RAG index (nothing to show).
+  if (!status || status === 'not processing') return null;
+
+  const base = 'flex items-center gap-1 text-xs flex-shrink-0 whitespace-nowrap';
+
+  if (status === 'queued' || status === 'processing') {
+    return (
+      <span className={base} style={{ color: UI_COLORS.text.muted }} title="This document is being processed for the AI to use.">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        {status === 'queued' ? 'Queued' : 'Processing'}
+      </span>
+    );
+  }
+
+  if (status === 'completed') {
+    return (
+      <span className={base} style={{ color: '#16a34a' }} title="Ready for the AI to use.">
+        <CheckCircle className="w-3 h-3" />
+        Ready
+      </span>
+    );
+  }
+
+  // error
+  return (
+    <span className={base} style={{ color: '#dc2626' }} title="Processing failed. Delete and re-upload this document to retry.">
+      <XCircle className="w-3 h-3" />
+      Failed
+    </span>
+  );
+}
+
+
 /* ─── File Display Name Row ─── */
 
 function FileDisplayNameRow({
   file,
   fileType,
+  ingestionStatus,
   onSaveDisplayName,
   onDelete,
   onPreview,
@@ -634,6 +676,7 @@ function FileDisplayNameRow({
   file: import('@/services/instructorService').UploadedFileInfo;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   fileType: 'llm' | 'patientInfo' /* | 'answerKey' */;
+  ingestionStatus?: import('@/services/instructorService').IngestionStatusOrQueued;
   onSaveDisplayName: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string, displayName: string) => Promise<void>;
   onDelete: (fileType: 'llm' | 'patientInfo' /* | 'answerKey' */, filename: string) => Promise<void>;
   onPreview: (file: import('@/services/instructorService').UploadedFileInfo) => void;
@@ -661,9 +704,12 @@ function FileDisplayNameRow({
     >
       <FileText className="w-4 h-4 mt-1 flex-shrink-0" style={{ color: UI_COLORS.text.muted }} />
       <div className="flex-1 min-w-0 space-y-1.5">
-        <p className="text-xs truncate" style={{ color: UI_COLORS.text.muted }} title={file.filename}>
-          {file.filename}
-        </p>
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-xs truncate" style={{ color: UI_COLORS.text.muted }} title={file.filename}>
+            {file.filename}
+          </p>
+          <IngestionStatusBadge status={ingestionStatus} />
+        </div>
         <div className="flex items-center gap-2">
           <Input
             value={localName}

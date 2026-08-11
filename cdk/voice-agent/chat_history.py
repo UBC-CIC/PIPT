@@ -29,17 +29,29 @@ _TABLE_NAME = os.environ.get("TABLE_NAME")
 
 
 def format_chat_history(
-    session_id: str, table_name: str = None
+    session_id: str, table_name: str = None, patient_name: str = None
 ) -> str:
+    """Render the recent transcript for injection into the system prompt.
+
+    Speakers are labelled concretely ("Student:" and the patient's actual name)
+    rather than with generic "User:"/"Assistant:" labels. On session resumption
+    after an inactivity timeout the whole transcript re-enters as plain text,
+    and its labelling is the model's only grounding for who said what — generic
+    labels require it to hold a User->student / Assistant->patient mapping that
+    nothing in the transcript itself reinforces.
+    """
     table_name = table_name or _TABLE_NAME
     if not table_name:
         raise RuntimeError("TABLE_NAME environment variable is not set")
     history = DynamoDBChatMessageHistory(table_name=table_name, session_id=session_id)
     recent_messages = history.messages[-10:]
 
+    student_label = "Student"
+    patient_label = (patient_name or "").strip() or "Patient"
+
     lines = []
     for m in recent_messages:
-        role = "User" if m.type == "human" else "Assistant"
+        role = student_label if m.type == "human" else patient_label
         content = m.content.strip().replace("\n", " ")
         safe_content = json.dumps(content)[1:-1]
         lines.append(f"{role}: {safe_content}")

@@ -3,6 +3,7 @@ import {
   instructorService,
   type CaseMaterial,
   type GlobalRubricQuestion,
+  type IngestionStatusOrQueued,
   type ManageablePatient,
   type UploadedFileInfo,
 } from '@/services/instructorService';
@@ -32,6 +33,8 @@ export interface UsePatientEditorReturn {
   filesLoading: boolean;
   // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
   uploadedFiles: Record<'llm' | 'patientInfo' /* | 'answerKey' */, UploadedFileInfo[]>;
+  // Live ingestion status per uploaded file, keyed by filename (e.g. "record.pdf").
+  ingestionStatus: Record<'llm' | 'patientInfo', Record<string, IngestionStatusOrQueued>>;
   editPatientProfilePicUrl: string | null;
   caseMaterials: CaseMaterial[];
   selectedMaterialId: string;
@@ -100,6 +103,75 @@ export function usePatientEditor({
   const [editPatientProfilePicUrl, setEditPatientProfilePicUrl] = useState<string | null>(null);
   const uploadTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
+  // Live document ingestion status (RAG embedding progress) + polling control.
+  const [ingestionStatus, setIngestionStatus] = useState<Record<'llm' | 'patientInfo', Record<string, IngestionStatusOrQueued>>>({ llm: {}, patientInfo: {} });
+  const uploadedFilesRef = useRef(uploadedFiles);
+  const ingestionPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const ingestionPollCancelled = useRef(false);
+
+  // Keep a ref of the latest uploaded files so the poller can mark files that
+  // exist in S3 but don't yet have a persona_data row as 'queued'.
+  useEffect(() => { uploadedFilesRef.current = uploadedFiles; }, [uploadedFiles]);
+
+  const INGESTION_POLL_INTERVAL_MS = 3000;
+  const INGESTION_POLL_MAX_MS = 5 * 60 * 1000;
+
+  const stopIngestionPolling = () => {
+    ingestionPollCancelled.current = true;
+    if (ingestionPollTimer.current) {
+      clearTimeout(ingestionPollTimer.current);
+      ingestionPollTimer.current = null;
+    }
+  };
+
+  /**
+   * Poll ingestion status until every uploaded document reaches a terminal
+   * state (completed / error / not processing) or the max poll window elapses.
+   */
+  const pollIngestionStatus = (patientId: string) => {
+    if (!groupId || patientId === 'new') return;
+    if (ingestionPollTimer.current) clearTimeout(ingestionPollTimer.current);
+    ingestionPollCancelled.current = false;
+    const start = Date.now();
+
+    const tick = async () => {
+      if (ingestionPollCancelled.current) return;
+      let byFolder;
+      try {
+        byFolder = await instructorService.getIngestionStatus(groupId, patientId);
+      } catch {
+        return; // stop the loop on a hard failure
+      }
+      if (ingestionPollCancelled.current) return;
+
+      const expected = uploadedFilesRef.current;
+      const mapSection = (
+        files: UploadedFileInfo[],
+        serverMap: Record<string, IngestionStatusOrQueued>
+      ): Record<string, IngestionStatusOrQueued> => {
+        const out: Record<string, IngestionStatusOrQueued> = {};
+        files.forEach((f) => { out[f.filename] = serverMap[f.filename] ?? 'queued'; });
+        return out;
+      };
+
+      const llm = mapSection(expected.llm, byFolder.documents);
+      const patientInfo = mapSection(expected.patientInfo, byFolder.info);
+      setIngestionStatus({ llm, patientInfo });
+
+      const anyPending = [...Object.values(llm), ...Object.values(patientInfo)]
+        .some((s) => s === 'processing' || s === 'queued');
+
+      if (anyPending && Date.now() - start < INGESTION_POLL_MAX_MS) {
+        ingestionPollTimer.current = setTimeout(tick, INGESTION_POLL_INTERVAL_MS);
+      }
+    };
+
+    tick();
+  };
+
+  // Stop polling on unmount.
+  useEffect(() => stopIngestionPolling, []);
+
   // Case materials state
   const [caseMaterials, setCaseMaterials] = useState<CaseMaterial[]>([]);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string>('');
@@ -135,6 +207,7 @@ export function usePatientEditor({
     if (!groupId || patientId === 'new') {
       // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
       setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
+      uploadedFilesRef.current = { llm: [], patientInfo: [] };
       setEditPatientProfilePicUrl(null);
       return;
     }
@@ -144,9 +217,15 @@ export function usePatientEditor({
       // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
       const { llm, patientInfo } = result.files;
       setUploadedFiles({ llm, patientInfo });
+      // Update the ref synchronously so the first ingestion poll tick sees the
+      // current file set rather than waiting for the effect to flush.
+      uploadedFilesRef.current = { llm, patientInfo };
       setEditPatientProfilePicUrl(result.profilePictureUrl);
+      // Kick off live ingestion polling for any files still being embedded.
+      pollIngestionStatus(patientId);
     } catch {
       setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
+      uploadedFilesRef.current = { llm: [], patientInfo: [] };
       setEditPatientProfilePicUrl(null);
     } finally {
       setFilesLoading(false);
@@ -235,6 +314,8 @@ export function usePatientEditor({
     // Answer key file handling disabled — replaced by DTP/Recommendations Bank approach
     setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
     setEditPatientProfilePicUrl(null);
+    stopIngestionPolling();
+    setIngestionStatus({ llm: {}, patientInfo: {} });
   };
 
   /**
@@ -249,6 +330,8 @@ export function usePatientEditor({
     setEditPatientProfilePicUrl(null);
     Object.values(uploadTimers.current).forEach(clearTimeout);
     uploadTimers.current = {};
+    stopIngestionPolling();
+    setIngestionStatus({ llm: {}, patientInfo: {} });
   };
 
   /**
@@ -517,6 +600,7 @@ export function usePatientEditor({
     uploadStatus,
     filesLoading,
     uploadedFiles,
+    ingestionStatus,
     editPatientProfilePicUrl,
     caseMaterials,
     selectedMaterialId,

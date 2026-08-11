@@ -1646,24 +1646,36 @@ exports.handler = async (event, context) => {
             event.queryStringParameters;
 
           try {
-            // Query patient_data table to fetch filenames and ingestion_status for documents
+            // Fetch ingestion status for every embeddable folder (documents, info,
+            // answer_key). filepath format: {group}/{persona}/{folder}/{name}.{ext}
             const ingestionStatusData = await sqlConnection`
-                    SELECT filename, filetype, ingestion_status
+                    SELECT filename, filetype, ingestion_status, filepath
                     FROM "persona_data"
                     WHERE persona_id = ${persona_id}
-                    AND filepath LIKE ${simulation_group_id + "/" + persona_id + "/documents/%"
-              };
+                    AND filepath LIKE ${simulation_group_id + "/" + persona_id + "/%"};
                 `;
 
-            // Convert the results to a hashmap
+            // Group by folder type so filenames can't collide across sections.
+            // Also keep a flat map for backward compatibility (documents only).
+            const byFolder = { documents: {}, info: {}, answer_key: {} };
             const ingestionStatusMap = {};
             ingestionStatusData.forEach((row) => {
-              ingestionStatusMap[row.filename + "." + row.filetype] =
-                row.ingestion_status;
+              const key = row.filename + "." + row.filetype;
+              // filepath: group/persona/folder/file — folder is the 3rd segment
+              const folder = (row.filepath || "").split("/")[2];
+              if (byFolder[folder]) {
+                byFolder[folder][key] = row.ingestion_status;
+              }
+              if (folder === "documents") {
+                ingestionStatusMap[key] = row.ingestion_status;
+              }
             });
 
             response.statusCode = 200;
-            response.body = JSON.stringify(ingestionStatusMap);
+            response.body = JSON.stringify({
+              ...ingestionStatusMap,
+              byFolder,
+            });
           } catch (err) {
             response.statusCode = 500;
             logger.error("Operation failed", { error: err.message, stack: err.stack });

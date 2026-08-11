@@ -379,6 +379,7 @@ export interface InstructorDataService {
   uploadPatientFile: (simulationGroupId: string, patientId: string, file: File, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   deletePatientFile: (simulationGroupId: string, patientId: string, fileName: string, fileType: string, folderType: 'documents' | 'info' | 'answer_key') => Promise<void>;
   fetchPatientUploadedFiles: (simulationGroupId: string, patientId: string) => Promise<{ files: Record<'llm' | 'patientInfo' | 'answerKey', import('@/services/instructorService').UploadedFileInfo[]>; profilePictureUrl: string | null }>;
+  getIngestionStatus: (simulationGroupId: string, patientId: string) => Promise<import('@/services/instructorService').IngestionStatusByFolder>;
   updateFileDisplayName: (patientId: string, filename: string, filetype: string, displayName: string) => Promise<void>;
   updatePatientLLMEvaluation: (patientId: string, enabled: boolean) => Promise<void>;
   updatePatientVoiceEnabled: (patientId: string, simulationGroupId: string, enabled: boolean) => Promise<void>;
@@ -1038,6 +1039,51 @@ async function deletePatientFile(
     `instructor/delete_file?${queryParams.toString()}`,
     { method: 'DELETE' }
   );
+}
+
+/**
+ * Ingestion status of an uploaded file, as tracked in persona_data.ingestion_status.
+ * 'queued' is a synthetic client-side state for files whose S3 event hasn't yet
+ * produced a DB row (the ingestion Lambda runs asynchronously after upload).
+ */
+export type IngestionStatus = 'not processing' | 'processing' | 'completed' | 'error';
+export type IngestionStatusOrQueued = IngestionStatus | 'queued';
+
+/**
+ * Per-folder ingestion status map: { "record.pdf": "completed", ... }
+ */
+export interface IngestionStatusByFolder {
+  documents: Record<string, IngestionStatus>;
+  info: Record<string, IngestionStatus>;
+  answer_key: Record<string, IngestionStatus>;
+}
+
+/**
+ * Fetch ingestion status for every uploaded file of a patient, grouped by folder.
+ * Used by the editor to poll live status after a document upload.
+ */
+async function getIngestionStatus(
+  simulationGroupId: string,
+  patientId: string
+): Promise<IngestionStatusByFolder> {
+  const queryParams = new URLSearchParams({
+    persona_id: patientId,               // endpoint expects persona_id, not patient_id
+    simulation_group_id: simulationGroupId,
+  });
+
+  try {
+    const data = await apiClient.request<{ byFolder?: Partial<IngestionStatusByFolder> }>(
+      `instructor/ingestion_status?${queryParams.toString()}`
+    );
+    return {
+      documents: data.byFolder?.documents ?? {},
+      info: data.byFolder?.info ?? {},
+      answer_key: data.byFolder?.answer_key ?? {},
+    };
+  } catch (error) {
+    console.error('Failed to fetch ingestion status:', error);
+    return { documents: {}, info: {}, answer_key: {} };
+  }
 }
 
 /**
@@ -2246,6 +2292,7 @@ export const instructorService: InstructorDataService = {
   uploadPatientFile,
   deletePatientFile,
   fetchPatientUploadedFiles,
+  getIngestionStatus,
   updateFileDisplayName,
   updatePatientLLMEvaluation,
   updatePatientVoiceEnabled,

@@ -24,6 +24,7 @@ const ALLOWED_IFRAME_DOMAINS = [
   'www.h5p.org',
   'h5p.com',
   'embed.h5p.com',
+  'apps.pharmacy.ubc.ca',
   'docs.google.com',
   'drive.google.com',
   'open.spotify.com',
@@ -85,6 +86,22 @@ function sanitizeEmbedCode(html: string): string {
  */
 function isEmbedCode(value: string): boolean {
   return value.trimStart().toLowerCase().startsWith('<iframe');
+}
+
+/**
+ * Extract the iframe src from an embed HTML snippet, if present.
+ * Used to offer an "open in new tab" link when the embed can't be rendered
+ * inline (e.g. its domain isn't allowlisted).
+ */
+function extractIframeSrc(html: string): string | null {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const src = doc.querySelector('iframe')?.getAttribute('src') || '';
+  try {
+    return new URL(src, window.location.origin).href;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -195,14 +212,15 @@ function ImageViewer({ url, title }: { url: string; title: string }) {
  * Renders a single embed — either from raw embed HTML or a plain URL.
  */
 function EmbedRenderer({ url, title }: { url: string; title: string }) {
+  const embedCode = isEmbedCode(url);
   const { sanitizedHtml, aspectRatio } = useMemo(() => {
-    if (isEmbedCode(url)) {
+    if (embedCode) {
       const sanitized = sanitizeEmbedCode(url);
       const ratio = extractAspectRatio(url);
       return { sanitizedHtml: sanitized, aspectRatio: ratio };
     }
     return { sanitizedHtml: null, aspectRatio: null };
-  }, [url]);
+  }, [url, embedCode]);
 
   // Embed code path — render sanitized HTML in a responsive container
   if (sanitizedHtml) {
@@ -218,6 +236,40 @@ function EmbedRenderer({ url, title }: { url: string; title: string }) {
         }}
         dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
       />
+    );
+  }
+
+  // Embed code that couldn't be sanitized/rendered (e.g. its domain isn't
+  // allowlisted). Never fall through to the plain-URL <iframe> below — that
+  // would put the raw embed HTML into the src attribute and 404. Show a notice
+  // with a link to open the source directly, if we can recover it.
+  if (embedCode) {
+    const src = extractIframeSrc(url);
+    return (
+      <div
+        className="rounded-lg p-4 text-sm"
+        style={{
+          borderWidth: '1px',
+          borderStyle: 'solid',
+          borderColor: UI_COLORS.border.default,
+          backgroundColor: UI_COLORS.background.hoverLight,
+          color: UI_COLORS.text.muted,
+        }}
+      >
+        <p>This content can't be displayed here.</p>
+        {src && (
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-2 no-underline"
+            style={{ color: UI_COLORS.text.body }}
+          >
+            <ExternalLink className="w-3 h-3" />
+            Open content in a new tab
+          </a>
+        )}
+      </div>
     );
   }
 
