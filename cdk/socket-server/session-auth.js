@@ -20,13 +20,30 @@ const secretsManager = new SecretsManagerClient({
 let sqlConnection = null;
 
 /**
- * Lazily initialize the database connection using SM_DB_CREDENTIALS and RDS_PROXY_ENDPOINT.
- * Reuses the connection once established.
- * @returns {Promise<object>} postgres tagged template connection
+ * Detect a database authentication failure (wrong/rotated password).
+ *
+ * The app_rw password is rotated by the db_setup Lambda on every run, while
+ * this process caches its connection for its whole lifetime. After a rotation
+ * the cached password is stale and the DB (or RDS Proxy) rejects it. Postgres
+ * reports this as SQLSTATE 28P01 (invalid_password) / 28000; RDS Proxy surfaces
+ * it as a message like "The password that was provided for the role X is wrong."
+ *
+ * @param {any} error
+ * @returns {boolean}
  */
-async function getDbConnection() {
-  if (sqlConnection) return sqlConnection;
+function isAuthError(error) {
+  if (!error) return false;
+  const code = error.code || error.routine;
+  if (code === "28P01" || code === "28000") return true;
+  const msg = (error.message || "").toLowerCase();
+  return msg.includes("password") && (msg.includes("wrong") || msg.includes("authentication failed"));
+}
 
+/**
+ * Build a fresh postgres connection from the latest secret value.
+ * @returns {Promise<object>}
+ */
+async function createConnection() {
   const secretName = process.env.SM_DB_CREDENTIALS;
   const rdsProxyEndpoint = process.env.RDS_PROXY_ENDPOINT;
 
@@ -39,7 +56,7 @@ async function getDbConnection() {
   );
   const credentials = JSON.parse(SecretString);
 
-  sqlConnection = postgres({
+  const connection = postgres({
     host: rdsProxyEndpoint,
     port: credentials.port,
     username: credentials.username,
@@ -51,6 +68,36 @@ async function getDbConnection() {
   });
 
   console.log("✅ Socket server DB connection initialized");
+  return connection;
+}
+
+/**
+ * Lazily initialize the database connection using SM_DB_CREDENTIALS and RDS_PROXY_ENDPOINT.
+ * Reuses the connection once established.
+ * @returns {Promise<object>} postgres tagged template connection
+ */
+async function getDbConnection() {
+  if (sqlConnection) return sqlConnection;
+  sqlConnection = await createConnection();
+  return sqlConnection;
+}
+
+/**
+ * Discard the cached connection and rebuild it by re-reading the secret.
+ * Used to self-heal after the app_rw password is rotated out from under a
+ * long-lived process. The old connection is closed best-effort in the
+ * background so we don't block on draining it.
+ * @returns {Promise<object>} a fresh connection
+ */
+async function refreshDbConnection() {
+  const stale = sqlConnection;
+  sqlConnection = null;
+  if (stale) {
+    // Fire-and-forget close; a stale-auth pool may never drain cleanly.
+    Promise.resolve(stale.end({ timeout: 5 })).catch(() => {});
+  }
+  console.log("♻️  Refreshing socket server DB connection (credential rotation suspected)");
+  sqlConnection = await createConnection();
   return sqlConnection;
 }
 
@@ -63,17 +110,27 @@ async function getDbConnection() {
  * @returns {Promise<{authorized: boolean, userId?: string}>}
  */
 async function verifySessionOwnership(sessionId, userEmail) {
+  const runQuery = (sql) => sql`
+    SELECT u.user_id
+    FROM chats c
+    JOIN student_interactions si ON si.student_interaction_id = c.student_interaction_id
+    JOIN enrollments e ON e.enrollment_id = si.enrollment_id
+    JOIN users u ON u.user_id = e.user_id
+    WHERE c.chat_id = ${sessionId}
+      AND u.user_email = ${userEmail};
+  `;
+
   try {
-    const sql = await getDbConnection();
-    const result = await sql`
-      SELECT u.user_id
-      FROM chats c
-      JOIN student_interactions si ON si.student_interaction_id = c.student_interaction_id
-      JOIN enrollments e ON e.enrollment_id = si.enrollment_id
-      JOIN users u ON u.user_id = e.user_id
-      WHERE c.chat_id = ${sessionId}
-        AND u.user_email = ${userEmail};
-    `;
+    let result;
+    try {
+      result = await runQuery(await getDbConnection());
+    } catch (error) {
+      if (!isAuthError(error)) throw error;
+      // Password likely rotated (db_setup) since this connection was cached.
+      // Rebuild from the latest secret and retry once before failing closed.
+      console.warn("⚠️  DB auth failed during ownership check; refreshing credentials and retrying once.");
+      result = await runQuery(await refreshDbConnection());
+    }
 
     if (result.length > 0) {
       return { authorized: true, userId: result[0].user_id };
@@ -85,4 +142,4 @@ async function verifySessionOwnership(sessionId, userEmail) {
   }
 }
 
-module.exports = { verifySessionOwnership, getDbConnection };
+module.exports = { verifySessionOwnership, getDbConnection, refreshDbConnection };

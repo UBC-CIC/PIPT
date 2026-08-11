@@ -138,6 +138,81 @@ def get_pg_connection():
         return pg_conn_pool.getconn()
 
 
+def reset_pg_pool():
+    """Discard the cached connection pool so the next call re-reads the secret.
+
+    The app_rw password is rotated by the db_setup Lambda on every run, while
+    this container caches the pool for its whole lifetime. After a rotation the
+    cached password is stale; dropping the pool forces get_pg_connection to
+    rebuild it from the current secret value.
+    """
+    global pg_conn_pool
+    with pool_lock:
+        stale = pg_conn_pool
+        pg_conn_pool = None
+    if stale is not None:
+        try:
+            stale.closeall()
+        except Exception:
+            pass
+
+
+def _is_pg_auth_error(exc) -> bool:
+    """Detect a DB authentication failure (wrong/rotated password).
+
+    Postgres reports invalid passwords as SQLSTATE 28P01 / 28000; RDS Proxy
+    surfaces it as "The password that was provided for the role X is wrong."
+    """
+    pgcode = getattr(exc, "pgcode", None)
+    if pgcode in ("28P01", "28000"):
+        return True
+    msg = str(exc).lower()
+    return "password" in msg and ("wrong" in msg or "authentication failed" in msg)
+
+
+def run_pg(operation, commit: bool = False):
+    """Run operation(conn) with one automatic retry if the cached pool holds a
+    stale (rotated) password.
+
+    Handles getconn/putconn, rollback on failed writes, and rebuilding the pool
+    from the latest secret when an auth error is detected.
+    """
+    for attempt in (1, 2):
+        conn = None
+        try:
+            conn = get_pg_connection()
+            result = operation(conn)
+            if commit:
+                conn.commit()
+            return result
+        except Exception as e:  # noqa: BLE001 - broad by design; re-raised below
+            if conn is not None and commit:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+            if attempt == 1 and _is_pg_auth_error(e):
+                logger.warning(
+                    "[VOICE AGENT] DB auth failed (credential rotation suspected); "
+                    "resetting pool and retrying once."
+                )
+                if conn is not None and pg_conn_pool is not None:
+                    try:
+                        pg_conn_pool.putconn(conn, close=True)
+                    except Exception:
+                        pass
+                    conn = None
+                reset_pg_pool()
+                continue
+            raise
+        finally:
+            if conn is not None and pg_conn_pool is not None:
+                try:
+                    pg_conn_pool.putconn(conn)
+                except Exception:
+                    pass
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # NovaSonic — bidirectional streaming client
 # ═══════════════════════════════════════════════════════════════════════════
@@ -322,11 +397,9 @@ class NovaSonic:
         """
         if not self.patient_id:
             return ""
-        conn = None
-        try:
-            conn = get_pg_connection()
+
+        def _query(conn):
             cursor = conn.cursor()
-            
             # Fetch ALL document chunks for this patient directly from the vector store tables
             # bypassing the need for a similarity search completely.
             cursor.execute("""
@@ -335,26 +408,21 @@ class NovaSonic:
                 JOIN langchain_pg_collection c ON e.collection_id = c.uuid
                 WHERE c.name = %s
             """, (self.patient_id,))
-            
             rows = cursor.fetchall()
             cursor.close()
-            
+            return rows
+
+        try:
+            # run_pg returns the connection to the pool and self-heals a stale
+            # (rotated) app_rw password by rebuilding the pool and retrying once.
+            rows = run_pg(_query)
             if rows:
                 context = "\n---\n".join([r[0] for r in rows])
                 logger.info("Loaded complete case file (%d chunks) into Voice Agent memory for patient %s", len(rows), self.patient_id)
                 return context
-                
         except Exception as e:
             logger.error("[VOICE AGENT] Failed to retrieve complete medical context: %s", e)
-        finally:
-            # Always return the connection to the pool so we don't leak
-            # connections on error — the pool only has 5 slots.
-            if conn is not None:
-                try:
-                    pg_conn_pool.putconn(conn)
-                except Exception:
-                    pass  # Connection may already be returned or invalid
-            
+
         return ""
 
     # ------------------------------------------------------------------
@@ -476,15 +544,17 @@ class NovaSonic:
         if self._cached_system_prompt:
             return self._cached_system_prompt
 
-        try:
-            conn = get_pg_connection()
+        def _query(conn):
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT prompt_content FROM system_prompt_history ORDER BY created_at DESC LIMIT 1"
             )
-            result = cursor.fetchone()
+            row = cursor.fetchone()
             cursor.close()
-            pg_conn_pool.putconn(conn)
+            return row
+
+        try:
+            result = run_pg(_query)
 
             if result and result[0]:
                 prompt = self._sanitize_prompt_for_voice(result[0])
@@ -1199,26 +1269,25 @@ class NovaSonic:
             logger.error("Failed to call matching endpoint: %s", e)
 
     def _save_message_to_db(self, session_id, student_sent, message_content, empathy_evaluation=None):
-        try:
-            conn = get_pg_connection()
+        sender = "student" if student_sent else "ai"
+        msg_id = str(uuid.uuid4())
+
+        def _insert(conn):
             cursor = conn.cursor()
-            sender = "student" if student_sent else "ai"
-            msg_id = str(uuid.uuid4())
             cursor.execute(
                 'INSERT INTO "messages" (message_id, chat_id, sender_type, message_content, sent_at) VALUES (%s, %s, %s, %s, NOW())',
                 (msg_id, session_id, sender, message_content),
             )
-            conn.commit()
             cursor.close()
-            pg_conn_pool.putconn(conn)
+
+        try:
+            # commit=True lets run_pg commit/rollback and self-heal a rotated
+            # app_rw password by rebuilding the pool and retrying once.
+            run_pg(_insert, commit=True)
             logger.info("Message saved to DB")
             return msg_id
         except Exception as e:
             logger.error("Error saving message: %s", e)
-            try:
-                pg_conn_pool.putconn(conn, close=True)
-            except Exception:
-                pass  # Connection may already be invalid; nothing to clean up
             return None
 
     # ------------------------------------------------------------------

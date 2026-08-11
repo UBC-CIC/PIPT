@@ -99,11 +99,44 @@ def connect_to_db():
     return connection
 
 
+def reset_db_connection():
+    """Drop the cached secret and connection so the next connect_to_db re-reads
+    the current app_rw password.
+
+    db_setup rotates that password on every run; a long-lived container caches
+    both the secret and the connection, so after a rotation it must rebuild both
+    to recover.
+    """
+    global connection, db_secret
+    stale = connection
+    connection = None
+    db_secret = None
+    if stale is not None:
+        try:
+            stale.close()
+        except Exception:
+            pass
+
+
+def _is_pg_auth_error(exc) -> bool:
+    """Detect a DB authentication failure (wrong/rotated password).
+
+    Postgres reports invalid passwords as SQLSTATE 28P01 / 28000; RDS Proxy
+    surfaces it as "The password that was provided for the role X is wrong."
+    """
+    pgcode = getattr(exc, "pgcode", None)
+    if pgcode in ("28P01", "28000"):
+        return True
+    msg = str(exc).lower()
+    return "password" in msg and ("wrong" in msg or "authentication failed" in msg)
+
+
 def insert_message_to_postgres(session_id: str, role: str, content: str):
-    try:
+    sender = "student" if role == "user" else "ai"
+
+    def _insert():
         conn = connect_to_db()
         cursor = conn.cursor()
-        sender = "student" if role == "user" else "ai"
         cursor.execute(
             """INSERT INTO messages (message_id, chat_id, sender_type, message_content, sent_at)
                VALUES (%s, %s, %s, %s, %s)""",
@@ -111,7 +144,26 @@ def insert_message_to_postgres(session_id: str, role: str, content: str):
         )
         conn.commit()
         cursor.close()
-        logger.info("Saved message to PostgreSQL (session=%s, role=%s)", session_id, role)
-    except Exception as e:
-        logger.error("Failed to insert message: %s", e)
-        conn.rollback()
+
+    for attempt in (1, 2):
+        try:
+            _insert()
+            logger.info("Saved message to PostgreSQL (session=%s, role=%s)", session_id, role)
+            return
+        except Exception as e:
+            # Roll back if we have a live connection; ignore if the failure was
+            # establishing the connection itself.
+            if connection is not None and not getattr(connection, "closed", 1):
+                try:
+                    connection.rollback()
+                except Exception:
+                    pass
+            if attempt == 1 and _is_pg_auth_error(e):
+                logger.warning(
+                    "DB auth failed on message insert (credential rotation suspected); "
+                    "resetting connection and retrying once."
+                )
+                reset_db_connection()
+                continue
+            logger.error("Failed to insert message: %s", e)
+            return
