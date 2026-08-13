@@ -254,6 +254,23 @@ NON-NEGOTIABLE RULES:
 # def build_empathy_feedback(evaluation): ...
 # --- End empathy evaluation functions ---
 
+def _escape_template_braces(text: str) -> str:
+    """Escape curly braces so admin/patient-supplied text is treated as literal
+    content by ChatPromptTemplate rather than as template variables.
+
+    LangChain templates use ``{var}`` for variables and ``{{`` / ``}}`` for a
+    literal brace. Any stray ``{...}`` in a group system prompt, a patient
+    prompt, or the default prompt's ``{patient_name}`` placeholder would
+    otherwise be parsed as a required input variable and raise
+    "Input to ChatPromptTemplate is missing variables". We only want the
+    ``{context}`` and ``{input}`` placeholders we add ourselves to be treated
+    as variables, so everything injected from data is escaped here.
+    """
+    if not text:
+        return text
+    return text.replace("{", "{{").replace("}", "}}")
+
+
 def get_response(
     query: str,
     patient_name: str,
@@ -322,15 +339,25 @@ def get_response(
                 Once the proper diagnosis is provided, include SESSION COMPLETED in your response and politely end the conversation.
                 """
 
+    # Fill the intended {patient_name} placeholder that the default/group system
+    # prompt carries, then escape any remaining braces in the data-supplied text
+    # so ChatPromptTemplate does not treat them as required input variables.
+    # Only the {context}/{input} placeholders we add ourselves should be variables.
+    safe_patient_name = _escape_template_braces(patient_name)
+    safe_system_prompt = _escape_template_braces(
+        (system_prompt or "").replace("{patient_name}", patient_name)
+    )
+    safe_patient_prompt = _escape_template_braces(patient_prompt)
+
     if raw_prompt_mode:
         # In raw prompt mode (playground), use the provided prompts directly
         # without appending the hardcoded patient behavior template
         system_prompt = (
             f"""
 <patient_context>
-{system_prompt}
-{patient_prompt}
-You are named {patient_name}.
+{safe_system_prompt}
+{safe_patient_prompt}
+You are named {safe_patient_name}.
 </patient_context>
 
 <documents>
@@ -345,13 +372,13 @@ You are named {patient_name}.
         system_prompt = (
             f"""
 <system>
-{system_prompt}
+{safe_system_prompt}
 {completion_string}
 </system>
 
 <patient_context>
-You are a patient named {patient_name}.
-{patient_prompt}
+You are a patient named {safe_patient_name}.
+{safe_patient_prompt}
 
 Use the documents provided as your medical history and symptoms. Be subtle and realistic — share information gradually as a real patient would.
 </patient_context>
