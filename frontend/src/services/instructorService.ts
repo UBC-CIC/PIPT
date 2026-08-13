@@ -401,6 +401,8 @@ export interface InstructorDataService {
   updateSystemPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
   updateDebriefPrompt: (simulationGroupId: string, instructorEmail: string, prompt: string) => Promise<void>;
   getDefaultDebriefPrompt: () => Promise<string>;
+  getDefaultSystemPrompt: () => Promise<string>;
+  getDefaultPersonaPrompt: () => Promise<string>;
   getPromptHistory: (simulationGroupId: string, type: 'system' | 'debrief') => Promise<PromptHistoryEntry[]>;
   getStudents: (simulationGroupId: string) => Promise<Student[]>;
   getStudentDetails: (studentId: string, simulationGroupId: string, groupName?: string) => Promise<StudentDetails | undefined>;
@@ -1425,6 +1427,36 @@ async function getDefaultDebriefPrompt(): Promise<string> {
 }
 
 /**
+ * Get the default system prompt
+ */
+async function getDefaultSystemPrompt(): Promise<string> {
+  try {
+    const data = await apiClient.request<{ default_system_prompt: string }>(
+      'instructor/get_default_system_prompt'
+    );
+    return data.default_system_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch default system prompt:', error);
+    return '';
+  }
+}
+
+/**
+ * Get the default persona prompt
+ */
+async function getDefaultPersonaPrompt(): Promise<string> {
+  try {
+    const data = await apiClient.request<{ default_persona_prompt: string }>(
+      'instructor/get_default_persona_prompt'
+    );
+    return data.default_persona_prompt || '';
+  } catch (error) {
+    console.error('Failed to fetch default persona prompt:', error);
+    return '';
+  }
+}
+
+/**
  * Prompt history entry from the backend
  */
 export interface PromptHistoryEntry {
@@ -2314,6 +2346,8 @@ export const instructorService: InstructorDataService = {
   updateSystemPrompt,
   updateDebriefPrompt,
   getDefaultDebriefPrompt,
+  getDefaultSystemPrompt,
+  getDefaultPersonaPrompt,
   getPromptHistory,
   getStudents,
   getStudentDetails,

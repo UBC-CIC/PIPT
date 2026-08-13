@@ -443,7 +443,7 @@ function AdminSimulationGroupPage() {
   // ── Prompt handlers ──
   const handleLoadDefaultPrompt = async () => {
     if (selectedPromptType === 'system') {
-      setSystemPromptText('Pretend to be a patient with the context you are given. You are helping the pharmacist practice their skills interacting with a patient.');
+      setSystemPromptText(await instructorService.getDefaultSystemPrompt());
     } else {
       setEvaluationPromptText(await instructorService.getDefaultDebriefPrompt());
     }
@@ -1066,7 +1066,7 @@ function AdminSimulationGroupPage() {
                     <h2 className="text-2xl font-bold mb-6" style={{ color: UI_COLORS.text.heading }}>{selectedPromptType === 'system' ? 'System Prompt' : 'Debrief Prompt'}</h2>
                     <div className="space-y-4">
                       <label className="text-sm font-medium" style={{ color: UI_COLORS.text.heading }}>Edit Prompt</label>
-                      <textarea value={String(selectedPromptType === 'system' ? systemPromptText : evaluationPromptText)} onChange={e => { if (selectedPromptType === 'system') { setSystemPromptText(e.target.value); } else { setEvaluationPromptText(e.target.value); } setIsPromptUnsaved(true); }} placeholder={selectedPromptType === 'evaluation' ? 'No custom debrief prompt configured.' : 'Prompt goes here...'} rows={6} className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }} />
+                      <textarea value={String(selectedPromptType === 'system' ? systemPromptText : evaluationPromptText)} onChange={e => { if (selectedPromptType === 'system') { setSystemPromptText(e.target.value); } else { setEvaluationPromptText(e.target.value); } setIsPromptUnsaved(true); }} placeholder={selectedPromptType === 'evaluation' ? 'No custom debrief prompt configured.' : 'Leave empty to use the default patient behavior prompt. The AI will respond briefly, stay in character, and follow standard clinical simulation guidelines.'} rows={6} className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading }} />
                       <div className="flex gap-3 justify-end">
                         <Button onClick={handleLoadDefaultPrompt} variant="outline" className="px-6 transition-colors" style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading, backgroundColor: UI_COLORS.background.white }}>Load Default Prompt</Button>
                         <Button onClick={handleSavePrompt} className="px-6 transition-colors" style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }} onMouseEnter={e => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover} onMouseLeave={e => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}>Save Prompt</Button>

@@ -556,7 +556,7 @@ class NovaSonic:
         try:
             result = run_pg(_query)
 
-            if result and result[0]:
+            if result and result[0] and result[0].strip():
                 prompt = self._sanitize_prompt_for_voice(result[0])
                 self._cached_system_prompt = prompt.rstrip() + self._ROLE_GUARDRAILS
                 return self._cached_system_prompt

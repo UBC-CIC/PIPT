@@ -9,6 +9,9 @@ let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 let sqlConnection = global.sqlConnection;
 
 const DEFAULT_DEBRIEF_PROMPT = fs.readFileSync(path.join(__dirname, "defaultDebriefPrompt.txt"), "utf8").trim();
+const { seedPrompt } = require("./seedPrompt.js");
+const DEFAULT_PERSONA_PROMPT = fs.readFileSync(path.join(__dirname, "defaultPersonaPrompt.txt"), "utf8").trim();
+const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "defaultSystemPrompt.txt"), "utf8").trim();
 
 exports.handler = async (event, context) => {
   logger.init(event, context);
@@ -486,7 +489,7 @@ exports.handler = async (event, context) => {
                         ${persona_number}, 
                         ${persona_age}, 
                         ${persona_gender}, 
-                        ${persona_prompt},
+                        ${seedPrompt(persona_prompt, DEFAULT_PERSONA_PROMPT)},
                         ${voice_id},
                         ${voice_persona_prompt || null}
                     )
@@ -1167,6 +1170,12 @@ exports.handler = async (event, context) => {
           logger.error("Operation failed", { error: err.message, stack: err.stack });
           response.body = JSON.stringify({ error: "Internal server error" });
         }
+        break;
+      case "GET /instructor/get_default_system_prompt":
+        response.body = JSON.stringify({ default_system_prompt: DEFAULT_SYSTEM_PROMPT });
+        break;
+      case "GET /instructor/get_default_persona_prompt":
+        response.body = JSON.stringify({ default_persona_prompt: DEFAULT_PERSONA_PROMPT });
         break;
       case "GET /instructor/get_prompt_history":
         if (

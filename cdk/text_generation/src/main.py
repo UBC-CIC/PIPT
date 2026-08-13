@@ -8,7 +8,8 @@ from botocore.config import Config
 from langchain_aws import BedrockEmbeddings
 from helpers.cohere_embeddings import CohereBedrockEmbeddings
 
-from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, set_stream_callback_url
+from helpers.chat import get_bedrock_llm, get_initial_student_query, get_student_query, set_stream_callback_url, get_default_system_prompt
+from helpers.seed_prompt import seed_prompt
 
 # Set up basic logging
 logging.basicConfig(level=logging.INFO)
@@ -62,6 +63,11 @@ TABLE_NAME = None
 
 # Cached embeddings instance
 embeddings = None
+
+# Default prompts used when DB values are null/empty
+DEFAULT_SYSTEM_PROMPT = get_default_system_prompt("{patient_name}")
+
+DEFAULT_PERSONA_PROMPT = """You are a patient visiting a pharmacy. Use ONLY the information provided in your uploaded case documents to describe your symptoms, medical history, and concerns. Do not invent or fabricate any symptoms, medications, diagnoses, or history beyond what is in the documents. If asked about something not covered in the documents, respond as a patient who genuinely does not know or has not experienced that issue."""
 
 def get_secret(secret_name, expect_json=True):
     global db_secret
@@ -227,12 +233,12 @@ def get_system_prompt(simulation_group_id):
 
         cur.close()
 
-        if system_prompt:
+        if system_prompt and system_prompt.strip():
             logger.info(f"System prompt for simulation_group_id {simulation_group_id} found: {system_prompt}")
+            return system_prompt
         else:
-            logger.warning(f"No system prompt found for simulation_group_id {simulation_group_id}")
-
-        return system_prompt
+            logger.warning(f"No system prompt configured for simulation_group_id={simulation_group_id}, using default")
+            return DEFAULT_SYSTEM_PROMPT
 
     except Exception as e:
         logger.error(f"Error fetching system prompt: {e}")
@@ -265,6 +271,7 @@ def get_persona_details(persona_id):
 
         if result:
             persona_name, persona_age, persona_prompt = result
+            persona_prompt = seed_prompt(persona_prompt, DEFAULT_PERSONA_PROMPT)
             llm_completion = True
             logger.info(f"persona details found for persona_id {persona_id}: "
                         f"Name: {persona_name}, Age: {persona_age}, Prompt: {persona_prompt}, LLM Completion: {llm_completion}")
@@ -522,16 +529,7 @@ def handler(event, context):
             message_content = body.get("message_content", "").strip()
 
             if not custom_system_prompt:
-                return {
-                    "statusCode": 400,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Headers": "*",
-                        "Access-Control-Allow-Origin": _get_cors_origin(event),
-                        "Access-Control-Allow-Methods": "*",
-                    },
-                    "body": json.dumps({"error": "system_prompt is required"}),
-                }
+                custom_system_prompt = DEFAULT_SYSTEM_PROMPT
 
             patient_name, patient_age, patient_prompt, llm_completion = get_persona_details(persona_id)
             if patient_name is None:

@@ -403,11 +403,6 @@ export function usePatientEditor({
       return false;
     }
 
-    if (!editPatientPrompt.trim()) {
-      showNotification({ message: 'Please fill in the Text Prompt before saving.', type: 'warning' });
-      return false;
-    }
-
     if (selectedPatientForEdit === 'new') {
       const newPersonaId = await instructorService.createPatient(groupId, {
         patient_name: editPatientName,
