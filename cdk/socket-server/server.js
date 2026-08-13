@@ -6,6 +6,7 @@ const { spawn } = require("child_process");
 const WebSocket = require("ws");
 const { verifyToken, getStsCredentials } = require("./auth");
 const { verifySessionOwnership } = require("./session-auth");
+const logger = require("./logger");
 const { SignatureV4 } = require("@smithy/signature-v4");
 const { HttpRequest } = require("@smithy/protocol-http");
 const { defaultProvider } = require("@aws-sdk/credential-provider-node");
@@ -141,15 +142,26 @@ const _smClient = new SecretsManagerClient({ region: process.env.AWS_REGION || "
 (async () => {
   const secretName = process.env.SM_STREAM_CALLBACK_SECRET;
   if (!secretName) {
-    console.warn("⚠️ SM_STREAM_CALLBACK_SECRET not set — /stream-callback auth disabled");
+    logger.warn("SM_STREAM_CALLBACK_SECRET not set — /stream-callback auth disabled", {
+      component: "server",
+      operation: "loadStreamCallbackToken",
+    });
     return;
   }
   try {
     const { SecretString } = await _smClient.send(new GetSecretValueCommand({ SecretId: secretName }));
     streamCallbackToken = SecretString;
-    console.log("✅ Stream callback token loaded");
+    logger.info("Stream callback token loaded", {
+      component: "server",
+      operation: "loadStreamCallbackToken",
+    });
   } catch (e) {
-    console.error("❌ Failed to load stream callback secret:", e.message);
+    logger.error("Failed to load stream callback secret", {
+      component: "server",
+      operation: "loadStreamCallbackToken",
+      secretName,
+      error: e.message,
+    });
   }
 })();
 
@@ -274,7 +286,12 @@ io.on("connection", (socket) => {
     if (sessionId && socket.userEmail) {
       const ownership = await verifySessionOwnership(sessionId, socket.userEmail);
       if (!ownership.authorized) {
-        console.warn("🚫 Session ownership denied for start-nova-sonic:", socket.userEmail, "session:", sessionId);
+        logger.warn("Session ownership denied for start-nova-sonic", {
+          component: "server",
+          operation: "start-nova-sonic",
+          userEmail: socket.userEmail,
+          sessionId,
+        });
         socket.emit("nova-error", { error: "Access denied: you do not own this session" });
         return;
       }
@@ -656,7 +673,12 @@ io.on("connection", (socket) => {
     if (sessionId && socket.userEmail) {
       const ownership = await verifySessionOwnership(sessionId, socket.userEmail);
       if (!ownership.authorized) {
-        console.warn("🚫 Session ownership denied for text-generation:", socket.userEmail, "session:", sessionId);
+        logger.warn("Session ownership denied for text-generation", {
+          component: "server",
+          operation: "text-generation",
+          userEmail: socket.userEmail,
+          sessionId,
+        });
         socket.emit("text-stream", {
           type: "error",
           content: "Access denied: you do not own this session",

@@ -12,12 +12,19 @@
 
 const postgres = require("postgres");
 const { SecretsManagerClient, GetSecretValueCommand } = require("@aws-sdk/client-secrets-manager");
+const logger = require("./logger");
 
 const secretsManager = new SecretsManagerClient({
   region: process.env.AWS_REGION || "ca-central-1",
 });
 
 let sqlConnection = null;
+// Single-flight guards: ensure only ONE connection build / refresh runs at a
+// time even when many sessions hit a stale (rotated) connection concurrently.
+// Without these, a rotation triggers a stampede of Secrets Manager reads and
+// leaked connection pools.
+let connectingPromise = null;
+let refreshingPromise = null;
 
 /**
  * Detect a database authentication failure (wrong/rotated password).
@@ -51,10 +58,21 @@ async function createConnection() {
     throw new Error("SM_DB_CREDENTIALS or RDS_PROXY_ENDPOINT not configured");
   }
 
-  const { SecretString } = await secretsManager.send(
-    new GetSecretValueCommand({ SecretId: secretName })
-  );
-  const credentials = JSON.parse(SecretString);
+  let credentials;
+  try {
+    const { SecretString } = await secretsManager.send(
+      new GetSecretValueCommand({ SecretId: secretName })
+    );
+    credentials = JSON.parse(SecretString);
+  } catch (error) {
+    logger.error("Failed to read DB credentials from Secrets Manager", {
+      component: "session-auth",
+      operation: "createConnection",
+      secretName,
+      error: error.message,
+    });
+    throw error;
+  }
 
   const connection = postgres({
     host: rdsProxyEndpoint,
@@ -67,7 +85,12 @@ async function createConnection() {
     idle_timeout: 60,
   });
 
-  console.log("✅ Socket server DB connection initialized");
+  logger.info("Socket server DB connection initialized", {
+    component: "session-auth",
+    operation: "createConnection",
+    username: credentials.username,
+    database: credentials.dbname,
+  });
   return connection;
 }
 
@@ -78,8 +101,18 @@ async function createConnection() {
  */
 async function getDbConnection() {
   if (sqlConnection) return sqlConnection;
-  sqlConnection = await createConnection();
-  return sqlConnection;
+  // Single-flight: concurrent cold-start callers await the same build.
+  if (!connectingPromise) {
+    connectingPromise = createConnection()
+      .then((conn) => {
+        sqlConnection = conn;
+        return conn;
+      })
+      .finally(() => {
+        connectingPromise = null;
+      });
+  }
+  return connectingPromise;
 }
 
 /**
@@ -87,18 +120,85 @@ async function getDbConnection() {
  * Used to self-heal after the app_rw password is rotated out from under a
  * long-lived process. The old connection is closed best-effort in the
  * background so we don't block on draining it.
+ *
+ * Single-flight + stale-guard: if many queries fail auth at once (the usual
+ * case right after a rotation), only the first triggers an actual rebuild;
+ * the rest either join the in-flight refresh or, if the cached connection was
+ * already replaced, return the new one without re-reading the secret.
+ *
+ * @param {object} [staleConn] - the connection the caller saw fail, used to
+ *   detect whether another caller already refreshed.
  * @returns {Promise<object>} a fresh connection
  */
-async function refreshDbConnection() {
-  const stale = sqlConnection;
-  sqlConnection = null;
-  if (stale) {
-    // Fire-and-forget close; a stale-auth pool may never drain cleanly.
-    Promise.resolve(stale.end({ timeout: 5 })).catch(() => {});
+async function refreshDbConnection(staleConn) {
+  // Another caller already rebuilt the connection since this one failed — reuse it.
+  if (staleConn && sqlConnection && sqlConnection !== staleConn) {
+    return sqlConnection;
   }
-  console.log("♻️  Refreshing socket server DB connection (credential rotation suspected)");
-  sqlConnection = await createConnection();
-  return sqlConnection;
+  // A refresh is already underway — join it instead of starting a second one.
+  if (refreshingPromise) return refreshingPromise;
+
+  refreshingPromise = (async () => {
+    const stale = sqlConnection;
+    sqlConnection = null;
+    if (stale) {
+      // Fire-and-forget close; a stale-auth pool may never drain cleanly.
+      Promise.resolve(stale.end({ timeout: 5 })).catch(() => {});
+    }
+    logger.warn("Refreshing socket server DB connection (app_rw credential rotation suspected)", {
+      component: "session-auth",
+      operation: "refreshDbConnection",
+    });
+    const fresh = await createConnection();
+    sqlConnection = fresh;
+    logger.info("Socket server DB connection refreshed after credential rotation", {
+      component: "session-auth",
+      operation: "refreshDbConnection",
+    });
+    return fresh;
+  })().finally(() => {
+    refreshingPromise = null;
+  });
+
+  return refreshingPromise;
+}
+
+/**
+ * Run a query and self-heal on a wrong/rotated app_rw password.
+ *
+ * Executes `queryFn(connection)` against the cached connection. If the DB (or
+ * RDS Proxy) rejects it with an authentication error — i.e. the cached app_rw
+ * password is stale after a db_setup rotation — the connection is rebuilt from
+ * the latest secret and the query is retried exactly once. Any non-auth error,
+ * or a second auth failure, is re-thrown to the caller.
+ *
+ * Use this for every DB query in the socket server so credential rotation is
+ * always auto-fixed, not just in one call site.
+ *
+ * @template T
+ * @param {(sql: object) => Promise<T>} queryFn
+ * @param {string} [context] - short label for logs (e.g. "ownership check")
+ * @returns {Promise<T>}
+ */
+async function runWithAuthRetry(queryFn, context = "query") {
+  const conn = await getDbConnection();
+  try {
+    return await queryFn(conn);
+  } catch (error) {
+    if (!isAuthError(error)) throw error;
+    // Password likely rotated (db_setup) since this connection was cached.
+    // Rebuild from the latest secret and retry once before surfacing the error.
+    // Passing `conn` lets refreshDbConnection dedupe concurrent auth failures.
+    logger.warn("DB auth failed; app_rw password appears rotated — refreshing credentials and retrying once", {
+      component: "session-auth",
+      operation: "runWithAuthRetry",
+      context,
+      errorCode: error.code || error.routine,
+      error: error.message,
+    });
+    const fresh = await refreshDbConnection(conn);
+    return await queryFn(fresh);
+  }
 }
 
 /**
@@ -121,25 +221,25 @@ async function verifySessionOwnership(sessionId, userEmail) {
   `;
 
   try {
-    let result;
-    try {
-      result = await runQuery(await getDbConnection());
-    } catch (error) {
-      if (!isAuthError(error)) throw error;
-      // Password likely rotated (db_setup) since this connection was cached.
-      // Rebuild from the latest secret and retry once before failing closed.
-      console.warn("⚠️  DB auth failed during ownership check; refreshing credentials and retrying once.");
-      result = await runQuery(await refreshDbConnection());
-    }
+    // runWithAuthRetry auto-heals a rotated app_rw password (refresh + retry once).
+    const result = await runWithAuthRetry(runQuery, "ownership check");
 
     if (result.length > 0) {
       return { authorized: true, userId: result[0].user_id };
     }
     return { authorized: false };
   } catch (error) {
-    console.error("❌ Session ownership verification error:", error.message);
+    logger.error("Session ownership verification error", {
+      component: "session-auth",
+      operation: "verifySessionOwnership",
+      sessionId,
+      // Flag auth errors that survived the refresh+retry so they're easy to spot.
+      authErrorAfterRetry: isAuthError(error),
+      errorCode: error.code || error.routine,
+      error: error.message,
+    });
     return { authorized: false };
   }
 }
 
-module.exports = { verifySessionOwnership, getDbConnection, refreshDbConnection };
+module.exports = { verifySessionOwnership, getDbConnection, refreshDbConnection, runWithAuthRetry };
