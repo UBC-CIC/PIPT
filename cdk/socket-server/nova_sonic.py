@@ -251,7 +251,7 @@ class NovaSonic:
             cursor.close()
             pg_conn_pool.putconn(conn)
             
-            if result and result[0]:
+            if result and result[0] and result[0].strip():
                 prompt = result[0]
                 if "NON-NEGOTIABLE RULES" not in prompt:
                     prompt = prompt.rstrip() + self._ROLE_GUARDRAILS

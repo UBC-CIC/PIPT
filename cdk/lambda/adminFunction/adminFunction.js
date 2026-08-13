@@ -13,6 +13,8 @@ const s3Client = new S3Client();
 const cognitoClient = new CognitoIdentityProviderClient();
 
 const DEFAULT_DEBRIEF_PROMPT = fs.readFileSync(path.join(__dirname, "defaultDebriefPrompt.txt"), "utf8").trim();
+const { seedPrompt } = require("../lib/seedPrompt.js");
+const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "../lib/defaultSystemPrompt.txt"), "utf8").trim();
 
 // SQL conneciton from global variable at libadmin.js
 let sqlConnectionTableCreator = global.sqlConnectionTableCreator;
@@ -295,7 +297,7 @@ exports.handler = async (event, context) => {
                       ${group_description},
                       ${group_access_code},
                       ${typeof group_student_access === "string" ? group_student_access.toLowerCase() === "true" : !!group_student_access},
-                      ${system_prompt || null},
+                      ${seedPrompt(system_prompt, DEFAULT_SYSTEM_PROMPT)},
                       ${DEFAULT_DEBRIEF_PROMPT}
                   )
                   RETURNING *;
