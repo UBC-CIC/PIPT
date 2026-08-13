@@ -13,8 +13,8 @@ const s3Client = new S3Client();
 const cognitoClient = new CognitoIdentityProviderClient();
 
 const DEFAULT_DEBRIEF_PROMPT = fs.readFileSync(path.join(__dirname, "defaultDebriefPrompt.txt"), "utf8").trim();
-const { seedPrompt } = require("../lib/seedPrompt.js");
-const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "../lib/defaultSystemPrompt.txt"), "utf8").trim();
+const { seedPrompt } = require("./seedPrompt.js");
+const DEFAULT_SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, "defaultSystemPrompt.txt"), "utf8").trim();
 
 // SQL conneciton from global variable at libadmin.js
 let sqlConnectionTableCreator = global.sqlConnectionTableCreator;
