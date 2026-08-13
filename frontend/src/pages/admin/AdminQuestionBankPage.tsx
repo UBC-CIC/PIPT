@@ -164,6 +164,7 @@ function AdminQuestionBankPage() {
           title: question.title,
           question_text: question.keyQuestion,
           evaluation_criteria: question.evaluationCriteria,
+          clinical_intent: question.clinicalIntent,
           is_mandatory: question.required,
           tags: question.tags || [],
         }
@@ -190,6 +191,7 @@ function AdminQuestionBankPage() {
           title: question.title,
           question_text: question.keyQuestion,
           evaluation_criteria: question.evaluationCriteria,
+          clinical_intent: question.clinicalIntent,
           is_mandatory: question.required,
           tags: ['patient_specific', ...(question.tags || [])],
         }

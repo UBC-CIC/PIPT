@@ -1317,7 +1317,7 @@ exports.handler = async (event, context) => {
               break;
             }
             const created_by = userLookup[0].user_id;
-            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, clinical_intent, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
 
             if (!title || !question_text || !evaluation_criteria) {
               response.statusCode = 400;
@@ -1330,11 +1330,11 @@ exports.handler = async (event, context) => {
             const newQuestion = await sqlConnectionTableCreator`
               INSERT INTO "question_bank" (
                 organization_id, created_by, title, question_text, evaluation_criteria,
-                category, difficulty_level, is_mandatory, weight, max_score, tags
+                clinical_intent, category, difficulty_level, is_mandatory, weight, max_score, tags
               )
               VALUES (
                 ${organization_id}, ${created_by}, ${title}, ${question_text}, ${evaluation_criteria},
-                ${category || null}, ${difficulty_level || null},
+                ${clinical_intent || null}, ${category || null}, ${difficulty_level || null},
                 ${is_mandatory !== undefined ? is_mandatory : false},
                 ${weight !== undefined ? weight : 1.0},
                 ${max_score !== undefined ? max_score : 100},
@@ -1363,7 +1363,7 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { question_id } = event.queryStringParameters;
-            const { title, question_text, evaluation_criteria, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, clinical_intent, category, difficulty_level, is_mandatory, weight, max_score, tags } = JSON.parse(event.body);
 
             const updated = await sqlConnectionTableCreator`
               UPDATE "question_bank"
@@ -1371,6 +1371,7 @@ exports.handler = async (event, context) => {
                 title = COALESCE(${title || null}, title),
                 question_text = COALESCE(${question_text || null}, question_text),
                 evaluation_criteria = COALESCE(${evaluation_criteria || null}, evaluation_criteria),
+                clinical_intent = COALESCE(${clinical_intent !== undefined ? clinical_intent : null}, clinical_intent),
                 category = COALESCE(${category !== undefined ? category : null}, category),
                 difficulty_level = COALESCE(${difficulty_level !== undefined ? difficulty_level : null}, difficulty_level),
                 is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory),

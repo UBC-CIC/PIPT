@@ -259,7 +259,7 @@ export function usePatientEditor({
             group_question_id: q.group_question_id,
             title: q.title || '',
             keyQuestion: q.question_text || '',
-            clinicalIntent: '',
+            clinicalIntent: q.clinical_intent || '',
             evaluationCriteria: q.evaluation_criteria || '',
             required: q.is_mandatory ?? false,
           }));
@@ -278,7 +278,7 @@ export function usePatientEditor({
               group_question_id: q.group_question_id,
               title: q.title || '',
               keyQuestion: q.question_text || '',
-              clinicalIntent: '',
+              clinicalIntent: q.clinical_intent || '',
               evaluationCriteria: q.evaluation_criteria || '',
               required: q.is_mandatory ?? false,
             }));
@@ -400,6 +400,11 @@ export function usePatientEditor({
 
     if (!editPatientGender.trim()) {
       showNotification({ message: 'Please enter a patient gender before saving.', type: 'warning' });
+      return false;
+    }
+
+    if (!editPatientPrompt.trim()) {
+      showNotification({ message: 'Please fill in the Text Prompt before saving.', type: 'warning' });
       return false;
     }
 
