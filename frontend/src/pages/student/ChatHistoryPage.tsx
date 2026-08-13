@@ -8,7 +8,7 @@ import { SIMULATION_GROUP_COLOR_PALETTE, UI_COLORS } from '@/lib/colors';
 import { useState, useRef, useEffect } from 'react';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
-import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
+import PhysicalAssessmentContent, { ImageViewer, isImageFile } from '@/components/PhysicalAssessmentContent';
 import { useAuth } from '@/App';
 import { useResizablePanel } from '@/hooks/useResizablePanel';
 import ResizeHandle from '@/components/ResizeHandle';
@@ -405,12 +405,16 @@ function ChatHistoryPage() {
                     {selectedPatientFile.filename}
                   </h4>
                   {selectedPatientFile.url ? (
-                    <iframe
-                      src={selectedPatientFile.url}
-                      title={selectedPatientFile.filename}
-                      className="w-full flex-1 rounded border"
-                      style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
-                    />
+                    isImageFile(selectedPatientFile.filename) || isImageFile(selectedPatientFile.url) ? (
+                      <ImageViewer url={selectedPatientFile.url} title={selectedPatientFile.filename} />
+                    ) : (
+                      <iframe
+                        src={selectedPatientFile.url}
+                        title={selectedPatientFile.filename}
+                        className="w-full flex-1 rounded border"
+                        style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
+                      />
+                    )
                   ) : (
                     <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No preview available for this file.</p>
                   )}

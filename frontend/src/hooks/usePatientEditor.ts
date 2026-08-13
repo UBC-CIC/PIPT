@@ -343,6 +343,14 @@ export function usePatientEditor({
       showNotification({ message: 'Please enter a patient name before proceeding.', type: 'warning' });
       return null;
     }
+    if (!editPatientAge.trim() || parseInt(editPatientAge) <= 0) {
+      showNotification({ message: 'Please enter a valid patient age before proceeding.', type: 'warning' });
+      return null;
+    }
+    if (!editPatientGender.trim()) {
+      showNotification({ message: 'Please enter a patient gender before proceeding.', type: 'warning' });
+      return null;
+    }
     try {
       const newPersonaId = await instructorService.createPatient(groupId, {
         patient_name: editPatientName,
@@ -379,6 +387,21 @@ export function usePatientEditor({
    */
   const savePatient = async (): Promise<boolean> => {
     if (!selectedPatientForEdit || !groupId) return false;
+
+    if (!editPatientName.trim()) {
+      showNotification({ message: 'Please enter a patient name before saving.', type: 'warning' });
+      return false;
+    }
+
+    if (!editPatientAge.trim() || parseInt(editPatientAge) <= 0) {
+      showNotification({ message: 'Please enter a valid patient age before saving.', type: 'warning' });
+      return false;
+    }
+
+    if (!editPatientGender.trim()) {
+      showNotification({ message: 'Please enter a patient gender before saving.', type: 'warning' });
+      return false;
+    }
 
     if (!editPatientPrompt.trim()) {
       showNotification({ message: 'Please fill in the Text Prompt before saving.', type: 'warning' });

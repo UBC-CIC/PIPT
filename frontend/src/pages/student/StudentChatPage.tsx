@@ -10,7 +10,7 @@ import { io, type Socket } from 'socket.io-client';
 import { SocketIOAudioClient, type VoiceSessionState } from '@/lib/socketio-audio-client';
 // CaseMaterialsDialog and PhysicalAssessmentDialog are rendered inline in the sidebar
 import ConfirmConcludeDialog from '@/components/ConfirmConcludeDialog';
-import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
+import PhysicalAssessmentContent, { ImageViewer, isImageFile } from '@/components/PhysicalAssessmentContent';
 import ReportIssueDialog from '@/components/ReportIssueDialog';
 import AIDebriefDialog from '@/components/AIDebriefDialog';
 import { ConcludeModal } from '@/components/ConcludeModal';
@@ -1481,13 +1481,17 @@ function StudentChatPage() {
                     {selectedPatientFile.filename}
                   </h4>
                   {selectedPatientFile.url ? (
-                    <iframe
-                      src={selectedPatientFile.url}
-                      title={selectedPatientFile.filename}
-                      className="w-full flex-1 rounded border"
-                      style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
-                      referrerPolicy="no-referrer"
-                    />
+                    isImageFile(selectedPatientFile.filename) || isImageFile(selectedPatientFile.url) ? (
+                      <ImageViewer url={selectedPatientFile.url} title={selectedPatientFile.filename} />
+                    ) : (
+                      <iframe
+                        src={selectedPatientFile.url}
+                        title={selectedPatientFile.filename}
+                        className="w-full flex-1 rounded border"
+                        style={{ borderColor: UI_COLORS.border.default, minHeight: '400px' }}
+                        referrerPolicy="no-referrer"
+                      />
+                    )
                   ) : (
                     <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>No preview available for this file.</p>
                   )}

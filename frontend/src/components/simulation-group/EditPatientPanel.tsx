@@ -294,7 +294,7 @@ function InfoTab({
       {/* Patient Name */}
       <div>
         <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-          Patient Name
+          Patient Name <span style={{ color: UI_COLORS.text.error }}>*</span>
         </label>
         <Input
           value={patientEditor.editPatientName}
@@ -313,7 +313,7 @@ function InfoTab({
       {/* Patient Age */}
       <div>
         <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-          Patient Age
+          Patient Age <span style={{ color: UI_COLORS.text.error }}>*</span>
         </label>
         <Input
           type="number"
@@ -344,7 +344,7 @@ function InfoTab({
       {/* Gender */}
       <div>
         <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
-          Gender
+          Gender <span style={{ color: UI_COLORS.text.error }}>*</span>
         </label>
         <Input
           value={patientEditor.editPatientGender}

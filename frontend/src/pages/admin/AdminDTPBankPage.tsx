@@ -41,6 +41,9 @@ function AdminDTPBankPage() {
     isRequired: boolean;
     tags: string[];
   }>({ title: '', expectedDTPText: '', clinicalIntent: '', evaluationCriteria: '', isRequired: false, tags: [] });
+  // Raw text for the comma-separated tags input while editing. Kept separate from
+  // editForm.tags so typing spaces/commas isn't stripped on every keystroke.
+  const [editTagsInput, setEditTagsInput] = useState('');
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -194,6 +197,7 @@ function AdminDTPBankPage() {
       isRequired: item.isRequired,
       tags: item.tags || [],
     });
+    setEditTagsInput((item.tags || []).filter(t => t !== 'patient_specific').join(', '));
     setEditError(null);
   };
 
@@ -216,13 +220,20 @@ function AdminDTPBankPage() {
     setEditSaving(true);
     setEditError(null);
     try {
+      const baseTag = editForm.tags.includes('patient_specific') ? ['patient_specific'] : [];
+      const userTags = editTagsInput
+        .split(',')
+        .map(t => t.trim())
+        .filter(Boolean)
+        .filter(t => t !== 'patient_specific');
+      const finalTags = [...baseTag, ...userTags];
       const updated = await updateDTPItem(editingItemId, {
         title: editForm.title.trim(),
         expectedDTPText: editForm.expectedDTPText.trim(),
         clinicalIntent: editForm.clinicalIntent.trim(),
         evaluationCriteria: editForm.evaluationCriteria.trim(),
         isRequired: editForm.isRequired,
-        tags: editForm.tags,
+        tags: finalTags,
       });
       setDtpItems(prev => prev.map(item => item.id === editingItemId ? updated : item));
       setEditingItemId(null);
@@ -512,12 +523,8 @@ function AdminDTPBankPage() {
                                 <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Tags (comma-separated)</label>
                                   <Input
-                                    value={editForm.tags.filter(t => t !== 'patient_specific').join(', ')}
-                                    onChange={(e) => {
-                                      const userTags = e.target.value.split(',').map(t => t.trim()).filter(Boolean);
-                                      const baseTag = editForm.tags.includes('patient_specific') ? ['patient_specific'] : [];
-                                      setEditForm(prev => ({ ...prev, tags: [...baseTag, ...userTags] }));
-                                    }}
+                                    value={editTagsInput}
+                                    onChange={(e) => setEditTagsInput(e.target.value)}
                                     placeholder="e.g. cardiology, dosing, interaction"
                                     style={{ borderColor: UI_COLORS.border.default }}
                                   />

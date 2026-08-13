@@ -125,9 +125,18 @@ function extractAspectRatio(html: string): string | null {
 }
 
 /**
+ * Returns true when the given filename/url points to a raster or vector image
+ * that should be rendered inline with <img> (resizable) rather than an <iframe>.
+ */
+export function isImageFile(nameOrUrl: string): boolean {
+  const path = nameOrUrl.split('?')[0].split('#')[0].toLowerCase();
+  return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/.test(path);
+}
+
+/**
  * Renders a zoomable image with zoom in/out/reset controls.
  */
-function ImageViewer({ url, title }: { url: string; title: string }) {
+export function ImageViewer({ url, title }: { url: string; title: string }) {
   const [scale, setScale] = useState(1);
 
   const zoomIn = () => setScale((s) => Math.min(s + 0.25, 4));

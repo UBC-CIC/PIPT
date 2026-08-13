@@ -58,6 +58,7 @@ export const UI_COLORS = {
     muted: '#6B7280', // gray-500
     light: '#9CA3AF', // gray-400
     black: '#000000',
+    error: '#DC2626', // red-600
   },
   icon: {
     default: '#262626',
