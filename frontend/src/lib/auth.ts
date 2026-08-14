@@ -43,11 +43,17 @@ interface UserProfileResponse {
 class AuthService {
   // Session-level cache for user profile from /student/me
   private cachedUser: AuthUser | null = null;
+  // Session-level cache for the ID token so we don't call fetchAuthSession()
+  // on every API request. Refreshed automatically as it nears expiry.
+  private cachedToken: string | null = null;
+  private cachedTokenExp = 0; // token expiry, epoch seconds
 
   // Sign in with email and password
   async signIn(email: string, password: string): Promise<AuthResult> {
-    // Clear cached profile on new sign-in
+    // Clear cached profile and token on new sign-in
     this.cachedUser = null;
+    this.cachedToken = null;
+    this.cachedTokenExp = 0;
 
     const result = await signIn({ username: email, password });
 
@@ -120,15 +126,30 @@ class AuthService {
   // preventing stolen tokens from being used after the user logs out.
   async signOut(): Promise<void> {
     this.cachedUser = null;
+    this.cachedToken = null;
+    this.cachedTokenExp = 0;
     await signOut({ global: true });
   }
 
-  // Get current ID token for API requests
+  // Get current ID token for API requests.
+  // Returns the cached token while it's still valid (with a 60s safety buffer)
+  // to avoid a fetchAuthSession() call on every request.
   async getIdToken(): Promise<string | null> {
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (this.cachedToken && nowSec < this.cachedTokenExp - 60) {
+      return this.cachedToken;
+    }
     try {
       const session = await fetchAuthSession();
-      return session.tokens?.idToken?.toString() || null;
+      const idToken = session.tokens?.idToken;
+      const token = idToken?.toString() || null;
+      this.cachedToken = token;
+      const exp = idToken?.payload?.exp;
+      this.cachedTokenExp = typeof exp === 'number' ? exp : 0;
+      return token;
     } catch {
+      this.cachedToken = null;
+      this.cachedTokenExp = 0;
       return null;
     }
   }

@@ -1,5 +1,5 @@
 import { useNavigate, useParams } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
 import { ArrowLeft, BarChart3, Users, UserCog, FileText, Search, Trash2, Plus, Menu, UserPlus, FileCode, HelpCircle, AlertTriangle, Pill, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,11 +18,15 @@ import { useQuestionBank } from '@/hooks/useQuestionBank';
 import { useStudentViewer } from '@/hooks/useStudentViewer';
 import { useDebriefViewer } from '@/hooks/useDebriefViewer';
 import { SimulationGroupSidebar } from '@/components/simulation-group/SimulationGroupSidebar';
-import { AnalyticsSection } from '@/components/simulation-group/AnalyticsSection';
 import { PatientsSection } from '@/components/simulation-group/PatientsSection';
 import { StudentsSection } from '@/components/simulation-group/StudentsSection';
 import { StudentDetailsPanel } from '@/components/simulation-group/StudentDetailsPanel';
 import { EditPatientPanel } from '@/components/simulation-group/EditPatientPanel';
+
+// Lazy-loaded so recharts (~426 KB) only downloads when the Analytics tab opens.
+const AnalyticsSection = lazy(() =>
+  import('@/components/simulation-group/AnalyticsSection').then((m) => ({ default: m.AnalyticsSection }))
+);
 import { RubricSection } from '@/components/simulation-group/RubricSection';
 import { QuestionBankSection } from '@/components/simulation-group/QuestionBankSection';
 import { AddQuestionDialog } from '@/components/AddQuestionDialog';
@@ -859,7 +863,11 @@ function AdminSimulationGroupPage() {
         />
 
         <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'prompts', 'editPatient', 'viewStudent', 'issuesFeedback'].includes(activeSection) ? '0' : '2rem' }}>
-          {activeSection === 'analytics' && <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} dtpCoverage={dtpCoverage} recommendationCoverage={recommendationCoverage} dtpAnalytics={dtpAnalytics} recommendationAnalytics={recommendationAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />}
+          {activeSection === 'analytics' && (
+            <Suspense fallback={<div className="p-8 text-sm" style={{ color: UI_COLORS.text.muted }}>Loading analytics…</div>}>
+              <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} dtpCoverage={dtpCoverage} recommendationCoverage={recommendationCoverage} dtpAnalytics={dtpAnalytics} recommendationAnalytics={recommendationAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />
+            </Suspense>
+          )}
 
           {activeSection === 'patients' && (
             <PatientsSection patients={manageablePatients} profilePictures={profilePictures} searchQuery={searchQuery} onSearchChange={setSearchQuery} onEditPatient={handleEditPatient} onDeletePatient={handleDeletePatient} onCreatePatient={handleCreateNewPatient} onTogglePatientVoice={handleTogglePatientVoice} labels={labels} enableVoiceForAll={enableVoiceForAll} onToggleVoice={async (newValue) => {

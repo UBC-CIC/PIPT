@@ -1,8 +1,9 @@
 import { useState, useRef, useCallback } from 'react';
 import { instructorService } from '@/services/instructorService';
 import { type AIDebriefData, type UpdatedDebriefData } from '@/services/studentService';
-import { downloadChatPdf } from '@/lib/download-chat-pdf';
 import { useNotification } from '@/components/notifications';
+// downloadChatPdf (and its heavy jspdf/html2canvas deps) is imported dynamically
+// at click time so that ~588 KB bundle only loads when a user exports a PDF.
 
 interface UseDebriefViewerParams {
   groupId: string | undefined;
@@ -71,6 +72,7 @@ export function useDebriefViewer({ groupId }: UseDebriefViewerParams): UseDebrie
       node.style.overflowY = 'visible';
     });
     try {
+      const { downloadChatPdf } = await import('@/lib/download-chat-pdf');
       await downloadChatPdf({ element: containerRef, filename: `chat-${attemptId}.pdf`, scale: 2 });
     } catch (error) {
       console.error('Failed to download chat PDF:', error);

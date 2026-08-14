@@ -18,4 +18,17 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy libraries into their own chunks so they are cached
+        // separately and only fetched when a route that uses them loads.
+        manualChunks: {
+          recharts: ["recharts"],
+          pdf: ["jspdf", "html2canvas"],
+          amplify: ["aws-amplify"],
+        },
+      },
+    },
+  },
 });

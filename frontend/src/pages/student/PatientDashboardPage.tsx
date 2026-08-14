@@ -3,14 +3,17 @@ import { Button } from '@/components/ui/button';
 import PageContainer from '@/components/PageContainer';
 import UserAvatar from '@/components/UserAvatar';
 import { ArrowLeft, Trash2, User, Stethoscope, ChevronDown, ChevronRight, FileText, ArrowLeftIcon, MessageCircle, Loader2 } from 'lucide-react';
-import { UI_COLORS, SIMULATION_GROUP_COLOR_PALETTE } from '@/lib/colors';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useState, useEffect } from 'react';
+import { UI_COLORS } from '@/lib/colors';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useAuth } from '@/App';
 import { studentService, type ChatHistoryEntry, type PatientDetail, type PatientFile, type PersonaMedia } from '@/services/studentService';
 import type { KeyQuestionsCoverageData } from '@/services/studentService';
 import ConfirmDeleteSessionDialog from '@/components/ConfirmDeleteSessionDialog';
 import PhysicalAssessmentContent from '@/components/PhysicalAssessmentContent';
+
+// Lazy-loaded so `recharts` is only downloaded when the coverage chart renders,
+// keeping it off the patient dashboard's initial paint.
+const KeyQuestionsCoverageChart = lazy(() => import('@/components/KeyQuestionsCoverageChart'));
 
 /**
  * PatientDashboardPage Component
@@ -364,42 +367,18 @@ function PatientDashboardPage() {
                       Showing last 5 attempts
                     </p>
                   )}
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={displayedCoverageData} margin={{ top: 5, right: 20, bottom: 20, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={UI_COLORS.border.light} />
-                      <XAxis 
-                        dataKey="attemptNumber" 
-                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                        stroke={UI_COLORS.border.default}
-                        label={{ value: 'Attempt Number', position: 'insideBottom', offset: -10, fill: UI_COLORS.text.body }}
-                        tickFormatter={(value) => `#${value}`}
-                      />
-                      <YAxis 
-                        label={{ value: 'Coverage (%)', angle: -90, position: 'insideLeft', fill: UI_COLORS.text.body }}
-                        tick={{ fill: UI_COLORS.text.body, fontSize: 12 }}
-                        domain={[0, 100]}
-                        stroke={UI_COLORS.border.default}
-                      />
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: UI_COLORS.background.white, 
-                          border: `1px solid ${UI_COLORS.border.default}`,
-                          borderRadius: '6px',
-                          color: UI_COLORS.text.body
-                        }}
-                        labelStyle={{ color: UI_COLORS.text.heading }}
-                      />
-                      <Line 
-                        type="monotone"
-                        dataKey="coverage" 
-                        stroke={SIMULATION_GROUP_COLOR_PALETTE[2]} 
-                        strokeWidth={2}
-                        name="Coverage (%)"
-                        dot={{ fill: SIMULATION_GROUP_COLOR_PALETTE[2], r: 4 }}
-                        activeDot={{ r: 6 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <Suspense
+                    fallback={
+                      <div
+                        className="flex items-center justify-center rounded-lg"
+                        style={{ height: 300, backgroundColor: UI_COLORS.background.input }}
+                      >
+                        <Loader2 className="w-5 h-5 animate-spin" style={{ color: UI_COLORS.text.muted }} />
+                      </div>
+                    }
+                  >
+                    <KeyQuestionsCoverageChart data={displayedCoverageData} />
+                  </Suspense>
                 </>
               ) : (
                 <div 
