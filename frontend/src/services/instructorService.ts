@@ -1335,6 +1335,7 @@ async function updateGlobalRubricQuestion(_simulationGroupId: string, question: 
         title: question.title,
         question_text: question.keyQuestion,
         evaluation_criteria: question.evaluationCriteria,
+        clinical_intent: question.clinicalIntent,
         is_mandatory: question.required,
       },
     }
@@ -1751,6 +1752,7 @@ function updateCaseSpecificQuestion(_patientId: string, question: GlobalRubricQu
         title: question.title,
         question_text: question.keyQuestion,
         evaluation_criteria: question.evaluationCriteria,
+        clinical_intent: question.clinicalIntent,
         is_mandatory: question.required,
       },
     }

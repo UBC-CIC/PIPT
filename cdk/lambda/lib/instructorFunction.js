@@ -1844,7 +1844,7 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { question_id } = event.queryStringParameters;
-            const { title, question_text, evaluation_criteria, is_mandatory } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, clinical_intent, is_mandatory } = JSON.parse(event.body);
 
             const updated = await sqlConnection`
               UPDATE "question_bank"
@@ -1852,6 +1852,7 @@ exports.handler = async (event, context) => {
                 title = COALESCE(${title || null}, title),
                 question_text = COALESCE(${question_text || null}, question_text),
                 evaluation_criteria = COALESCE(${evaluation_criteria || null}, evaluation_criteria),
+                clinical_intent = COALESCE(${clinical_intent !== undefined ? clinical_intent : null}, clinical_intent),
                 is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory)
               WHERE question_id = ${question_id}
               RETURNING *;
@@ -1885,7 +1886,7 @@ exports.handler = async (event, context) => {
             let data;
             if (persona_id) {
               data = await sqlConnection`
-                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.category, qb.is_mandatory
+                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.clinical_intent, qb.category, qb.is_mandatory
                 FROM "simulation_group_questions" sgq
                 JOIN "question_bank" qb ON sgq.question_id = qb.question_id
                 WHERE sgq.simulation_group_id = ${simulation_group_id}
@@ -1894,7 +1895,7 @@ exports.handler = async (event, context) => {
               `;
             } else {
               data = await sqlConnection`
-                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.category, qb.is_mandatory
+                SELECT sgq.*, qb.title, qb.question_text, qb.evaluation_criteria, qb.clinical_intent, qb.category, qb.is_mandatory
                 FROM "simulation_group_questions" sgq
                 JOIN "question_bank" qb ON sgq.question_id = qb.question_id
                 WHERE sgq.simulation_group_id = ${simulation_group_id}

@@ -394,7 +394,7 @@ export function mapBackendToQuestionBankItem(row: any): QuestionBankItem {
     id: row.question_id,
     title: row.title,
     questionText: row.question_text,
-    clinicalIntent: '',
+    clinicalIntent: row.clinical_intent || '',
     evaluationCriteria: row.evaluation_criteria,
     category: row.category,
     difficultyLevel: row.difficulty_level,

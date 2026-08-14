@@ -50,10 +50,11 @@ function AdminQuestionBankPage() {
   const [editForm, setEditForm] = useState<{
     title: string;
     questionText: string;
+    clinicalIntent: string;
     evaluationCriteria: string;
     isMandatory: boolean;
     tags: string[];
-  }>({ title: '', questionText: '', evaluationCriteria: '', isMandatory: false, tags: [] });
+  }>({ title: '', questionText: '', clinicalIntent: '', evaluationCriteria: '', isMandatory: false, tags: [] });
   // Raw text for the comma-separated tags input while editing. Kept separate from
   // editForm.tags so typing spaces/commas isn't stripped on every keystroke.
   const [editTagsInput, setEditTagsInput] = useState('');
@@ -181,15 +182,19 @@ function AdminQuestionBankPage() {
   }) => {
     try {
       setError(null);
-      await createQuestionBankQuestion(organizationId || '', {
-        title: question.title,
-        question_text: question.keyQuestion,
-        evaluation_criteria: question.evaluationCriteria,
-        is_mandatory: question.required,
-        tags: (question.tags || []).filter(t => t !== 'patient_specific'),
-      });
+      const created = await createQuestionBankQuestion(
+        organizationId || '',
+        {
+          title: question.title,
+          question_text: question.keyQuestion,
+          evaluation_criteria: question.evaluationCriteria,
+          clinical_intent: question.clinicalIntent,
+          is_mandatory: question.required,
+          tags: question.tags || [],
+        }
+      );
+      setQuestionItems(prev => [...prev, created]);
       showNotification({ message: `"${question.title}" created successfully.`, type: 'success' });
-      loadData();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create question';
       setError(msg);
@@ -207,15 +212,19 @@ function AdminQuestionBankPage() {
   }) => {
     try {
       setError(null);
-      await createQuestionBankQuestion(organizationId || '', {
-        title: question.title,
-        question_text: question.keyQuestion,
-        evaluation_criteria: question.evaluationCriteria,
-        is_mandatory: question.required,
-        tags: ['patient_specific', ...(question.tags || []).filter(t => t !== 'patient_specific')],
-      });
+      const created = await createQuestionBankQuestion(
+        organizationId || '',
+        {
+          title: question.title,
+          question_text: question.keyQuestion,
+          evaluation_criteria: question.evaluationCriteria,
+          clinical_intent: question.clinicalIntent,
+          is_mandatory: question.required,
+          tags: ['patient_specific', ...(question.tags || []).filter(t => t !== 'patient_specific')],
+        }
+      );
+      setQuestionItems(prev => [...prev, created]);
       showNotification({ message: `"${question.title}" created successfully.`, type: 'success' });
-      loadData();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to create patient-specific question';
       setError(msg);
@@ -236,6 +245,7 @@ function AdminQuestionBankPage() {
     setEditForm({
       title: item.title,
       questionText: item.questionText,
+      clinicalIntent: item.clinicalIntent,
       evaluationCriteria: item.evaluationCriteria,
       isMandatory: item.isMandatory,
       tags: item.tags || [],
@@ -273,6 +283,7 @@ function AdminQuestionBankPage() {
       const updated = await updateQuestionBankQuestion(editingItemId, {
         title: editForm.title.trim(),
         question_text: editForm.questionText.trim(),
+        clinical_intent: editForm.clinicalIntent.trim(),
         evaluation_criteria: editForm.evaluationCriteria.trim(),
         is_mandatory: editForm.isMandatory,
         tags: finalTags,
@@ -531,6 +542,21 @@ function AdminQuestionBankPage() {
                                   />
                                 </div>
                                 <div>
+                                  <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                  <textarea
+                                    value={editForm.clinicalIntent}
+                                    onChange={(e) => setEditForm(prev => ({ ...prev, clinicalIntent: e.target.value }))}
+                                    placeholder="Why this question matters clinically..."
+                                    className="w-full px-3 py-2 rounded-md border resize-none text-sm"
+                                    rows={2}
+                                    style={{
+                                      borderColor: UI_COLORS.border.default,
+                                      backgroundColor: UI_COLORS.background.white,
+                                      color: UI_COLORS.text.heading,
+                                    }}
+                                  />
+                                </div>
+                                <div>
                                   <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>
                                   <textarea
                                     value={editForm.evaluationCriteria}
@@ -614,6 +640,14 @@ function AdminQuestionBankPage() {
                                     {item.questionText || '—'}
                                   </p>
                                 </div>
+                                {item.clinicalIntent && (
+                                  <div>
+                                    <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Clinical Intent</label>
+                                    <p className="text-sm whitespace-pre-line" style={{ color: UI_COLORS.text.body }}>
+                                      {item.clinicalIntent}
+                                    </p>
+                                  </div>
+                                )}
                                 {item.evaluationCriteria && (
                                   <div>
                                     <label className="block text-xs font-semibold mb-1" style={{ color: UI_COLORS.text.muted }}>Evaluation Criteria</label>

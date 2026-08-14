@@ -254,6 +254,7 @@ CREATE TABLE IF NOT EXISTS public.question_bank (
     title character varying(255) NOT NULL,
     question_text text NOT NULL,
     evaluation_criteria text NOT NULL,
+    clinical_intent text,
     category character varying(100),
     difficulty_level character varying(50),
     is_mandatory boolean DEFAULT false,
