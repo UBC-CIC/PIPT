@@ -130,7 +130,7 @@ export function QuestionBankSection({
               cursor: 'pointer'
             }}
           >
-            Global Questions
+            Group-Wide Questions
           </button>
           <button
             onClick={handlePatientSpecificTabSwitch}
@@ -182,8 +182,8 @@ export function QuestionBankSection({
             <>
               <p className="text-sm mb-4" style={{ color: UI_COLORS.text.muted }}>
                 {role === 'admin'
-                  ? "Select which global questions should be included in this simulation group's rubric."
-                  : "Select which global questions should be included in this simulation group\u2019s rubric. These are questions that are saved in the question bank and are visible to be included for all patients in this simulation group."}
+                  ? "Select which group-wide questions should be included in this simulation group's rubric."
+                  : "Select which group-wide questions should be included in this simulation group\u2019s rubric. These are questions that are saved in the question bank and are visible to be included for all patients in this simulation group."}
               </p>
 
               {/* Instructor: per-tab search */}
@@ -192,7 +192,7 @@ export function QuestionBankSection({
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
                   <Input
                     type="text"
-                    placeholder="Search global questions..."
+                    placeholder="Search group-wide questions..."
                     value={globalQuestionSearchQuery}
                     onChange={(e) => setGlobalQuestionSearchQuery(e.target.value)}
                     className="pl-10"
@@ -252,7 +252,7 @@ export function QuestionBankSection({
                 <>
                   {filteredGlobalQuestions.length === 0 ? (
                     <p className="text-sm text-center py-8" style={{ color: UI_COLORS.text.muted }}>
-                      {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No global questions yet.'}
+                      {questionBankSearchQuery || questionBankTagFilter ? 'No questions match your filters.' : 'No group-wide questions yet.'}
                     </p>
                   ) : (
                     <Accordion type="single" collapsible className="space-y-2">

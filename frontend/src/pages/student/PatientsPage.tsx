@@ -7,6 +7,7 @@ import { studentService, type Patient, type UserData } from '@/services/studentS
 import { ArrowLeft, CheckCircle, Loader, Circle, Clock, MessageSquare, BarChart3 } from 'lucide-react';
 import { UI_COLORS } from '@/lib/colors';
 import { PatientListSkeleton } from '@/components/skeletons';
+import { peekCached } from '@/lib/dataCache';
 import { useAuth } from '@/App';
 
 /**
@@ -44,11 +45,15 @@ function PatientsPage() {
   const location = useLocation();
   const adminReturnUrl = (location.state as any)?.adminReturnUrl as string | undefined;
 
+  // Seed from cache so returning to a group you already opened renders instantly.
+  const cachedPatients = groupId ? peekCached<Patient[]>(`student:patients:${groupId}`) : undefined;
   const [user, setUser] = useState<UserData>({ name: 'Loading...' });
-  const [patients, setPatients] = useState<Patient[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [patients, setPatients] = useState<Patient[]>(cachedPatients ?? []);
+  // Only show the skeleton on a true cold load (no cached data to show).
+  const [loading, setLoading] = useState(cachedPatients === undefined);
 
-  // Fetch data from backend on mount
+  // Fetch data from backend on mount. If we have cached data we still refetch in
+  // the background (stale-while-revalidate) but don't block the UI with a skeleton.
   useEffect(() => {
     const loadData = async () => {
       try {

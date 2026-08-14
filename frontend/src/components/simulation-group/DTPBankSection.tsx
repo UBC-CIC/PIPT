@@ -111,7 +111,7 @@ export function DTPBankSection({
               cursor: 'pointer',
             }}
           >
-            Global DTPs
+            Group-Wide DTPs
           </button>
           <button
             onClick={handlePatientSpecificTabSwitch}

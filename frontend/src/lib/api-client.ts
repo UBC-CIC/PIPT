@@ -9,6 +9,8 @@ export interface ApiRequestOptions {
 
 export class ApiClient {
   private baseUrl: string;
+  // Tracks in-flight GET requests so concurrent identical reads share one call.
+  private inFlightGets = new Map<string, Promise<unknown>>();
 
   constructor() {
     this.baseUrl = appConfig.api.endpoint;
@@ -28,6 +30,29 @@ export class ApiClient {
   }
 
   async request<T>(
+    endpoint: string,
+    options: ApiRequestOptions = {}
+  ): Promise<T> {
+    const method = options.method ?? 'GET';
+
+    // De-duplicate concurrent identical GET requests. If the same GET is already
+    // in flight, return its promise instead of issuing a second network call.
+    // Callers of GETs treat responses as read-only, so sharing the resolved
+    // value is safe. Non-GET requests are never deduplicated.
+    if (method === 'GET') {
+      const existing = this.inFlightGets.get(endpoint);
+      if (existing) return existing as Promise<T>;
+      const pending = this.executeRequest<T>(endpoint, options).finally(() => {
+        this.inFlightGets.delete(endpoint);
+      });
+      this.inFlightGets.set(endpoint, pending as Promise<unknown>);
+      return pending;
+    }
+
+    return this.executeRequest<T>(endpoint, options);
+  }
+
+  private async executeRequest<T>(
     endpoint: string,
     options: ApiRequestOptions = {}
   ): Promise<T> {

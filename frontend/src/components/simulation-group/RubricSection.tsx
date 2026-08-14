@@ -49,21 +49,21 @@ export function RubricSection({
         <div style={{ borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: UI_COLORS.border.default }}>
           <div className="px-6 pt-6 pb-6">
             <h2 className="font-semibold text-lg mb-3" style={{ color: UI_COLORS.text.heading }}>
-              GLOBAL KEY QUESTIONS
+              GROUP-WIDE KEY QUESTIONS
             </h2>
             <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
               These questions apply to all patients in this simulation group.
-              Global key questions can only be edited here.
+              Group-wide key questions can only be edited here.
             </p>
             <p className="text-xs mb-4" style={{ color: UI_COLORS.text.muted }}>
-              In each patient&apos;s page, global key questions are view-only.
+              In each patient&apos;s page, group-wide key questions are view-only.
             </p>
 
             {/* Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
               <Input
-                placeholder="Search Global Key Questions"
+                placeholder="Search Group-Wide Key Questions"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"

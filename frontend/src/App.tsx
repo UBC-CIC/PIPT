@@ -4,25 +4,28 @@ import '@/config/aws-config';
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { NotificationProvider } from '@/components/notifications';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
-import { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import { useState, useEffect, createContext, useContext, useCallback, lazy, Suspense } from 'react';
 import LoginPage from './pages/LoginPage';
 import SignUpPage from './pages/SignUpPage';
-import StudentDashboardPage from './pages/student/StudentDashboardPage';
-import InstructorDashboardPage from './pages/instructor/InstructorDashboardPage';
-import InstructorSimulationGroupPage from './pages/instructor/InstructorSimulationGroupPage';
-import AdminHomePage from './pages/admin/AdminHomePage';
-import AdminOrganizationPage from './pages/admin/AdminOrganizationPage';
-import AdminSimulationGroupPage from './pages/admin/AdminSimulationGroupPage';
-import AdminQuestionBankPage from './pages/admin/AdminQuestionBankPage';
-import AdminDTPBankPage from '@/pages/admin/AdminDTPBankPage';
-import AdminRecommendationsBankPage from '@/pages/admin/AdminRecommendationsBankPage';
-import AdminManageBanksPage from '@/pages/admin/AdminManageBanksPage';
-import AdminConfigurationPage from '@/pages/admin/AdminConfigurationPage';
-import PatientsPage from './pages/student/PatientsPage';
-import PatientDashboardPage from './pages/student/PatientDashboardPage';
-import StudentChatPage from './pages/student/StudentChatPage';
-import ChatHistoryPage from './pages/student/ChatHistoryPage';
 import { authService, type AuthUser } from './lib/auth';
+
+// Lazily loaded pages — route-level code-splitting so each role only downloads
+// its own bundle (and heavy deps like recharts/jspdf load on demand).
+const StudentDashboardPage = lazy(() => import('./pages/student/StudentDashboardPage'));
+const InstructorDashboardPage = lazy(() => import('./pages/instructor/InstructorDashboardPage'));
+const InstructorSimulationGroupPage = lazy(() => import('./pages/instructor/InstructorSimulationGroupPage'));
+const AdminHomePage = lazy(() => import('./pages/admin/AdminHomePage'));
+const AdminOrganizationPage = lazy(() => import('./pages/admin/AdminOrganizationPage'));
+const AdminSimulationGroupPage = lazy(() => import('./pages/admin/AdminSimulationGroupPage'));
+const AdminQuestionBankPage = lazy(() => import('./pages/admin/AdminQuestionBankPage'));
+const AdminDTPBankPage = lazy(() => import('@/pages/admin/AdminDTPBankPage'));
+const AdminRecommendationsBankPage = lazy(() => import('@/pages/admin/AdminRecommendationsBankPage'));
+const AdminManageBanksPage = lazy(() => import('@/pages/admin/AdminManageBanksPage'));
+const AdminConfigurationPage = lazy(() => import('@/pages/admin/AdminConfigurationPage'));
+const PatientsPage = lazy(() => import('./pages/student/PatientsPage'));
+const PatientDashboardPage = lazy(() => import('./pages/student/PatientDashboardPage'));
+const StudentChatPage = lazy(() => import('./pages/student/StudentChatPage'));
+const ChatHistoryPage = lazy(() => import('./pages/student/ChatHistoryPage'));
 
 // Auth context for sharing auth state across components
 interface AuthContextType {
@@ -111,6 +114,13 @@ function AppRoutes() {
 
   return (
     <AuthContext.Provider value={{ user, loading, signOut: handleSignOut, refreshUser }}>
+      <Suspense
+        fallback={
+          <div className="min-h-screen flex items-center justify-center">
+            <LoadingIndicator size="lg" message="Loading..." />
+          </div>
+        }
+      >
       <Routes>
         <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage />} />
@@ -132,6 +142,7 @@ function AppRoutes() {
         <Route path="/patients/:groupId/:patientId/chat/:chatId" element={<ProtectedRoute><StudentChatPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId/:patientId/chat/:chatId/history" element={<ProtectedRoute><ChatHistoryPage /></ProtectedRoute>} />
       </Routes>
+      </Suspense>
     </AuthContext.Provider>
   );
 }

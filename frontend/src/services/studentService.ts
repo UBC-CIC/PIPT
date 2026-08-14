@@ -8,6 +8,7 @@
 import { getSimulationGroupColor } from '@/lib/colors';
 import { apiClient } from '@/lib/api-client';
 import { authService } from '@/lib/auth';
+import { setCached } from '@/lib/dataCache';
 import type { Socket } from 'socket.io-client';
 
 /**
@@ -838,7 +839,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     });
     const chatStats = await Promise.all(chatStatsPromises);
 
-    return uniqueData.map((p, i) => {
+    const result: Patient[] = uniqueData.map((p, i) => {
       const stats = chatStats[i];
       let debriefStatus: Patient['debrief_status'];
       if (p.is_completed) {
@@ -861,6 +862,10 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
         mode: p.mode || 'full_assessment',
       };
     });
+
+    // Cache for stale-while-revalidate so returning to this group renders instantly.
+    setCached(`student:patients:${simulationGroupId}`, result);
+    return result;
   } catch (error) {
     console.error('Failed to fetch patients:', error);
     throw new Error('Failed to load patients. Please try again.');
