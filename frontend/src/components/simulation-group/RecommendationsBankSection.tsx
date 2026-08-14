@@ -111,7 +111,7 @@ export function RecommendationsBankSection({
               cursor: 'pointer',
             }}
           >
-            Global Recommendations
+            Group-Wide Recommendations
           </button>
           <button
             onClick={handlePatientSpecificTabSwitch}

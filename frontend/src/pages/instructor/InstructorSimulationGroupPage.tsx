@@ -652,7 +652,7 @@ function InstructorSimulationGroupPage() {
             { id: 'analytics', label: 'Analytics', icon: <BarChart3 className="w-5 h-5" /> },
             { id: 'patients', label: `Manage ${aiPersonaLabelPlural}`, icon: <Users className="w-5 h-5" /> },
             { id: 'students', label: `Manage ${userRoleLabel}s`, icon: <UserCog className="w-5 h-5" /> },
-            { id: 'rubric', label: 'Global Key Questions', icon: <FileText className="w-5 h-5" /> },
+            { id: 'rubric', label: 'Group-Wide Key Questions', icon: <FileText className="w-5 h-5" /> },
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" />, onClick: () => { setActiveSection('questionBank'); questionBankTab === 'global' ? syncGlobalIds() : syncPatientIds(selectedPatientForQuestionBank); } },
             { id: 'dtpBank', label: 'DTP Bank', icon: <Pill className="w-5 h-5" /> },
             { id: 'recommendationsBank', label: 'Recommendations Bank', icon: <ClipboardList className="w-5 h-5" /> },

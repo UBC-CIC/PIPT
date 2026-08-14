@@ -844,7 +844,7 @@ function AdminSimulationGroupPage() {
             { id: 'patients', label: `Manage ${aiPersonaLabelPlural}`, icon: <Users className="w-5 h-5" /> },
             { id: 'students', label: `Manage ${userRoleLabel}s`, icon: <UserCog className="w-5 h-5" /> },
             { id: 'instructors', label: 'Manage Instructors', icon: <UserPlus className="w-5 h-5" /> },
-            { id: 'rubric', label: 'Global Key Questions', icon: <FileText className="w-5 h-5" /> },
+            { id: 'rubric', label: 'Group-Wide Key Questions', icon: <FileText className="w-5 h-5" /> },
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" /> },
             { id: 'dtpBank', label: 'DTP Bank', icon: <Pill className="w-5 h-5" /> },
             { id: 'recommendationsBank', label: 'Recommendations Bank', icon: <ClipboardList className="w-5 h-5" /> },
@@ -1185,9 +1185,9 @@ function AdminSimulationGroupPage() {
       <Dialog open={deleteQuestionConfirm.open} onOpenChange={(open) => setDeleteQuestionConfirm(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Remove Global Question</DialogTitle>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Remove Group-Wide Question</DialogTitle>
             <DialogDescription style={{ color: UI_COLORS.text.body }}>
-              Are you sure you want to remove "{deleteQuestionConfirm.questionTitle}" from the global rubric? It will remain in the question bank.
+              Are you sure you want to remove "{deleteQuestionConfirm.questionTitle}" from the group-wide rubric? It will remain in the question bank.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

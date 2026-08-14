@@ -214,6 +214,17 @@ function InfoTab({
 }) {
   const [previewFile, setPreviewFile] = useState<UploadedFileInfo | null>(null);
 
+  // Photos and file uploads attach to a saved patient (persona_id). For a new
+  // patient we can auto-save on first upload, but only once the required
+  // identity fields are present — so gate those controls until then.
+  const isNewPatient = patientEditor.selectedPatientForEdit === 'new';
+  const requiredFieldsComplete =
+    patientEditor.editPatientName.trim() !== '' &&
+    patientEditor.editPatientAge.trim() !== '' &&
+    parseInt(patientEditor.editPatientAge) > 0 &&
+    patientEditor.editPatientGender.trim() !== '';
+  const canAttachAssets = !isNewPatient || requiredFieldsComplete;
+
   return (
     <div className="space-y-6 max-w-2xl">
       {/* Photo Delete Confirmation Dialog */}
@@ -251,44 +262,13 @@ function InfoTab({
           </div>
         </DialogContent>
       </Dialog>
-      <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
-        {patientEditor.selectedPatientForEdit === 'new' ? `Create ${labels.aiPersona} Information` : `Edit ${labels.aiPersona} Information`}
-      </h3>
-
-      {/* Patient Photo */}
-      <div className="flex items-center gap-4">
-        <UserAvatar
-          name={patientEditor.editPatientName || 'P'}
-          imageUrl={patientEditor.editPatientProfilePicUrl || (patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' ? profilePictures[patientEditor.selectedPatientForEdit] : undefined)}
-          size="large"
-        />
-        <label className="cursor-pointer">
-          <input
-            type="file"
-            accept="image/*"
-            onChange={patientEditor.handlePhotoUpload}
-            className="hidden"
-          />
-          <div
-            className="p-3 rounded-full transition-colors"
-            style={{
-              backgroundColor: UI_COLORS.background.tableHeader,
-              color: UI_COLORS.text.body
-            }}
-          >
-            <Camera className="w-6 h-6" />
-          </div>
-        </label>
-        {patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' && (patientEditor.editPatientProfilePicUrl || profilePictures[patientEditor.selectedPatientForEdit]) && (
-          <button
-            onClick={patientEditor.handlePhotoDelete}
-            className="p-3 rounded-full transition-colors"
-            style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
-            title="Remove photo"
-          >
-            <Trash2 className="w-6 h-6" />
-          </button>
-        )}
+      <div>
+        <h3 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>
+          {patientEditor.editPatientName.trim() || (isNewPatient ? `Create ${labels.aiPersona}` : `Edit ${labels.aiPersona}`)}
+        </h3>
+        <p className="text-sm mt-1" style={{ color: UI_COLORS.text.muted }}>
+          {isNewPatient ? `New ${labels.aiPersona.toLowerCase()} information` : `Editing ${labels.aiPersona.toLowerCase()}`}
+        </p>
       </div>
 
       {/* Patient Name */}
@@ -465,6 +445,53 @@ function InfoTab({
         </div>
       </div>
 
+      {/* Patient Photo */}
+      <div>
+        <label className="block text-sm font-medium mb-2" style={{ color: UI_COLORS.text.body }}>
+          Photo
+        </label>
+        <div className="flex items-center gap-4">
+          <UserAvatar
+            name={patientEditor.editPatientName || 'P'}
+            imageUrl={patientEditor.editPatientProfilePicUrl || (patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' ? profilePictures[patientEditor.selectedPatientForEdit] : undefined)}
+            size="large"
+          />
+          <label className={`cursor-pointer ${!canAttachAssets ? 'pointer-events-none opacity-50' : ''}`}>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={patientEditor.handlePhotoUpload}
+              className="hidden"
+              disabled={!canAttachAssets}
+            />
+            <div
+              className="p-3 rounded-full transition-colors"
+              style={{
+                backgroundColor: UI_COLORS.background.tableHeader,
+                color: UI_COLORS.text.body
+              }}
+            >
+              <Camera className="w-6 h-6" />
+            </div>
+          </label>
+          {patientEditor.selectedPatientForEdit && patientEditor.selectedPatientForEdit !== 'new' && (patientEditor.editPatientProfilePicUrl || profilePictures[patientEditor.selectedPatientForEdit]) && (
+            <button
+              onClick={patientEditor.handlePhotoDelete}
+              className="p-3 rounded-full transition-colors"
+              style={{ backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.body }}
+              title="Remove photo"
+            >
+              <Trash2 className="w-6 h-6" />
+            </button>
+          )}
+        </div>
+        {!canAttachAssets && (
+          <p className="text-xs mt-2" style={{ color: UI_COLORS.text.muted }}>
+            Add a name, age, and gender first.
+          </p>
+        )}
+      </div>
+
       {/* File Upload Sections */}
       <div className="space-y-4">
         {patientEditor.filesLoading && (
@@ -472,6 +499,11 @@ function InfoTab({
             <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />
             <span className="text-sm" style={{ color: UI_COLORS.text.body }}>Loading patient files…</span>
           </div>
+        )}
+        {!canAttachAssets && (
+          <p className="text-xs" style={{ color: UI_COLORS.text.muted }}>
+            Add a name, age, and gender first to upload files.
+          </p>
         )}
         {([
           { label: 'LLM Upload', type: 'llm' as const, description: 'Document used by the AI to roleplay as this patient.' },
@@ -492,12 +524,12 @@ function InfoTab({
                 {patientEditor.uploadStatus[type] === 'uploading' && <Loader2 className="w-4 h-4 animate-spin" style={{ color: UI_COLORS.text.muted }} />}
                 {patientEditor.uploadStatus[type] === 'success' && <span className="flex items-center gap-1 text-sm" style={{ color: '#16a34a' }}><CheckCircle className="w-4 h-4" /> Uploaded</span>}
                 {patientEditor.uploadStatus[type] === 'error' && <span className="flex items-center gap-1 text-sm" style={{ color: '#dc2626' }}><XCircle className="w-4 h-4" /> Failed</span>}
-                <label className={`cursor-pointer ${(patientEditor.uploadStatus[type] === 'uploading' || patientEditor.filesLoading) ? 'pointer-events-none opacity-50' : ''}`}>
+                <label className={`cursor-pointer ${(patientEditor.uploadStatus[type] === 'uploading' || patientEditor.filesLoading || !canAttachAssets) ? 'pointer-events-none opacity-50' : ''}`}>
                   <input
                     type="file"
                     onChange={(e) => patientEditor.handleFileUpload(type, e)}
                     className="hidden"
-                    disabled={patientEditor.filesLoading}
+                    disabled={patientEditor.filesLoading || !canAttachAssets}
                   />
                   <div
                     className="p-2 rounded-lg transition-colors flex items-center gap-2"
@@ -1077,20 +1109,20 @@ function QuestionsTab({
       {/* Divider */}
       <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
 
-      {/* Global Key Questions Section */}
+      {/* Group-Wide Key Questions Section */}
       <div className="space-y-4">
         <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
-          GLOBAL KEY QUESTIONS
+          GROUP-WIDE KEY QUESTIONS
         </h3>
         <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
-          The following global questions are shown for reference to prevent redundancy. Edit global questions from the Global Key Questions tab.
+          The following group-wide questions are shown for reference to prevent redundancy. Edit group-wide questions from the Group-Wide Key Questions tab.
         </p>
 
-        {/* Search Bar for Global Questions */}
+        {/* Search Bar for Group-Wide Questions */}
         <div className="relative mb-6">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" style={{ color: UI_COLORS.text.muted }} />
           <Input
-            placeholder="Search Global Questions"
+            placeholder="Search Group-Wide Questions"
             value={globalRubricSearchQuery}
             onChange={(e) => onGlobalRubricSearchChange(e.target.value)}
             className="pl-9 py-2 text-sm focus-visible:ring-0 focus-visible:ring-offset-0"
@@ -1780,10 +1812,10 @@ function PatientDTPsTab({
           <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
           <div className="space-y-4">
             <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
-              GLOBAL DTPS
+              GROUP-WIDE DTPS
             </h3>
             <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
-              The following global DTPs are shown for reference to prevent redundancy. Select which global DTPs to include/exclude in the DTP Bank tab.
+              The following group-wide DTPs are shown for reference to prevent redundancy. Select which group-wide DTPs to include/exclude in the DTP Bank tab.
             </p>
             <Accordion type="single" collapsible className="space-y-2">
               {groupDTPs.map((dtp, index) => (
@@ -2066,10 +2098,10 @@ function PatientRecommendationsTab({
           <div className="my-8" style={{ borderTopWidth: '1px', borderTopStyle: 'solid', borderTopColor: UI_COLORS.border.default }} />
           <div className="space-y-4">
             <h3 className="font-semibold text-lg" style={{ color: UI_COLORS.text.heading }}>
-              GLOBAL RECOMMENDATIONS
+              GROUP-WIDE RECOMMENDATIONS
             </h3>
             <p className="text-xs italic mb-4" style={{ color: UI_COLORS.text.muted }}>
-              The following global recommendations are shown for reference to prevent redundancy. Select which global recommendations to include/exclude in the Recommendations Bank tab.
+              The following group-wide recommendations are shown for reference to prevent redundancy. Select which group-wide recommendations to include/exclude in the Recommendations Bank tab.
             </p>
             <Accordion type="single" collapsible className="space-y-2">
               {groupRecommendations.map((rec, index) => (
