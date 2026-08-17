@@ -108,6 +108,9 @@ export function usePatientEditor({
   const uploadedFilesRef = useRef(uploadedFiles);
   const ingestionPollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const ingestionPollCancelled = useRef(false);
+  // Track files uploaded during this editing session so we can show 'queued'
+  // only for files we know are awaiting Lambda processing (not legacy files).
+  const recentlyUploadedRef = useRef<Set<string>>(new Set());
 
   // Keep a ref of the latest uploaded files so the poller can mark files that
   // exist in S3 but don't yet have a persona_data row as 'queued'.
@@ -150,7 +153,26 @@ export function usePatientEditor({
         serverMap: Record<string, IngestionStatusOrQueued>
       ): Record<string, IngestionStatusOrQueued> => {
         const out: Record<string, IngestionStatusOrQueued> = {};
-        files.forEach((f) => { out[f.filename] = serverMap[f.filename] ?? 'queued'; });
+        files.forEach((f) => {
+          if (serverMap[f.filename]) {
+            // Server has a status for this file — use it directly.
+            out[f.filename] = serverMap[f.filename];
+            // Once the server knows about this file, stop treating it as "recent".
+            recentlyUploadedRef.current.delete(f.filename);
+          } else if (f.ingestionStatus) {
+            // File was loaded with an initial status from get_all_files (DB row
+            // exists). Use that rather than defaulting to 'queued'.
+            out[f.filename] = f.ingestionStatus;
+          } else if (recentlyUploadedRef.current.has(f.filename)) {
+            // File was uploaded in this session but Lambda hasn't created the
+            // DB row yet. Show 'queued' — it should transition soon.
+            out[f.filename] = 'queued';
+          } else {
+            // File exists in S3 but has no DB row and was NOT uploaded this
+            // session. It's a legacy file — don't show a misleading badge.
+            out[f.filename] = 'not processing';
+          }
+        });
         return out;
       };
 
@@ -163,6 +185,17 @@ export function usePatientEditor({
 
       if (anyPending && Date.now() - start < INGESTION_POLL_MAX_MS) {
         ingestionPollTimer.current = setTimeout(tick, INGESTION_POLL_INTERVAL_MS);
+      } else if (anyPending) {
+        // Polling timed out but some files are still pending. Mark any 'queued'
+        // files as 'error' since the Lambda likely never processed them.
+        const markStaleQueued = (map: Record<string, IngestionStatusOrQueued>) => {
+          const out = { ...map };
+          for (const key of Object.keys(out)) {
+            if (out[key] === 'queued') out[key] = 'error';
+          }
+          return out;
+        };
+        setIngestionStatus({ llm: markStaleQueued(llm), patientInfo: markStaleQueued(patientInfo) });
       }
     };
 
@@ -221,8 +254,27 @@ export function usePatientEditor({
       // current file set rather than waiting for the effect to flush.
       uploadedFilesRef.current = { llm, patientInfo };
       setEditPatientProfilePicUrl(result.profilePictureUrl);
+
+      // Set initial ingestion status from the file metadata so files don't
+      // flash "Queued" before the first poll response arrives.
+      const initialLlm: Record<string, IngestionStatusOrQueued> = {};
+      const initialPatientInfo: Record<string, IngestionStatusOrQueued> = {};
+      llm.forEach((f) => {
+        if (f.ingestionStatus) initialLlm[f.filename] = f.ingestionStatus;
+      });
+      patientInfo.forEach((f) => {
+        if (f.ingestionStatus) initialPatientInfo[f.filename] = f.ingestionStatus;
+      });
+      setIngestionStatus({ llm: initialLlm, patientInfo: initialPatientInfo });
+
       // Kick off live ingestion polling for any files still being embedded.
-      pollIngestionStatus(patientId);
+      const hasPending = [...llm, ...patientInfo].some(
+        (f) => !f.ingestionStatus || f.ingestionStatus === 'processing'
+          || recentlyUploadedRef.current.has(f.filename)
+      );
+      if (hasPending) {
+        pollIngestionStatus(patientId);
+      }
     } catch {
       setUploadedFiles({ llm: [], patientInfo: [] /* , answerKey: [] */ });
       uploadedFilesRef.current = { llm: [], patientInfo: [] };
@@ -316,6 +368,7 @@ export function usePatientEditor({
     setEditPatientProfilePicUrl(null);
     stopIngestionPolling();
     setIngestionStatus({ llm: {}, patientInfo: {} });
+    recentlyUploadedRef.current.clear();
   };
 
   /**
@@ -332,6 +385,7 @@ export function usePatientEditor({
     uploadTimers.current = {};
     stopIngestionPolling();
     setIngestionStatus({ llm: {}, patientInfo: {} });
+    recentlyUploadedRef.current.clear();
   };
 
   /**
@@ -502,6 +556,9 @@ export function usePatientEditor({
         await instructorService.uploadPatientFile(groupId, patientId, file, folderType);
         setUploadStatus(prev => ({ ...prev, [fileType]: 'success' }));
         uploadTimers.current[fileType] = setTimeout(() => setUploadStatus(prev => ({ ...prev, [fileType]: 'idle' })), 3000);
+        // Track this file as recently uploaded so the poller shows 'queued'
+        // rather than 'not processing' while awaiting the ingestion Lambda.
+        recentlyUploadedRef.current.add(file.name);
         // Refresh uploaded files list to show the new file
         loadUploadedFiles(patientId);
       } catch (error) {

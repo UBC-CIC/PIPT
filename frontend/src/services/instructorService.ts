@@ -1097,6 +1097,8 @@ export interface UploadedFileInfo {
   metadata: string | null;
   url: string;
   folderType: 'documents' | 'info' | 'answer_key';
+  /** Ingestion status from the DB, available on initial file load. */
+  ingestionStatus: IngestionStatus | null;
 }
 
 /**
@@ -1109,21 +1111,23 @@ async function fetchPatientUploadedFiles(
 ): Promise<{ files: Record<'llm' | 'patientInfo' | 'answerKey', UploadedFileInfo[]>; profilePictureUrl: string | null }> {
   try {
     const data = await apiClient.request<{
-      document_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
-      info_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
-      answer_key_files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>;
+      document_files: Record<string, { url: string; metadata: string | null; display_name?: string | null; ingestion_status?: string | null }>;
+      info_files: Record<string, { url: string; metadata: string | null; display_name?: string | null; ingestion_status?: string | null }>;
+      answer_key_files: Record<string, { url: string; metadata: string | null; display_name?: string | null; ingestion_status?: string | null }>;
       profile_picture_url?: string | null;
     }>(
       `instructor/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(patientId)}&patient_name=${encodeURIComponent(patientId)}`
     );
 
-    const mapFiles = (files: Record<string, { url: string; metadata: string | null; display_name?: string | null }>, folderType: 'documents' | 'info' | 'answer_key'): UploadedFileInfo[] =>
+    const validStatuses: IngestionStatus[] = ['not processing', 'processing', 'completed', 'error'];
+    const mapFiles = (files: Record<string, { url: string; metadata: string | null; display_name?: string | null; ingestion_status?: string | null }>, folderType: 'documents' | 'info' | 'answer_key'): UploadedFileInfo[] =>
       Object.entries(files ?? {}).map(([filename, info]) => ({
         filename,
         displayName: info.display_name ?? null,
         metadata: info.metadata ?? null,
         url: info.url,
         folderType,
+        ingestionStatus: (validStatuses.includes(info.ingestion_status as IngestionStatus) ? info.ingestion_status as IngestionStatus : null),
       }));
 
     return {
