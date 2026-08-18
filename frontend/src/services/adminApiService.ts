@@ -140,6 +140,26 @@ export async function lowerInstructor(email: string): Promise<{ message: string 
 }
 
 /**
+ * Elevate an instructor to admin role.
+ */
+export async function elevateToAdmin(email: string): Promise<{ message: string }> {
+  return apiClient.request<{ message: string }>(
+    `admin/elevate_admin`,
+    { method: 'POST', body: { email } }
+  );
+}
+
+/**
+ * Demote an admin back to instructor role.
+ */
+export async function lowerAdmin(email: string): Promise<{ message: string }> {
+  return apiClient.request<{ message: string }>(
+    `admin/lower_admin`,
+    { method: 'POST', body: { email } }
+  );
+}
+
+/**
  * Enroll an instructor in a simulation group.
  * This also creates student_interactions for all patients in the group.
  */

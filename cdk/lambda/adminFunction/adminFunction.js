@@ -111,7 +111,6 @@ exports.handler = async (event, context) => {
           const users = await sqlConnectionTableCreator`
             SELECT user_id, user_email, first_name, last_name, roles
             FROM "users"
-            WHERE NOT (roles @> ARRAY['admin']::varchar[])
             ORDER BY last_name ASC, first_name ASC
           `;
           response.body = JSON.stringify(users);
@@ -726,6 +725,131 @@ exports.handler = async (event, context) => {
             response.statusCode = 200;
             response.body = JSON.stringify({
               message: `User role updated to student for ${userEmail} and all instructor enrolments deleted.`,
+            });
+          } catch (err) {
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.statusCode = 500;
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        }
+        break;
+      case "POST /admin/elevate_admin":
+        {
+          const body = event.body ? JSON.parse(event.body) : {};
+          const targetEmail = body.email || (event.queryStringParameters && event.queryStringParameters.email);
+
+          if (!targetEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Email is required" });
+            break;
+          }
+
+          try {
+            // Check if the user exists in the DB
+            const existingUser = await sqlConnectionTableCreator`
+              SELECT * FROM "users"
+              WHERE user_email = ${targetEmail};
+            `;
+
+            if (existingUser.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({
+                error: "User does not exist. Only registered users can be elevated to admin.",
+              });
+              break;
+            }
+
+            const userRoles = existingUser[0].roles;
+
+            // Only promote instructors to admin (not students directly)
+            if (userRoles.includes("admin")) {
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                message: "No changes made. User is already an admin.",
+              });
+              break;
+            }
+
+            if (!userRoles.includes("instructor")) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({
+                error: "User must be an instructor before being elevated to admin.",
+              });
+              break;
+            }
+
+            // Replace 'instructor' with 'admin'
+            const newRoles = userRoles.map((role) =>
+              role === "instructor" ? "admin" : role
+            );
+
+            await sqlConnectionTableCreator`
+              UPDATE "users"
+              SET roles = ${newRoles}
+              WHERE user_email = ${targetEmail};
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify({
+              message: "User role updated to admin.",
+            });
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        }
+        break;
+      case "POST /admin/lower_admin":
+        {
+          const body = event.body ? JSON.parse(event.body) : {};
+          const targetEmail = body.email || (event.queryStringParameters && event.queryStringParameters.email);
+
+          if (!targetEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Email is required" });
+            break;
+          }
+
+          // Prevent self-demotion
+          if (targetEmail === adminEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "You cannot demote yourself from admin.",
+            });
+            break;
+          }
+
+          try {
+            const userRoleData = await sqlConnectionTableCreator`
+              SELECT roles FROM "users"
+              WHERE user_email = ${targetEmail};
+            `;
+
+            const userRoles = userRoleData[0]?.roles;
+
+            if (!userRoles || !userRoles.includes("admin")) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({
+                error: "User is not an admin or doesn't exist.",
+              });
+              break;
+            }
+
+            // Replace 'admin' with 'instructor'
+            const updatedRoles = userRoles.map((role) =>
+              role === "admin" ? "instructor" : role
+            );
+
+            await sqlConnectionTableCreator`
+              UPDATE "users"
+              SET roles = ${updatedRoles}
+              WHERE user_email = ${targetEmail};
+            `;
+
+            response.statusCode = 200;
+            response.body = JSON.stringify({
+              message: `User role updated to instructor for ${targetEmail}.`,
             });
           } catch (err) {
             logger.error("Operation failed", { error: err.message, stack: err.stack });
