@@ -152,6 +152,72 @@ export async function updateDTPItem(
 }
 
 /**
+ * Content fields an instructor may submit when creating a DTP item.
+ */
+export interface InstructorDTPWriteFields {
+  title: string;
+  expectedDTPText: string;
+  clinicalIntent: string;
+  evaluationCriteria: string;
+  tags: string[];
+  isRequired: boolean;
+}
+
+/**
+ * Create a new DTP item through the instructor-scoped route.
+ *
+ * The active flag is deliberately never sent: instructor reads filter on active
+ * rows only, so writing that flag would amount to a soft delete.
+ */
+export async function createDTPItemAsInstructor(
+  organizationId: string,
+  data: InstructorDTPWriteFields
+): Promise<DTPItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/dtp_bank?organization_id=${encodeURIComponent(organizationId)}`,
+    {
+      method: 'POST',
+      body: {
+        title: data.title,
+        expected_dtp_text: data.expectedDTPText,
+        clinical_intent: data.clinicalIntent,
+        evaluation_criteria: data.evaluationCriteria,
+        tags: data.tags,
+        is_required: data.isRequired,
+      },
+    }
+  );
+  return mapBackendToDTPItem(row);
+}
+
+/**
+ * Update an existing DTP item through the instructor-scoped route.
+ *
+ * Each content field is included only when defined, so an omitted field keeps
+ * its stored value server-side. The active flag is never sent.
+ */
+export async function updateDTPItemAsInstructor(
+  itemId: string,
+  data: Partial<InstructorDTPWriteFields>
+): Promise<DTPItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/dtp_bank?dtp_id=${encodeURIComponent(itemId)}`,
+    {
+      method: 'PUT',
+      body: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.expectedDTPText !== undefined && { expected_dtp_text: data.expectedDTPText }),
+        ...(data.clinicalIntent !== undefined && { clinical_intent: data.clinicalIntent }),
+        ...(data.evaluationCriteria !== undefined && { evaluation_criteria: data.evaluationCriteria }),
+        ...(data.tags !== undefined && { tags: data.tags }),
+        ...(data.isRequired !== undefined && { is_required: data.isRequired }),
+      },
+    }
+  );
+  return mapBackendToDTPItem(row);
+}
+
+/**
  * Delete a DTP item by ID.
  */
 export async function deleteDTPItem(itemId: string): Promise<void> {

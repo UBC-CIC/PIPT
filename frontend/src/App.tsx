@@ -17,6 +17,8 @@ const InstructorDashboardPage = lazy(() => import('./pages/instructor/Instructor
 const InstructorSimulationGroupPage = lazy(() => import('./pages/instructor/InstructorSimulationGroupPage'));
 const InstructorConfigurationPage = lazy(() => import('./pages/instructor/InstructorConfigurationPage'));
 const InstructorQuestionBankPage = lazy(() => import('./pages/instructor/InstructorQuestionBankPage'));
+const InstructorDTPBankPage = lazy(() => import('./pages/instructor/InstructorDTPBankPage'));
+const InstructorRecommendationsBankPage = lazy(() => import('./pages/instructor/InstructorRecommendationsBankPage'));
 const AdminHomePage = lazy(() => import('./pages/admin/AdminHomePage'));
 const AdminOrganizationPage = lazy(() => import('./pages/admin/AdminOrganizationPage'));
 const AdminSimulationGroupPage = lazy(() => import('./pages/admin/AdminSimulationGroupPage'));
@@ -132,6 +134,8 @@ function AppRoutes() {
         <Route path="/instructor/group/:groupId" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorSimulationGroupPage /></RoleRoute>} />
         <Route path="/instructor/configuration" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorConfigurationPage /></RoleRoute>} />
         <Route path="/instructor/question-bank" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorQuestionBankPage /></RoleRoute>} />
+        <Route path="/instructor/dtp-bank" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorDTPBankPage /></RoleRoute>} />
+        <Route path="/instructor/recommendations-bank" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorRecommendationsBankPage /></RoleRoute>} />
         <Route path="/admin" element={<RoleRoute allowedRoles={['admin']}><AdminHomePage /></RoleRoute>} />
         <Route path="/admin/organization/:organizationId" element={<RoleRoute allowedRoles={['admin']}><AdminOrganizationPage /></RoleRoute>} />
         <Route path="/admin/organization/:organizationId/banks" element={<RoleRoute allowedRoles={['admin']}><AdminManageBanksPage /></RoleRoute>} />
