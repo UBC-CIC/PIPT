@@ -1,6 +1,6 @@
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
-import { ArrowLeft, BarChart3, Users, UserCog, FileText, Eye, Menu, HelpCircle, Pill, ClipboardList } from 'lucide-react';
+import { ArrowLeft, BarChart3, Users, UserCog, FileText, Menu, HelpCircle, Pill, ClipboardList, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import PageContainer from '@/components/PageContainer';
@@ -75,8 +75,9 @@ function InstructorSimulationGroupPage() {
   const debriefViewer = useDebriefViewer({ groupId });
 
   // Instructor-specific: prompts
-  const [, setEvaluationPromptText] = useState('');
+  const [systemPromptText, setSystemPromptText] = useState('');
   const [debriefPromptText, setDebriefPromptText] = useState('');
+  const [selectedPromptType, setSelectedPromptType] = useState<'system' | 'debrief'>('system');
 
   // Global rubric state
   const [globalRubricQuestions, setGlobalRubricQuestions] = useState<GlobalRubricQuestion[]>(() =>
@@ -119,11 +120,11 @@ function InstructorSimulationGroupPage() {
     if (!groupId) return;
     (async () => {
       try {
-        const [evalPrompt, debriefPrompt] = await Promise.all([
+        const [systemPrompt, debriefPrompt] = await Promise.all([
           instructorService.getEvaluationPrompt(groupId),
           instructorService.getDebriefPrompt(groupId),
         ]);
-        setEvaluationPromptText(evalPrompt);
+        setSystemPromptText(systemPrompt);
         setDebriefPromptText(debriefPrompt);
       } catch (error) { console.error('Error loading prompts:', error); }
     })();
@@ -682,7 +683,7 @@ function InstructorSimulationGroupPage() {
             { id: 'questionBank', label: 'Question Bank', icon: <HelpCircle className="w-5 h-5" />, onClick: () => { setActiveSection('questionBank'); questionBankTab === 'global' ? syncGlobalIds() : syncPatientIds(selectedPatientForQuestionBank); } },
             { id: 'dtpBank', label: 'DTP Bank', icon: <Pill className="w-5 h-5" /> },
             { id: 'recommendationsBank', label: 'Recommendations Bank', icon: <ClipboardList className="w-5 h-5" /> },
-            { id: 'prompt', label: 'View Debrief Prompt', icon: <Eye className="w-5 h-5" /> },
+            { id: 'prompt', label: 'Manage Prompts', icon: <FileCode className="w-5 h-5" /> },
           ]}
           accessCode={accessCode}
           onCopyAccessCode={handleCopyAccessCode}
@@ -691,7 +692,7 @@ function InstructorSimulationGroupPage() {
           onToggleVisibility={() => setIsMainSidebarVisible(!isMainSidebarVisible)}
         />
 
-        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'editPatient', 'viewStudent'].includes(activeSection) ? '0' : '2rem' }}>
+        <main className="flex-1 overflow-y-auto" style={{ padding: ['rubric', 'questionBank', 'dtpBank', 'recommendationsBank', 'editPatient', 'viewStudent', 'prompt'].includes(activeSection) ? '0' : '2rem' }}>
           {activeSection === 'analytics' && (
             <Suspense fallback={<DashboardSkeleton />}>
               <AnalyticsSection patientAnalytics={patientAnalytics} analyticsDateRange={analyticsDateRange} onDateRangeChange={setAnalyticsDateRange} keyQuestionCoverage={keyQuestionCoverage} keyQuestionAnalytics={keyQuestionAnalytics} dtpCoverage={dtpCoverage} recommendationCoverage={recommendationCoverage} dtpAnalytics={dtpAnalytics} recommendationAnalytics={recommendationAnalytics} studentProgress={studentProgress} selectedPatientId={selectedPatientId} onPatientSelect={setSelectedPatientId} labels={labels} simulationGroup={simulationGroup} onNavigateToSection={section => setActiveSection(section as ActiveSection)} />
@@ -709,9 +710,77 @@ function InstructorSimulationGroupPage() {
           {activeSection === 'dtpBank' && <DTPBankSection dtpBank={dtpBank} role="instructor" groupId={groupId || ''} patients={manageablePatients} onConfirmSelections={handleConfirmDTPSelections} onGroupWideTabClick={syncDTPGroupWideIds} onPatientSpecificTabClick={() => syncDTPPatientIds(dtpBank.selectedPatientId)} onPatientSelect={syncDTPPatientIds} />}
           {activeSection === 'recommendationsBank' && <RecommendationsBankSection recommendationsBank={recommendationsBank} role="instructor" groupId={groupId || ''} patients={manageablePatients} onConfirmSelections={handleConfirmRecommendationSelections} onGroupWideTabClick={syncRecGroupWideIds} onPatientSpecificTabClick={() => syncRecPatientIds(recommendationsBank.selectedPatientId)} onPatientSelect={syncRecPatientIds} />}
           {activeSection === 'prompt' && (
-            <div className="space-y-4">
-              <h2 className="text-2xl font-semibold" style={{ color: UI_COLORS.text.heading }}>View Debrief Prompt</h2>
-              <textarea readOnly className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default" style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.tableHeader, minHeight: '500px' }} defaultValue={debriefPromptText || 'Default built-in debrief prompt is in use.'} />
+            <div className="flex h-full relative">
+              <aside className="flex flex-col border-r" style={{ backgroundColor: UI_COLORS.background.white, borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default, width: '16rem', minWidth: '16rem' }}>
+                <div className="p-6">
+                  <h3 className="text-sm font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>Prompt Type</h3>
+                  <div className="space-y-2">
+                    {(['system', 'debrief'] as const).map(type => (
+                      <Button key={type} onClick={() => setSelectedPromptType(type)} variant="ghost" className="w-full justify-start gap-3 px-4 py-2.5 h-auto font-medium" style={{ backgroundColor: selectedPromptType === type ? UI_COLORS.background.tableHeader : 'transparent', color: UI_COLORS.text.heading }}>
+                        {type === 'system' ? 'System Prompt' : 'Debrief Prompt'}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </aside>
+              <div className="flex-1 overflow-y-auto p-8">
+                <div className="max-w-4xl space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold mb-2" style={{ color: UI_COLORS.text.heading }}>{selectedPromptType === 'system' ? 'System Prompt' : 'Debrief Prompt'}</h2>
+                    {selectedPromptType === 'system' ? (
+                      <div className="space-y-4">
+                        <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>Controls how the AI patient behaves during conversations. Changes apply to all patients in this group.</p>
+                        <textarea
+                          value={systemPromptText}
+                          onChange={e => setSystemPromptText(e.target.value)}
+                          placeholder="Leave empty to use the default patient behavior prompt."
+                          rows={12}
+                          className="w-full px-4 py-3 rounded-md resize-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 text-sm font-mono"
+                          style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.white, color: UI_COLORS.text.heading, minHeight: '400px' }}
+                        />
+                        <div className="flex gap-3 justify-end">
+                          <Button
+                            onClick={async () => { setSystemPromptText(await instructorService.getDefaultSystemPrompt()); }}
+                            variant="outline"
+                            className="px-6 transition-colors"
+                            style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading, backgroundColor: UI_COLORS.background.white }}
+                          >
+                            Load Default Prompt
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              if (!groupId) return;
+                              try {
+                                await instructorService.updateSystemPrompt(groupId, authUser?.email || '', systemPromptText);
+                                showNotification({ message: 'System prompt saved successfully!', type: 'success' });
+                              } catch (error) {
+                                console.error('Failed to save system prompt:', error);
+                                showNotification({ message: 'Failed to save prompt. Please try again.', type: 'error' });
+                              }
+                            }}
+                            className="px-6 transition-colors"
+                            style={{ backgroundColor: UI_COLORS.button.primary, color: UI_COLORS.button.text }}
+                            onMouseEnter={e => e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover}
+                            onMouseLeave={e => e.currentTarget.style.backgroundColor = UI_COLORS.button.primary}
+                          >
+                            Save Prompt
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>The debrief prompt controls how AI-generated debriefs are structured. This is managed by admins.</p>
+                        <textarea
+                          readOnly
+                          className="w-full px-4 py-3 rounded-lg resize-none text-sm font-mono cursor-default"
+                          style={{ borderWidth: '1px', borderStyle: 'solid', borderColor: UI_COLORS.border.default, backgroundColor: UI_COLORS.background.tableHeader, color: UI_COLORS.text.heading, minHeight: '400px' }}
+                          value={debriefPromptText || 'Default built-in debrief prompt is in use.'}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
           {activeSection === 'editPatient' && <EditPatientPanel patientEditor={patientEditor} profilePictures={profilePictures} onBack={handleBackFromEditPatient} labels={labels} groupId={groupId || ''} globalRubricQuestions={globalRubricQuestions} onSavePatient={handleSavePatientChanges} onSaveCaseQuestion={(pid, q) => instructorService.updateCaseSpecificQuestion(pid, q)} onDeleteCaseQuestion={(pid, qid) => instructorService.deleteCaseSpecificQuestion(pid, qid)} onCreatePatientDTP={handleCreatePatientDTP} onUpdatePatientDTP={handleUpdatePatientDTP} onDeletePatientDTP={handleDeletePatientDTP} patientDTPs={patientDTPs} groupDTPs={groupDTPs} onLoadPatientDTPs={handleLoadPatientDTPs} onCreatePatientRecommendation={handleCreatePatientRecommendation} onUpdatePatientRecommendation={handleUpdatePatientRecommendation} onDeletePatientRecommendation={handleDeletePatientRecommendation} patientRecommendations={patientRecommendations} groupRecommendations={groupRecommendations} onLoadPatientRecommendations={handleLoadPatientRecommendations} />}

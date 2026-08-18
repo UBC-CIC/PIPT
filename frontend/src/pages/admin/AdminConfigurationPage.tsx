@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, CheckCircle2, Search, ShieldCheck, ShieldAlert, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Search, ShieldCheck, Crown, UserMinus, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -354,7 +354,7 @@ function AdminConfigurationPage() {
                           const isSelf = user.user_email === currentUser?.email;
 
                           const roleBadge = isAdmin
-                            ? { label: 'Admin', bg: '#FEE2E2', color: '#991B1B' }
+                            ? { label: 'Admin', bg: '#EDE9FE', color: '#5B21B6' }
                             : isInstructor
                             ? { label: 'Instructor', bg: '#DCFCE7', color: '#166534' }
                             : { label: 'Student', bg: '#F3F4F6', color: UI_COLORS.text.body };
@@ -367,7 +367,7 @@ function AdminConfigurationPage() {
                               {/* Name */}
                               <div className="flex items-center gap-2">
                                 {isAdmin && (
-                                  <ShieldAlert className="h-4 w-4 shrink-0" style={{ color: '#991B1B' }} />
+                                  <Crown className="h-4 w-4 shrink-0" style={{ color: '#7C3AED' }} />
                                 )}
                                 {isInstructor && !isAdmin && (
                                   <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: UI_COLORS.status.success }} />
@@ -413,9 +413,9 @@ function AdminConfigurationPage() {
                                       size="sm"
                                       onClick={() => handleElevateToAdmin(user.user_email)}
                                       className="text-xs gap-1 cursor-pointer"
-                                      style={{ color: '#991B1B', borderColor: '#991B1B' }}
+                                      style={{ color: '#7C3AED', borderColor: '#7C3AED' }}
                                     >
-                                      <ShieldAlert className="h-3.5 w-3.5" />
+                                      <Crown className="h-3.5 w-3.5" />
                                       Make Admin
                                     </Button>
                                     <Button

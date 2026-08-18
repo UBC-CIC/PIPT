@@ -1,6 +1,6 @@
 import { useNavigate, useParams } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { ArrowLeft, HelpCircle, FileText, ClipboardList, CheckCircle2, Search, UserMinus, UserPlus } from 'lucide-react';
+import { ArrowLeft, HelpCircle, FileText, ClipboardList, Search, UserMinus, UserPlus, Crown, GraduationCap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
@@ -122,7 +122,7 @@ function AdminManageBanksPage() {
           {organizationId && <ThresholdConfigSection organizationId={organizationId} />}
         </div>
 
-        {/* Manage Instructors Section */}
+        {/* Manage Users Section */}
         <div className="mt-10">
           <ManageInstructorsSection />
         </div>
@@ -195,6 +195,46 @@ function ManageInstructorsSection() {
     }
   }
 
+  async function handleElevateToAdmin(email: string) {
+    if (!confirm(`Are you sure you want to elevate ${email} to admin? They will have full administrative access.`)) {
+      return;
+    }
+    try {
+      await adminApi.elevateToAdmin(email);
+      setUsers(prev =>
+        prev.map(u =>
+          u.user_email === email
+            ? { ...u, roles: [...u.roles.filter(r => r !== 'instructor'), 'admin'] }
+            : u
+        )
+      );
+      showNotification({ message: `${email} elevated to admin.`, type: 'success' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to elevate user to admin.';
+      showNotification({ message, type: 'error' });
+    }
+  }
+
+  async function handleDemoteAdmin(email: string) {
+    if (!confirm(`Are you sure you want to demote ${email} from admin to instructor?`)) {
+      return;
+    }
+    try {
+      await adminApi.lowerAdmin(email);
+      setUsers(prev =>
+        prev.map(u =>
+          u.user_email === email
+            ? { ...u, roles: u.roles.map(r => r === 'admin' ? 'instructor' : r) }
+            : u
+        )
+      );
+      showNotification({ message: `${email} demoted to instructor.`, type: 'success' });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to demote admin.';
+      showNotification({ message, type: 'error' });
+    }
+  }
+
   const filteredUsers = users.filter(u => {
     if (!searchQuery.trim()) return true;
     const query = searchQuery.toLowerCase();
@@ -215,10 +255,10 @@ function ManageInstructorsSection() {
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4" style={{ color: UI_COLORS.text.heading }}>
-        Manage Instructors
+        Manage Users
       </h2>
       <p className="text-sm mb-4" style={{ color: UI_COLORS.text.body }}>
-        Elevate students to instructor role or demote instructors back to student. Instructors are marked with a verification badge.
+        Promote or demote users between student, instructor, and admin roles.
       </p>
 
       {/* Search */}
@@ -246,18 +286,18 @@ function ManageInstructorsSection() {
       ) : (
         <>
           <p className="text-sm mb-3" style={{ color: UI_COLORS.text.muted }}>
-            {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} · {filteredUsers.filter(u => u.roles.includes('instructor')).length} instructor{filteredUsers.filter(u => u.roles.includes('instructor')).length !== 1 ? 's' : ''}
+            {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''} · {filteredUsers.filter(u => u.roles.includes('admin')).length} admin{filteredUsers.filter(u => u.roles.includes('admin')).length !== 1 ? 's' : ''} · {filteredUsers.filter(u => u.roles.includes('instructor')).length} instructor{filteredUsers.filter(u => u.roles.includes('instructor')).length !== 1 ? 's' : ''} · {filteredUsers.filter(u => u.roles.includes('student')).length} student{filteredUsers.filter(u => u.roles.includes('student')).length !== 1 ? 's' : ''}
           </p>
           <div className="border rounded-lg overflow-hidden" style={{ borderColor: UI_COLORS.border.default }}>
           {/* Table Header */}
           <div
-            className="grid grid-cols-[2fr_2fr_100px_160px] gap-4 px-4 py-3 text-sm font-medium"
+            className="grid grid-cols-[2fr_2fr_100px_1fr] gap-4 px-4 py-3 text-sm font-medium"
             style={{ backgroundColor: '#f9fafb', color: UI_COLORS.text.body }}
           >
             <span>Name</span>
             <span>Email</span>
             <span>Role</span>
-            <span>Action</span>
+            <span>Actions</span>
           </div>
 
           {/* Table Body */}
@@ -268,15 +308,26 @@ function ManageInstructorsSection() {
           ) : (
             <div className="divide-y" style={{ borderColor: UI_COLORS.border.light }}>
               {paginatedUsers.map((user) => {
+                const isAdmin = user.roles.includes('admin');
                 const isInstructor = user.roles.includes('instructor');
+
+                const roleBadge = isAdmin
+                  ? { label: 'Admin', bg: '#EDE9FE', color: '#5B21B6' }
+                  : isInstructor
+                  ? { label: 'Instructor', bg: '#DCFCE7', color: '#166534' }
+                  : { label: 'Student', bg: '#F3F4F6', color: UI_COLORS.text.body };
+
                 return (
                   <div
                     key={user.user_id}
-                    className="grid grid-cols-[2fr_2fr_100px_160px] gap-4 px-4 py-3 items-center text-sm"
+                    className="grid grid-cols-[2fr_2fr_100px_1fr] gap-4 px-4 py-3 items-center text-sm"
                   >
                     <div className="flex items-center gap-2">
-                      {isInstructor && (
-                        <CheckCircle2 className="h-4 w-4 shrink-0" style={{ color: '#16a34a' }} />
+                      {isAdmin && (
+                        <Crown className="h-4 w-4 shrink-0" style={{ color: '#7C3AED' }} />
+                      )}
+                      {isInstructor && !isAdmin && (
+                        <GraduationCap className="h-4 w-4 shrink-0" style={{ color: '#16a34a' }} />
                       )}
                       <span style={{ color: UI_COLORS.text.heading }}>
                         {user.first_name} {user.last_name}
@@ -284,36 +335,58 @@ function ManageInstructorsSection() {
                     </div>
                     <span style={{ color: UI_COLORS.text.body }}>{user.user_email}</span>
                     <span
-                      className="px-2 py-0.5 rounded text-xs font-medium"
-                      style={{
-                        backgroundColor: isInstructor ? '#DCFCE7' : '#F3F4F6',
-                        color: isInstructor ? '#166534' : UI_COLORS.text.body,
-                      }}
+                      className="inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{ backgroundColor: roleBadge.bg, color: roleBadge.color }}
                     >
-                      {isInstructor ? 'Instructor' : 'Student'}
+                      {roleBadge.label}
                     </span>
-                    <div>
-                      {isInstructor ? (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {isAdmin && (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
-                          onClick={() => handleDemote(user.user_email)}
+                          onClick={() => handleDemoteAdmin(user.user_email)}
                           className="text-xs gap-1 cursor-pointer"
-                          style={{ color: '#dc2626' }}
+                          style={{ color: UI_COLORS.status.error, borderColor: UI_COLORS.status.error }}
                         >
                           <UserMinus className="h-3.5 w-3.5" />
-                          Demote
+                          Demote to Instructor
                         </Button>
-                      ) : (
+                      )}
+                      {isInstructor && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleElevateToAdmin(user.user_email)}
+                            className="text-xs gap-1 cursor-pointer"
+                            style={{ color: '#7C3AED', borderColor: '#7C3AED' }}
+                          >
+                            <Crown className="h-3.5 w-3.5" />
+                            Make Admin
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleDemote(user.user_email)}
+                            className="text-xs gap-1 cursor-pointer"
+                            style={{ color: UI_COLORS.status.error, borderColor: UI_COLORS.status.error }}
+                          >
+                            <UserMinus className="h-3.5 w-3.5" />
+                            Demote to Student
+                          </Button>
+                        </>
+                      )}
+                      {!isAdmin && !isInstructor && (
                         <Button
-                          variant="ghost"
+                          variant="outline"
                           size="sm"
                           onClick={() => handleElevate(user.user_email)}
                           className="text-xs gap-1 cursor-pointer"
-                          style={{ color: UI_COLORS.button.primary }}
+                          style={{ color: UI_COLORS.button.primary, borderColor: UI_COLORS.button.primary }}
                         >
                           <UserPlus className="h-3.5 w-3.5" />
-                          Elevate to Instructor
+                          Make Instructor
                         </Button>
                       )}
                     </div>
