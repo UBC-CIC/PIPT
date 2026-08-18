@@ -4,6 +4,11 @@ const { initializeConnection } = require("./lib.js");
 const { getCorsHeaders } = require("./cors.js");
 const { verifyGroupOwnership, verifyPersonaOwnership, isAdmin } = require("./authz.js");
 const { validateTagsField, normalizeCreateFields } = require("./questionBankFields.js");
+const {
+  BANK_DESCRIPTORS,
+  validateRequiredTextFields,
+  normalizeBankCreateFields,
+} = require("./bankItemFields.js");
 const logger = require("./logger");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
@@ -3270,6 +3275,130 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "organization_id is required" });
         }
         break;
+      case "POST /instructor/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const authEmail = event.requestContext?.authorizer?.email;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { organization_id } = event.queryStringParameters;
+            const body = JSON.parse(event.body);
+            const descriptor = BANK_DESCRIPTORS.dtp;
+
+            // Trim before validating: a whitespace-only title passes a falsy
+            // check but trips chk_dtp_title_not_empty, which would surface as a
+            // 500 instead of a 400 naming the blank field.
+            const requiredCheck = validateRequiredTextFields(body, descriptor.requiredTextKeys);
+            if (!requiredCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: requiredCheck.error });
+              break;
+            }
+
+            // Reject a present non-array tags value before touching the database.
+            const tagsCheck = validateTagsField(body.tags);
+            if (!tagsCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: tagsCheck.error });
+              break;
+            }
+
+            const { text, tags: safeTags, booleans } = normalizeBankCreateFields(body, descriptor);
+
+            const newDtp = await sqlConnection`
+              INSERT INTO "dtp_bank" (
+                organization_id, created_by, title, expected_dtp_text,
+                clinical_intent, evaluation_criteria, tags, is_required
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${text.title}, ${text.expected_dtp_text},
+                ${text.clinical_intent}, ${text.evaluation_criteria},
+                ${safeTags}, ${booleans.is_required}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newDtp[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create DTP item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "PUT /instructor/dtp_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.dtp_id &&
+          event.body
+        ) {
+          try {
+            const { dtp_id } = event.queryStringParameters;
+            // is_active is deliberately not accepted here: instructor reads
+            // filter on is_active = true, so honouring it would let a PUT hide
+            // an item permanently — a delete under another name.
+            const { title, expected_dtp_text, clinical_intent, evaluation_criteria, tags, is_required } =
+              JSON.parse(event.body);
+
+            // Reject a non-array tags value before touching the database, so no
+            // column changes when tags are malformed.
+            const tagsCheck = validateTagsField(tags);
+            if (!tagsCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: tagsCheck.error });
+              break;
+            }
+
+            const updated = await sqlConnection`
+              UPDATE "dtp_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                expected_dtp_text = COALESCE(${expected_dtp_text || null}, expected_dtp_text),
+                clinical_intent = COALESCE(${clinical_intent !== undefined ? clinical_intent : null}, clinical_intent),
+                evaluation_criteria = COALESCE(${evaluation_criteria !== undefined ? evaluation_criteria : null}, evaluation_criteria),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags),
+                is_required = COALESCE(${is_required !== undefined ? is_required : null}, is_required)
+              WHERE dtp_id = ${dtp_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "DTP item not found" });
+            } else {
+              response.statusCode = 200;
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update DTP item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "dtp_id and request body are required" });
+        }
+        break;
       case "GET /instructor/recommendations_bank":
         if (
           event.queryStringParameters != null &&
@@ -3293,6 +3422,128 @@ exports.handler = async (event, context) => {
         } else {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "organization_id is required" });
+        }
+        break;
+      case "POST /instructor/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const authEmail = event.requestContext?.authorizer?.email;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { organization_id } = event.queryStringParameters;
+            const body = JSON.parse(event.body);
+            const descriptor = BANK_DESCRIPTORS.recommendation;
+
+            // Trim before validating: a whitespace-only title passes a falsy
+            // check but trips chk_rec_title_not_empty, which would surface as a
+            // 500 instead of a 400 naming the blank field.
+            const requiredCheck = validateRequiredTextFields(body, descriptor.requiredTextKeys);
+            if (!requiredCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: requiredCheck.error });
+              break;
+            }
+
+            // Reject a present non-array tags value before touching the database.
+            const tagsCheck = validateTagsField(body.tags);
+            if (!tagsCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: tagsCheck.error });
+              break;
+            }
+
+            const { text, tags: safeTags } = normalizeBankCreateFields(body, descriptor);
+
+            const newRec = await sqlConnection`
+              INSERT INTO "recommendations_bank" (
+                organization_id, created_by, title, recommendation_text,
+                evaluation_criteria, rationale, tags
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${text.title}, ${text.recommendation_text},
+                ${text.evaluation_criteria}, ${text.rationale}, ${safeTags}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newRec[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create recommendation item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
+      case "PUT /instructor/recommendations_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.recommendation_id &&
+          event.body
+        ) {
+          try {
+            const { recommendation_id } = event.queryStringParameters;
+            // is_active is deliberately not accepted here: instructor reads
+            // filter on is_active = true, so honouring it would let a PUT hide
+            // an item permanently — a delete under another name.
+            const { title, recommendation_text, evaluation_criteria, rationale, tags } =
+              JSON.parse(event.body);
+
+            // Reject a non-array tags value before touching the database, so no
+            // column changes when tags are malformed.
+            const tagsCheck = validateTagsField(tags);
+            if (!tagsCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: tagsCheck.error });
+              break;
+            }
+
+            const updated = await sqlConnection`
+              UPDATE "recommendations_bank"
+              SET
+                title = COALESCE(${title || null}, title),
+                recommendation_text = COALESCE(${recommendation_text || null}, recommendation_text),
+                evaluation_criteria = COALESCE(${evaluation_criteria !== undefined ? evaluation_criteria : null}, evaluation_criteria),
+                rationale = COALESCE(${rationale !== undefined ? rationale : null}, rationale),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags)
+              WHERE recommendation_id = ${recommendation_id}
+              RETURNING *;
+            `;
+
+            if (updated.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "Recommendation item not found" });
+            } else {
+              response.statusCode = 200;
+              response.body = JSON.stringify(updated[0]);
+            }
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to update recommendation item", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "recommendation_id and request body are required" });
         }
         break;
       case "GET /instructor/dtp_coverage":
