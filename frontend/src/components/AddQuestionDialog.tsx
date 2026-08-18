@@ -10,6 +10,10 @@ interface AddQuestionDialogProps {
   onOpenChange: (open: boolean) => void;
   questionType: 'global' | 'patientSpecific';
   existingTags?: string[];
+  /**
+   * Persist the question. May return a promise: a rejection keeps the dialog open
+   * with the entered values and surfaces the rejection message inline.
+   */
   onSave: (question: {
     title: string;
     keyQuestion: string;
@@ -17,7 +21,7 @@ interface AddQuestionDialogProps {
     evaluationCriteria: string;
     required: boolean;
     tags?: string[];
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export function AddQuestionDialog({ open, onOpenChange, questionType, existingTags = [], onSave }: AddQuestionDialogProps) {
@@ -30,6 +34,8 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, existingTa
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const tagInputRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
@@ -65,20 +71,31 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, existingTa
     setTags(prev => prev.filter(t => t !== tag));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() || !keyQuestion.trim()) {
       showNotification({ message: 'Please fill in at least the Title and Key Question fields.', type: 'warning' });
       return;
     }
 
-    onSave({
-      title: title.trim(),
-      keyQuestion: keyQuestion.trim(),
-      clinicalIntent: clinicalIntent.trim(),
-      evaluationCriteria: evaluationCriteria.trim(),
-      required,
-      tags,
-    });
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // A rejecting onSave means the save did not happen — keep the dialog open
+      // with the entered values so nothing the user typed is lost.
+      await onSave({
+        title: title.trim(),
+        keyQuestion: keyQuestion.trim(),
+        clinicalIntent: clinicalIntent.trim(),
+        evaluationCriteria: evaluationCriteria.trim(),
+        required,
+        tags,
+      });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save question.');
+      return;
+    } finally {
+      setSaving(false);
+    }
 
     // Reset form
     setTitle('');
@@ -88,11 +105,13 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, existingTa
     setRequired(false);
     setTagInput('');
     setTags([]);
+    setSaveError(null);
     onOpenChange(false);
   };
 
   const handleCancel = () => {
     // Reset form
+    setSaveError(null);
     setTitle('');
     setKeyQuestion('');
     setClinicalIntent('');
@@ -318,28 +337,36 @@ export function AddQuestionDialog({ open, onOpenChange, questionType, existingTa
         </div>
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
-          <Button
-            onClick={handleCancel}
-            variant="outline"
-            style={{
-              borderColor: UI_COLORS.border.default,
-              color: UI_COLORS.text.heading,
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            style={{
-              backgroundColor: UI_COLORS.button.primary,
-              color: UI_COLORS.button.text,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
-          >
-            Save Question
-          </Button>
+        <div className="pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+          {saveError && (
+            <p className="text-sm mb-3" role="alert" style={{ color: UI_COLORS.text.error }}>
+              {saveError}
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button
+              onClick={handleCancel}
+              variant="outline"
+              style={{
+                borderColor: UI_COLORS.border.default,
+                color: UI_COLORS.text.heading,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={saving}
+              style={{
+                backgroundColor: UI_COLORS.button.primary,
+                color: UI_COLORS.button.text,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+            >
+              {saving ? 'Saving...' : 'Save Question'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

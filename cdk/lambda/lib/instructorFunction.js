@@ -3,6 +3,7 @@ const path = require("path");
 const { initializeConnection } = require("./lib.js");
 const { getCorsHeaders } = require("./cors.js");
 const { verifyGroupOwnership, verifyPersonaOwnership, isAdmin } = require("./authz.js");
+const { validateTagsField, normalizeCreateFields } = require("./questionBankFields.js");
 const logger = require("./logger");
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 
@@ -1836,6 +1837,72 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
+      case "POST /instructor/question_bank":
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.organization_id &&
+          event.body
+        ) {
+          try {
+            const authEmail = event.requestContext?.authorizer?.email;
+            if (!authEmail) {
+              response.statusCode = 401;
+              response.body = JSON.stringify({ error: "Unable to determine user identity" });
+              break;
+            }
+            const userLookup = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${authEmail} LIMIT 1;
+            `;
+            if (userLookup.length === 0) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "Authenticated user not found in users table" });
+              break;
+            }
+            const created_by = userLookup[0].user_id;
+            const { organization_id } = event.queryStringParameters;
+            const body = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, clinical_intent, category, difficulty_level, is_mandatory, weight, max_score, tags } = body;
+
+            if (!title || !question_text || !evaluation_criteria) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: "title, question_text, and evaluation_criteria are required" });
+              break;
+            }
+
+            // clinical_intent defaults to '' (not NULL) so a later GET returns the
+            // same empty value the client renders; tags defaults to [].
+            const { clinicalIntent: safeClinicalIntent } = normalizeCreateFields(body);
+            const safeTags = Array.isArray(tags) ? tags : [];
+
+            const newQuestion = await sqlConnection`
+              INSERT INTO "question_bank" (
+                organization_id, created_by, title, question_text, evaluation_criteria,
+                clinical_intent, category, difficulty_level, is_mandatory, weight, max_score, tags
+              )
+              VALUES (
+                ${organization_id}, ${created_by}, ${title}, ${question_text}, ${evaluation_criteria},
+                ${safeClinicalIntent},
+                ${category || null}, ${difficulty_level || null},
+                ${is_mandatory !== undefined ? is_mandatory : false},
+                ${weight !== undefined ? weight : 1.0},
+                ${max_score !== undefined ? max_score : 100},
+                ${safeTags}
+              )
+              RETURNING *;
+            `;
+
+            response.statusCode = 201;
+            response.body = JSON.stringify(newQuestion[0]);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Failed to create question", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "organization_id and request body are required" });
+        }
+        break;
       case "PUT /instructor/question_bank":
         if (
           event.queryStringParameters != null &&
@@ -1844,7 +1911,15 @@ exports.handler = async (event, context) => {
         ) {
           try {
             const { question_id } = event.queryStringParameters;
-            const { title, question_text, evaluation_criteria, clinical_intent, is_mandatory } = JSON.parse(event.body);
+            const { title, question_text, evaluation_criteria, clinical_intent, is_mandatory, tags } = JSON.parse(event.body);
+
+            // Reject a non-array tags value before touching the database.
+            const tagsCheck = validateTagsField(tags);
+            if (!tagsCheck.ok) {
+              response.statusCode = 400;
+              response.body = JSON.stringify({ error: tagsCheck.error });
+              break;
+            }
 
             const updated = await sqlConnection`
               UPDATE "question_bank"
@@ -1853,7 +1928,8 @@ exports.handler = async (event, context) => {
                 question_text = COALESCE(${question_text || null}, question_text),
                 evaluation_criteria = COALESCE(${evaluation_criteria || null}, evaluation_criteria),
                 clinical_intent = COALESCE(${clinical_intent !== undefined ? clinical_intent : null}, clinical_intent),
-                is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory)
+                is_mandatory = COALESCE(${is_mandatory !== undefined ? is_mandatory : null}, is_mandatory),
+                tags = COALESCE(${tags !== undefined ? tags : null}, tags)
               WHERE question_id = ${question_id}
               RETURNING *;
             `;

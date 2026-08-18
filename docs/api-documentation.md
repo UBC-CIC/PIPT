@@ -2472,6 +2472,92 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/
 
 ---
 
+### Create Question (Instructor)
+
+Create a new question in the organization's question bank. The `created_by` field is resolved server-side from the authenticated instructor's JWT email — it is not passed as a parameter.
+
+**Endpoint:** `POST /instructor/question_bank`
+
+**Authentication:** `instructorAuthorizer` (JWT)
+
+**Query Parameters:**
+
+- `organization_id` (string, required): ID of the organization to create the question in
+
+**Request Body:**
+
+```json
+{
+  "title": "Allergy Assessment",
+  "question_text": "Did you ask about drug allergies?",
+  "evaluation_criteria": "Student should specifically ask about known drug allergies and reactions",
+  "clinical_intent": "Establish allergy history before recommending therapy",
+  "category": "Safety",
+  "difficulty_level": "basic",
+  "is_mandatory": true,
+  "weight": 1.5,
+  "max_score": 10,
+  "tags": ["allergies", "safety"]
+}
+```
+
+**Parameters:**
+
+- `title` (string, required): Question title
+- `question_text` (string, required): Full question text
+- `evaluation_criteria` (string, required): Criteria for evaluating student performance
+- `clinical_intent` (string, optional, default: `""`): Clinical intent behind the question. An omitted, null, or non-string value is stored as an empty string rather than `NULL`
+- `category` (string, optional): Question category
+- `difficulty_level` (string, optional): Difficulty level (e.g., "basic", "intermediate", "advanced")
+- `is_mandatory` (boolean, optional, default: `false`): Whether the question is mandatory
+- `weight` (number, optional, default: `1.0`): Scoring weight
+- `max_score` (number, optional, default: `100`): Maximum score
+- `tags` (array of strings, optional, default: `[]`): Tags for filtering and organization
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 201 | Created — Question successfully created |
+| 400 | Bad Request — Missing required fields (`title`, `question_text`, or `evaluation_criteria`) or invalid `organization_id` |
+| 401 | Unauthorized — Invalid or missing JWT token, or user lacks instructor role |
+| 500 | Internal Server Error — Unexpected failure |
+
+**Response (201 Created):**
+
+```json
+{
+  "question_id": "uuid",
+  "organization_id": "uuid",
+  "title": "Allergy Assessment",
+  "question_text": "Did you ask about drug allergies?",
+  "evaluation_criteria": "Student should specifically ask about known drug allergies and reactions",
+  "clinical_intent": "Establish allergy history before recommending therapy",
+  "category": "Safety",
+  "difficulty_level": "basic",
+  "is_mandatory": true,
+  "weight": 1.5,
+  "max_score": 10,
+  "tags": ["allergies", "safety"],
+  "created_by": "instructor@example.com",
+  "created_at": "2024-06-15T14:30:00.000Z",
+  "is_active": true
+}
+```
+
+**Example (cURL):**
+
+```bash
+curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/question_bank?organization_id=uuid" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Allergy Assessment", "question_text": "Did you ask about drug allergies?", "evaluation_criteria": "Should ask about allergies", "category": "Safety", "is_mandatory": true}'
+```
+
+> **Note:** Deleting questions is an admin-only operation. See [Delete Question](#delete-question) in the [Question Bank (Admin)](#question-bank-admin) section.
+
+---
+
 ### Update Question (Instructor)
 
 Update a question in the question bank.
@@ -2489,11 +2575,30 @@ Update a question in the question bank.
   "title": "Updated Title",
   "question_text": "Updated question text",
   "evaluation_criteria": "Updated criteria",
-  "is_mandatory": true
+  "clinical_intent": "Updated clinical intent",
+  "is_mandatory": true,
+  "tags": ["allergies", "safety"]
 }
 ```
 
-**Response:** `200 OK`
+**Parameters:**
+
+- `title` (string, optional): New question title
+- `question_text` (string, optional): New question text
+- `evaluation_criteria` (string, optional): New evaluation criteria
+- `clinical_intent` (string, optional): New clinical intent
+- `is_mandatory` (boolean, optional): Whether the question is mandatory
+- `tags` (array of strings, optional): Replacement tag list. An empty array `[]` clears the stored tags; omitting the field leaves them unchanged
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 200 | OK — Question updated; the full updated row is returned |
+| 400 | Bad Request — Missing `question_id` or request body, or `tags` is present but not an array. A non-array `tags` value is rejected before any database write with `{"error": "tags must be an array of strings"}` |
+| 401 | Unauthorized — Invalid or missing JWT token, or user lacks instructor role |
+| 404 | Not Found — No question matches `question_id` |
+| 500 | Internal Server Error — Unexpected failure |
 
 **Example (cURL):**
 
@@ -2501,8 +2606,10 @@ Update a question in the question bank.
 curl -X PUT "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/question_bank?question_id=uuid" \
   -H "Authorization: eyJraWQiOiJ..." \
   -H "Content-Type: application/json" \
-  -d '{"title": "Updated Title", "question_text": "Updated question", "evaluation_criteria": "Updated criteria", "is_mandatory": true}'
+  -d '{"title": "Updated Title", "question_text": "Updated question", "evaluation_criteria": "Updated criteria", "clinical_intent": "Updated clinical intent", "is_mandatory": true, "tags": ["allergies", "safety"]}'
 ```
+
+> **Note:** The instructor question bank resource exposes only `GET`, `POST`, and `PUT`. There is no `DELETE /instructor/question_bank` — deleting questions is an admin-only operation. See [Delete Question](#delete-question) in the [Question Bank (Admin)](#question-bank-admin) section.
 
 ---
 

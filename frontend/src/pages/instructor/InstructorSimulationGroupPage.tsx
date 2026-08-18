@@ -502,6 +502,28 @@ function InstructorSimulationGroupPage() {
   };
 
   // ── Question bank handlers (complex business logic) ──
+  const handleSaveNewGlobalQuestion = async (question: { title: string; keyQuestion: string; clinicalIntent: string; evaluationCriteria: string; required: boolean }) => {
+    const orgId = simulationGroup?.organization_id;
+    if (!orgId) {
+      showNotification({ message: 'Organization not available. Please try again.', type: 'error' });
+      return;
+    }
+    try {
+      await instructorService.createQuestionBankQuestion(orgId, {
+        title: question.title,
+        question_text: question.keyQuestion,
+        evaluation_criteria: question.evaluationCriteria,
+        is_mandatory: question.required,
+      });
+      const questions = await instructorService.getGlobalQuestionBank();
+      setGlobalBankQuestions(questions.filter(q => !q.tags?.includes('patient_specific')));
+      showNotification({ message: 'Question added to bank successfully.', type: 'success' });
+    } catch (error) {
+      console.error('Failed to add global question:', error);
+      showNotification({ message: 'Failed to add question. Please try again.', type: 'error' });
+    }
+  };
+
   const handleSaveNewPatientQuestion = (question: { patientId: string; title: string; keyQuestion: string; clinicalIntent: string; evaluationCriteria: string; required: boolean }) => {
     const newQuestionId = `bank-patient-${Date.now()}`;
     const newBankQuestion: any = { id: newQuestionId, title: question.title, questionText: question.keyQuestion, clinicalIntent: question.clinicalIntent, evaluationCriteria: question.evaluationCriteria, isMandatory: question.required, isActive: true, usedBySimulationGroups: [], usedByPatients: [] };
@@ -698,7 +720,7 @@ function InstructorSimulationGroupPage() {
       </div>
 
       <AIDebriefDialog isOpen={debriefViewer.isAIDebriefOpen} onClose={debriefViewer.closeDebrief} data={debriefViewer.selectedDebriefData} updatedDebriefData={debriefViewer.selectedUpdatedDebriefData} simulationGroupId={groupId} patientMode={debriefViewer.selectedUpdatedDebriefData?.chunk2 ? 'full_assessment' : 'interview_practice'} />
-      <AddQuestionDialog open={isAddQuestionDialogOpen} onOpenChange={setIsAddQuestionDialogOpen} questionType={questionBankTab === 'global' ? 'global' : 'patientSpecific'} existingTags={allExistingTags} onSave={(q) => handleSaveNewPatientQuestion({ ...q, patientId: selectedPatientForQuestionBank || '' })} />
+      <AddQuestionDialog open={isAddQuestionDialogOpen} onOpenChange={setIsAddQuestionDialogOpen} questionType={questionBankTab === 'global' ? 'global' : 'patientSpecific'} existingTags={allExistingTags} onSave={(q) => questionBankTab === 'global' ? handleSaveNewGlobalQuestion(q) : handleSaveNewPatientQuestion({ ...q, patientId: selectedPatientForQuestionBank || '' })} />
       <AddPatientSpecificQuestionDialog open={isAddPatientQuestionDialogOpen} onOpenChange={setIsAddPatientQuestionDialogOpen} patients={manageablePatients.map(p => ({ id: p.id, name: p.name }))} onSave={handleSaveNewPatientQuestion} />
 
       <Dialog open={isAccessCodeDialogOpen} onOpenChange={setIsAccessCodeDialogOpen}>

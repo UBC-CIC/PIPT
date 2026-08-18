@@ -3642,17 +3642,85 @@ paths:
                   type: string
                 evaluation_criteria:
                   type: string
+                clinical_intent:
+                  type: string
                 is_mandatory:
                   type: boolean
+                tags:
+                  type: array
+                  items:
+                    type: string
       responses:
         "200":
           description: Question updated successfully
         "400":
-          description: Bad Request
+          description: Bad Request - tags must be an array of strings
         "401":
           description: Unauthorized
         "404":
           description: Question not found
+        "500":
+          description: Internal Server Error
+      security:
+        - instructorAuthorizer: []
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${instructorFunction.Arn}/invocations"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        type: "aws_proxy"
+    post:
+      tags:
+        - Instructor
+      summary: Create a new question in the question bank
+      operationId: instructor_question_bank_POST
+      parameters:
+        - in: query
+          name: organization_id
+          required: true
+          description: ID of the organization
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - question_text
+                - evaluation_criteria
+              properties:
+                title:
+                  type: string
+                question_text:
+                  type: string
+                evaluation_criteria:
+                  type: string
+                clinical_intent:
+                  type: string
+                category:
+                  type: string
+                difficulty_level:
+                  type: string
+                is_mandatory:
+                  type: boolean
+                weight:
+                  type: number
+                max_score:
+                  type: integer
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: Question created successfully
+        "400":
+          description: Bad Request
+        "401":
+          description: Unauthorized
         "500":
           description: Internal Server Error
       security:

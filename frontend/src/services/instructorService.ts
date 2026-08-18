@@ -412,6 +412,8 @@ export interface InstructorDataService {
   getChatNotes: (attemptId: string) => string;
   getDefaultPatientPrompt: () => string;
   getGlobalQuestionBank: () => Promise<QuestionBankItem[]>;
+  createQuestionBankQuestion: (organizationId: string, data: { title: string; question_text: string; clinical_intent?: string; evaluation_criteria: string; category?: string; difficulty_level?: string; is_mandatory?: boolean; weight?: number; max_score?: number; tags?: string[] }) => Promise<QuestionBankItem>;
+  updateQuestionBankQuestion: (questionId: string, data: { title?: string; question_text?: string; clinical_intent?: string; evaluation_criteria?: string; is_mandatory?: boolean; tags?: string[] }) => Promise<QuestionBankItem>;
   getPatientSpecificQuestionBank: () => QuestionBankItem[];
   addToGlobalQuestionBank: (question: QuestionBankItem) => void;
   addToPatientSpecificQuestionBank: (question: QuestionBankItem) => void;
@@ -1891,6 +1893,52 @@ async function getGlobalQuestionBank(): Promise<QuestionBankItem[]> {
 }
 
 /**
+ * Create a new question in the global question bank
+ */
+async function createQuestionBankQuestion(
+  organizationId: string,
+  data: {
+    title: string;
+    question_text: string;
+    clinical_intent?: string;
+    evaluation_criteria: string;
+    category?: string;
+    difficulty_level?: string;
+    is_mandatory?: boolean;
+    weight?: number;
+    max_score?: number;
+    tags?: string[];
+  }
+): Promise<QuestionBankItem> {
+  const response = await apiClient.request<any>(
+    `instructor/question_bank?organization_id=${encodeURIComponent(organizationId)}`,
+    { method: 'POST', body: data }
+  );
+  return mapBackendToQuestionBankItem(response);
+}
+
+/**
+ * Update an existing question in the global question bank
+ */
+async function updateQuestionBankQuestion(
+  questionId: string,
+  data: {
+    title?: string;
+    question_text?: string;
+    clinical_intent?: string;
+    evaluation_criteria?: string;
+    is_mandatory?: boolean;
+    tags?: string[];
+  }
+): Promise<QuestionBankItem> {
+  const response = await apiClient.request<any>(
+    `instructor/question_bank?question_id=${encodeURIComponent(questionId)}`,
+    { method: 'PUT', body: data }
+  );
+  return mapBackendToQuestionBankItem(response);
+}
+
+/**
  * Get patient-specific question bank — requires API
  */
 function getPatientSpecificQuestionBank(): QuestionBankItem[] {
@@ -2363,6 +2411,8 @@ export const instructorService: InstructorDataService = {
   getChatNotes,
   getDefaultPatientPrompt,
   getGlobalQuestionBank,
+  createQuestionBankQuestion,
+  updateQuestionBankQuestion,
   getPatientSpecificQuestionBank,
   addToGlobalQuestionBank,
   addToPatientSpecificQuestionBank,

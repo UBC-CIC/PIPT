@@ -107,6 +107,8 @@ function InstructorDashboardPage() {
         onSignOut={handleSignOut}
         onStudentView={handleStudentView}
         showStudentViewButton={true}
+        showManageBanksButton={true}
+        onManageBanks={() => navigate('/instructor/configuration')}
       />
       <main className="flex-1 overflow-y-auto px-8 py-6">
         <SimulationGroupsSection
