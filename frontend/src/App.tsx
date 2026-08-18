@@ -3,6 +3,7 @@ import '@/config/aws-config';
 
 import LoadingIndicator from '@/components/LoadingIndicator';
 import { NotificationProvider } from '@/components/notifications';
+import RoleRoute from '@/components/RoleRoute';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useState, useEffect, createContext, useContext, useCallback, lazy, Suspense } from 'react';
 import LoginPage from './pages/LoginPage';
@@ -14,6 +15,8 @@ import { authService, type AuthUser } from './lib/auth';
 const StudentDashboardPage = lazy(() => import('./pages/student/StudentDashboardPage'));
 const InstructorDashboardPage = lazy(() => import('./pages/instructor/InstructorDashboardPage'));
 const InstructorSimulationGroupPage = lazy(() => import('./pages/instructor/InstructorSimulationGroupPage'));
+const InstructorConfigurationPage = lazy(() => import('./pages/instructor/InstructorConfigurationPage'));
+const InstructorQuestionBankPage = lazy(() => import('./pages/instructor/InstructorQuestionBankPage'));
 const AdminHomePage = lazy(() => import('./pages/admin/AdminHomePage'));
 const AdminOrganizationPage = lazy(() => import('./pages/admin/AdminOrganizationPage'));
 const AdminSimulationGroupPage = lazy(() => import('./pages/admin/AdminSimulationGroupPage'));
@@ -125,16 +128,18 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/instructor" element={<ProtectedRoute><InstructorDashboardPage /></ProtectedRoute>} />
-        <Route path="/instructor/group/:groupId" element={<ProtectedRoute><InstructorSimulationGroupPage /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute><AdminHomePage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId" element={<ProtectedRoute><AdminOrganizationPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/banks" element={<ProtectedRoute><AdminManageBanksPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/question-bank" element={<ProtectedRoute><AdminQuestionBankPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/dtp-bank" element={<ProtectedRoute><AdminDTPBankPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/recommendations-bank" element={<ProtectedRoute><AdminRecommendationsBankPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/configuration" element={<ProtectedRoute><AdminConfigurationPage /></ProtectedRoute>} />
-        <Route path="/admin/organization/:organizationId/group/:groupId" element={<ProtectedRoute><AdminSimulationGroupPage /></ProtectedRoute>} />
+        <Route path="/instructor" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorDashboardPage /></RoleRoute>} />
+        <Route path="/instructor/group/:groupId" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorSimulationGroupPage /></RoleRoute>} />
+        <Route path="/instructor/configuration" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorConfigurationPage /></RoleRoute>} />
+        <Route path="/instructor/question-bank" element={<RoleRoute allowedRoles={['instructor', 'admin']}><InstructorQuestionBankPage /></RoleRoute>} />
+        <Route path="/admin" element={<RoleRoute allowedRoles={['admin']}><AdminHomePage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId" element={<RoleRoute allowedRoles={['admin']}><AdminOrganizationPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/banks" element={<RoleRoute allowedRoles={['admin']}><AdminManageBanksPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/question-bank" element={<RoleRoute allowedRoles={['admin']}><AdminQuestionBankPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/dtp-bank" element={<RoleRoute allowedRoles={['admin']}><AdminDTPBankPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/recommendations-bank" element={<RoleRoute allowedRoles={['admin']}><AdminRecommendationsBankPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/configuration" element={<RoleRoute allowedRoles={['admin']}><AdminConfigurationPage /></RoleRoute>} />
+        <Route path="/admin/organization/:organizationId/group/:groupId" element={<RoleRoute allowedRoles={['admin']}><AdminSimulationGroupPage /></RoleRoute>} />
         <Route path="/student" element={<ProtectedRoute><StudentDashboardPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId" element={<ProtectedRoute><PatientsPage /></ProtectedRoute>} />
         <Route path="/patients/:groupId/:patientId" element={<ProtectedRoute><PatientDashboardPage /></ProtectedRoute>} />
