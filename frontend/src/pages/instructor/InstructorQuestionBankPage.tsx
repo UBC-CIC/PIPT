@@ -728,24 +728,6 @@ function InstructorQuestionBankPage() {
                                     className="block text-xs font-semibold mb-1"
                                     style={{ color: UI_COLORS.text.muted }}
                                   >
-                                    Clinical Intent
-                                  </span>
-                                  <p
-                                    className="text-sm whitespace-pre-line"
-                                    style={{
-                                      color: item.clinicalIntent
-                                        ? UI_COLORS.text.body
-                                        : UI_COLORS.text.muted,
-                                    }}
-                                  >
-                                    {item.clinicalIntent || '—'}
-                                  </p>
-                                </div>
-                                <div>
-                                  <span
-                                    className="block text-xs font-semibold mb-1"
-                                    style={{ color: UI_COLORS.text.muted }}
-                                  >
                                     Evaluation Criteria
                                   </span>
                                   <p

@@ -248,41 +248,6 @@ function PatientDashboardPage() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-8 py-6">
-        {/* Empty state CTA - shown prominently when no chats exist */}
-        {!hasChats && (
-          <div
-            className="flex flex-col items-center justify-center text-center py-10 px-6 mb-8 rounded-xl"
-            style={{
-              backgroundColor: UI_COLORS.background.tableHeader,
-              borderWidth: '1px',
-              borderStyle: 'solid',
-              borderColor: UI_COLORS.border.default,
-            }}
-          >
-            <div
-              className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
-              style={{ backgroundColor: UI_COLORS.button.secondary }}
-            >
-              <MessageCircle className="w-7 h-7" style={{ color: UI_COLORS.button.text }} />
-            </div>
-            <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
-              No attempts yet
-            </h2>
-            <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
-              Start your first chat with {patientLoading ? 'this patient' : patient.name} to begin the simulation.
-            </p>
-            <Button
-              onClick={handleStartNewChat}
-              className="px-8 py-3 text-base font-medium transition-colors"
-              style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
-            >
-              + Start New Interaction
-            </Button>
-          </div>
-        )}
-
         <div className="grid grid-cols-2 gap-6">
           {/* Left Column - Patient Overview */}
           <div className="pr-6 overflow-y-auto" style={{ borderRightWidth: '1px', borderRightStyle: 'solid', borderRightColor: UI_COLORS.border.default }}>
@@ -543,7 +508,7 @@ function PatientDashboardPage() {
           </div>
 
           {/* Right Column - Chat History (only when there are chats) */}
-          {hasChats && (
+          {hasChats ? (
             <div className="pl-6 flex flex-col">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xl font-semibold" style={{ color: UI_COLORS.text.heading }}>Chat History</h2>
@@ -634,6 +599,41 @@ function PatientDashboardPage() {
                   </div>
                 </div>
               )}
+            </div>
+          ) : (
+            /* Empty state CTA - shown in right sidebar when no chats exist */
+            <div className="pl-6 flex flex-col">
+              <div
+                className="flex flex-col items-center justify-center text-center py-10 px-6 rounded-xl"
+                style={{
+                  backgroundColor: UI_COLORS.background.tableHeader,
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: UI_COLORS.border.default,
+                }}
+              >
+                <div
+                  className="w-14 h-14 rounded-full flex items-center justify-center mb-4"
+                  style={{ backgroundColor: UI_COLORS.button.secondary }}
+                >
+                  <MessageCircle className="w-7 h-7" style={{ color: UI_COLORS.button.text }} />
+                </div>
+                <h2 className="text-xl font-semibold mb-2" style={{ color: UI_COLORS.text.heading }}>
+                  No attempts yet
+                </h2>
+                <p className="text-sm mb-6" style={{ color: UI_COLORS.text.muted }}>
+                  Start your first chat with {patientLoading ? 'this patient' : patient.name} to begin the simulation.
+                </p>
+                <Button
+                  onClick={handleStartNewChat}
+                  className="px-8 py-3 text-base font-medium transition-colors"
+                  style={{ backgroundColor: UI_COLORS.button.secondary, color: UI_COLORS.button.text }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondaryHover}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = UI_COLORS.button.secondary}
+                >
+                  + Start New Interaction
+                </Button>
+              </div>
             </div>
           )}
         </div>
