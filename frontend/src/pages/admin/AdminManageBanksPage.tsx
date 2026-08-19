@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import LoadingIndicator from '@/components/LoadingIndicator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { mockAdminDataService } from '@/services/adminService';
 import { useAuth } from '@/App';
 import { UI_COLORS } from '@/lib/colors';
@@ -141,6 +142,14 @@ function ManageInstructorsSection() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 5;
 
+  // ─── Role Change Confirmation Dialog State ──────────────────────────────────
+  const [roleConfirm, setRoleConfirm] = useState<{
+    open: boolean;
+    email: string;
+    action: 'elevate' | 'demote' | 'elevateAdmin' | 'demoteAdmin';
+    targetRole: string;
+  }>({ open: false, email: '', action: 'elevate', targetRole: '' });
+
   useEffect(() => {
     loadUsers();
   }, []);
@@ -159,78 +168,75 @@ function ManageInstructorsSection() {
   }
 
   async function handleElevate(email: string) {
-    try {
-      await adminApi.elevateToInstructor(email);
-      setUsers(prev =>
-        prev.map(u =>
-          u.user_email === email
-            ? { ...u, roles: [...u.roles.filter(r => r !== 'student'), 'instructor'] }
-            : u
-        )
-      );
-      showNotification({ message: `${email} elevated to instructor.`, type: 'success' });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to elevate user.';
-      showNotification({ message, type: 'error' });
-    }
+    setRoleConfirm({ open: true, email, action: 'elevate', targetRole: 'instructor' });
   }
 
   async function handleDemote(email: string) {
-    if (!confirm(`Are you sure you want to demote ${email} from instructor to student? This will also remove their instructor enrollments.`)) {
-      return;
-    }
-    try {
-      await adminApi.lowerInstructor(email);
-      setUsers(prev =>
-        prev.map(u =>
-          u.user_email === email
-            ? { ...u, roles: u.roles.map(r => r === 'instructor' ? 'student' : r) }
-            : u
-        )
-      );
-      showNotification({ message: `${email} demoted to student.`, type: 'success' });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to demote instructor.';
-      showNotification({ message, type: 'error' });
-    }
+    setRoleConfirm({ open: true, email, action: 'demote', targetRole: 'student' });
   }
 
   async function handleElevateToAdmin(email: string) {
-    if (!confirm(`Are you sure you want to elevate ${email} to admin? They will have full administrative access.`)) {
-      return;
-    }
-    try {
-      await adminApi.elevateToAdmin(email);
-      setUsers(prev =>
-        prev.map(u =>
-          u.user_email === email
-            ? { ...u, roles: [...u.roles.filter(r => r !== 'instructor'), 'admin'] }
-            : u
-        )
-      );
-      showNotification({ message: `${email} elevated to admin.`, type: 'success' });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to elevate user to admin.';
-      showNotification({ message, type: 'error' });
-    }
+    setRoleConfirm({ open: true, email, action: 'elevateAdmin', targetRole: 'admin' });
   }
 
   async function handleDemoteAdmin(email: string) {
-    if (!confirm(`Are you sure you want to demote ${email} from admin to instructor?`)) {
-      return;
-    }
+    setRoleConfirm({ open: true, email, action: 'demoteAdmin', targetRole: 'instructor' });
+  }
+
+  async function handleConfirmRoleChange() {
+    const { email, action } = roleConfirm;
+    setRoleConfirm(prev => ({ ...prev, open: false }));
+
     try {
-      await adminApi.lowerAdmin(email);
-      setUsers(prev =>
-        prev.map(u =>
-          u.user_email === email
-            ? { ...u, roles: u.roles.map(r => r === 'admin' ? 'instructor' : r) }
-            : u
-        )
-      );
-      showNotification({ message: `${email} demoted to instructor.`, type: 'success' });
+      switch (action) {
+        case 'elevate':
+          await adminApi.elevateToInstructor(email);
+          setUsers(prev =>
+            prev.map(u =>
+              u.user_email === email
+                ? { ...u, roles: [...u.roles.filter(r => r !== 'student'), 'instructor'] }
+                : u
+            )
+          );
+          showNotification({ message: `${email} elevated to instructor.`, type: 'success' });
+          break;
+        case 'demote':
+          await adminApi.lowerInstructor(email);
+          setUsers(prev =>
+            prev.map(u =>
+              u.user_email === email
+                ? { ...u, roles: u.roles.map(r => r === 'instructor' ? 'student' : r) }
+                : u
+            )
+          );
+          showNotification({ message: `${email} demoted to student.`, type: 'success' });
+          break;
+        case 'elevateAdmin':
+          await adminApi.elevateToAdmin(email);
+          setUsers(prev =>
+            prev.map(u =>
+              u.user_email === email
+                ? { ...u, roles: [...u.roles.filter(r => r !== 'instructor'), 'admin'] }
+                : u
+            )
+          );
+          showNotification({ message: `${email} elevated to admin.`, type: 'success' });
+          break;
+        case 'demoteAdmin':
+          await adminApi.lowerAdmin(email);
+          setUsers(prev =>
+            prev.map(u =>
+              u.user_email === email
+                ? { ...u, roles: u.roles.map(r => r === 'admin' ? 'instructor' : r) }
+                : u
+            )
+          );
+          showNotification({ message: `${email} demoted to instructor.`, type: 'success' });
+          break;
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to demote admin.';
+      console.error('Failed to change user role:', err);
+      const message = err instanceof Error ? err.message : 'Failed to change user role.';
       showNotification({ message, type: 'error' });
     }
   }
@@ -433,6 +439,35 @@ function ManageInstructorsSection() {
         </div>
         </>
       )}
+
+      {/* Role Change Confirmation Dialog */}
+      <Dialog open={roleConfirm.open} onOpenChange={(open) => setRoleConfirm(prev => ({ ...prev, open }))}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ color: UI_COLORS.text.heading }}>Confirm Role Change</DialogTitle>
+            <DialogDescription style={{ color: UI_COLORS.text.body }}>
+              {roleConfirm.action === 'elevate' && `Are you sure you want to elevate ${roleConfirm.email} to instructor?`}
+              {roleConfirm.action === 'demote' && `Are you sure you want to demote ${roleConfirm.email} from instructor to student? This will also remove their instructor enrollments.`}
+              {roleConfirm.action === 'elevateAdmin' && `Are you sure you want to elevate ${roleConfirm.email} to admin? They will have full administrative access.`}
+              {roleConfirm.action === 'demoteAdmin' && `Are you sure you want to demote ${roleConfirm.email} from admin to instructor?`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRoleConfirm(prev => ({ ...prev, open: false }))} style={{ borderColor: UI_COLORS.border.default, color: UI_COLORS.text.heading }}>Cancel</Button>
+            <Button
+              onClick={handleConfirmRoleChange}
+              style={{
+                backgroundColor: roleConfirm.action.startsWith('demote') ? '#ef4444' : UI_COLORS.button.primary,
+                color: '#fff',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = roleConfirm.action.startsWith('demote') ? '#dc2626' : UI_COLORS.button.primaryHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = roleConfirm.action.startsWith('demote') ? '#ef4444' : UI_COLORS.button.primary}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

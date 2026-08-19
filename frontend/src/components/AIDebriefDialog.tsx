@@ -181,6 +181,21 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
 
           {/* Two-Chunk Layout (when updatedDebriefData is provided) */}
           {updatedDebriefData ? (
+            updatedDebriefData.chunk1.questionsAddressedCount === 0 ? (
+              /* Zero key questions addressed — show retry message instead of full debrief */
+              <div
+                className="flex flex-col items-center gap-3 py-10 px-6 text-center rounded-lg border"
+                style={{ backgroundColor: '#fef3c7', borderColor: '#f59e0b' }}
+              >
+                <AlertTriangle className="w-6 h-6" style={{ color: '#d97706' }} />
+                <p className="text-sm font-semibold" style={{ color: '#92400e' }}>
+                  Not enough information to generate feedback
+                </p>
+                <p className="text-sm" style={{ color: '#92400e' }}>
+                  Please attempt this interaction again and try other questions to see feedback.
+                </p>
+              </div>
+            ) : (
             <>
               {/* ─── Chunk 1: Interview Summary & Key Questions ─── */}
               {/* Interview Summary */}
@@ -244,6 +259,10 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                   <p className="text-sm italic pl-7" style={{ color: UI_COLORS.text.muted }}>
                     No key questions were missed.
                   </p>
+                ) : updatedDebriefData.chunk1.questionsAddressedCount === 0 ? (
+                  <p className="text-sm pl-7" style={{ color: UI_COLORS.text.muted }}>
+                    Please attempt this interaction again and try other questions to see feedback.
+                  </p>
                 ) : updatedDebriefData.chunk2 === null ? (
                   <p className="text-sm pl-7 flex items-center gap-2" style={{ color: UI_COLORS.text.muted }}>
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -253,7 +272,7 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
               </div>
 
               {/* Suggested Question Rewrites */}
-              {updatedDebriefData.chunk1.suggestedRewrites.length > 0 ? (
+              {updatedDebriefData.chunk1.questionsAddressedCount === 0 ? null : updatedDebriefData.chunk1.suggestedRewrites.length > 0 ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
                     <Star className="w-5 h-5" style={{ color: UI_COLORS.text.heading }} />
@@ -494,6 +513,7 @@ function AIDebriefDialog({ isOpen, onClose, data, updatedDebriefData, simulation
                 </>
               ) : null}
             </>
+            )
           ) : (
             <>
           {/* Original/Legacy Layout (when debriefData is used) */}
