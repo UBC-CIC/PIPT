@@ -3720,6 +3720,69 @@ def generate_debrief(
             logger.error(f"Failed to publish chunk1 to AppSync: {e}")
 
         # =====================================================================
+        # SHORT-CIRCUIT: Skip Phase 2 when 0 key questions were addressed.
+        # No meaningful feedback (rewrites, guidance) can be generated, and
+        # the LLM calls would waste time. Save a minimal debrief and return.
+        # =====================================================================
+        if len(questions_addressed) == 0:
+            logger.info(f"📋 0 key questions addressed — skipping Phase 2 for session={session_id}")
+
+            debrief_data = {
+                "summary": "The student did not address any key questions during this interaction.",
+                "questions_addressed": [],
+                "questions_missed": questions_missed,
+                "recommendation_feedback": {"strengths": [], "areas_for_improvement": []},
+                "reasoning_gaps": "",
+                "overall_score": 0.0,
+                "suggested_rewrites": [],
+                "answer_key_comparison": {"answer_key_available": False},
+                "recommendation": recommendation,
+                "section_scores": kq_section_score,
+                "guidance": {"key_questions": None, "dtps": None, "recommendations": None},
+            }
+
+            # Publish empty chunk2 so frontend stops waiting
+            chunk2_content = {
+                "summary": debrief_data["summary"],
+                "suggested_rewrites": [],
+                "section_scores": kq_section_score,
+                "guidance": debrief_data["guidance"],
+                "answer_key_comparison": {"answer_key_available": False},
+            }
+            try:
+                publish_to_appsync(session_id, {
+                    "type": "debrief_chunk2",
+                    "content": json.dumps(chunk2_content),
+                })
+                logger.info(f"📋 Published empty chunk2 (0 addressed) for session={session_id}")
+            except Exception as e:
+                logger.error(f"Failed to publish chunk2 to AppSync: {e}")
+
+            # Persist minimal debrief to DB so get_debrief polling resolves
+            total_assigned = len(cached_questions)
+            total_asked = 0
+            total_missed = len(questions_missed)
+            save_debrief_to_db(
+                session_id=session_id,
+                student_id=student_id,
+                persona_id=persona_id,
+                simulation_group_id=simulation_group_id,
+                generated_text=json.dumps(debrief_data),
+                missing_key_questions=questions_missed,
+                reasoning_gaps="",
+                rubric_scores={},
+                total_questions_assigned=total_assigned,
+                total_questions_asked=total_asked,
+                total_questions_missed=total_missed,
+                overall_score=0.0,
+                tracker=tracker,
+            )
+
+            debrief_data["evaluation_integrity"] = tracker.to_dict()
+            logger.info(f"✅ DEBRIEF GENERATION COMPLETE (short-circuit, 0 addressed) for session={session_id}")
+            return debrief_data
+
+        # =====================================================================
         # PHASE 2 (Chunk2) — Parallel LLM + matching via ThreadPoolExecutor
         # =====================================================================
 

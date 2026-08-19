@@ -774,9 +774,27 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
 
-    const data = await apiClient.request<any[]>(
-      `student/simulation_group_page?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
-    );
+    // Fetch all three data sources in parallel (3 requests instead of 1 + 2N)
+    const [data, profilePicsMap, statsMap] = await Promise.all([
+      // 1. Patient list (existing endpoint)
+      apiClient.request<any[]>(
+        `student/simulation_group_page?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      ),
+      // 2. Batch profile pictures (existing endpoint, previously unused by students)
+      apiClient.request<Record<string, string>>(
+        `student/get_profile_pictures?simulation_group_id=${encodeURIComponent(simulationGroupId)}`,
+        { method: 'POST' }
+      ).catch(() => ({} as Record<string, string>)),
+      // 3. Batch chat stats (new endpoint)
+      apiClient.request<Record<string, {
+        attempt_count: number;
+        best_coverage: number | null;
+        has_active_chat: boolean;
+        last_chat_accessed: string | null;
+      }>>(
+        `student/group_patient_stats?simulation_group_id=${encodeURIComponent(simulationGroupId)}`
+      ).catch(() => ({} as Record<string, { attempt_count: number; best_coverage: number | null; has_active_chat: boolean; last_chat_accessed: string | null }>)),
+    ]);
 
     // Deduplicate by persona_id (backend may return multiple rows from different enrollments)
     const seen = new Set<string>();
@@ -786,65 +804,12 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
       return true;
     });
 
-    // Fetch profile picture URLs in parallel using the same get_all_files endpoint
-    // that works on the patient dashboard page
-    const profilePicPromises = uniqueData.map(async (p) => {
-      try {
-        const filesData = await apiClient.request<{
-          profile_picture_url?: string | null;
-        }>(
-          `student/get_all_files?simulation_group_id=${encodeURIComponent(simulationGroupId)}&persona_id=${encodeURIComponent(p.persona_id)}&patient_name=patient`
-        );
-        return filesData.profile_picture_url ?? undefined;
-      } catch {
-        return undefined;
-      }
-    });
-    const profilePicUrls = await Promise.all(profilePicPromises);
-
-    // Fetch chat history per patient in parallel to get attempt count + best coverage
-    const chatStatsPromises = uniqueData.map(async (p) => {
-      try {
-        const chats = await apiClient.request<Array<{
-          chat_id: string;
-          status: string | null;
-          overall_score: number | null;
-          last_accessed: string | null;
-        }>>(
-          `student/patient?simulation_group_id=${encodeURIComponent(simulationGroupId)}&patient_id=${encodeURIComponent(p.persona_id)}`
-        );
-        if (!Array.isArray(chats) || chats.length === 0) return { attemptCount: 0, bestCoverage: null, hasActiveChat: false, lastChatAccessed: null };
-        const completedScores = chats
-          .filter((c) => c.status === 'concluded' && c.overall_score != null)
-          .map((c) => c.overall_score as number);
-        const hasActiveChat = chats.some((c) => c.status !== 'concluded');
-        // Most recent chat activity (actual practice, not just viewing the dashboard)
-        const chatDates = chats
-          .map((c) => c.last_accessed)
-          .filter((d): d is string => d != null)
-          .map((d) => new Date(d).getTime())
-          .filter((t) => !isNaN(t));
-        const lastChatAccessed = chatDates.length > 0
-          ? new Date(Math.max(...chatDates)).toISOString()
-          : null;
-        return {
-          attemptCount: chats.length,
-          bestCoverage: completedScores.length > 0 ? Math.max(...completedScores) : null,
-          hasActiveChat,
-          lastChatAccessed,
-        };
-      } catch {
-        return { attemptCount: 0, bestCoverage: null, hasActiveChat: false, lastChatAccessed: null };
-      }
-    });
-    const chatStats = await Promise.all(chatStatsPromises);
-
-    const result: Patient[] = uniqueData.map((p, i) => {
-      const stats = chatStats[i];
+    const result: Patient[] = uniqueData.map((p) => {
+      const stats = statsMap[p.persona_id] || { attempt_count: 0, best_coverage: null, has_active_chat: false, last_chat_accessed: null };
       let debriefStatus: Patient['debrief_status'];
       if (p.is_completed) {
         debriefStatus = 'debrief_reached';
-      } else if (stats.hasActiveChat) {
+      } else if (stats.has_active_chat) {
         debriefStatus = 'in_progress';
       } else {
         debriefStatus = 'not_started';
@@ -853,12 +818,12 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
       return {
         patient_id: p.persona_id,
         patient_name: p.persona_name,
-        avatarUrl: profilePicUrls[i],
+        avatarUrl: profilePicsMap[p.persona_id] || undefined,
         debrief_status: debriefStatus,
         instructor_evaluation: p.persona_score > 0 ? 'Evaluated' : 'Not Evaluated',
-        best_coverage: stats.bestCoverage != null ? Math.round(stats.bestCoverage) : null,
-        attempt_count: stats.attemptCount,
-        last_accessed: stats.lastChatAccessed,
+        best_coverage: stats.best_coverage != null ? Math.round(stats.best_coverage) : null,
+        attempt_count: stats.attempt_count,
+        last_accessed: stats.last_chat_accessed,
         mode: p.mode || 'full_assessment',
       };
     });

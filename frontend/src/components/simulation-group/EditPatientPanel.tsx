@@ -757,22 +757,28 @@ function FileDisplayNameRow({
           <IngestionStatusBadge status={ingestionStatus} />
         </div>
         <div className="flex items-center gap-2">
-          <Input
-            value={localName}
-            onChange={(e) => setLocalName(e.target.value)}
-            onBlur={handleBlur}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-            placeholder="Enter display name..."
-            className="h-8 text-sm flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
-            style={{
-              borderWidth: '1px',
-              borderStyle: 'solid',
-              borderColor: UI_COLORS.border.default,
-              backgroundColor: UI_COLORS.background.white,
-            }}
-          />
-          {saving && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: UI_COLORS.text.muted }} />}
-          {saved && <CheckCircle className="w-3 h-3 flex-shrink-0" style={{ color: '#16a34a' }} />}
+          {/* Display name only applies to patient info files (visible to students) */}
+          {fileType === 'patientInfo' && (
+            <>
+              <Input
+                value={localName}
+                onChange={(e) => setLocalName(e.target.value)}
+                onBlur={handleBlur}
+                onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                placeholder="Enter display name..."
+                className="h-8 text-sm flex-1 focus-visible:ring-0 focus-visible:ring-offset-0"
+                style={{
+                  borderWidth: '1px',
+                  borderStyle: 'solid',
+                  borderColor: UI_COLORS.border.default,
+                  backgroundColor: UI_COLORS.background.white,
+                }}
+              />
+              {saving && <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" style={{ color: UI_COLORS.text.muted }} />}
+              {saved && <CheckCircle className="w-3 h-3 flex-shrink-0" style={{ color: '#16a34a' }} />}
+            </>
+          )}
+          {fileType !== 'patientInfo' && <div className="flex-1" />}
           <button
             onClick={() => onPreview(file)}
             className="p-1 rounded transition-colors flex-shrink-0"

@@ -2019,6 +2019,77 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({ error: "Internal server error" });
         }
         break;
+      case "GET /student/group_patient_stats":
+        // Batch endpoint: returns chat stats (attempt_count, best_coverage,
+        // has_active_chat, last_chat_accessed) for ALL patients in a group
+        // in a single SQL query. Replaces the N per-patient calls the
+        // frontend previously made.
+        if (
+          event.queryStringParameters != null &&
+          event.queryStringParameters.simulation_group_id
+        ) {
+          const studentEmail = userEmailAttribute || event.queryStringParameters.email;
+          const simulationGroupId = event.queryStringParameters.simulation_group_id;
+
+          if (!studentEmail) {
+            response.statusCode = 400;
+            response.body = JSON.stringify({ error: "Invalid value" });
+            break;
+          }
+
+          try {
+            const userResult = await sqlConnection`
+              SELECT user_id FROM "users" WHERE user_email = ${studentEmail} LIMIT 1;
+            `;
+
+            if (userResult.length === 0) {
+              response.statusCode = 404;
+              response.body = JSON.stringify({ error: "User not found" });
+              break;
+            }
+
+            const userId = userResult[0].user_id;
+
+            // Single query: join enrollments → student_interactions → chats → debriefs
+            // to aggregate per-persona stats.
+            const stats = await sqlConnection`
+              SELECT
+                si.persona_id,
+                COUNT(c.chat_id)::int AS attempt_count,
+                MAX(CASE WHEN c.status = 'concluded' THEN d.overall_score ELSE NULL END) AS best_coverage,
+                bool_or(c.status IS NOT NULL AND c.status <> 'concluded') AS has_active_chat,
+                MAX(c.last_accessed) AS last_chat_accessed
+              FROM "enrollments" e
+              JOIN "student_interactions" si ON si.enrollment_id = e.enrollment_id
+              LEFT JOIN "chats" c ON c.student_interaction_id = si.student_interaction_id
+              LEFT JOIN "debriefs" d ON d.chat_id = c.chat_id
+              WHERE e.user_id = ${userId}
+                AND e.simulation_group_id = ${simulationGroupId}
+              GROUP BY si.persona_id;
+            `;
+
+            // Return as a map keyed by persona_id for O(1) lookup on the frontend
+            const statsMap = {};
+            for (const row of stats) {
+              statsMap[row.persona_id] = {
+                attempt_count: row.attempt_count || 0,
+                best_coverage: row.best_coverage != null ? Number(row.best_coverage) : null,
+                has_active_chat: row.has_active_chat || false,
+                last_chat_accessed: row.last_chat_accessed || null,
+              };
+            }
+
+            response.body = JSON.stringify(statsMap);
+          } catch (err) {
+            response.statusCode = 500;
+            logger.error("Operation failed", { error: err.message, stack: err.stack });
+            response.body = JSON.stringify({ error: "Internal server error" });
+          }
+        } else {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "simulation_group_id is required" });
+        }
+        break;
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

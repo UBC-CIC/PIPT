@@ -64,6 +64,12 @@ async function verifyGroupOwnership(sqlConnection, simulationGroupId, userEmail)
             WHERE gi.simulation_group_id = ${simulationGroupId}
               AND gi.user_id = u.user_id
           )
+          OR EXISTS (
+            SELECT 1 FROM enrollments e
+            WHERE e.simulation_group_id = ${simulationGroupId}
+              AND e.user_id = u.user_id
+              AND e.enrollment_type = 'instructor'
+          )
         );
     `;
 
@@ -128,6 +134,13 @@ async function verifyPersonaOwnership(sqlConnection, personaId, userEmail) {
             JOIN group_instructors gi ON gi.simulation_group_id = p.simulation_group_id
             WHERE p.persona_id = ${personaId}
               AND gi.user_id = u.user_id
+          )
+          OR EXISTS (
+            SELECT 1 FROM personas p
+            JOIN enrollments e ON e.simulation_group_id = p.simulation_group_id
+            WHERE p.persona_id = ${personaId}
+              AND e.user_id = u.user_id
+              AND e.enrollment_type = 'instructor'
           )
         );
     `;
