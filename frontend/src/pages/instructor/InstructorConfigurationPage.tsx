@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, HelpCircle } from 'lucide-react';
+import { ArrowLeft, HelpCircle, FileText, ClipboardList } from 'lucide-react';
 import PageContainer from '@/components/PageContainer';
 import DashboardHeader from '@/components/DashboardHeader';
 import { useNotification } from '@/components/notifications';
@@ -17,11 +17,10 @@ interface BankCard {
 }
 
 /**
- * The item banks an instructor may reach from here. The question bank is the
- * only bank instructors are permitted to manage, so this list holds exactly
- * one entry — everything else on this hub is scoped to higher privileges and
- * is intentionally absent, along with matching-threshold controls and role
- * assignment, which stay out of instructor reach entirely.
+ * The item banks an instructor may reach from here: questions, drug therapy
+ * problems, and recommendations. Everything else on the higher-privilege hub
+ * stays out of instructor reach entirely — matching-threshold controls and role
+ * assignment are intentionally absent from this page.
  */
 const BANK_CARDS: BankCard[] = [
   {
@@ -31,13 +30,27 @@ const BANK_CARDS: BankCard[] = [
     icon: <HelpCircle className="w-8 h-8" />,
     path: '/instructor/question-bank',
   },
+  {
+    title: 'DTP Bank',
+    description:
+      'Manage Drug Therapy Problem items used for evaluating student clinical assessments.',
+    icon: <FileText className="w-8 h-8" />,
+    path: '/instructor/dtp-bank',
+  },
+  {
+    title: 'Recommendations Bank',
+    description:
+      'Manage recommendation and rationale items for student recommendation submissions.',
+    icon: <ClipboardList className="w-8 h-8" />,
+    path: '/instructor/recommendations-bank',
+  },
 ];
 
 /**
  * InstructorConfigurationPage
  *
  * Instructor-facing scoring and configuration hub. Mirrors the layout of the
- * equivalent higher-privilege hub but exposes only the question bank.
+ * equivalent higher-privilege hub but exposes only the three item banks.
  */
 function InstructorConfigurationPage() {
   const navigate = useNavigate();

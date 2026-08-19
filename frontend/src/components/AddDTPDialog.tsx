@@ -14,6 +14,10 @@ interface AddDTPDialogProps {
   existingTags?: string[];
   /** When true, dialog title reflects patient-specific context and injects the patient_specific tag */
   isPatientSpecific?: boolean;
+  /**
+   * Persist the DTP item. May return a promise: a rejection keeps the dialog open
+   * with the entered values and surfaces the rejection message inline.
+   */
   onSave: (dtp: {
     title: string;
     expectedDTPText: string;
@@ -21,7 +25,7 @@ interface AddDTPDialogProps {
     evaluationCriteria: string;
     tags: string[];
     isRequired: boolean;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = false }: AddDTPDialogProps) {
@@ -33,6 +37,8 @@ export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = f
   const [isRequired, setIsRequired] = useState(false);
   const [tagInput, setTagInput] = useState('');
   const [tags, setTags] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const handleAddTag = () => {
     const trimmed = tagInput.trim();
@@ -53,7 +59,7 @@ export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = f
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() || !expectedDTPText.trim()) {
       showNotification({ message: 'Please fill in at least the Title and Expected DTP Text fields.', type: 'warning' });
       return;
@@ -63,14 +69,25 @@ export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = f
       ? ['patient_specific', ...tags.filter(t => t !== 'patient_specific')]
       : tags.filter(t => t !== 'patient_specific');
 
-    onSave({
-      title: title.trim(),
-      expectedDTPText: expectedDTPText.trim(),
-      clinicalIntent: clinicalIntent.trim(),
-      evaluationCriteria: evaluationCriteria.trim(),
-      tags: finalTags,
-      isRequired,
-    });
+    setSaving(true);
+    setSaveError(null);
+    try {
+      // A rejecting onSave means the save did not happen — keep the dialog open
+      // with the entered values so nothing the user typed is lost.
+      await onSave({
+        title: title.trim(),
+        expectedDTPText: expectedDTPText.trim(),
+        clinicalIntent: clinicalIntent.trim(),
+        evaluationCriteria: evaluationCriteria.trim(),
+        tags: finalTags,
+        isRequired,
+      });
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to save DTP item.');
+      return;
+    } finally {
+      setSaving(false);
+    }
 
     // Reset form
     setTitle('');
@@ -80,10 +97,12 @@ export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = f
     setIsRequired(false);
     setTagInput('');
     setTags([]);
+    setSaveError(null);
     onOpenChange(false);
   };
 
   const handleCancel = () => {
+    setSaveError(null);
     setTitle('');
     setExpectedDTPText('');
     setClinicalIntent('');
@@ -264,28 +283,36 @@ export function AddDTPDialog({ open, onOpenChange, onSave, isPatientSpecific = f
         </div>
 
         {/* Action Buttons */}
-        <div className="flex justify-end gap-3 pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
-          <Button
-            onClick={handleCancel}
-            variant="outline"
-            style={{
-              borderColor: UI_COLORS.border.default,
-              color: UI_COLORS.text.heading,
-            }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSave}
-            style={{
-              backgroundColor: UI_COLORS.button.primary,
-              color: UI_COLORS.button.text,
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
-          >
-            Save DTP Item
-          </Button>
+        <div className="pt-4 border-t" style={{ borderColor: UI_COLORS.border.default }}>
+          {saveError && (
+            <p className="text-sm mb-3" role="alert" style={{ color: UI_COLORS.text.error }}>
+              {saveError}
+            </p>
+          )}
+          <div className="flex justify-end gap-3">
+            <Button
+              onClick={handleCancel}
+              variant="outline"
+              style={{
+                borderColor: UI_COLORS.border.default,
+                color: UI_COLORS.text.heading,
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => void handleSave()}
+              disabled={saving}
+              style={{
+                backgroundColor: UI_COLORS.button.primary,
+                color: UI_COLORS.button.text,
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primaryHover)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = UI_COLORS.button.primary)}
+            >
+              {saving ? 'Saving...' : 'Save DTP Item'}
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

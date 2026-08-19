@@ -2878,6 +2878,141 @@ curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/
 
 ---
 
+### Create DTP Item (Instructor)
+
+Create a new DTP item in the organization's DTP bank. The `created_by` field is resolved server-side from the authenticated instructor's JWT email — it is not passed as a parameter.
+
+**Endpoint:** `POST /instructor/dtp_bank`
+
+**Authentication:** `instructorAuthorizer` (JWT)
+
+**Query Parameters:**
+
+- `organization_id` (string, required): ID of the organization to create the DTP item in
+
+**Request Body:**
+
+```json
+{
+  "title": "Untreated Indication",
+  "expected_dtp_text": "Patient has hypertension with no antihypertensive therapy prescribed",
+  "clinical_intent": "Student should recognize the untreated indication",
+  "evaluation_criteria": "Student names the condition and the absent therapy",
+  "tags": ["hypertension", "untreated"],
+  "is_required": true
+}
+```
+
+**Parameters:**
+
+- `title` (string, required): DTP item title. A blank or whitespace-only value is rejected with **400**
+- `expected_dtp_text` (string, required): The expected DTP statement. A blank or whitespace-only value is rejected with **400**
+- `clinical_intent` (string, optional, default: `""`): Clinical intent behind the DTP. An omitted, null, or non-string value is stored as an empty string rather than `NULL`
+- `evaluation_criteria` (string, optional, default: `""`): Criteria for evaluating the student's DTP. An omitted, null, or non-string value is stored as an empty string rather than `NULL`
+- `tags` (array of strings, optional, default: `[]`): Tags for filtering and organization
+- `is_required` (boolean, optional, default: `false`): Whether the DTP item must be identified
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 201 | Created — DTP item successfully created; the full row is returned |
+| 400 | Bad Request — Missing `organization_id` or request body, a blank required field (the error names the field, e.g. `{"error": "title is required"}`), or `tags` is present but not an array |
+| 401 | Unauthorized — Invalid or missing JWT token, or the authenticated identity could not be determined |
+| 500 | Internal Server Error — Unexpected failure |
+
+**Response (201 Created):**
+
+```json
+{
+  "dtp_id": "uuid",
+  "organization_id": "uuid",
+  "created_by": "uuid",
+  "title": "Untreated Indication",
+  "expected_dtp_text": "Patient has hypertension with no antihypertensive therapy prescribed",
+  "clinical_intent": "Student should recognize the untreated indication",
+  "evaluation_criteria": "Student names the condition and the absent therapy",
+  "tags": ["hypertension", "untreated"],
+  "is_required": true,
+  "is_active": true,
+  "created_at": "2024-06-15T14:30:00.000Z"
+}
+```
+
+**Example (cURL):**
+
+```bash
+curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/dtp_bank?organization_id=uuid" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Untreated Indication", "expected_dtp_text": "Patient has hypertension with no antihypertensive therapy prescribed", "clinical_intent": "Recognize the untreated indication", "is_required": true, "tags": ["hypertension"]}'
+```
+
+> **Note:** Deleting DTP items is an admin-only operation. See [Delete DTP](#delete-dtp) in the [DTP Bank (Admin)](#dtp-bank-admin) section.
+
+---
+
+### Update DTP Item (Instructor)
+
+Update a DTP item in the DTP bank.
+
+**Endpoint:** `PUT /instructor/dtp_bank`
+
+**Authentication:** `instructorAuthorizer` (JWT)
+
+**Query Parameters:**
+
+- `dtp_id` (string, required): ID of the DTP item to update
+
+**Request Body:**
+
+```json
+{
+  "title": "Updated Title",
+  "expected_dtp_text": "Updated expected DTP text",
+  "clinical_intent": "Updated clinical intent",
+  "evaluation_criteria": "Updated criteria",
+  "tags": ["hypertension", "untreated"],
+  "is_required": true
+}
+```
+
+**Parameters:**
+
+- `title` (string, optional): New DTP item title
+- `expected_dtp_text` (string, optional): New expected DTP statement
+- `clinical_intent` (string, optional): New clinical intent
+- `evaluation_criteria` (string, optional): New evaluation criteria
+- `tags` (array of strings, optional): Replacement tag list. An empty array `[]` clears the stored tags; omitting the field leaves them unchanged
+- `is_required` (boolean, optional): Whether the DTP item must be identified
+
+Every field is optional — an omitted field retains its stored value.
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 200 | OK — DTP item updated; the full updated row is returned |
+| 400 | Bad Request — Missing `dtp_id` or request body, or `tags` is present but not an array. A non-array `tags` value is rejected before any database write with `{"error": "tags must be an array of strings"}` |
+| 401 | Unauthorized — Invalid or missing JWT token, or user lacks instructor role |
+| 404 | Not Found — No DTP item matches `dtp_id` |
+| 500 | Internal Server Error — Unexpected failure |
+
+**Example (cURL):**
+
+```bash
+curl -X PUT "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/dtp_bank?dtp_id=uuid" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Updated Title", "expected_dtp_text": "Updated expected DTP text", "clinical_intent": "Updated clinical intent", "is_required": true, "tags": ["hypertension", "untreated"]}'
+```
+
+> **Note:** `is_active` is deliberately not accepted on this endpoint. The instructor DTP bank read filters on `is_active = true`, so honouring `is_active` here would let a `PUT` hide an item permanently — a delete under another name. Deactivation remains an admin-only operation.
+
+> **Note:** The instructor DTP bank resource exposes only `GET`, `POST`, and `PUT`. There is no `DELETE /instructor/dtp_bank` — deleting DTP items is an admin-only operation. See [Delete DTP](#delete-dtp) in the [DTP Bank (Admin)](#dtp-bank-admin) section.
+
+---
+
 ### Get Recommendations Bank (Instructor)
 
 Browse the recommendations bank (read-only).
@@ -2907,6 +3042,136 @@ Browse the recommendations bank (read-only).
 curl -X GET "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/recommendations_bank?organization_id=uuid" \
   -H "Authorization: eyJraWQiOiJ..."
 ```
+
+---
+
+### Create Recommendation Item (Instructor)
+
+Create a new recommendation item in the organization's recommendations bank. The `created_by` field is resolved server-side from the authenticated instructor's JWT email — it is not passed as a parameter.
+
+**Endpoint:** `POST /instructor/recommendations_bank`
+
+**Authentication:** `instructorAuthorizer` (JWT)
+
+**Query Parameters:**
+
+- `organization_id` (string, required): ID of the organization to create the recommendation item in
+
+**Request Body:**
+
+```json
+{
+  "title": "Dosage Adjustment",
+  "recommendation_text": "Reduce the dose based on the patient's renal function",
+  "rationale": "Renal clearance is reduced, raising the risk of accumulation",
+  "evaluation_criteria": "Student proposes a specific reduced dose and cites renal function",
+  "tags": ["renal", "dosing"]
+}
+```
+
+**Parameters:**
+
+- `title` (string, required): Recommendation item title. A blank or whitespace-only value is rejected with **400**
+- `recommendation_text` (string, required): The expected recommendation. A blank or whitespace-only value is rejected with **400**
+- `rationale` (string, optional, default: `""`): Rationale behind the recommendation. An omitted, null, or non-string value is stored as an empty string rather than `NULL`
+- `evaluation_criteria` (string, optional, default: `""`): Criteria for evaluating the student's recommendation. An omitted, null, or non-string value is stored as an empty string rather than `NULL`
+- `tags` (array of strings, optional, default: `[]`): Tags for filtering and organization
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 201 | Created — Recommendation item successfully created; the full row is returned |
+| 400 | Bad Request — Missing `organization_id` or request body, a blank required field (the error names the field, e.g. `{"error": "recommendation_text is required"}`), or `tags` is present but not an array |
+| 401 | Unauthorized — Invalid or missing JWT token, or the authenticated identity could not be determined |
+| 500 | Internal Server Error — Unexpected failure |
+
+**Response (201 Created):**
+
+```json
+{
+  "recommendation_id": "uuid",
+  "organization_id": "uuid",
+  "created_by": "uuid",
+  "title": "Dosage Adjustment",
+  "recommendation_text": "Reduce the dose based on the patient's renal function",
+  "evaluation_criteria": "Student proposes a specific reduced dose and cites renal function",
+  "rationale": "Renal clearance is reduced, raising the risk of accumulation",
+  "tags": ["renal", "dosing"],
+  "is_active": true,
+  "created_at": "2024-06-15T14:30:00.000Z"
+}
+```
+
+**Example (cURL):**
+
+```bash
+curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/recommendations_bank?organization_id=uuid" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Dosage Adjustment", "recommendation_text": "Reduce the dose based on renal function", "rationale": "Reduced renal clearance raises accumulation risk", "tags": ["renal"]}'
+```
+
+> **Note:** Deleting recommendation items is an admin-only operation. See [Delete Recommendation](#delete-recommendation) in the [Recommendations Bank (Admin)](#recommendations-bank-admin) section.
+
+---
+
+### Update Recommendation Item (Instructor)
+
+Update a recommendation item in the recommendations bank.
+
+**Endpoint:** `PUT /instructor/recommendations_bank`
+
+**Authentication:** `instructorAuthorizer` (JWT)
+
+**Query Parameters:**
+
+- `recommendation_id` (string, required): ID of the recommendation item to update
+
+**Request Body:**
+
+```json
+{
+  "title": "Updated Title",
+  "recommendation_text": "Updated recommendation text",
+  "rationale": "Updated rationale",
+  "evaluation_criteria": "Updated criteria",
+  "tags": ["renal", "dosing"]
+}
+```
+
+**Parameters:**
+
+- `title` (string, optional): New recommendation item title
+- `recommendation_text` (string, optional): New expected recommendation
+- `rationale` (string, optional): New rationale
+- `evaluation_criteria` (string, optional): New evaluation criteria
+- `tags` (array of strings, optional): Replacement tag list. An empty array `[]` clears the stored tags; omitting the field leaves them unchanged
+
+Every field is optional — an omitted field retains its stored value.
+
+**Response Codes:**
+
+| Status | Description |
+|--------|-------------|
+| 200 | OK — Recommendation item updated; the full updated row is returned |
+| 400 | Bad Request — Missing `recommendation_id` or request body, or `tags` is present but not an array. A non-array `tags` value is rejected before any database write with `{"error": "tags must be an array of strings"}` |
+| 401 | Unauthorized — Invalid or missing JWT token, or user lacks instructor role |
+| 404 | Not Found — No recommendation item matches `recommendation_id` |
+| 500 | Internal Server Error — Unexpected failure |
+
+**Example (cURL):**
+
+```bash
+curl -X PUT "https://api-id.execute-api.us-east-1.amazonaws.com/prod/instructor/recommendations_bank?recommendation_id=uuid" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Updated Title", "recommendation_text": "Updated recommendation text", "rationale": "Updated rationale", "tags": ["renal", "dosing"]}'
+```
+
+> **Note:** `is_active` is deliberately not accepted on this endpoint. The instructor recommendations bank read filters on `is_active = true`, so honouring `is_active` here would let a `PUT` hide an item permanently — a delete under another name. Deactivation remains an admin-only operation.
+
+> **Note:** The instructor recommendations bank resource exposes only `GET`, `POST`, and `PUT`. There is no `DELETE /instructor/recommendations_bank` — deleting recommendation items is an admin-only operation. See [Delete Recommendation](#delete-recommendation) in the [Recommendations Bank (Admin)](#recommendations-bank-admin) section.
 
 
 ---

@@ -144,6 +144,69 @@ export async function updateRecommendationItem(
 }
 
 /**
+ * Content fields an instructor may submit when creating a Recommendation item.
+ */
+export interface InstructorRecommendationWriteFields {
+  title: string;
+  recommendationText: string;
+  evaluationCriteria: string;
+  rationale: string;
+  tags: string[];
+}
+
+/**
+ * Create a new Recommendation item through the instructor-scoped route.
+ *
+ * The active flag is deliberately never sent: instructor reads filter on active
+ * rows only, so writing that flag would amount to a soft delete.
+ */
+export async function createRecommendationItemAsInstructor(
+  organizationId: string,
+  data: InstructorRecommendationWriteFields
+): Promise<RecommendationItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/recommendations_bank?organization_id=${encodeURIComponent(organizationId)}`,
+    {
+      method: 'POST',
+      body: {
+        title: data.title,
+        recommendation_text: data.recommendationText,
+        evaluation_criteria: data.evaluationCriteria,
+        rationale: data.rationale,
+        tags: data.tags,
+      },
+    }
+  );
+  return mapBackendToRecommendationItem(row);
+}
+
+/**
+ * Update an existing Recommendation item through the instructor-scoped route.
+ *
+ * Each content field is included only when defined, so an omitted field keeps
+ * its stored value server-side. The active flag is never sent.
+ */
+export async function updateRecommendationItemAsInstructor(
+  itemId: string,
+  data: Partial<InstructorRecommendationWriteFields>
+): Promise<RecommendationItem> {
+  const row = await apiClient.request<Record<string, unknown>>(
+    `instructor/recommendations_bank?recommendation_id=${encodeURIComponent(itemId)}`,
+    {
+      method: 'PUT',
+      body: {
+        ...(data.title !== undefined && { title: data.title }),
+        ...(data.recommendationText !== undefined && { recommendation_text: data.recommendationText }),
+        ...(data.evaluationCriteria !== undefined && { evaluation_criteria: data.evaluationCriteria }),
+        ...(data.rationale !== undefined && { rationale: data.rationale }),
+        ...(data.tags !== undefined && { tags: data.tags }),
+      },
+    }
+  );
+  return mapBackendToRecommendationItem(row);
+}
+
+/**
  * Delete a Recommendation item by ID.
  */
 export async function deleteRecommendationItem(itemId: string): Promise<void> {
