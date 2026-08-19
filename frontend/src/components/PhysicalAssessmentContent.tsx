@@ -324,7 +324,9 @@ function PhysicalAssessmentContent({ materials, loading }: PhysicalAssessmentCon
     );
   }
 
-  if (materials.length === 0) {
+  const materialsWithContent = materials.filter((material) => material.url?.trim());
+
+  if (materialsWithContent.length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
         <p className="text-sm" style={{ color: UI_COLORS.text.muted }}>No physical assessment materials available.</p>
@@ -334,7 +336,7 @@ function PhysicalAssessmentContent({ materials, loading }: PhysicalAssessmentCon
 
   return (
     <div className="space-y-6">
-      {materials.map((material) => (
+      {materialsWithContent.map((material) => (
         <div key={material.media_id} className="space-y-2">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold" style={{ color: UI_COLORS.text.heading }}>
