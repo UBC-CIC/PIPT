@@ -14,6 +14,7 @@ import {
 import { TurnServerStack } from "../lib/turn-server-stack";
 import { CICDStack } from "../lib/cicd-stack";
 import { CloudFrontWafStack } from "../lib/cloudfront-waf-stack";
+import { AuditTrailStack } from "../lib/audit-trail-stack";
 
 const app = new cdk.App();
 
@@ -31,6 +32,7 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
   env,
   githubRepo,
   githubBranch: app.node.tryGetContext("githubBranch") || "main",
+  stackPrefix: StackPrefix,
   lambdaFunctions: [
     {
       name: "textGeneration",
@@ -44,7 +46,6 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
     },
     {
       name: "socketServer",
-      functionName: `${StackPrefix}-EcsSocket-SocketServer`,
       sourceDir: "cdk/socket-server",
       ecsServiceSsmParams: {
         cluster: getSocketEcsClusterSsmParam(StackPrefix),
@@ -52,8 +53,9 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
       },
     },
     {
+      // Hosted on Bedrock AgentCore (configured outside CDK); the build only
+      // pushes and records the approved image tag.
       name: "voiceAgent",
-      functionName: `${StackPrefix}-VoiceAgent-VoiceAgentService`,
       sourceDir: "cdk/voice-agent",
     },
   ],
@@ -119,7 +121,7 @@ const ecsSocketStack = new EcsSocketStack(
   apiStack.getDynamoTableName(),
   cloudFrontWafStack.webAclArn,
   { env, crossRegionReferences: true },
-  cicdStack.buildRole
+  cicdStack.buildRoles["socketServer"]
 );
 const dbFlowStack = new DBFlowStack(
   app,
@@ -155,3 +157,11 @@ cdk.Tags.of(apiStack).add("Project", StackPrefix);
 cdk.Tags.of(turnServerStack).add("Project", StackPrefix);
 cdk.Tags.of(dbFlowStack).add("Project", StackPrefix);
 cdk.Tags.of(amplifyStack).add("Project", StackPrefix);
+
+// Optional CloudTrail trail. Off by default because most accounts already have
+// an organization or Control Tower trail, and a second copy is billed.
+// Enable with: cdk deploy -c EnableCloudTrail=true
+if (String(app.node.tryGetContext("EnableCloudTrail")) === "true") {
+  const auditTrailStack = new AuditTrailStack(app, `${StackPrefix}-AuditTrail`, { env });
+  cdk.Tags.of(auditTrailStack).add("Project", StackPrefix);
+}

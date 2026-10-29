@@ -84,6 +84,19 @@ Lambda responses use a configurable allowlist-based CORS policy via the `ALLOWED
 
 The CORS helpers still understand `*` subdomain patterns and an explicit `*` entry, but the stack no longer emits them. If `ALLOWED_ORIGINS` is unset or empty, the helpers fail closed.
 
+Gateway error responses and the `OPTIONS` mock integrations still return `Access-Control-Allow-Origin: *`, because API Gateway can't pick one origin from a list there. This is safe because the API authenticates with a bearer token, never cookies. Gateway errors return fixed messages (`Unauthorized`, `Request rejected`, ...) rather than `$context.error.messageString`.
+
+### WAF Body Rules
+
+The API WAF (`cdk/lib/api-service-stack.ts`) runs the managed `SizeRestrictions_BODY`, `CrossSiteScripting_BODY` and `GenericLFI_BODY` rules in Count mode and adds two custom rules in Block mode:
+
+- `BlockOversizedBody`: REST API bodies over 64 KB get a 403. The body inspection limit is raised to 64 KB. AppSync (`/graphql`) is excluded.
+- `BlockXssBody`: XSS patterns in the body get a 403 on every path except `*/instructor/persona_media` (instructor `<iframe>` embed codes, sanitized on render) and AppSync.
+
+### Frontend Security Headers
+
+The Amplify app sends HSTS, `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` and a Content Security Policy (`cdk/lib/security-headers.ts`). By default the CSP is sent as `Content-Security-Policy-Report-Only`. Once the browser checks in `cdk/scripts/smoke-security-defaults.ps1` show no violations, deploy the Amplify stack with `-c CspEnforce=true` to enforce it. If you add a new embed provider to `ALLOWED_IFRAME_DOMAINS` in `frontend/src/lib/embedSafety.ts`, add it to `FRONTEND_IFRAME_DOMAINS` in `security-headers.ts` too. A unit test fails if the two lists differ.
+
 ### Shared Endpoints
 
 The following endpoints are accessible to any authenticated user regardless of role:
@@ -954,37 +967,6 @@ curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/co
 ---
 
 ## Scoring & Completion
-
-### Update Patient Score
-
-Update the patient interaction score based on LLM verdict.
-
-**Endpoint:** `POST /student/update_persona_score`
-
-**Query Parameters:**
-
-- `patient_id` (string, required): ID of the patient
-- `student_email` (string, required): Email of the student (must match token email)
-- `simulation_group_id` (string, required): ID of the simulation group
-- `llm_verdict` (boolean, required): LLM verdict — `true` sets score to 100, `false` sets to 0
-
-**Response:**
-
-```json
-{
-  "message": "Student Interaction score updated successfully."
-}
-```
-
-**Example (cURL):**
-
-```bash
-curl -X POST "https://api-id.execute-api.us-east-1.amazonaws.com/prod/student/update_patient_score?patient_id=uuid&student_email=student@example.com&simulation_group_id=uuid&llm_verdict=true" \
-  -H "Authorization: eyJraWQiOiJ..." \
-  -H "Content-Type: application/json"
-```
-
----
 
 ### Get Completion Status
 

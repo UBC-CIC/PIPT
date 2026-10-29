@@ -767,12 +767,29 @@ async function getCurrentUser(): Promise<UserData | null> {
 }
 
 /**
+ * Cache key for a student's patient list in a group. The list carries that
+ * student's own progress (debrief status, coverage, attempts), so the key is
+ * bound to the user. Returns undefined when there's no identity, which callers
+ * treat as "don't cache".
+ */
+export function patientsCacheKey(
+  userEmail: string | null | undefined,
+  simulationGroupId: string
+): string | undefined {
+  if (!userEmail) return undefined;
+  return `${userEmail}:student:patients:${simulationGroupId}`;
+}
+
+/**
  * Get patients for a simulation group
  */
 async function getPatients(simulationGroupId: string): Promise<Patient[]> {
   try {
     const user = await authService.getCurrentUser();
     if (!user) throw new Error('Not authenticated');
+    // Capture the owner before the requests start so a response that lands
+    // after a session change is filed under the user who requested it.
+    const cacheKey = patientsCacheKey(user.email, simulationGroupId);
 
     // Fetch all three data sources in parallel (3 requests instead of 1 + 2N)
     const [data, profilePicsMap, statsMap] = await Promise.all([
@@ -829,7 +846,7 @@ async function getPatients(simulationGroupId: string): Promise<Patient[]> {
     });
 
     // Cache for stale-while-revalidate so returning to this group renders instantly.
-    setCached(`student:patients:${simulationGroupId}`, result);
+    if (cacheKey) setCached(cacheKey, result);
     return result;
   } catch (error) {
     console.error('Failed to fetch patients:', error);
@@ -1439,6 +1456,34 @@ async function fetchUpdatedDebrief(sessionId: string): Promise<UpdatedDebriefDat
   }
 
   throw new Error('Debrief generation timed out');
+}
+
+/**
+ * Empty chunk2 for a debrief that finished without any DTP/Rec comparison
+ * (no submissions, no instructor answers, matching failed, or the
+ * 0-key-questions short-circuit). The debrief dialog treats chunk2 === null
+ * as "still processing", so a completed debrief must never leave it null in
+ * the live conclude flow or the dialog spins forever.
+ */
+export function emptyDebriefChunk2(): DebriefChunk2 {
+  return {
+    dtpComparison: {
+      overview: 'You identified 0 out of 0 expected drug therapy problems.',
+      matched: [],
+      missed: [],
+      additional: [],
+      score: null,
+      guidance: null,
+    },
+    recommendationsComparison: {
+      overview: 'You matched 0 out of 0 expected recommendations.',
+      matched: [],
+      missed: [],
+      additional: [],
+      score: null,
+      guidance: null,
+    },
+  };
 }
 
 /**

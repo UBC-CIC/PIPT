@@ -23,7 +23,19 @@ REGION = os.environ["REGION"]
 DATA_INGESTION_BUCKET = os.environ["BUCKET"]
 EMBEDDING_BUCKET_NAME = os.environ["EMBEDDING_BUCKET_NAME"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+# RDS Proxy presents an ACM certificate; verify it (and the hostname) against
+# the Amazon Trust Services roots in the OS trust store.
+# https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.howitworks.html#rds-proxy-security.tls
+DB_SSL_ROOT_CERT = os.environ.get("PGSSLROOTCERT", "/etc/pki/tls/certs/ca-bundle.crt")
 EMBEDDING_MODEL_PARAM = os.environ["EMBEDDING_MODEL_PARAM"]
+
+# Folders embedded into the persona collection the student chat retrieves from.
+# answer_key is instructor-only and deliberately excluded (see
+# processing/documents.py EMBEDDED_FOLDERS).
+EMBEDDED_CATEGORIES = ("documents", "info")
+# Folders whose embeddings are removed on file delete. Includes answer_key so
+# chunks embedded by earlier versions are still cleaned up.
+EMBEDDING_CLEANUP_CATEGORIES = ("documents", "info", "answer_key")
 
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager")
@@ -97,7 +109,8 @@ def _open_connection():
             'password': secret["password"],
             'host': RDS_PROXY_ENDPOINT,
             'port': secret["port"],
-            'sslmode': 'require'
+            'sslmode': 'verify-full',
+            'sslrootcert': DB_SSL_ROOT_CERT,
         }
         conn = psycopg2.connect(**connection_params)
         conn.autocommit = True
@@ -308,7 +321,7 @@ def insert_file_into_db(persona_id, file_name, file_type, file_path, bucket_name
         existing_file = cur.fetchone()
 
         timestamp = datetime.now(timezone.utc)
-        ingestion_status = "processing" if file_category in ("documents", "info", "answer_key") else "not processing"
+        ingestion_status = "processing" if file_category in EMBEDDED_CATEGORIES else "not processing"
 
         if existing_file:
             # Update the existing record
@@ -512,7 +525,7 @@ def handler(event, context):
         else:
             logger.info(f"File {file_name}.{file_type} is being deleted.")
             # Clean up embeddings for embeddable file types
-            if file_category in ("documents", "info", "answer_key"):
+            if file_category in EMBEDDING_CLEANUP_CATEGORIES:
                 try:
                     connection = connect_to_db()
                     if connection is None:
@@ -553,7 +566,7 @@ def handler(event, context):
             }
         
         # Update embeddings for persona after the file is successfully inserted into the database. Only if document file
-        if file_category in ("documents", "info", "answer_key"):
+        if file_category in EMBEDDED_CATEGORIES:
             try:
                 update_vectorstore_from_s3(bucket_name, simulation_group_id, persona_id, file_key)
                 logger.info(f"Vectorstore updated successfully for persona {persona_id} in group {simulation_group_id}.")

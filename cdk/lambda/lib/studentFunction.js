@@ -35,7 +35,14 @@ exports.handler = async (event, context) => {
     (userEmail && userEmail !== userEmailAttribute);
 
   if (isUnauthorized) {
-    logger.warn("Unauthorized access attempt", { queryEmail, studentEmail, userEmail, userEmailAttribute });
+    logger.warn("AUTHZ_DENY", {
+      check: "emailParamMatchesToken",
+      reason: "not_authorized",
+      queryEmail,
+      studentEmail,
+      userEmail,
+      userEmailAttribute,
+    });
     return {
       statusCode: 401,
       headers: getCorsHeaders(event),
@@ -733,12 +740,32 @@ exports.handler = async (event, context) => {
               }
             }
 
-            // Check message limit for this simulation group
+            // Check message limit using the group that actually owns this chat
+            // (chats -> student_interactions -> enrollments -> simulation_groups),
+            // never the caller-supplied simulation_group_id. Fail closed if the
+            // chat cannot be resolved to a group.
             const groupSettings = await sqlConnection`
-              SELECT max_messages_per_chat FROM "simulation_groups"
-              WHERE simulation_group_id = ${simulationGroupId};
+              SELECT sg.max_messages_per_chat, c.status AS chat_status
+              FROM "chats" c
+              JOIN "student_interactions" si ON si.student_interaction_id = c.student_interaction_id
+              JOIN "enrollments" e ON e.enrollment_id = si.enrollment_id
+              JOIN "simulation_groups" sg ON sg.simulation_group_id = e.simulation_group_id
+              WHERE c.chat_id = ${sessionId};
             `;
-            const maxMessages = groupSettings[0]?.max_messages_per_chat;
+            if (groupSettings.length === 0) {
+              response.statusCode = 403;
+              response.body = JSON.stringify({ error: "Forbidden" });
+              break;
+            }
+            // A concluded chat is read-only: the debrief has been graded, so new
+            // turns must not be appended (security finding f-7d966e0e).
+            if (groupSettings[0].chat_status === 'concluded') {
+              response.statusCode = 409;
+              response.body = JSON.stringify({ error: "Session already concluded." });
+              break;
+            }
+            // NULL cap on an existing group means "unlimited" (see adminFunction.js)
+            const maxMessages = groupSettings[0].max_messages_per_chat;
 
             if (maxMessages != null) {
               const messageCount = await sqlConnection`
@@ -1094,109 +1121,6 @@ exports.handler = async (event, context) => {
           response.body = JSON.stringify({
             error:
               "student_email and group_access_code query parameters are required",
-          });
-        }
-        break;
-      case "POST /student/update_persona_score":
-        if (
-          event.queryStringParameters != null &&
-          event.queryStringParameters.patient_id &&
-          event.queryStringParameters.student_email &&
-          event.queryStringParameters.simulation_group_id &&
-          event.queryStringParameters.llm_verdict
-        ) {
-          try {
-            const patientId = event.queryStringParameters.patient_id;
-            const studentEmail = event.queryStringParameters.student_email;
-            const simulationGroupId =
-              event.queryStringParameters.simulation_group_id;
-            const llmVerdict =
-              event.queryStringParameters.llm_verdict === "true"; // Convert to boolean
-
-            // Authorization: verify enrollment in simulation group (admins bypass)
-            const isAdminUserScore = await isAdmin(sqlConnection, userEmailAttribute);
-            if (!isAdminUserScore) {
-              const enrollment = await verifyEnrollment(sqlConnection, simulationGroupId, userEmailAttribute);
-              if (!enrollment.authorized) {
-                response.statusCode = 403;
-                response.body = JSON.stringify({ error: "Forbidden" });
-                break;
-              }
-            }
-
-            // Retrieve user_id from the Users table
-            const userData = await sqlConnection`
-                    SELECT user_id
-                    FROM "users"
-                    WHERE user_email = ${studentEmail};
-                `;
-
-            const userId = userData[0]?.user_id;
-
-            if (!userId) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({
-                error: "User not found",
-              });
-              break;
-            }
-
-            // Get the student_interaction_id and current score for the student and patient
-            const studentPatientData = await sqlConnection`
-                    SELECT student_interaction_id, persona_score
-                    FROM "student_interactions"
-                    WHERE persona_id = ${patientId}
-                      AND enrollment_id = (
-                        SELECT enrollment_id
-                        FROM "enrollments"
-                        WHERE user_id = ${userId} AND simulation_group_id = ${simulationGroupId}
-                    );
-                `;
-
-            const studentPatientId =
-              studentPatientData[0]?.student_interaction_id;
-            const currentScore = studentPatientData[0]?.persona_score;
-
-            if (!studentPatientId) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({
-                error: "Student patient entry not found.",
-              });
-              break;
-            }
-
-            // If llm_verdict is false and the current score is 100, no update is needed
-            if (!llmVerdict && currentScore === 100) {
-              response.statusCode = 200;
-              response.body = JSON.stringify({
-                message: "No changes made. Patient score is already 100.",
-              });
-              break;
-            }
-
-            // Determine the new score based on llm_verdict
-            const newScore = llmVerdict ? 100 : 0;
-
-            // Update the patient score for the student
-            await sqlConnection`
-                    UPDATE "student_interactions"
-                    SET persona_score = ${newScore}
-                    WHERE student_interaction_id = ${studentPatientId};
-                `;
-
-            response.statusCode = 200;
-            response.body = JSON.stringify({
-              message: "Patient score updated successfully.",
-            });
-          } catch (err) {
-            logger.error("Operation failed", { error: err.message, stack: err.stack });
-            response.statusCode = 500;
-            response.body = JSON.stringify({ error: "Internal server error" });
-          }
-        } else {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Invalid query parameters.",
           });
         }
         break;
@@ -1560,6 +1484,12 @@ exports.handler = async (event, context) => {
             `;
 
             if (ownerCheck.length === 0) {
+              logger.warn("AUTHZ_DENY", {
+                check: "chatOwnership",
+                reason: "not_authorized",
+                userEmail: userEmailAttribute,
+                sessionId,
+              });
               response.statusCode = 403;
               response.body = JSON.stringify({
                 error: "Forbidden: you do not have access to this chat.",
@@ -1711,6 +1641,14 @@ exports.handler = async (event, context) => {
                 AND e.simulation_group_id = ${simulationGroupId};
             `;
             if (sessionBinding.length === 0) {
+              logger.warn("AUTHZ_DENY", {
+                check: "sessionBinding",
+                reason: "not_authorized",
+                userEmail: userEmailAttribute,
+                sessionId,
+                personaId: patientId,
+                simulationGroupId,
+              });
               response.statusCode = 403;
               response.body = JSON.stringify({ error: "Forbidden" });
               break;
@@ -1759,6 +1697,9 @@ exports.handler = async (event, context) => {
             // dtp_submission and recommendation_submission are null for interview_practice
             // patients (no modal step). For full_assessment patients, they contain the
             // structured entries the debrief Lambda will match against instructor items.
+            // Conclude is one-way: the status precondition makes the transition atomic,
+            // so a concluded chat cannot be re-concluded to generate a fresh debrief
+            // after the student has read the graded one (security finding f-7d966e0e).
             const updatedChat = await sqlConnection`
               UPDATE "chats"
               SET recommendation = ${recommendation},
@@ -1768,12 +1709,15 @@ exports.handler = async (event, context) => {
                   status = 'concluded',
                   last_accessed = CURRENT_TIMESTAMP
               WHERE chat_id = ${sessionId}
+                AND status IS DISTINCT FROM 'concluded'
               RETURNING *;
             `;
 
             if (updatedChat.length === 0) {
-              response.statusCode = 404;
-              response.body = JSON.stringify({ error: "Session not found." });
+              // sessionBinding above proved the chat exists, so no row means it
+              // was already concluded.
+              response.statusCode = 409;
+              response.body = JSON.stringify({ error: "Session already concluded." });
               break;
             }
 

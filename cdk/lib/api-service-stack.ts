@@ -35,9 +35,31 @@ import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as ses from "aws-cdk-lib/aws-ses";
 import * as route53 from "aws-cdk-lib/aws-route53";
-import { LogProtection } from "./log-protection";
+import { LogProtection, logWebAclToCloudWatch } from "./log-protection";
+import { getImageTagSsmParam } from "./cicd-stack";
+import { approvedImageTag } from "./approved-image";
+
+/** Largest REST API request body the WAF lets through (matches the KB_64 inspection limit). */
+export const WAF_MAX_BODY_BYTES = 64 * 1024;
+
+/** WAF statement matching the request URI path (case-insensitive). */
+function wafUriPathIs(
+  path: string,
+  positionalConstraint: "EXACTLY" | "ENDS_WITH"
+): wafv2.CfnWebACL.StatementProperty {
+  return {
+    byteMatchStatement: {
+      fieldToMatch: { uriPath: {} },
+      positionalConstraint,
+      searchString: path,
+      textTransformations: [{ priority: 0, type: "LOWERCASE" }],
+    },
+  };
+}
 
 export class ApiServiceStack extends cdk.Stack {
+  /** ECR image waiter provider; other stacks use it to pin images (see approved-image.ts). */
+  public readonly imageWaiterServiceToken: string;
   private readonly api: apigateway.SpecRestApi;
   public readonly appClient: cognito.UserPoolClient;
   public readonly userPool: cognito.UserPool;
@@ -46,6 +68,8 @@ export class ApiServiceStack extends cdk.Stack {
   private readonly layerList: { [key: string]: LayerVersion };
   private readonly guardrailId: string;
   private readonly allowedOriginsEnv: string;
+  private readonly docsDomainName: string;
+  private readonly dataIngestionBucketName: string;
   public readonly stageARN_APIGW: string;
   public readonly apiGW_basedURL: string;
   public readonly secret: secretsmanager.ISecret;
@@ -58,6 +82,12 @@ export class ApiServiceStack extends cdk.Stack {
   public getGuardrailId = () => this.guardrailId;
   public getDynamoTableName = () => this.dynamoTableName;
   public getAllowedOriginsEnv = () => this.allowedOriginsEnv;
+  /** Hostname of the REST API (no scheme or stage), for the frontend CSP. */
+  public getApiHost = () => `${this.api.restApiId}.execute-api.${this.region}.${this.urlSuffix}`;
+  /** Hostname of the CloudFront document distribution, for the frontend CSP. */
+  public getDocsDomainName = () => this.docsDomainName;
+  /** Name of the bucket that receives presigned-POST uploads, for the frontend CSP. */
+  public getDataIngestionBucketName = () => this.dataIngestionBucketName;
   public addLayer = (name: string, layer: LayerVersion) =>
     (this.layerList[name] = layer);
   public getLayers = () => this.layerList;
@@ -120,6 +150,33 @@ export class ApiServiceStack extends cdk.Stack {
     const allowedOriginsEnv = allowedOrigins.join(",");
     this.allowedOriginsEnv = allowedOriginsEnv;
 
+    // Finite retention + CMK encryption for every log group in this stack.
+    // Each Lambda writes to a new encrypted group; its original unencrypted
+    // group gets the same retention (expireLegacyLambdaLogGroups below).
+    const logProtection = new LogProtection(this, `${id}-LogProtection`);
+
+    // Receives S3 server access logs and CloudFront standard logs for this
+    // stack. SSE-S3, not KMS: S3 server access logging cannot deliver to a
+    // bucket with SSE-KMS default encryption. ACLs stay enabled
+    // (BUCKET_OWNER_PREFERRED) because CloudFront standard logging delivers
+    // with an ACL grant. Logs expire with the same retention as CloudWatch.
+    // https://docs.aws.amazon.com/AmazonS3/latest/userguide/enable-server-access-logging.html
+    // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/standard-logging-legacy-s3.html
+    const accessLogsBucket = new s3.Bucket(this, `${id}-AccessLogsBucket`, {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: s3.BucketEncryption.S3_MANAGED,
+      enforceSSL: true,
+      versioned: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+      lifecycleRules: [
+        {
+          expiration: cdk.Duration.days(logProtection.retention),
+          noncurrentVersionExpiration: cdk.Duration.days(30),
+        },
+      ],
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     const embeddingStorageBucket = new s3.Bucket(
       this,
       `${id}-embeddingStorageBucket`,
@@ -141,6 +198,8 @@ export class ApiServiceStack extends cdk.Stack {
         // When deleting the stack, need to empty the Bucket and delete it manually
         removalPolicy: cdk.RemovalPolicy.RETAIN,
         enforceSSL: true,
+        serverAccessLogsBucket: accessLogsBucket,
+        serverAccessLogsPrefix: "s3/embedding-storage/",
       }
     );
 
@@ -426,6 +485,18 @@ export class ApiServiceStack extends cdk.Stack {
 
     const data = Fn.transform("AWS::Include", { Location: asset.s3ObjectUrl });
 
+    // Per-request access log for the REST API: who called what, from where,
+    // and with what result. Uses the resource template path ($context.resourcePath)
+    // and no query string, so IDs, emails and access codes in the URL are not
+    // recorded. dataTraceEnabled stays off below because it logs full bodies.
+    // https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-logging.html
+    const apiAccessLogGroup = new logs.LogGroup(this, `${id}-ApiAccessLogs`, {
+      logGroupName: `/aws/apigateway/${id}-API/access`,
+      retention: logProtection.retention,
+      encryptionKey: logProtection.encryptionKey,
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
+    });
+
     // Create the API Gateway REST API
     this.api = new apigateway.SpecRestApi(this, `${id}-APIGateway`, {
       apiDefinition: apigateway.AssetApiDefinition.fromInline(data),
@@ -438,6 +509,28 @@ export class ApiServiceStack extends cdk.Stack {
         loggingLevel: apigateway.MethodLoggingLevel.ERROR,
         dataTraceEnabled: false,
         stageName: "prod",
+        accessLogDestination: new apigateway.LogGroupLogDestination(apiAccessLogGroup),
+        accessLogFormat: apigateway.AccessLogFormat.custom(
+          JSON.stringify({
+            requestId: "$context.requestId",
+            extendedRequestId: "$context.extendedRequestId",
+            requestTime: "$context.requestTime",
+            sourceIp: "$context.identity.sourceIp",
+            userAgent: "$context.identity.userAgent",
+            principalId: "$context.authorizer.principalId",
+            httpMethod: "$context.httpMethod",
+            resourcePath: "$context.resourcePath",
+            protocol: "$context.protocol",
+            status: "$context.status",
+            responseLength: "$context.responseLength",
+            responseLatency: "$context.responseLatency",
+            integrationStatus: "$context.integration.status",
+            authorizerStatus: "$context.authorizer.status",
+            authorizerError: "$context.authorizer.error",
+            wafStatus: "$context.waf.status",
+            errorMessage: "$context.error.message",
+          })
+        ),
         methodOptions: {
           "/*/*": {
             throttlingRateLimit: 100,
@@ -651,11 +744,6 @@ export class ApiServiceStack extends cdk.Stack {
       ec2.Port.tcp(5432),
       "Allow API Lambda functions to access RDS Proxy"
     );
-
-    // Finite retention + CMK encryption for every Lambda log group in this stack.
-    // Each function writes to a new encrypted group; its original unencrypted
-    // group gets the same retention (expireLegacyLambdaLogGroups below).
-    const logProtection = new LogProtection(this, `${id}-LogProtection`);
 
     const lambdaStudentFunction = new lambda.Function(
       this,
@@ -1482,6 +1570,8 @@ export class ApiServiceStack extends cdk.Stack {
             outputStrength: "HIGH",
           },
           {
+            // Bedrock only evaluates prompt attacks on input; outputStrength must be NONE.
+            // https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-prompt-attack.html
             type: "PROMPT_ATTACK",
             inputStrength: "HIGH",
             outputStrength: "NONE",
@@ -1581,8 +1671,23 @@ export class ApiServiceStack extends cdk.Stack {
         ],
       },
 
-      // No PII filters — patient simulation data (names, ages, medical details)
-      // is educational content from instructor-uploaded documents and must flow freely.
+      // PII policy — block only identifiers that never belong in a simulated
+      // encounter (real contact/financial/credential data typed by a student or
+      // echoed by the model). Persona data — NAME, AGE, ADDRESS, PHONE and
+      // CA_HEALTH_NUMBER (PHN) — is educational content from instructor-uploaded
+      // case documents and is deliberately NOT filtered.
+      // All callers use ApplyGuardrail and treat GUARDRAIL_INTERVENED as a block,
+      // so BLOCK is used rather than ANONYMIZE.
+      sensitiveInformationPolicyConfig: {
+        piiEntitiesConfig: [
+          "EMAIL",
+          "CREDIT_DEBIT_CARD_NUMBER",
+          "CA_SOCIAL_INSURANCE_NUMBER",
+          "PASSWORD",
+          "AWS_ACCESS_KEY",
+          "AWS_SECRET_KEY",
+        ].map((type) => ({ type, action: "BLOCK" })),
+      },
 
       // No contextual grounding — the simulation system prompt and medical
       // documents are the grounding context themselves; this policy would
@@ -1674,48 +1779,56 @@ export class ApiServiceStack extends cdk.Stack {
       })
     );
 
-    // Grant CodeBuild start permissions (for triggering builds)
+    // Read the approved image tag the CI/CD build records in SSM (one
+    // parameter per module, all under this environment's prefix).
     imageWaiterFunction.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: ["codebuild:StartBuild"],
-        resources: [`arn:aws:codebuild:${this.region}:${this.account}:project/*`],
+        actions: ["ssm:GetParameter"],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${getImageTagSsmParam(stackPrefix, "*")}`,
+        ],
       })
     );
+
+    // Let the waiter start only this environment's text-gen and data-ingest
+    // builds (not every project in the account) when their image is missing.
+    const waiterBuildProjects = [textGenBuildProjectName, dataIngestBuildProjectName].filter(
+      (name): name is string => Boolean(name)
+    );
+    if (waiterBuildProjects.length > 0) {
+      imageWaiterFunction.addToRolePolicy(
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ["codebuild:StartBuild"],
+          resources: waiterBuildProjects.map(
+            (name) => `arn:aws:codebuild:${this.region}:${this.account}:project/${name}`
+          ),
+        })
+      );
+    }
 
     const imageWaiterProvider = new cr.Provider(this, `${id}-EcrImageWaiterProvider`, {
       onEventHandler: imageWaiterFunction,
     });
+    this.imageWaiterServiceToken = imageWaiterProvider.serviceToken;
 
-    // Wait for text generation image
-    if (textGenRepo) {
-      const textGenImageWaiter = new cdk.CustomResource(this, `${id}-TextGenImageWaiter`, {
-        serviceToken: imageWaiterProvider.serviceToken,
-        properties: {
-          RepositoryName: textGenRepo.repositoryName,
-          ImageTag: "latest",
-          MaxRetries: "28",
-          RetryDelaySeconds: "30",
-          TriggerBuildOnMissing: textGenBuildProjectName ? "true" : "false",
-          CodeBuildProjectName: textGenBuildProjectName || "",
-        },
-      });
-    }
-
-    // Wait for data ingestion image
-    if (dataIngestRepo) {
-      const dataIngestImageWaiter = new cdk.CustomResource(this, `${id}-DataIngestImageWaiter`, {
-        serviceToken: imageWaiterProvider.serviceToken,
-        properties: {
-          RepositoryName: dataIngestRepo.repositoryName,
-          ImageTag: "latest",
-          MaxRetries: "28",
-          RetryDelaySeconds: "30",
-          TriggerBuildOnMissing: dataIngestBuildProjectName ? "true" : "false",
-          CodeBuildProjectName: dataIngestBuildProjectName || "",
-        },
-      });
-    }
+    // Pin each Docker Lambda to the newest scan-approved image (an immutable
+    // tag), waiting for the first build on a fresh environment.
+    const textGenImageTag = approvedImageTag(this, `${id}-TextGenImageWaiter`, {
+      serviceToken: imageWaiterProvider.serviceToken,
+      repository: textGenRepo!,
+      stackPrefix,
+      moduleName: "textGeneration",
+      buildProjectName: textGenBuildProjectName,
+    });
+    const dataIngestImageTag = approvedImageTag(this, `${id}-DataIngestImageWaiter`, {
+      serviceToken: imageWaiterProvider.serviceToken,
+      repository: dataIngestRepo!,
+      stackPrefix,
+      moduleName: "dataIngestion",
+      buildProjectName: dataIngestBuildProjectName,
+    });
 
     /**
      *
@@ -1725,7 +1838,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-TextGenLambdaDockerFunction`,
       {
-        code: lambda.DockerImageCode.fromEcr(textGenRepo!),
+        code: lambda.DockerImageCode.fromEcr(textGenRepo!, { tagOrDigest: textGenImageTag }),
         memorySize: 1024,
         timeout: cdk.Duration.seconds(300),
         reservedConcurrentExecutions: 25,
@@ -1890,6 +2003,8 @@ export class ApiServiceStack extends cdk.Stack {
         // When deleting the stack, need to empty the Bucket and delete it manually
         removalPolicy: cdk.RemovalPolicy.RETAIN,
         enforceSSL: true,
+        serverAccessLogsBucket: accessLogsBucket,
+        serverAccessLogsPrefix: "s3/data-ingestion/",
       }
     );
 
@@ -1988,8 +2103,17 @@ export class ApiServiceStack extends cdk.Stack {
           responseHeadersPolicy: docsCorsHeadersPolicy,
         },
         ...(cloudFrontWafArn && { webAclId: cloudFrontWafArn }),
+        // Standard logs record each viewer request. They include the query
+        // string, i.e. signed-URL signatures, which expire after 5-15 minutes.
+        enableLogging: true,
+        logBucket: accessLogsBucket,
+        logFilePrefix: "cloudfront/docs/",
+        logIncludesCookies: false,
       }
     );
+
+    this.docsDomainName = docsDistribution.domainName;
+    this.dataIngestionBucketName = dataIngestionBucket.bucketName;
 
     new cdk.CfnOutput(this, "CloudFrontDomain", {
       value: docsDistribution.domainName,
@@ -2088,7 +2212,7 @@ export class ApiServiceStack extends cdk.Stack {
       this,
       `${id}-DataIngestLambdaDockerFunction`,
       {
-        code: lambda.DockerImageCode.fromEcr(dataIngestRepo!),
+        code: lambda.DockerImageCode.fromEcr(dataIngestRepo!, { tagOrDigest: dataIngestImageTag }),
         memorySize: 3008,
         timeout: cdk.Duration.seconds(900),
         reservedConcurrentExecutions: 10,
@@ -2271,8 +2395,10 @@ export class ApiServiceStack extends cdk.Stack {
           source: ["aws.cloudwatch"],
           detailType: ["CloudWatch Alarm State Change"],
           resources: [timeoutAlarm.alarmArn],
+          // ALARM only: the alarm returning to OK is not a timeout and must
+          // not trigger another sweep.
           detail: {
-            state: { value: ["ALARM", "OK"] },
+            state: { value: ["ALARM"] },
           },
         },
       }
@@ -2293,6 +2419,14 @@ export class ApiServiceStack extends cdk.Stack {
         environment: {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+          // The handler ignores any event not from this alarm.
+          TIMEOUT_ALARM_NAME: timeoutAlarm.alarmName,
+          // Rows younger than the ingestion timeout belong to a run that may
+          // still finish. 60s margin covers the gap between invocation start
+          // and the row being registered.
+          STUCK_AFTER_SECONDS: String(
+            (dataIngestLambdaDockerFunc.timeout ?? cdk.Duration.seconds(900)).toSeconds() - 60
+          ),
         },
         functionName: `${id}-TimeoutHandlerLambda`,
         layers: [psycopgLayer, powertoolsLayer],
@@ -2704,6 +2838,45 @@ export class ApiServiceStack extends cdk.Stack {
       deleteLastMessage,
     ]);
 
+    // Authorization denials: every AUTHZ_DENY line (authz.js helpers and the
+    // handler-level role/email checks) is counted into one metric, and a burst
+    // raises an alarm. A run of ownership failures is the signature of
+    // ID-guessing (IDOR) probes. Look up the actor and targets with Logs
+    // Insights: filter message = "AUTHZ_DENY".
+    const authzDenialMetricNamespace = `${id}/Security`;
+    const authzDenialMetricName = "AuthorizationDenials";
+    const authzLoggingFunctions: [string, lambda.Function][] = [
+      ["Student", lambdaStudentFunction],
+      ["Instructor", lambdaInstructorFunction],
+      ["Admin", lambdaAdminFunction],
+      ["TextStreamAuthz", textStreamAuthzFunction],
+    ];
+    for (const [name, fn] of authzLoggingFunctions) {
+      new logs.MetricFilter(this, `${id}-${name}AuthzDenyMetricFilter`, {
+        logGroup: fn.logGroup,
+        metricNamespace: authzDenialMetricNamespace,
+        metricName: authzDenialMetricName,
+        filterPattern: logs.FilterPattern.stringValue("$.message", "=", "AUTHZ_DENY"),
+        metricValue: "1",
+        defaultValue: 0,
+      });
+    }
+    new cloudwatch.Alarm(this, `${id}-AuthzDenialSpikeAlarm`, {
+      alarmName: `${id}-Authorization-Denial-Spike`,
+      alarmDescription:
+        "More than 50 authorization denials in 5 minutes across the student, instructor, admin and text-stream handlers. Possible IDOR / enumeration attempt; query AUTHZ_DENY in Logs Insights.",
+      metric: new cloudwatch.Metric({
+        namespace: authzDenialMetricNamespace,
+        metricName: authzDenialMetricName,
+        period: cdk.Duration.minutes(5),
+        statistic: "Sum",
+      }),
+      threshold: 50,
+      evaluationPeriods: 1,
+      comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING,
+    });
+
     // Grant access to Secret Manager: app_rw credential only
     deleteLastMessage.addToRolePolicy(
       new iam.PolicyStatement({
@@ -2756,17 +2929,16 @@ export class ApiServiceStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
-              // SizeRestrictions_BODY: large document/prompt payloads exceed the default size limit.
-              // GenericLFI_BODY: clinical free-text (e.g. question bank entries asking for PHN, dosages,
-              // path-like tokens) false-positives as local file inclusion. Backend uses parameterized
-              // queries, so body inspection here adds little protection.
-              // CrossSiteScripting_BODY: physical-assessment materials (persona_media) legitimately
-              // contain <iframe> embed codes submitted by instructors, which this rule flags as XSS.
-              // The stored HTML is sanitized on render with DOMPurify (iframe-only allowlist) and React
-              // auto-escapes everywhere else, so XSS is controlled at the app layer. Scoping this rule to
-              // a single path would require a second CommonRuleSet (700 WCU) that exceeds the 1500 WCU
-              // WebACL limit, so it is counted API-wide here.
-              // All are set to Count (via ruleActionOverrides) instead of Block — still logged for visibility.
+              // These three rules are Count here (still logged) because the managed group can't be
+              // scoped per path. Two of them are replaced by the Block rules further down:
+              // SizeRestrictions_BODY (fixed 8 KB): prompts/case text legitimately exceed it.
+              //   -> replaced by "BlockOversizedBody" (64 KB, REST API only).
+              // CrossSiteScripting_BODY: instructors submit <iframe> embed codes to
+              //   instructor/persona_media (sanitized on render with DOMPurify, iframe-only allowlist).
+              //   -> replaced by "BlockXssBody", which blocks on every other path.
+              // GenericLFI_BODY: clinical free-text (PHN, dosages, path-like tokens) false-positives
+              //   as local file inclusion. There is no filesystem access from request bodies and the
+              //   backend uses parameterized queries, so this one stays Count only.
               ruleActionOverrides: [
                 { name: "SizeRestrictions_BODY", actionToUse: { count: {} } },
                 { name: "GenericLFI_BODY", actionToUse: { count: {} } },
@@ -2847,7 +3019,74 @@ export class ApiServiceStack extends cdk.Stack {
             metricName: "AWS-AWSManagedRulesSQLiRuleSet",
           },
         },
+        {
+          // Bounds JSON body size on the REST API (the gateway validator is params-only, so
+          // nothing else does). The REST API body inspection limit is raised to 64 KB in
+          // associationConfig below; anything larger is "oversize" and MATCHes. AppSync is
+          // excluded because its inspection limit is fixed at 8 KB.
+          name: "BlockOversizedBody",
+          priority: 6,
+          action: { block: {} },
+          statement: {
+            andStatement: {
+              statements: [
+                {
+                  sizeConstraintStatement: {
+                    fieldToMatch: { body: { oversizeHandling: "MATCH" } },
+                    comparisonOperator: "GT",
+                    size: WAF_MAX_BODY_BYTES,
+                    textTransformations: [{ priority: 0, type: "NONE" }],
+                  },
+                },
+                { notStatement: { statement: wafUriPathIs("/graphql", "EXACTLY") } },
+              ],
+            },
+          },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "BlockOversizedBody",
+          },
+        },
+        {
+          // XSS body inspection in Block mode everywhere except the one endpoint that
+          // accepts instructor <iframe> embed codes, and AppSync (server-generated stream
+          // chunks published by the text-generation Lambda).
+          name: "BlockXssBody",
+          priority: 7,
+          action: { block: {} },
+          statement: {
+            andStatement: {
+              statements: [
+                {
+                  xssMatchStatement: {
+                    fieldToMatch: { body: { oversizeHandling: "CONTINUE" } },
+                    textTransformations: [
+                      { priority: 0, type: "URL_DECODE" },
+                      { priority: 1, type: "HTML_ENTITY_DECODE" },
+                    ],
+                  },
+                },
+                { notStatement: { statement: wafUriPathIs("/instructor/persona_media", "ENDS_WITH") } },
+                { notStatement: { statement: wafUriPathIs("/graphql", "EXACTLY") } },
+              ],
+            },
+          },
+          visibilityConfig: {
+            sampledRequestsEnabled: true,
+            cloudWatchMetricsEnabled: true,
+            metricName: "BlockXssBody",
+          },
+        },
       ],
+      // Inspect up to 64 KB of REST API bodies (default 16 KB) so BlockOversizedBody can
+      // allow payloads up to that size. Each extra 16 KB adds a small per-request WAF charge.
+      // https://docs.aws.amazon.com/waf/latest/developerguide/web-acl-setting-body-inspection-limit.html
+      associationConfig: {
+        requestBody: {
+          API_GATEWAY: { defaultSizeInspectionLimit: "KB_64" },
+        },
+      },
     });
     const wafAssociation = new wafv2.CfnWebACLAssociation(
       this,
@@ -2862,6 +3101,10 @@ export class ApiServiceStack extends cdk.Stack {
       resourceArn: this.appSyncApi.arn,
       webAclArn: waf.attrArn,
     });
+
+    // Full WAF request log (every request, with the rule that matched), instead
+    // of only the sampled requests kept for three hours.
+    logWebAclToCloudWatch(this, `${id}-WafLogging`, waf, `aws-waf-logs-${id}-api`, logProtection);
 
     // Export outputs for frontend configuration
     new cdk.CfnOutput(this, 'ApiEndpoint', {

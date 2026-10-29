@@ -57,6 +57,10 @@ def _get_cors_origin(event):
     # Fallback: return first allowed origin (won't match but is safe)
     return _ALLOWED_ORIGINS[0]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+# RDS Proxy presents an ACM certificate; verify it (and the hostname) against
+# the Amazon Trust Services roots in the OS trust store.
+# https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.howitworks.html#rds-proxy-security.tls
+DB_SSL_ROOT_CERT = os.environ.get("PGSSLROOTCERT", "/etc/pki/tls/certs/ca-bundle.crt")
 BEDROCK_LLM_PARAM = os.environ["BEDROCK_LLM_PARAM"]
 EMBEDDING_MODEL_PARAM = os.environ["EMBEDDING_MODEL_PARAM"]
 TABLE_NAME_PARAM = os.environ["TABLE_NAME_PARAM"]
@@ -209,7 +213,8 @@ def _open_connection():
             user=secret["username"],
             password=secret["password"],
             autocommit=True,
-            sslmode="require",
+            sslmode="verify-full",
+            sslrootcert=DB_SSL_ROOT_CERT,
         )
 
     try:
@@ -839,12 +844,32 @@ def handler(event, context):
         try:
             conn = connect_to_db()
             cur = conn.cursor()
+            # Resolve the cap from the group that owns this chat, never from the
+            # caller-supplied simulation_group_id. Fail closed if unresolvable.
             cur.execute("""
-                SELECT max_messages_per_chat FROM "simulation_groups"
-                WHERE simulation_group_id = %s
-            """, (simulation_group_id,))
+                SELECT sg.max_messages_per_chat
+                FROM "chats" c
+                JOIN "student_interactions" si ON si.student_interaction_id = c.student_interaction_id
+                JOIN "enrollments" e ON e.enrollment_id = si.enrollment_id
+                JOIN "simulation_groups" sg ON sg.simulation_group_id = e.simulation_group_id
+                WHERE c.chat_id = %s
+            """, (session_id,))
             group_result = cur.fetchone()
-            max_messages = group_result[0] if group_result else None
+            if group_result is None:
+                logger.warning(f"Message limit check: chat {session_id} has no owning group; rejecting")
+                cur.close()
+                return {
+                    'statusCode': 403,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Headers": "*",
+                        "Access-Control-Allow-Origin": _get_cors_origin(event),
+                        "Access-Control-Allow-Methods": "*",
+                    },
+                    'body': json.dumps({"error": "Forbidden"})
+                }
+            # NULL cap on an existing group means "unlimited"
+            max_messages = group_result[0]
 
             if max_messages is not None:
                 cur.execute("""
@@ -873,8 +898,18 @@ def handler(event, context):
                     }
             cur.close()
         except Exception as e:
-            logger.warning(f"Error checking message limit (failing open): {e}")
-            # Fail open — allow the message through if limit check fails
+            # Fail closed — do not invoke the LLM if the limit cannot be verified
+            logger.error(f"Error checking message limit (failing closed): {e}")
+            return {
+                'statusCode': 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": _get_cors_origin(event),
+                    "Access-Control-Allow-Methods": "*",
+                },
+                'body': json.dumps({"error": "Unable to verify message limit"})
+            }
 
     # Check if streaming is requested
     query_params = event.get("queryStringParameters", {})

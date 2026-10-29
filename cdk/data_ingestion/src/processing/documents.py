@@ -18,6 +18,11 @@ s3 = boto3.client('s3')
 
 EMBEDDING_BUCKET_NAME = os.environ["EMBEDDING_BUCKET_NAME"]
 
+# Folders whose files are embedded into the persona's collection. The student
+# chat retrieves from that collection, so instructor-only folders (answer_key)
+# must never be listed here. The debrief reads answer keys from S3 directly.
+EMBEDDED_FOLDERS = ("documents", "info")
+
 def extract_txt(
     bucket: str, 
     file_key: str
@@ -204,7 +209,12 @@ def add_document(
         bucket=output_bucket,
         filenames=output_filenames,
         vectorstore=vectorstore,
-        embeddings=embeddings
+        embeddings=embeddings,
+        # The document's identity is its original object key, passed explicitly.
+        # It must not be re-derived from the per-page temp keys: a filename that
+        # itself contains "_page" would otherwise collide with another document's
+        # source id, and incremental cleanup would delete that document's embeddings.
+        source_key=f"{group}/{persona}/{folder}/{filename}",
     )
     
     return this_doc_chunks
@@ -213,7 +223,8 @@ def store_doc_chunks(
     bucket: str, 
     filenames: List[str],
     vectorstore: PGVector, 
-    embeddings: BedrockEmbeddings
+    embeddings: BedrockEmbeddings,
+    source_key: str,
 ) -> List[Document]:
     """
     Store chunks of documents in the vectorstore.
@@ -223,6 +234,10 @@ def store_doc_chunks(
     filenames (List[str]): A list of keys for the text files in the bucket.
     vectorstore (PGVector): The vectorstore instance.
     embeddings (BedrockEmbeddings): The embeddings instance.
+    source_key (str): Key of the original uploaded document
+        ({group}/{persona}/{folder}/{filename}). Every chunk's "source" metadata
+        is s3://{bucket}/{source_key}; this is the source_id_key used by
+        index() incremental cleanup, so it must uniquely identify one upload.
     
     Returns:
     List[Document]: A list of all document chunks for this document that were added to the vectorstore.
@@ -238,14 +253,11 @@ def store_doc_chunks(
         doc_texts = output_buffer.read().decode('utf-8')
         doc_chunks = text_splitter.create_documents([doc_texts])
         
-        head, _, _ = filename.partition("_page")
-        true_filename = head # Converts 'GroupCode_XXX_-_Group-Name.pdf_page_1.txt' to 'GroupCode_XXX_-_Group-Name.pdf'
-        
         doc_chunks = [x for x in doc_chunks if x.page_content]
         
         for doc_chunk in doc_chunks:
             if doc_chunk:
-                doc_chunk.metadata["source"] = f"s3://{bucket}/{true_filename}"
+                doc_chunk.metadata["source"] = f"s3://{bucket}/{source_key}"
                 doc_chunk.metadata["doc_id"] = this_uuid
                 
             else:
@@ -257,6 +269,47 @@ def store_doc_chunks(
        
     return this_doc_chunks
                 
+def purge_answer_key_embeddings(persona_id: str, connection) -> int:
+    """
+    Delete answer-key chunks from a persona's collection.
+
+    Earlier versions embedded the answer_key folder into the same collection
+    the student chat retrieves from. This removes those chunks so they stop
+    being retrievable. Matching uses the same source format store_doc_chunks
+    writes: s3://{bucket}/{group}/{persona}/answer_key/{file}.
+
+    Returns the number of rows deleted (0 on error, which is logged).
+    """
+    if connection is None:
+        logger.error("Database connection failed. Unable to purge answer-key embeddings.")
+        return 0
+
+    cur = None
+    try:
+        cur = connection.cursor()
+        cur.execute(
+            """
+            DELETE FROM langchain_pg_embedding e
+            USING langchain_pg_collection c
+            WHERE e.collection_id = c.uuid
+              AND c.name = %s
+              AND e.cmetadata->>'source' LIKE %s
+            """,
+            (persona_id, f"%/{persona_id}/answer_key/%"),
+        )
+        deleted = cur.rowcount
+        connection.commit()
+        cur.close()
+        if deleted:
+            logger.info(f"Purged {deleted} answer-key embeddings from persona {persona_id}.")
+        return deleted
+    except Exception as e:
+        if cur:
+            cur.close()
+        connection.rollback()
+        logger.error(f"Error purging answer-key embeddings for persona {persona_id}: {e}")
+        return 0
+
 def process_documents(
     bucket: str, 
     group: str, 
@@ -276,7 +329,10 @@ def process_documents(
     embeddings (BedrockEmbeddings): The embeddings instance.
     record_manager (SQLRecordManager): Manages list of documents in the vectorstore for indexing.
     """
-    folders = ["documents", "info", "answer_key"]
+    # Remove answer-key chunks that earlier versions embedded here.
+    purge_answer_key_embeddings(persona_id, connection)
+
+    folders = EMBEDDED_FOLDERS
     all_doc_chunks = []
     # Files are marked "completed" only after index() has written their
     # embeddings. Marking them earlier meant a failure inside index() left
