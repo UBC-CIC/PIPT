@@ -2095,6 +2095,9 @@ exports.handler = async (event, context) => {
   logger.logResponse(response);
   // Role changes also get a ROLE_CHANGE line and a role_audit_log row
   // (applyRoleChange); this records every admin mutation, including failures.
-  logger.audit(event, { actorEmail: adminEmail, statusCode: response.statusCode });
+  logger.audit(event, {
+    actorId: event.requestContext.authorizer.userId,
+    statusCode: response.statusCode,
+  });
   return response;
 };

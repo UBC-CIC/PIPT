@@ -4210,7 +4210,7 @@ exports.handler = async (event, context) => {
   }
   logger.logResponse(response);
   logger.audit(event, {
-    actorEmail: userEmailAttribute,
+    actorId: event.requestContext.authorizer.userId,
     statusCode: response.statusCode,
     scope: authorizedScope,
   });

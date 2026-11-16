@@ -2970,7 +2970,11 @@ export class ApiServiceStack extends cdk.Stack {
         logGroup: fn.logGroup,
         metricNamespace: authzDenialMetricNamespace,
         metricName: authzDenialMetricName,
-        filterPattern: logs.FilterPattern.stringValue("$.message", "=", "AUTHZ_DENY"),
+        // Text pattern, not a JSON one: with the default text log format the
+        // runtime prefixes each line with timestamp, request ID and level, so
+        // the event is not a JSON document and `$.message` can never match.
+        // https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/FilterAndPatternSyntax.html
+        filterPattern: logs.FilterPattern.literal('"AUTHZ_DENY"'),
         metricValue: "1",
         defaultValue: 0,
       });

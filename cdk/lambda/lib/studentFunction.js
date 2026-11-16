@@ -2194,6 +2194,6 @@ exports.handler = async (event, context) => {
     response.body = JSON.stringify(error.message);
   }
   logger.logResponse(response);
-
+  logger.audit(event, { actorId: cognito_id, statusCode: response.statusCode });
   return response;
 };
