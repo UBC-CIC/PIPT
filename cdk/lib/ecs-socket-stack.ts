@@ -118,7 +118,11 @@ export class EcsSocketStack extends Stack {
                 "bedrock-agentcore:InvokeAgentRuntime",
                 "bedrock-agentcore:InvokeAgentRuntimeWithWebSocketStream",
               ],
-              resources: ["*"],
+              // Only the PIPT voice agent. AgentCore checks the identity policy
+              // against both the runtime and the endpoint being invoked
+              // (DEFAULT here), so both ARNs are listed.
+              // https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/resource-based-policies.html#resource-based-policies-hierarchical-authorization
+              resources: [resolvedVoiceAgentEndpoint, `${resolvedVoiceAgentEndpoint}/*`],
             }),
             // No sts:AssumeRole here: the socket server never assumes another role,
             // and an unscoped AssumeRole would let it pivot into any role that trusts
