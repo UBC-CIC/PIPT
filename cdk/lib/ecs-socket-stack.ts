@@ -192,8 +192,8 @@ export class EcsSocketStack extends Stack {
       allowAllOutbound: true,
     });
     // Only CloudFront (origin-facing prefix list, as the VPC origins docs
-    // recommend) and in-VPC callers (the text-gen Lambda's /stream-callback
-    // POSTs) may reach the NLB; not 0.0.0.0/0.
+    // recommend) and the text-gen Lambda's security group (its /stream-callback
+    // POSTs) may reach the NLB; not 0.0.0.0/0 or the rest of the VPC.
     // https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/private-content-vpc-origins.html
     const cloudFrontOriginFacing = ec2.PrefixList.fromLookup(this, "CloudFrontOriginFacing", {
       prefixListName: "com.amazonaws.global.cloudfront.origin-facing",
@@ -204,9 +204,9 @@ export class EcsSocketStack extends Stack {
       "CloudFront VPC Origin inbound"
     );
     nlbSg.addIngressRule(
-      ec2.Peer.ipv4(vpc.vpcCidrBlock),
+      apiServiceStack.textGenLambdaSg,
       ec2.Port.tcp(80),
-      "In-VPC stream callbacks (text-gen Lambda)"
+      "Stream callbacks from the text-gen Lambda"
     );
 
     const nlb = new elbv2.NetworkLoadBalancer(this, "SocketNLBInternal", {
@@ -346,12 +346,10 @@ export class EcsSocketStack extends Stack {
       });
     }
 
-    // 5.1) Allow the internal NLB to reach the service on port 80 (VPC traffic only)
-    service.connections.allowFrom(
-      ec2.Peer.ipv4(vpc.vpcCidrBlock),
-      ec2.Port.tcp(80),
-      "Allow NLB to reach ECS service"
-    );
+    // 5.1) Only the NLB may reach the service on port 80. Referencing the NLB's
+    // security group covers both forwarded traffic and health checks.
+    // https://docs.aws.amazon.com/elasticloadbalancing/latest/network/target-group-register-targets.html#target-security-groups
+    service.connections.allowFrom(nlbSg, ec2.Port.tcp(80), "Allow NLB to reach ECS service");
 
 
 

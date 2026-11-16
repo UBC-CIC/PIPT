@@ -80,6 +80,11 @@ export class ApiServiceStack extends cdk.Stack {
   public readonly apiGW_basedURL: string;
   public readonly secret: secretsmanager.ISecret;
   public readonly streamCallbackSecret: secretsmanager.ISecret;
+  /**
+   * Attached only to the text-gen Lambda. The socket NLB admits /stream-callback
+   * traffic from this group alone, not from every API Lambda or the whole VPC.
+   */
+  public readonly textGenLambdaSg: ec2.SecurityGroup;
   public readonly appSyncApi: appsync.GraphqlApi;
   public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
@@ -764,6 +769,14 @@ export class ApiServiceStack extends cdk.Stack {
       ec2.Port.tcp(5432),
       "Allow API Lambda functions to access RDS Proxy"
     );
+
+    // Identifies the text-gen Lambda to the socket NLB (see textGenLambdaSg).
+    // It carries no ingress rules; database access still comes from apiLambdaSg.
+    this.textGenLambdaSg = new ec2.SecurityGroup(this, `${id}-textGenLambdaSg`, {
+      vpc: vpcStack.vpc,
+      description: "Text-gen Lambda; the only source allowed to reach the socket NLB from the VPC",
+      allowAllOutbound: true,
+    });
 
     const lambdaStudentFunction = new lambda.Function(
       this,
@@ -1870,7 +1883,7 @@ export class ApiServiceStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(300),
         reservedConcurrentExecutions: 25,
         vpc: vpcStack.vpc, // Pass the VPC
-        securityGroups: [apiLambdaSg],
+        securityGroups: [apiLambdaSg, this.textGenLambdaSg],
         functionName: `${id}-TextGenLambdaDockerFunction`,
         environment: {
           // Least-privilege app_rw user (DML only), not the RDS master credential.
