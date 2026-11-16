@@ -1555,9 +1555,12 @@ exports.handler = async (event, context) => {
 
             // 3a) Fetch student's own submissions + status from chats table
             const chatRow = await sqlConnection`
-              SELECT dtp_submission, recommendation_submission, status
-              FROM "chats"
-              WHERE chat_id = ${sessionId}
+              SELECT c.dtp_submission, c.recommendation_submission, c.status,
+                EXISTS (
+                  SELECT 1 FROM "messages" m WHERE m.chat_id = c.chat_id
+                ) AS has_messages
+              FROM "chats" c
+              WHERE c.chat_id = ${sessionId}
               LIMIT 1;
             `;
             const rawDtp = chatRow[0]?.dtp_submission ?? null;
@@ -1581,6 +1584,22 @@ exports.handler = async (event, context) => {
               response.statusCode = 200;
               response.body = JSON.stringify({
                 status: "not_concluded",
+                generated_text: null,
+                dtp_submission: dtpSubmission,
+                recommendation_submission: recommendationSubmission,
+              });
+              break;
+            }
+
+            // A concluded chat with no messages can never get a debrief: the
+            // grader returns "No chat transcript found" without saving a row.
+            // Return a terminal status instead of sleeping ~19s in the retry
+            // loop and requesting recovery on every poll (security finding
+            // f-7ad37f17).
+            if (!chatRow[0]?.has_messages) {
+              response.statusCode = 200;
+              response.body = JSON.stringify({
+                status: "no_transcript",
                 generated_text: null,
                 dtp_submission: dtpSubmission,
                 recommendation_submission: recommendationSubmission,
