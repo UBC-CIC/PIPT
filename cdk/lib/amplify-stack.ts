@@ -76,6 +76,7 @@ export class AmplifyStack extends cdk.Stack {
       name: `${id}-amplify`,
       repository: `https://github.com/${githubOwner}/${githubRepoName}`,
       accessToken: githubToken.unsafeUnwrap(), // TEMPORARY: Using PAT instead of CodeStar Connection
+      iamServiceRole: this.createAmplifyBuildServiceRole(id).roleArn,
       platform: "WEB",
       environmentVariables: [
         { name: "VITE_AWS_REGION", value: this.region },
@@ -203,4 +204,18 @@ applications:
   //   );
   //   return role;
   // }
+
+  /**
+   * Service role the Amplify build runs under.
+   * https://docs.aws.amazon.com/amplify/latest/userguide/amplify-service-role.html
+   */
+  private createAmplifyBuildServiceRole(id: string): cdk.aws_iam.Role {
+    return new cdk.aws_iam.Role(this, `${id}-AmplifyBuildServiceRole`, {
+      assumedBy: new cdk.aws_iam.ServicePrincipal("amplify.amazonaws.com"),
+      description: "Service role for Amplify Hosting builds",
+      managedPolicies: [
+        cdk.aws_iam.ManagedPolicy.fromAwsManagedPolicyName("AdministratorAccess-Amplify"),
+      ],
+    });
+  }
 }

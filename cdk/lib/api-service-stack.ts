@@ -149,13 +149,10 @@ export class ApiServiceStack extends cdk.Stack {
       String(this.node.tryGetContext("AllowLocalhostOrigins") ?? "false") === "true";
 
     const allowedOrigins = [
-      "https://main.d3uv171xv91wfq.amplifyapp.com", 
-      "https://main.d3sunerinpg5un.amplifyapp.com",
-      // TEMPORARY: trusts every Amplify app on the shared amplifyapp.com
-      // domain, including other tenants' apps, so that recreated Amplify apps
-      // work without redeploying this stack. Replace with exact origins (or a
-      // custom domain via SesVerifiedDomain) once the app ID is stable.
-      "https://*.amplifyapp.com",
+      // PIPT-Redeploy-Amplify-amplify (app d1m0fpmpp0gc2g), main branch.
+      // Update this if the Amplify app is recreated, or pass extra origins
+      // with -c AllowedOrigins.
+      "https://main.d1m0fpmpp0gc2g.amplifyapp.com",
       //"https://genrx.pharmsci.ubc.ca",
       ...extraAllowedOrigins,
       ...(allowLocalhostOrigins ? ["http://localhost:5173", "http://localhost:5174"] : []),
