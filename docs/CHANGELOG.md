@@ -15,6 +15,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The voice agent container runs as an unprivileged user (uid 10001) instead of root
 - Switched the chat and debrief LLM back from Claude Sonnet 5.5 to Claude Sonnet 4.6 (IAM permissions, alarms, SSM default and `temperature=0` request settings), because Sonnet 5.5 is not yet enabled on the project account
 
+### Fixed
+
+- Deployment guide brought in line with the current CDK code: new `AllowedOrigins` CORS step after the first deploy, ARN-shaped `voiceAgentArn` placeholder, immutable image tags and the first-deploy image wait, report-only ECR scan gate, prefixed DynamoDB table name, the `LogRetentionDays: 3` setting in `cdk.json`, all optional context values, termination protection on the VPC and Database stacks (not Api), and the Monitoring/AuditTrail stacks and retained resources in cleanup
+
 ## [2026-11-12]
 
 ### Added

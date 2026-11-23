@@ -1,7 +1,7 @@
 # Deployment Guide
 
 > **Type:** Procedural Guide
-> **Last updated:** 2026-06-18
+> **Last updated:** 2026-11-23
 
 ## Table of Contents
 
@@ -22,6 +22,7 @@
   - [DynamoDB Conversation Table & TTL](#dynamodb-conversation-table--ttl)
   - [Request SES Production Access (Optional)](#request-ses-production-access-optional)
   - [Build the Amplify App](#build-the-amplify-app)
+  - [Allow the Frontend Origin (CORS)](#allow-the-frontend-origin-cors)
   - [Create the First Admin User](#create-the-first-admin-user)
   - [Deploy the Voice Agent](#deploy-the-voice-agent)
   - [Rotating the CloudFront Signing Keys](#rotating-the-cloudfront-signing-keys)
@@ -316,7 +317,9 @@ aws ssm put-parameter ^
 
 The EcsSocket stack **unconditionally** reads this SSM parameter at deploy time to configure the voice agent WebSocket connection. Even though you won't have a real voice agent ARN until post-deployment, a placeholder value **must** exist before the first `cdk deploy` or CloudFormation will fail during the EcsSocket stack creation.
 
-Create the placeholder now. You will update it with the real ARN after deploying the voice agent (see [Deploy the Voice Agent](#deploy-the-voice-agent-optional)).
+Create the placeholder now. You will update it with the real ARN after deploying the voice agent (see [Deploy the Voice Agent](#deploy-the-voice-agent)).
+
+> **Use an ARN-shaped placeholder, not a bare word.** The socket task role's IAM policy grants `bedrock-agentcore:InvokeAgentRuntime` on exactly this value (and `<value>/*`). IAM rejects a policy whose resource is not an ARN, so a value such as `placeholder` makes the EcsSocket deploy fail. The `runtime/placeholder` ARN below matches no real runtime, so it grants nothing.
 
 <details>
 <summary>macOS / Linux</summary>
@@ -324,7 +327,7 @@ Create the placeholder now. You will update it with the real ARN after deploying
 ```bash
 aws ssm put-parameter \
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" \
-  --value "placeholder" \
+  --value "arn:aws:bedrock-agentcore:us-east-1:<YOUR-ACCOUNT-ID>:runtime/placeholder" \
   --type String \
   --region <YOUR-REGION> \
   --profile <YOUR-AWS-PROFILE>
@@ -338,7 +341,7 @@ aws ssm put-parameter \
 ```powershell
 aws ssm put-parameter `
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" `
-  --value "placeholder" `
+  --value "arn:aws:bedrock-agentcore:us-east-1:<YOUR-ACCOUNT-ID>:runtime/placeholder" `
   --type String `
   --region <YOUR-REGION> `
   --profile <YOUR-AWS-PROFILE>
@@ -352,7 +355,7 @@ aws ssm put-parameter `
 ```cmd
 aws ssm put-parameter ^
   --name "/<YOUR-STACK-PREFIX>/voiceAgentArn" ^
-  --value "placeholder" ^
+  --value "arn:aws:bedrock-agentcore:us-east-1:<YOUR-ACCOUNT-ID>:runtime/placeholder" ^
   --type String ^
   --region <YOUR-REGION> ^
   --profile <YOUR-AWS-PROFILE>
@@ -505,7 +508,9 @@ aws ssm put-parameter ^
 | `pipt-owner-name` | SSM Parameter (String) | GitHub username | CI/CD stack, Amplify stack |
 | `/{StackPrefix}/AllowedEmailDomains` | SSM Parameter (SecureString) | Comma-separated email domains | Cognito pre-signup Lambda |
 | `/{StackPrefix}/CloudFrontPublicKey` | SSM Parameter (String) | RSA public key (PEM) | Api stack (CloudFront PublicKey resource) |
-| `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | `placeholder` (updated post-deployment) | EcsSocket stack |
+| `/{StackPrefix}/voiceAgentArn` | SSM Parameter (String) | `arn:aws:bedrock-agentcore:us-east-1:<ACCOUNT-ID>:runtime/placeholder` (updated post-deployment) | EcsSocket stack |
+
+> **Created for you:** The stacks and pipeline also create SSM parameters you don't need to set by hand, including `/{StackPrefix}/image-tag/<module>` (newest approved image tag per module, written by CI/CD), `/{StackPrefix}/socket-url`, and `/{StackPrefix}-Api/TableName`, `BedrockLLMId`, `EmbeddingModelId` and `BedrockGuardrailId`. Don't delete the `image-tag` parameters: the Lambda functions and ECS task are pinned to the tags they hold.
 
 ### Step 5: Bootstrap CDK
 
@@ -535,15 +540,11 @@ cdk bootstrap aws://<YOUR-ACCOUNT-ID>/us-east-1 \
 
 ### Step 6: Deploy Stacks
 
-> **Optional — Rename the DynamoDB conversation table:** The default table name is `DynamoDB-Conversation-Table` (a legacy name from the forked codebase). If you're deploying fresh and want something more specific, change this one line in `cdk/lib/api-service-stack.ts` **before** deploying:
->
-> ```typescript
-> this.dynamoTableName = `${id}-DynamoDB-Conversation-Table`; // parameterized with your StackPrefix
-> ```
->
-> Everything else is parameterized from there — the custom resource creates whatever name you set, it gets written to the SSM parameter `/{id}/TableName`, and the Python Lambdas read it from SSM at runtime. No other code changes needed.
+> **DynamoDB conversation table name:** The table is named `<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table` (set by `this.dynamoTableName` in `cdk/lib/api-service-stack.ts`). The name is written to the SSM parameter `/<YOUR-STACK-PREFIX>-Api/TableName`, and the Lambdas and socket server read it from there or from their environment. No change is needed for a fresh deploy.
 
-The CDK app requires two context variables at deploy time, plus optional VPC configuration:
+> **⚠️ Check `LogRetentionDays` in `cdk/cdk.json` before deploying.** The repository's `cdk.json` sets `"LogRetentionDays": 3`, so every CloudWatch log group (Lambda, ECS, API Gateway, WAF) keeps only 3 days of logs, including the `AUDIT` and `AUTHZ_DENY` lines. If you remove the key, the code default is 365 days. For a production deployment, set it to the retention your institution requires. The value must be one CloudWatch accepts (1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096, 1827, 2192, 2557, 2922, 3288, 3653); anything else fails synthesis.
+
+The CDK app requires two context variables at deploy time. The rest are optional:
 
 | Context Variable | Description | Required |
 |-----------------|-------------|----------|
@@ -564,6 +565,14 @@ The CDK app requires two context variables at deploy time, plus optional VPC con
 | `vpcCidr` | CIDR for a new VPC (default: `10.0.0.0/16`) | No |
 | `maxAzs` | Number of availability zones for a new VPC (default: `2`) | No |
 | `natGateways` | Number of NAT Gateways for a new VPC (default: `1`; use `2` for prod HA) | No |
+| `skipVpcEndpoints` | Set to `true` to skip creating VPC interface endpoints (when the existing VPC already has them) | No |
+| `AllowedOrigins` | Comma-separated exact `https://` origins added to the CORS allow-list (no wildcards, no paths). **Required in practice** after the first deploy; see [Allow the Frontend Origin (CORS)](#allow-the-frontend-origin-cors) | No |
+| `AllowLocalhostOrigins` | Set to `"true"` to allow `http://localhost:5173` and `:5174` (Vite dev server). Dev deployments only | No |
+| `LogRetentionDays` | Log retention in days for all log groups (code default `365`; the shipped `cdk.json` sets `3`) | No |
+| `CspEnforce` | Set to `"false"` to send the frontend Content-Security-Policy as Report-Only while debugging (default: enforced) | No |
+| `AmplifySkipCustomDomain` | Set to `"true"` to skip attaching `SesVerifiedDomain` to the Amplify app | No |
+| `EnableCloudTrail` | Set to `"true"` to deploy the optional `{StackPrefix}-AuditTrail` CloudTrail stack | No |
+| `cfKeyVersion` | Version suffix of the CloudFront signing public key (default `1`). Increment only when rotating keys; see [Rotating the CloudFront Signing Keys](#rotating-the-cloudfront-signing-keys) | No |
 
 Choose one of the following deployment options:
 
@@ -580,6 +589,8 @@ cdk deploy --all \
 ```
 
 > **First deploy to a brand-new AWS account?** If this account has never used RDS before, add `-c createRdsServiceLinkedRole=true` to the command above. This creates the required `AWSServiceRoleForRDS` service-linked role. Omit this flag on subsequent deploys or if the account already has RDS resources.
+
+> **The first deploy waits for Docker images.** The Lambda functions and the ECS task are pinned to the newest image the CI/CD pipeline has approved, not to `:latest`. On a fresh environment no image exists yet, so the `{StackPrefix}-Api` and `{StackPrefix}-EcsSocket` stacks each pause on an ECR image waiter (up to 14 minutes) while the pipeline, which starts automatically when the `{StackPrefix}-CICD` stack is created, runs its tests and builds the images. If a waiter times out (for example because the pipeline failed), the stack rolls back with `Timeout: no approved image found in repository ...`. Fix the pipeline, wait for it to finish, then run the same deploy command again. See [Push Initial Docker Images](#push-initial-docker-images).
 
 > **Audit logging and CloudTrail.** Every deploy turns on API Gateway access logs (`/aws/apigateway/<StackPrefix>-Api-API/access`), WAF request logs (`aws-waf-logs-*` log groups; the CloudFront one is in `us-east-1`), and S3 server access and CloudFront standard logs (the `<StackPrefix>-Api-AccessLogsBucket*` bucket). Lambda handlers write structured `AUDIT` lines for every POST/PUT/DELETE and `AUTHZ_DENY` lines for every authorization denial. Query them with CloudWatch Logs Insights (`filter message = "AUTHZ_DENY"`). The `<StackPrefix>-Api-Authorization-Denial-Spike` alarm fires on more than 50 denials in 5 minutes. All of these use the same retention as the other log groups. The project doesn't create a CloudTrail trail by default, because accounts managed by AWS Organizations or Control Tower already have one, and a second copy of management events is billed. If your account has no trail (check with `aws cloudtrail describe-trails --include-shadow-trails`), add `-c EnableCloudTrail=true` to deploy the `<StackPrefix>-AuditTrail` stack.
 
@@ -604,7 +615,7 @@ cdk deploy --all \
   -c StackPrefix=<YOUR-STACK-PREFIX> \
   -c githubRepo=<REPO NAME HERE> \
   -c githubBranch=main \
-  -c voiceAgentArn="arn:aws:bedrock:us-east-1:123456789012:agent-runtime/XXXXXXXXXX" \
+  -c voiceAgentArn="arn:aws:bedrock-agentcore:us-east-1:123456789012:runtime/<RUNTIME-ID>" \
   --profile <YOUR-AWS-PROFILE>
 ```
 
@@ -613,16 +624,19 @@ cdk deploy --all \
 The CDK app creates the following stacks in dependency order:
 
 0. **`{StackPrefix}-Monitoring`** : SNS alarm topic (KMS-encrypted). Database, Api and EcsSocket depend on it
-1. **`{StackPrefix}-CICD`** : ECR repositories, CodeBuild projects, CodePipeline
-2. **`{StackPrefix}-VpcStack`** : VPC, subnets, NAT gateway, VPC endpoints
-3. **`{StackPrefix}-Database`** : RDS PostgreSQL instance, RDS Proxy, secrets
+1. **`{StackPrefix}-CICD`** : ECR repositories (immutable tags, scan on push), per-module CodeBuild projects and roles, CodePipeline (Source → Test → Build), and the `/{StackPrefix}/image-tag/<module>` SSM parameters
+2. **`{StackPrefix}-VpcStack`** : VPC, subnets, NAT gateway, VPC endpoints (termination protection on)
+3. **`{StackPrefix}-Database`** : RDS PostgreSQL instance, RDS Proxy, secrets (termination protection on)
 4. **`{StackPrefix}-CloudFrontWaf`** : WAF Web ACL for CloudFront (deployed to `us-east-1`)
-5. **`{StackPrefix}-Api`** : API Gateway, Lambda functions, Cognito, AppSync, S3, CloudFront
-6. **`{StackPrefix}-EcsSocket`** : ECS Fargate service for Socket.IO
+5. **`{StackPrefix}-Api`** : API Gateway, Lambda functions, Cognito, AppSync, S3, CloudFront, Bedrock Guardrail
+6. **`{StackPrefix}-EcsSocket`** : ECS Fargate service for Socket.IO behind an internal NLB and CloudFront
 7. **`{StackPrefix}-DBFlow`** : Database migration runner (triggers on deploy)
-8. **`{StackPrefix}-Amplify`** : Amplify hosting for the React frontend
+8. **`{StackPrefix}-Amplify`** : Amplify hosting for the React frontend (`main` and `chat-playground` branches)
+9. **`{StackPrefix}-AuditTrail`** : CloudTrail trail. Only created with `-c EnableCloudTrail=true`
 
-> **Note:** `--all` handles the dependency order automatically. Deployment takes approximately 30–45 minutes on first run.
+> **Note:** `--all` handles the dependency order automatically. Deployment takes approximately 30–45 minutes on first run, including the wait for the first image builds.
+
+> **Amplify `chat-playground` branch:** The Amplify stack always creates a `chat-playground` branch alongside `main`. If your fork has no branch with that name, the Amplify branch exists but has nothing to build. You can ignore it.
 
 ### Alarms
 
@@ -826,20 +840,39 @@ After deployment completes, verify the following:
 
 5. **Verify database connectivity.** Check CloudWatch Logs for the DBFlow Lambda to confirm migrations ran successfully.
 
+6. **Check the pipeline.** In the [CodePipeline console](https://console.aws.amazon.com/codepipeline/), confirm the `{StackPrefix}-CICD-DockerImagePipeline` run passed the Test stage and that each `Build_<module>` action that built succeeded. Review the scan counts each build printed, since the scan gate does not block images.
+
+7. **Run the security smoke test (optional).** After the Amplify build and the [CORS step](#allow-the-frontend-origin-cors), `cdk/scripts/smoke-security-defaults.ps1` checks the frontend security headers and CSP, the WAF rules, gateway error messages, the CORS preflight, and (with `-GuardrailId`) the guardrail PII policy. The HTTP checks send unauthenticated requests only. It runs on Windows PowerShell 5.1 and PowerShell 7:
+
+   ```powershell
+   ./cdk/scripts/smoke-security-defaults.ps1 `
+     -FrontendUrl https://main.<AMPLIFY-APP-ID>.amplifyapp.com `
+     -ApiUrl https://<API-ID>.execute-api.<YOUR-REGION>.amazonaws.com/prod/ `
+     -AllowedOrigin https://main.<AMPLIFY-APP-ID>.amplifyapp.com `
+     -GuardrailId <BedrockGuardrailId output of the Api stack> `
+     -Region <YOUR-REGION> -Profile <YOUR-AWS-PROFILE>
+   ```
+
 ---
 
 ## Post-Deployment
 
 ### Push Initial Docker Images
 
-The CI/CD pipeline builds and pushes all Docker images (text generation, data ingestion, socket server, voice agent). For the first deployment, the ECR repositories are empty. Trigger the pipeline by either:
+The `{StackPrefix}-CICD-DockerImagePipeline` pipeline builds all four Docker images (text generation, data ingestion, socket server, voice agent). It runs automatically once when the CICD stack is created, and again on every push to the tracked branch (GitHub webhook). To run it by hand, click **Release change** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/).
 
-- **Pushing a commit** to your tracked branch, or
-- **Clicking "Release change"** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline
+The pipeline has three stages:
 
-Wait for the pipeline to complete successfully. Once done, the Lambda functions and ECS services will have images to run.
+1. **Source**: pulls the tracked branch using the GitHub PAT.
+2. **Test**: the `{StackPrefix}-CICD-Tests` project runs the CDK, Lambda and socket-server Jest suites and the Python pytest suite. A failing test stops the pipeline, so nothing is built or deployed.
+3. **Build**: one CodeBuild project per module (`{StackPrefix}-CICD-<module>Builder`). Each build:
+   - pushes an image with a unique, immutable tag (`<module>-dev-<commit>-b<build-number>`); there is no `:latest` tag,
+   - runs the ECR vulnerability scan report (`cdk/scripts/ecr_scan_gate.sh`). The gate is **report-only**: CRITICAL and HIGH findings are printed in the build log and shown in the ECR console, but they do not block the image,
+   - writes the tag to `/{StackPrefix}/image-tag/<module>` and deploys it by digest (`cdk/scripts/deploy_image.sh`). Text generation and data ingestion update their Lambda function; the socket server registers a new task definition and rolls the ECS service. The voice agent build only records the tag, because AgentCore is configured outside CDK.
 
-> **Expected behavior:** Until the pipeline finishes pushing the `socketServer` image, the ECS socket service will show `STOPPED` tasks with `CannotPullContainerError`. This is normal on first deployment. The service retries automatically and will stabilize once the image is available in ECR (typically 10–15 minutes after the pipeline starts). Do not manually intervene or delete the service.
+On the first deploy you don't need to do anything extra: the Api and EcsSocket stacks wait for these first images (see the note under [Option A](#option-a-deploy-all-stacks-recommended-for-first-deployment)). Later `cdk deploy` runs keep whatever tag the pipeline last recorded, so a CDK deploy does not roll back an image the pipeline shipped.
+
+> **Builds marked "Failed" for unchanged modules are expected.** Once a module has an approved image, its build skips (and exits non-zero with `Skipping build due to no changes`) unless the latest commit changed files under that module's directory (`cdk/text_generation`, `cdk/data_ingestion`, `cdk/socket-server`, `cdk/voice-agent`). The pipeline execution then shows as failed even though the changed modules built and deployed. Check each `Build_<module>` action to see which ones actually built.
 
 ### DynamoDB Conversation Table & TTL
 
@@ -850,11 +883,11 @@ On a fresh deploy in a new account/region, everything is handled automatically:
 - A custom resource (`EnsureConversationTable`) creates the table during CloudFormation deployment.
 - TTL is enabled on the `expireAt` attribute as part of the same operation.
 - All downstream Lambdas have the table ready before they ever run.
-- Other DynamoDB tables in the account are **completely unaffected** — both the table creation and TTL enablement target this single table by name. The custom resource's IAM policy is scoped to `arn:aws:dynamodb:<region>:<account>:table/DynamoDB-Conversation-Table` only. TTL is a per-table setting in DynamoDB, not an account-wide setting — enabling it here does not touch any other table in your account.
+- Other DynamoDB tables in the account are **completely unaffected** — both the table creation and TTL enablement target this single table by name. The custom resource's IAM policy is scoped to `arn:aws:dynamodb:<region>:<account>:table/<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table` only. TTL is a per-table setting in DynamoDB, not an account-wide setting — enabling it here does not touch any other table in your account.
 
 #### How it works
 
-The `DynamoDB-Conversation-Table` is **not owned by CDK**. This project was forked from an earlier codebase where the table was created manually in the AWS console and never linked to CloudFormation. Importing it into CDK (`cdk import`) was attempted but failed repeatedly, so CDK only **references** the table (via `Table.fromTableName(...)`) for IAM policies, Lambda environment variables, and CloudWatch alarms — it does not manage its lifecycle.
+The conversation table (`<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table`) is **not owned by CDK**. This project was forked from an earlier codebase where the table was created manually in the AWS console and never linked to CloudFormation. Importing it into CDK (`cdk import`) was attempted but failed repeatedly, so CDK only **references** the table (via `Table.fromTableName(...)`) for IAM policies, Lambda environment variables, and CloudWatch alarms — it does not manage its lifecycle.
 
 To handle the case where the table doesn't exist yet (fresh deploy), the stack includes a custom resource that runs on every deploy:
 
@@ -868,7 +901,7 @@ Because CDK doesn't own the table, `cdk destroy` will **not** delete it or its d
 
 This only applies if the table was created **before** the custom resource existed (i.e., it was manually created in the console without TTL). In that scenario the custom resource sees the table already exists, catches the exception, and skips everything — including TTL setup.
 
-**Check if TTL is already enabled:** DynamoDB console → select `DynamoDB-Conversation-Table` > **Additional settings** tab > look for "Time to live attribute: `expireAt` (Enabled)". If it shows enabled, you're done.
+**Check if TTL is already enabled:** DynamoDB console → select `<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table` > **Additional settings** tab > look for "Time to live attribute: `expireAt` (Enabled)". If it shows enabled, you're done.
 
 If TTL is **not** enabled on a pre-existing table, run the following **once**:
 
@@ -877,7 +910,7 @@ If TTL is **not** enabled on a pre-existing table, run the following **once**:
 
 ```bash
 aws dynamodb update-time-to-live \
-  --table-name DynamoDB-Conversation-Table \
+  --table-name <YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table \
   --time-to-live-specification "Enabled=true, AttributeName=expireAt" \
   --region <YOUR-REGION> \
   --profile <YOUR-AWS-PROFILE>
@@ -890,7 +923,7 @@ aws dynamodb update-time-to-live \
 
 ```powershell
 aws dynamodb update-time-to-live `
-  --table-name DynamoDB-Conversation-Table `
+  --table-name <YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table `
   --time-to-live-specification "Enabled=true, AttributeName=expireAt" `
   --region <YOUR-REGION> `
   --profile <YOUR-AWS-PROFILE>
@@ -903,7 +936,7 @@ aws dynamodb update-time-to-live `
 
 ```cmd
 aws dynamodb update-time-to-live ^
-  --table-name DynamoDB-Conversation-Table ^
+  --table-name <YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table ^
   --time-to-live-specification "Enabled=true, AttributeName=expireAt" ^
   --region <YOUR-REGION> ^
   --profile <YOUR-AWS-PROFILE>
@@ -921,7 +954,7 @@ DynamoDB automatically deletes expired items in the background:
 
 | Concern | Answer |
 |---------|--------|
-| Will this affect other DynamoDB tables in my account? | **No.** The Lambda's IAM policy only grants access to the configured table (default: `DynamoDB-Conversation-Table`). The table name is parameterized via an environment variable, not hardcoded. Every API call targets that single table by name. Other tables are untouched. |
+| Will this affect other DynamoDB tables in my account? | **No.** The Lambda's IAM policy only grants access to the configured table (`<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table`). The table name is parameterized via an environment variable, not hardcoded. Every API call targets that single table by name. Other tables are untouched. |
 | Will `cdk destroy` delete the table? | **No.** CDK references it via `fromTableName`, it doesn't own the resource. The table and all its data survive stack deletion. |
 
 ### Request SES Production Access (Optional)
@@ -995,6 +1028,21 @@ aws amplify get-branch \
 
 The app will be available at `https://<BRANCH_NAME>.<APP_ID>.amplifyapp.com`.
 
+### Allow the Frontend Origin (CORS)
+
+The API only accepts browser requests from origins on its allow-list, and your Amplify URL isn't on it by default. After the first deploy, redeploy the Api and EcsSocket stacks with your Amplify origin (see [Visit the Web App](#visit-the-web-app)) in the `AllowedOrigins` flag:
+
+```bash
+cdk deploy <YOUR-STACK-PREFIX>-Api <YOUR-STACK-PREFIX>-EcsSocket \
+  -c StackPrefix=<YOUR-STACK-PREFIX> \
+  -c githubRepo=<REPO NAME HERE> \
+  -c githubBranch=main \
+  -c AllowedOrigins="https://main.<AMPLIFY-APP-ID>.amplifyapp.com" \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+Use the exact `https://` origin with no trailing slash, and separate several with commas. Include the flag on every later deploy (or set `"AllowedOrigins"` in the `context` section of `cdk/cdk.json`), because a deploy without it removes your origin again.
+
 ### Create the First Admin User
 
 On a fresh deployment there are no admin users. Every account that signs up through the app is automatically assigned the **student** role by the post-confirmation Lambda. There is no admin yet to promote anyone from inside the app, so the person who deployed the infrastructure creates the first admin by invoking the one-off `bootstrapAdmin` Lambda that the Api stack deploys.
@@ -1035,16 +1083,25 @@ Deploy all stacks without a voice agent ARN (Steps 5–6 above). This creates th
 
 #### Step B: Push the Voice Agent Image
 
-The CI/CD pipeline builds and pushes all Docker images, including the voice agent. Trigger it by either:
+The CI/CD pipeline builds and pushes all Docker images, including the voice agent (the first run starts automatically, see [Push Initial Docker Images](#push-initial-docker-images)). To run it again, push a commit that changes `cdk/voice-agent/` or click **Release change** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline.
 
-- **Pushing a commit** to your tracked branch, or
-- **Clicking "Release change"** in the [CodePipeline console](https://console.aws.amazon.com/codepipeline/) for the `{StackPrefix}-CICD-DockerImagePipeline` pipeline
+Wait for the `Build_voiceAgent` action to succeed, then get the image tag it approved. ECR tags are immutable and there is no `:latest` tag, so use this exact tag when you configure AgentCore:
 
-Wait for the pipeline to complete successfully before proceeding.
+```bash
+aws ssm get-parameter \
+  --name "/<YOUR-STACK-PREFIX>/image-tag/voiceAgent" \
+  --query Parameter.Value --output text \
+  --region <YOUR-REGION> \
+  --profile <YOUR-AWS-PROFILE>
+```
+
+The image URI is `<ACCOUNT-ID>.dkr.ecr.<YOUR-REGION>.amazonaws.com/<stackprefix-lowercase>-cicd-voiceagent:<TAG>`.
 
 #### Step C: Set Up AgentCore and Deploy the Voice Agent
 
-Follow the detailed instructions in [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) to configure Bedrock AgentCore and deploy the voice agent through the AWS console.
+Follow the detailed instructions in [AgentCore Voice Agent Setup](./AGENTCORE_VOICE_AGENT_SETUP.md) to configure Bedrock AgentCore and deploy the voice agent through the AWS console. Where that guide says to pick the **latest** image, pick the tag from Step B instead.
+
+The voice agent applies the PIPT Bedrock Guardrail, so its AgentCore execution role needs `bedrock:ApplyGuardrail` on the guardrail. The `{StackPrefix}-Api` stack prints the exact policy statement in its `AgentCoreGuardrailPolicy` output; add it to the runtime's execution role. See [Bedrock Guardrails](./BEDROCK_GUARDRAILS.md).
 
 Once complete, you will have a voice agent runtime ARN.
 
@@ -1172,6 +1229,8 @@ aws cloudformation describe-stacks \
   --profile <YOUR-AWS-PROFILE>
 ```
 
+The output is `<AMPLIFY-APP-ID>.amplifyapp.com`; the `main` branch is served at `https://main.<AMPLIFY-APP-ID>.amplifyapp.com`. If you haven't yet added that origin to `AllowedOrigins`, do it now ([Allow the Frontend Origin (CORS)](#allow-the-frontend-origin-cors)).
+
 ---
 
 ## Cleanup
@@ -1180,10 +1239,10 @@ To tear down all deployed resources, you must first disable termination protecti
 
 ### Step 1: Disable Stack Termination Protection
 
-The VPC and Api stacks have CloudFormation termination protection enabled. You must disable it before `cdk destroy` will work:
+The VPC and Database stacks have CloudFormation termination protection enabled (set in `cdk/bin/cdk.ts`). You must disable it before `cdk destroy` will work:
 
 1. Open the [CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your deployment region.
-2. For each of these stacks — `{StackPrefix}-VpcStack`, `{StackPrefix}-Api`:
+2. For each of these stacks — `{StackPrefix}-VpcStack`, `{StackPrefix}-Database`:
    - Select the stack.
    - Click **Stack actions** → **Edit termination protection**.
    - Set to **Disabled** and confirm.
@@ -1208,7 +1267,16 @@ cdk destroy --all \
   --profile <YOUR-AWS-PROFILE>
 ```
 
-> **Note:** S3 buckets have `removalPolicy: RETAIN`, so you need to empty and delete them manually after stack deletion.
+Add `-c EnableCloudTrail=true` if you deployed the `{StackPrefix}-AuditTrail` stack, otherwise `--all` does not include it.
+
+**Resources that survive `cdk destroy`.** These are retained on purpose so data isn't lost; delete them by hand once you're sure you don't need them:
+
+- **S3 buckets** (documents, embeddings, access logs, and the CloudTrail bucket if enabled): `RETAIN`. Versioned buckets must have all object versions removed before deletion.
+- **ECR repositories** (`<stackprefix>-cicd-<module>`): `RETAIN`.
+- **CloudWatch log groups** and their **KMS keys**: `RETAIN`, so existing logs stay readable. KMS keys can only be scheduled for deletion (7–30 day wait).
+- **DynamoDB conversation table** (`<YOUR-STACK-PREFIX>-Api-DynamoDB-Conversation-Table`): not owned by CDK.
+- **SSM parameters** `/{StackPrefix}/image-tag/<module>`, plus every secret and parameter you created in [Step 4](#step-4-upload-secrets-and-parameters).
+- **RDS**: CloudFormation takes a final snapshot when it deletes the instance (CDK's default `SNAPSHOT` policy), and automated backups are kept until they expire (`deleteAutomatedBackups: false`).
 
 To delete individual stacks, destroy them in reverse dependency order:
 
@@ -1220,8 +1288,13 @@ cdk destroy <YOUR-STACK-PREFIX>-Api -c StackPrefix=<YOUR-STACK-PREFIX> -c github
 cdk destroy <YOUR-STACK-PREFIX>-CloudFrontWaf -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy <YOUR-STACK-PREFIX>-Database -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy <YOUR-STACK-PREFIX>-VpcStack -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+cdk destroy <YOUR-STACK-PREFIX>-Monitoring -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main --profile <YOUR-AWS-PROFILE>
 cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main --profile <YOUR-AWS-PROFILE>
+# Only if deployed:
+cdk destroy <YOUR-STACK-PREFIX>-AuditTrail -c StackPrefix=<YOUR-STACK-PREFIX> -c githubRepo=<REPO NAME HERE> -c githubBranch=main -c EnableCloudTrail=true --profile <YOUR-AWS-PROFILE>
 ```
+
+> **Note:** Destroy CICD last. The Api and EcsSocket stacks reference its ECR repositories, and CloudFormation blocks deleting a stack whose exports are still imported.
 
 ---
 
@@ -1229,12 +1302,13 @@ cdk destroy <YOUR-STACK-PREFIX>-CICD -c StackPrefix=<YOUR-STACK-PREFIX> -c githu
 
 ### Stack deletion fails for Database stack
 
-**Cause:** The RDS instance has deletion protection enabled, which prevents CloudFormation from deleting it.
+**Cause:** The Database stack has termination protection, and the RDS instance inside it has deletion protection. Either one blocks deletion.
 
 **Fix:**
 
-1. Disable RDS deletion protection (see [Step 2 in Cleanup](#step-2-disable-rds-deletion-protection)).
-2. Retry `cdk destroy`.
+1. Disable termination protection on the `{StackPrefix}-Database` stack (see [Step 1 in Cleanup](#step-1-disable-stack-termination-protection)).
+2. Disable RDS deletion protection (see [Step 2 in Cleanup](#step-2-disable-rds-deletion-protection)).
+3. Retry `cdk destroy`.
 
 ### RDS username constraint error
 
@@ -1309,17 +1383,33 @@ aws secretsmanager create-secret \
 >
 > The output should be exactly: `{"my-github-token": "ghp_xxxxx..."}`
 
-### Lambda functions return errors after first deploy
+### Api or EcsSocket stack fails with "Timeout: no approved image found"
 
-**Cause:** ECR repositories are empty. The Docker Lambda functions have no image to run.
+**Cause:** The stack's ECR image waiter gave up after about 14 minutes because the pipeline had not yet recorded an approved image for `textGeneration`, `dataIngestion` or `socketServer`. Usually the pipeline failed (Test stage, Docker build, or GitHub source), or it was still running.
 
-**Fix:** Push initial images by triggering the CI/CD pipeline (see [Push Initial Docker Images](#push-initial-docker-images)) or push a commit to the tracked branch.
+**Fix:**
 
-### ECS socket service shows STOPPED tasks after first deploy
+1. Open the `{StackPrefix}-CICD-DockerImagePipeline` run in CodePipeline and fix whatever failed. Then click **Release change**.
+2. Wait until the relevant `Build_<module>` actions succeed. Confirm the tag was recorded: `aws ssm get-parameter --name /<YOUR-STACK-PREFIX>/image-tag/<module> --query Parameter.Value --output text --profile <YOUR-AWS-PROFILE>` should print a tag, not `pending-first-build`.
+3. Re-run the same `cdk deploy` command after the failed stack reaches `ROLLBACK_COMPLETE` (or `UPDATE_ROLLBACK_COMPLETE`).
 
-**Cause:** The ECS service starts immediately after the stack deploys, but the ECR repository for `socketServer` is empty until the CI/CD pipeline finishes building and pushing the image. The service cannot pull a container image that doesn't exist yet, so tasks fail with `CannotPullContainerError` and restart repeatedly.
+### Pipeline stops at the Test stage
 
-**Fix:** This resolves itself. Once the CI/CD pipeline pushes the `socketServer` image to ECR, the ECS service will pull it on the next retry and stabilize. No manual action is needed. If tasks are still failing 20+ minutes after the pipeline completes successfully, check that the image tag in ECR matches what the task definition expects (`latest`).
+**Cause:** A Jest or pytest test failed in the `{StackPrefix}-CICD-Tests` project. The pipeline stops on purpose, so no image is built or deployed.
+
+**Fix:** Open the `Run_Tests` action's CodeBuild log, fix the test or the code, and push the fix. To reproduce locally: `cd cdk && npx jest` and, from the repository root, `python -m pytest -q`.
+
+### Lambda or ECS still runs an old image after a pipeline run
+
+**Cause:** The module's build skipped because the commit didn't change that module's directory, or the build failed before `deploy_image.sh` ran.
+
+**Fix:** Check the `Build_<module>` log. `Skipping build due to no changes` means nothing under the module's source directory changed; the running image is already current. Otherwise fix the build error and run the pipeline again. Each successful build prints the exact rollback command for the previous version.
+
+### Browser console shows CORS errors after login
+
+**Cause:** Your frontend's origin is not in the CORS allow-list. On a new deployment, the Amplify origin has to be added with the `AllowedOrigins` context value.
+
+**Fix:** Follow [Allow the Frontend Origin (CORS)](#allow-the-frontend-origin-cors). Keep `AllowedOrigins` in `cdk/cdk.json` so later deploys don't drop it.
 
 ### Voice features not working
 
@@ -1329,8 +1419,9 @@ aws secretsmanager create-secret \
 
 1. Ensure Bedrock model access is enabled in `us-east-1` for Nova Sonic models.
 2. Verify the ECS task role has `bedrock:InvokeModelWithBidirectionalStream` permission in `us-east-1`.
-3. Confirm the voice agent is deployed to Bedrock AgentCore (see [Deploy the Voice Agent](#deploy-the-voice-agent-optional)).
-4. Verify the `voiceAgentArn` is set, either via the `-c` context flag or the `/{StackPrefix}/voiceAgentArn` SSM parameter.
+3. Confirm the voice agent is deployed to Bedrock AgentCore (see [Deploy the Voice Agent](#deploy-the-voice-agent)).
+4. Verify the `voiceAgentArn` is set to the real runtime ARN (not the `runtime/placeholder` value), either via the `-c` context flag or the `/{StackPrefix}/voiceAgentArn` SSM parameter, and that you redeployed EcsSocket afterwards. The socket task role can only invoke the runtime named in that value.
+5. If students see "Voice chat is unavailable right now", the guardrail preflight failed. Check that the AgentCore execution role has the `AgentCoreGuardrailPolicy` statement from the Api stack outputs (see [Bedrock Guardrails](./BEDROCK_GUARDRAILS.md)).
 
 ### Text generation or embeddings not working
 
