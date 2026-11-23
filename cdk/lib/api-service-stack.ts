@@ -1351,7 +1351,7 @@ export class ApiServiceStack extends cdk.Stack {
       metric: new cloudwatch.Metric({
         namespace: "AWS/Bedrock",
         metricName: "InvocationCount",
-        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-5-5" },
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
         statistic: "Sum",
         period: cdk.Duration.minutes(5),
       }),
@@ -1367,7 +1367,7 @@ export class ApiServiceStack extends cdk.Stack {
       metric: new cloudwatch.Metric({
         namespace: "AWS/Bedrock",
         metricName: "InputTokenCount",
-        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-5-5" },
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
         statistic: "Sum",
         period: cdk.Duration.hours(1),
       }),
@@ -1384,7 +1384,7 @@ export class ApiServiceStack extends cdk.Stack {
       {
         parameterName: `/${id}/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
-        stringValue: "us.anthropic.claude-sonnet-5-5",
+        stringValue: "us.anthropic.claude-sonnet-4-6",
       }
     );
 
@@ -1958,9 +1958,9 @@ export class ApiServiceStack extends cdk.Stack {
         "bedrock:ApplyGuardrail", // Required for guardrails
       ],
       resources: [
-        // Claude Sonnet 5.5 — US cross-region inference profile
-        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-5-5",
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-5-5",
+        // Claude Sonnet 4.6 — US cross-region inference profile
+        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-4-6",
+        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
         "arn:aws:bedrock:" +
           this.region +
           "::foundation-model/amazon.titan-embed-text-v2:0",
