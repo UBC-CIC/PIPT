@@ -3,6 +3,7 @@
 .kiro
 .agents/
 .workflows/
+.worktrees/
 
 # Environment variables
 .env
