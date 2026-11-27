@@ -13,7 +13,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 
 - The Amplify CSP is now enforced by default; `-c CspEnforce=false` switches it to Report-Only for debugging, and the security smoke test fails in that mode
 - The voice agent container runs as an unprivileged user (uid 10001) instead of root
-- Switched the chat and debrief LLM back from Claude Sonnet 5.5 to Claude Sonnet 4.6 (IAM permissions, alarms, SSM default and `temperature=0` request settings), because Sonnet 5.5 is not yet enabled on the project account
+- Claude Sonnet 5.5 (chat and debrief LLM) is now called from `ca-central-1` through the US geo inference profile `us.anthropic.claude-sonnet-5-5` instead of from `us-east-1` (IAM permissions, alarms, SSM default; no `temperature`, per-call `effort`, `high` for debriefs)
 
 ### Fixed
 

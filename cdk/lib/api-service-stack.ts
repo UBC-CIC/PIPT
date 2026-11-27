@@ -153,6 +153,8 @@ export class ApiServiceStack extends cdk.Stack {
       // Update this if the Amplify app is recreated, or pass extra origins
       // with -c AllowedOrigins.
       "https://main.d1m0fpmpp0gc2g.amplifyapp.com",
+      // pipt-stack-redeploy-Amplify-amplify (app d3uv171xv91wfq), main branch.
+      "https://main.d3uv171xv91wfq.amplifyapp.com",
       //"https://genrx.pharmsci.ubc.ca",
       ...extraAllowedOrigins,
       ...(allowLocalhostOrigins ? ["http://localhost:5173", "http://localhost:5174"] : []),
@@ -1351,7 +1353,7 @@ export class ApiServiceStack extends cdk.Stack {
       metric: new cloudwatch.Metric({
         namespace: "AWS/Bedrock",
         metricName: "InvocationCount",
-        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-5-5" },
         statistic: "Sum",
         period: cdk.Duration.minutes(5),
       }),
@@ -1367,7 +1369,7 @@ export class ApiServiceStack extends cdk.Stack {
       metric: new cloudwatch.Metric({
         namespace: "AWS/Bedrock",
         metricName: "InputTokenCount",
-        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-4-6" },
+        dimensionsMap: { ModelId: "us.anthropic.claude-sonnet-5-5" },
         statistic: "Sum",
         period: cdk.Duration.hours(1),
       }),
@@ -1384,7 +1386,7 @@ export class ApiServiceStack extends cdk.Stack {
       {
         parameterName: `/${id}/BedrockLLMId`,
         description: "Parameter containing the Bedrock LLM ID",
-        stringValue: "us.anthropic.claude-sonnet-4-6",
+        stringValue: "us.anthropic.claude-sonnet-5-5",
       }
     );
 
@@ -1958,9 +1960,14 @@ export class ApiServiceStack extends cdk.Stack {
         "bedrock:ApplyGuardrail", // Required for guardrails
       ],
       resources: [
-        // Claude Sonnet 4.6 — US cross-region inference profile
-        "arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-4-6",
-        "arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6",
+        // Claude Sonnet 5.5 — US geo inference profile, called from ca-central-1.
+        // From ca-central-1 the profile routes to ca-central-1, us-east-1,
+        // us-east-2 and us-west-2.
+        `arn:aws:bedrock:ca-central-1:${this.account}:inference-profile/us.anthropic.claude-sonnet-5-5`,
+        "arn:aws:bedrock:ca-central-1::foundation-model/anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:us-east-1::foundation-model/anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:us-east-2::foundation-model/anthropic.claude-sonnet-5-5",
+        "arn:aws:bedrock:us-west-2::foundation-model/anthropic.claude-sonnet-5-5",
         "arn:aws:bedrock:" +
           this.region +
           "::foundation-model/amazon.titan-embed-text-v2:0",
