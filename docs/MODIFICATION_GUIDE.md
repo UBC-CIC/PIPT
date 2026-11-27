@@ -364,7 +364,7 @@ const bedrockLLMParameter = new ssm.StringParameter(
   {
     parameterName: `/${id}/BedrockLLMId`,
     description: "Parameter containing the Bedrock LLM ID",
-    stringValue: "us.anthropic.claude-sonnet-4-6", // ← Change this
+    stringValue: "us.anthropic.claude-sonnet-5-5", // ← Change this
   }
 );
 ```
@@ -403,7 +403,7 @@ const embeddingModelParameter = new ssm.StringParameter(
 
 | Parameter | Default Value | Purpose |
 |-----------|---------------|---------|
-| `/{id}/PIPT/BedrockLLMId` | `us.anthropic.claude-sonnet-4-6` | Primary chat and debrief LLM (cross-region inference profile) |
+| `/{id}/PIPT/BedrockLLMId` | `us.anthropic.claude-sonnet-5-5` | Primary chat and debrief LLM (US geo inference profile, called from `ca-central-1`) |
 | `/{id}/PIPT/EmbeddingModelId` | `cohere.embed-v4:0` | Document and query embeddings |
 | `/{id}/PIPT/TableName` | `DynamoDB-Conversation-Table` | DynamoDB table for conversations |
 

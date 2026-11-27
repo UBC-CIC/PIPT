@@ -76,11 +76,11 @@ The CI/CD pipeline and Amplify app use a GitHub PAT to pull source code.
 
 Patient Interaction Practice Tool uses several Amazon Bedrock models. These models are available by default (no manual access request is needed). However, verify they are accessible in the regions used by the application.
 
-The application deploys to **`ca-central-1`** but makes cross-region calls to `us-east-1` for certain models that are only available there:
+The application deploys to **`ca-central-1`**. The primary LLM is called from `ca-central-1` through the US geo inference profile, which routes requests to `ca-central-1`, `us-east-1`, `us-east-2` and `us-west-2`. Other models are called in `us-east-1` because they are only available there:
 
 | Model | Region | Purpose |
 |-------|--------|---------|
-| **Anthropic Claude Sonnet 4.6** (`us.anthropic.claude-sonnet-4-6`) | `us-east-1` | Primary LLM for text generation |
+| **Anthropic Claude Sonnet 5.5** (`us.anthropic.claude-sonnet-5-5`) | `ca-central-1` | Primary LLM for text generation |
 | **Cohere Embed v4** (`cohere.embed-v4:0`) | `us-east-1` | Document and query embeddings |
 | **Amazon Nova Sonic 2.0** (`amazon.nova-2-sonic-v1:0`) | `us-east-1` | Voice interactions (via AgentCore) |
 
@@ -1425,14 +1425,14 @@ aws secretsmanager create-secret \
 
 ### Text generation or embeddings not working
 
-**Cause:** Claude Sonnet 4.6 and Cohere Embed v4 are called in `us-east-1` via cross-region inference, but the models may not be accessible there.
+**Cause:** Claude Sonnet 5.5 is called in `ca-central-1` via the `ca.` geo inference profile, and Cohere Embed v4 is called in `us-east-1`. Either model may not be accessible in its region.
 
 **Fix:**
 
-1. Open the [Bedrock console in us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/).
+1. Open the Bedrock console in [ca-central-1](https://ca-central-1.console.aws.amazon.com/bedrock/) (Claude Sonnet 5.5) and [us-east-1](https://us-east-1.console.aws.amazon.com/bedrock/) (Cohere Embed v4).
 2. Navigate to **Model access** and verify the models are available.
 3. Check CloudWatch Logs for the `TextGenLambdaDockerFunction` for specific error messages.
-4. Ensure the Lambda execution role has `bedrock:InvokeModel` permissions for the model ARNs in `us-east-1`.
+4. Ensure the Lambda execution role has `bedrock:InvokeModel` permissions for the model and inference profile ARNs in those regions.
 
 ---
 
